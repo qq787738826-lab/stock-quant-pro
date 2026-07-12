@@ -1,0 +1,20 @@
+{
+  "name": "stock-quant-pro",
+  "version": "1.0.0",
+  "frozenAt": "2026-07-12",
+  "sourceFileCount": 79,
+  "modules": [
+    "quant-core",
+    "quant-server",
+    "quant-ai",
+    "quant-web",
+    "quant-desktop"
+  ],
+  "validation": [
+    "python syntax",
+    "JDK17 core compile",
+    "Vue production build",
+    "Electron TypeScript compile",
+    "XML/JSON parse"
+  ]
+}

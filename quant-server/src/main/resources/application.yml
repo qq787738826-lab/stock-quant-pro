@@ -1,0 +1,32 @@
+server:
+  address: 127.0.0.1
+  port: ${SERVER_PORT:8080}
+spring:
+  application:
+    name: stock-quant-server
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:stock_quant}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:change_me}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  jackson:
+    time-zone: Asia/Shanghai
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+quant:
+  ai-service-url: ${AI_SERVICE_URL:http://127.0.0.1:8001}
+  jobs:
+    daily-scan-cron: "0 10 16 * * MON-FRI"
+logging:
+  file:
+    name: logs/quant-server.log
+  level:
+    com.stockquant: INFO

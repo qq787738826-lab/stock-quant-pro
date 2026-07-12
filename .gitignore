@@ -1,0 +1,11 @@
+.env
+.idea/
+.vscode/
+**/target/
+**/node_modules/
+**/dist/
+**/.venv/
+**/__pycache__/
+*.log
+logs/
+data/cache/

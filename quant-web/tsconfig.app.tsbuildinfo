@@ -1,0 +1,1 @@
+{"root":["./src/api.ts","./src/env.d.ts","./src/main.ts","./src/router.ts","./src/App.vue","./src/views/Ai.vue","./src/views/Backtest.vue","./src/views/Dashboard.vue","./src/views/Placeholder.vue","./src/views/Portfolio.vue","./src/views/Signals.vue"],"version":"5.7.3"}
