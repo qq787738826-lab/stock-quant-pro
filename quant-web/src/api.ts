@@ -1,7 +1,7 @@
 import axios from 'axios'
 
 const baseURL = window.location.protocol === 'file:'
-  ? 'http://localhost:8080/api'
+  ? 'http://127.0.0.1:8080/api'
   : '/api'
 
 export const api = axios.create({

@@ -1,11 +1,114 @@
-.env
+# ==============================
+# IntelliJ IDEA
+# ==============================
 .idea/
+*.iml
+*.ipr
+*.iws
+out/
+
+# ==============================
+# VS Code
+# ==============================
 .vscode/
+
+# ==============================
+# Java / Maven / Gradle
+# ==============================
 **/target/
+**/build/
+.gradle/
+*.class
+
+# ==============================
+# Node.js / Vue / Electron
+# ==============================
 **/node_modules/
 **/dist/
-**/.venv/
-**/__pycache__/
+**/.vite/
+**/.cache/
+**/release/
+**/out/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ==============================
+# Logs and runtime files
+# ==============================
+**/logs/
 *.log
-logs/
-data/cache/
+*.pid
+temp/
+tmp/
+cache/
+
+# ==============================
+# Local database and data
+# ==============================
+*.db
+*.sqlite
+*.sqlite3
+*.dump
+*.backup
+*.sql.gz
+
+# ==============================
+# Environment and secrets
+# ==============================
+.env
+.env.*
+!.env.example
+
+**/application-local.yml
+**/application-local.yaml
+**/application-prod.yml
+**/application-prod.yaml
+**/application-secret.yml
+**/application-secret.yaml
+
+# ==============================
+# Certificates and private keys
+# ==============================
+*.key
+*.pem
+*.p12
+*.pfx
+*.jks
+*.keystore
+
+# ==============================
+# Archives
+# ==============================
+*.zip
+*.rar
+*.7z
+*.tar
+*.gz
+
+# ==============================
+# Operating system files
+# ==============================
+.DS_Store
+Thumbs.db
+desktop.ini
+# Python
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Python environment variables
+.env
+.env.*
+!.env.example
