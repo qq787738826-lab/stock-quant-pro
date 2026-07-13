@@ -112,3 +112,6 @@ htmlcov/
 .env
 .env.*
 !.env.example
+
+# 股票历史行情本地缓存
+quant-ai/data/history-cache/
