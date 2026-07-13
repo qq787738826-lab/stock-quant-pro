@@ -25,6 +25,7 @@ quant:
   ai-service-url: ${AI_SERVICE_URL:http://127.0.0.1:8001}
   jobs:
     daily-scan-cron: "0 10 16 * * MON-FRI"
+    portfolio-risk-cron: "0 30 16 * * MON-FRI"
   market:
     scan-default-limit: 0
     scan-batch-size: 12

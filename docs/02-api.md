@@ -60,3 +60,23 @@ GET  /api/scan-backtests/{taskId}
 GET  /api/scan-backtests/{taskId}/results
 GET  /api/scans/{scanTaskId}/backtests/latest
 ```
+
+
+## 1.3.0 模拟交易接口
+
+```text
+GET  /api/portfolio
+GET  /api/portfolio/plans
+POST /api/portfolio/plans/from-scan
+POST /api/portfolio/plans/{planId}/orders
+POST /api/portfolio/plans/{planId}/cancel
+GET  /api/portfolio/orders
+POST /api/portfolio/orders
+POST /api/portfolio/orders/{id}/confirm
+POST /api/portfolio/orders/{id}/cancel
+GET  /api/portfolio/trades
+GET  /api/portfolio/equity
+POST /api/portfolio/refresh-risk
+GET  /api/portfolio/risk-events
+POST /api/portfolio/risk-events/{id}/resolve
+```

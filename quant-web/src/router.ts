@@ -16,7 +16,7 @@ export default createRouter({
     { path: '/data', component: () => import('./views/DataCenter.vue') },
     { path: '/watchlist', component: placeholder('自选股') },
     { path: '/strategy', component: placeholder('策略中心') },
-    { path: '/risk', component: placeholder('风险中心') },
+    { path: '/risk', component: () => import('./views/Risk.vue') },
     { path: '/news', component: placeholder('新闻公告') },
     { path: '/settings', component: placeholder('系统设置') },
   ],

@@ -28,3 +28,17 @@
 - 移动止盈：从最高价回撤4%
 - 单日亏损3%暂停开仓
 - 总回撤12%暂停策略
+
+## 1.3.0 模拟交易子系统
+
+```text
+智能选股结果
+  → trade_plans 交易计划
+  → manual_orders 待确认委托与冻结
+  → simulated_trades 模拟成交
+  → portfolio_accounts / positions 资金和持仓
+  → risk_events 风险触发
+  → account_equity_snapshots 权益曲线
+```
+
+所有成交由用户在客户端人工确认，不连接券商账户。

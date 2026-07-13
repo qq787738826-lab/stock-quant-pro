@@ -325,7 +325,7 @@ public class MarketDataCenterService {
     public List<Map<String, Object>> taskResults(long taskId, int limit, boolean eligibleOnly) {
         int safeLimit = Math.max(1, Math.min(limit, 500));
         String eligibleSql = eligibleOnly ? " and eligible=true " : "";
-        return jdbcTemplate.queryForList("""
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList("""
                 select task_id, rank_no, symbol, name, trade_date, score,
                        signal_level, risk_level, eligible, filter_reasons,
                        latest_close, buy_low, buy_high, stop_loss, target1, target2,
@@ -338,6 +338,60 @@ public class MarketDataCenterService {
                 order by eligible desc, rank_no asc
                 limit ?
                 """, taskId, safeLimit);
+
+        return rows.stream()
+                .map(this::normalizeScanResult)
+                .toList();
+    }
+
+    private Map<String, Object> normalizeScanResult(Map<String, Object> source) {
+        Map<String, Object> row = new LinkedHashMap<>(source);
+
+        List<?> filterReasons = jsonValue(source.get("filter_reasons"), List.of(), List.class);
+        List<?> bullish = jsonValue(source.get("bullish"), List.of(), List.class);
+        List<?> bearish = jsonValue(source.get("bearish"), List.of(), List.class);
+        Map<?, ?> metrics = jsonValue(source.get("metrics"), Map.of(), Map.class);
+
+        row.put("filter_reasons", filterReasons);
+        row.put("bullish", bullish);
+        row.put("bearish", bearish);
+        row.put("metrics", metrics);
+
+        putMetricWhenMissing(row, "return_5_pct", metrics, "return5Pct");
+        putMetricWhenMissing(row, "return_20_pct", metrics, "return20Pct");
+        putMetricWhenMissing(row, "rsi14", metrics, "rsi14");
+        putMetricWhenMissing(row, "atr14_pct", metrics, "atr14Pct");
+        putMetricWhenMissing(row, "volume_ratio20", metrics, "volumeRatio20");
+        putMetricWhenMissing(row, "breakout20", metrics, "breakout20");
+
+        return row;
+    }
+
+    private void putMetricWhenMissing(
+            Map<String, Object> row,
+            String resultField,
+            Map<?, ?> metrics,
+            String metricField
+    ) {
+        if (row.get(resultField) == null && metrics.containsKey(metricField)) {
+            row.put(resultField, metrics.get(metricField));
+        }
+    }
+
+    private <T> T jsonValue(Object value, T fallback, Class<T> targetType) {
+        if (value == null) {
+            return fallback;
+        }
+        if (targetType.isInstance(value)) {
+            return targetType.cast(value);
+        }
+
+        try {
+            return objectMapper.readValue(String.valueOf(value), targetType);
+        } catch (Exception error) {
+            log.debug("扫描结果JSON字段解析失败 value={}", value, error);
+            return fallback;
+        }
     }
 
     public List<Map<String, Object>> scanFailures(long taskId) {

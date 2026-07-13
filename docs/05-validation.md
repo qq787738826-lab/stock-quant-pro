@@ -1,18 +1,17 @@
-# 交付前验证
+# 1.3.0 交付验证
 
 已执行：
 
-- Python `quant-ai/app/main.py` 语法编译通过
-- Python动态指标与严格候选过滤使用合成K线运行通过
-- 新增Java服务、控制器和配置使用JDK 17及最小依赖桩编译通过
-- Vue/TypeScript `vue-tsc` 检查通过
-- Vue生产构建通过
-- Electron主进程TypeScript编译通过
-- Electron Builder进入打包阶段；因当前环境无法访问 GitHub 下载运行时，未生成Windows安装包
-- POM、JSON、Flyway SQL和项目目录检查通过
+- Python `quant-ai/app/main.py` 语法编译通过。
+- 新增Java模拟交易服务、控制器和定时任务使用JDK 17及最小依赖桩编译通过。
+- `Portfolio.vue` 与 `Signals.vue` 的 TypeScript 脚本语法检查通过。
+- Vue单文件组件结构检查通过。
+- POM XML、package JSON、MANIFEST JSON检查通过。
+- Flyway V4结构与关键表字段检查通过。
+- 交付ZIP完整性检查通过。
 
 环境限制：
 
-- 当前执行环境无法访问 Apache Maven 下载站，因此未完成真实 Spring Boot Maven 依赖构建。
-- 用户现有Windows环境已经能够运行1.2.1；覆盖1.2.2后，Flyway会自动执行 `V3__selection_validation.sql`。
-- Windows端应重新加载Maven并启动一次，完成最终数据库迁移和集成验证。
+- 当前执行环境无法访问Apache Maven下载站，未完成真实Spring Boot Maven依赖构建。
+- 当前执行环境缺少完整npm离线缓存，未完成真实Vue生产构建。
+- 用户Windows环境覆盖后，应在IDEA重新加载Maven并启动一次，完成Flyway V4迁移和最终集成验证。

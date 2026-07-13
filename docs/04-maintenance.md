@@ -13,3 +13,19 @@
 - 单元、集成、压力、故障恢复与交易演练
 
 维护原则：代码是真实状态，`docs/` 是单一需求基线，每次修改记录到 `docs/CHANGELOG.md`。
+
+## 模拟账户参数
+
+模拟交易参数保存在 `app_settings`：
+
+```text
+portfolio.max_positions
+portfolio.max_position_weight
+portfolio.commission_rate
+portfolio.minimum_commission
+portfolio.stamp_duty_rate
+portfolio.transfer_fee_rate
+portfolio.default_trailing_stop_pct
+```
+
+修改参数后无需重新编译，但应在没有待确认委托时调整，以避免前后规则不一致。

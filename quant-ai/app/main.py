@@ -14,7 +14,7 @@ import pandas as pd
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
-app = FastAPI(title="Stock Quant AI & Data Service", version="1.2.2")
+app = FastAPI(title="Stock Quant AI & Data Service", version="1.3.1")
 
 
 class AnalyzeRequest(BaseModel):
@@ -788,7 +788,7 @@ def health() -> dict[str, Any]:
         "provider": "AKShare-MultiSource",
         "providers": ["Tencent", "Sina", "Eastmoney", "Local-Cache"],
         "aiProvider": os.getenv("AI_PROVIDER", "local"),
-        "version": "1.2.2",
+        "version": "1.3.1",
     }
 
 

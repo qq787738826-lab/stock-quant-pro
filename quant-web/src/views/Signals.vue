@@ -53,12 +53,15 @@ const validationForm = reactive({ topN: 20, maxHoldingDays: 10 })
 const validationTask = ref<ValidationTask>({})
 const validationRows = ref<any[]>([])
 const validating = ref(false)
+const planningSymbol = ref('')
+const planMessage = ref('')
 
 let scanTimer: number | undefined
 let validationTimer: number | undefined
 
 const running = computed(() => ['QUEUED', 'RUNNING'].includes(task.value?.status || ''))
 const validationRunning = computed(() => ['QUEUED', 'RUNNING'].includes(validationTask.value?.status || ''))
+const legacyTask = computed(() => Boolean(task.value?.id) && !task.value?.trade_date)
 
 const progress = computed(() => {
   const total = Number(task.value?.total_symbols || 0)
@@ -106,6 +109,48 @@ function resultClass(value: any) {
   return Number(value || 0) >= 0 ? 'up' : 'down'
 }
 
+function parseJsonValue(value: any, fallback: any) {
+  if (value == null) return fallback
+  if (Array.isArray(value)) return value
+  if (typeof value === 'object' && value.value != null) {
+    return parseJsonValue(value.value, fallback)
+  }
+  if (typeof value === 'object') return value
+  if (typeof value !== 'string') return fallback
+
+  try {
+    return JSON.parse(value)
+  } catch {
+    return fallback
+  }
+}
+
+function normalizeResult(row: any) {
+  const metrics = parseJsonValue(row?.metrics, {})
+  return {
+    ...row,
+    metrics,
+    filter_reasons: parseJsonValue(row?.filter_reasons, []),
+    bullish: parseJsonValue(row?.bullish, []),
+    bearish: parseJsonValue(row?.bearish, []),
+    return_5_pct: row?.return_5_pct ?? metrics?.return5Pct ?? null,
+    return_20_pct: row?.return_20_pct ?? metrics?.return20Pct ?? null,
+    rsi14: row?.rsi14 ?? metrics?.rsi14 ?? null,
+    atr14_pct: row?.atr14_pct ?? metrics?.atr14Pct ?? null,
+    volume_ratio20: row?.volume_ratio20 ?? metrics?.volumeRatio20 ?? null,
+    breakout20: row?.breakout20 ?? metrics?.breakout20 ?? false,
+  }
+}
+
+function normalizeResults(value: any) {
+  return Array.isArray(value) ? value.map(normalizeResult) : []
+}
+
+function filterReasonTitle(row: any) {
+  const reasons = parseJsonValue(row?.filter_reasons, [])
+  return Array.isArray(reasons) ? reasons.join('；') : ''
+}
+
 function taskLabel(row: Task) {
   const official = row.official ? '｜正式' : ''
   return `#${row.id}｜${scanTypeLabel(row)}｜${row.total_symbols || row.requested_limit || 0}只${official}`
@@ -128,9 +173,16 @@ async function loadTask(taskId: number) {
   try {
     task.value = await api.get(`/scans/${taskId}`) as unknown as Task
     selectedTaskId.value = taskId
-    rows.value = await api.get(`/scans/${taskId}/results`, {
+
+    // 旧版本扫描没有严格候选字段，自动切换为查看全部结果。
+    if (!task.value.trade_date) {
+      showEligibleOnly.value = false
+    }
+
+    const resultRows = await api.get(`/scans/${taskId}/results`, {
       params: { limit: 200, eligibleOnly: showEligibleOnly.value },
-    }) as unknown as any[]
+    })
+    rows.value = normalizeResults(resultRows)
     failures.value = await api.get(`/scans/${taskId}/failures`) as unknown as any[]
     const latestValidation: any = await api.get(`/scans/${taskId}/backtests/latest`)
     validationTask.value = latestValidation || {}
@@ -164,11 +216,16 @@ async function changeTask() {
 }
 
 async function toggleEligible() {
-  if (task.value.id) {
-    rows.value = await api.get(`/scans/${task.value.id}/results`, {
-      params: { limit: 200, eligibleOnly: showEligibleOnly.value },
-    }) as unknown as any[]
+  if (!task.value.id) return
+  if (legacyTask.value) {
+    showEligibleOnly.value = false
+    return
   }
+
+  const resultRows = await api.get(`/scans/${task.value.id}/results`, {
+    params: { limit: 200, eligibleOnly: showEligibleOnly.value },
+  })
+  rows.value = normalizeResults(resultRows)
 }
 
 async function startScan() {
@@ -185,6 +242,24 @@ async function startScan() {
     error.value = e.message || '扫描启动失败'
   } finally {
     starting.value = false
+  }
+}
+
+async function addTradePlan(row: any) {
+  if (!task.value.id) return
+  planningSymbol.value = row.symbol
+  error.value = ''
+  planMessage.value = ''
+  try {
+    const result: any = await api.post('/portfolio/plans/from-scan', {
+      scanTaskId: task.value.id,
+      symbol: row.symbol,
+    })
+    planMessage.value = `${row.symbol} ${row.name} 已加入交易计划 #${result.planId}`
+  } catch (e: any) {
+    error.value = e.message || '加入交易计划失败'
+  } finally {
+    planningSymbol.value = ''
   }
 }
 
@@ -296,8 +371,8 @@ onUnmounted(() => {
         </select>
       </div>
       <label class="check-row">
-        <input v-model="showEligibleOnly" type="checkbox" @change="toggleEligible">
-        只看严格候选
+        <input v-model="showEligibleOnly" type="checkbox" :disabled="legacyTask" @change="toggleEligible">
+        {{ legacyTask ? '历史任务不支持严格候选' : '只看严格候选' }}
       </label>
       <button class="btn secondary" :disabled="loading" @click="loadRows">刷新</button>
     </div>
@@ -311,11 +386,13 @@ onUnmounted(() => {
         <span>范围：{{ task.total_symbols || task.requested_limit || 0 }}只</span>
         <span>成功：{{ task.success_symbols || 0 }}</span>
         <span>失败：{{ task.failed_symbols || 0 }}</span>
-        <span>严格候选：{{ task.selected_count || 0 }}</span>
+        <span>{{ legacyTask ? '历史候选' : '严格候选' }}：{{ task.selected_count || 0 }}</span>
         <span>交易日：{{ task.trade_date || '--' }}</span>
         <span>状态：{{ task.status || '--' }}</span>
       </div>
     </div>
+
+    <p v-if="legacyTask" class="legacy-note">该任务来自旧版本，结果仍可查看，但严格候选资格需要使用当前版本重新扫描。</p>
 
     <div class="scan-form">
       <label>扫描数量</label><input v-model.number="form.scanLimit" type="number" min="0" step="100">
@@ -356,7 +433,8 @@ onUnmounted(() => {
           <td><span class="score" :class="scoreClass(row.score)">{{ row.score }}</span></td>
           <td>
             <span v-if="row.eligible" class="eligible">通过</span>
-            <span v-else class="filtered" :title="(row.filter_reasons || []).join('；')">过滤</span>
+            <span v-else-if="filterReasonTitle(row)" class="filtered" :title="filterReasonTitle(row)">过滤</span>
+            <span v-else class="legacy-result">历史</span>
           </td>
           <td>{{ row.risk_level }}</td>
           <td>{{ row.latest_close }}</td>
@@ -373,6 +451,7 @@ onUnmounted(() => {
           <td class="actions">
             <router-link :to="`/ai?symbol=${row.symbol}`">分析</router-link>
             <router-link :to="`/backtest?symbol=${row.symbol}`">回测</router-link>
+            <button v-if="row.eligible" class="plan-button" :disabled="planningSymbol===row.symbol" @click="addTradePlan(row)">{{ planningSymbol===row.symbol ? '加入中' : '交易计划' }}</button>
           </td>
         </tr>
         <tr v-if="!loading && rows.length===0">
@@ -444,6 +523,7 @@ onUnmounted(() => {
     </table>
   </div>
 
+  <p v-if="planMessage" class="success">{{ planMessage }}</p>
   <p v-if="error" class="error">{{ error }}</p>
 </template>
 
@@ -473,8 +553,12 @@ onUnmounted(() => {
 .score.weak { color:#4ade9a; background:#173d32; }
 .eligible { color:#4ade9a; }
 .filtered { color:#ff7b86; cursor:help; }
+.legacy-result { color:#f0b84a; }
+.legacy-note { color:#f0b84a; border-left:3px solid #8f6a21; padding-left:10px; margin:0; }
 .actions { white-space:nowrap; }
 .actions a { color:#5da9ff; text-decoration:none; margin-right:8px; }
+.plan-button { border:1px solid #276a51; color:#4ade9a; background:#143226; border-radius:3px; padding:3px 6px; cursor:pointer; font-size:11px; }
+.plan-button:disabled { opacity:.5; cursor:wait; }
 .validation-grid { display:grid; grid-template-columns:2fr 1fr; gap:12px; margin-top:12px; }
 .validation-form { display:flex; align-items:center; gap:8px; }
 .validation-form input { width:80px; }

@@ -1,6 +1,6 @@
 {
   "name": "stock-quant-pro",
-  "version": "1.2.2",
+  "version": "1.3.1",
   "releasedAt": "2026-07-13",
   "baseline": "stock-quant-pro(1).zip",
   "modules": [
@@ -27,10 +27,10 @@
   ],
   "releaseDate": "2026-07-13",
   "notes": [
-    "扫描任务与结果按taskId绑定，默认展示最近一次正式全市场扫描",
-    "新增扫描历史、失败明细和失败股票重试",
-    "新增最近90日行情增量更新任务",
-    "候选过滤增加成交额、ATR、涨幅、回撤和涨停风险",
-    "新增候选前N名批量历史回测与汇总"
+    "修复智能选股历史任务结果存在但客户端表格为空的问题",
+    "后端将PostgreSQL jsonb字段标准化为JSON数组和对象",
+    "前端兼容PGobject结构和字符串JSON，避免filter_reasons.join运行时异常",
+    "旧扫描任务自动关闭严格候选筛选并显示历史任务提示",
+    "旧任务指标从metrics字段回填到5日、20日、RSI、ATR和量比列"
   ]
 }
