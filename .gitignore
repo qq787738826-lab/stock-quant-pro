@@ -9,3 +9,7 @@
 *.log
 logs/
 data/cache/
+
+quant-ai/data/history-cache/
+
+quant-ai/data/history-cache/
