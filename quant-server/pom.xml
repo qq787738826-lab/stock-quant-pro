@@ -7,7 +7,7 @@
   <parent>
     <groupId>com.stockquant</groupId>
     <artifactId>stock-quant-pro</artifactId>
-    <version>1.2.1</version>
+    <version>1.2.2</version>
   </parent>
 
   <artifactId>quant-server</artifactId>

@@ -1,6 +1,6 @@
 {
   "name": "stock-quant-pro",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "releasedAt": "2026-07-13",
   "baseline": "stock-quant-pro(1).zip",
   "modules": [
@@ -27,9 +27,10 @@
   ],
   "releaseDate": "2026-07-13",
   "notes": [
-    "修复Windows下localhost可能解析为IPv6导致Vite代理连接Java后端失败的问题",
-    "前端、Electron、健康检查统一使用127.0.0.1",
-    "数据管理页面增加明确的后端连接错误提示",
-    "CORS同时允许localhost与127.0.0.1"
+    "扫描任务与结果按taskId绑定，默认展示最近一次正式全市场扫描",
+    "新增扫描历史、失败明细和失败股票重试",
+    "新增最近90日行情增量更新任务",
+    "候选过滤增加成交额、ATR、涨幅、回撤和涨停风险",
+    "新增候选前N名批量历史回测与汇总"
   ]
 }

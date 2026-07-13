@@ -39,3 +39,24 @@
 | GET | `/market/history/{symbol}?days=120` | 多数据源历史行情 |
 | POST | `/market/analyze-batch` | 最多 50 只股票的并行动态分析 |
 | POST | `/ai/analyze` | 单只股票动态分析 |
+
+
+## 1.2.2 扫描与验证接口
+
+```text
+GET  /api/scans/history
+GET  /api/scans/{taskId}/results?eligibleOnly=true
+GET  /api/scans/{taskId}/failures
+POST /api/scans/{taskId}/retry
+GET  /api/scans/latest-official-task
+
+POST /api/data/updates
+GET  /api/data/updates/latest
+GET  /api/data/updates/{taskId}
+GET  /api/data/updates/{taskId}/failures
+
+POST /api/scans/{taskId}/backtests
+GET  /api/scan-backtests/{taskId}
+GET  /api/scan-backtests/{taskId}/results
+GET  /api/scans/{scanTaskId}/backtests/latest
+```

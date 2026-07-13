@@ -14,7 +14,7 @@ import pandas as pd
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
-app = FastAPI(title="Stock Quant AI & Data Service", version="1.2.0")
+app = FastAPI(title="Stock Quant AI & Data Service", version="1.2.2")
 
 
 class AnalyzeRequest(BaseModel):
@@ -25,6 +25,12 @@ class ScanBatchRequest(BaseModel):
     symbols: list[str] = Field(min_length=1, max_length=50)
     days: int = Field(default=120, ge=80, le=500)
     includeBars: bool = True
+    maxWorkers: int = Field(default=4, ge=1, le=8)
+
+
+class HistoryBatchRequest(BaseModel):
+    symbols: list[str] = Field(min_length=1, max_length=50)
+    days: int = Field(default=90, ge=30, le=500)
     maxWorkers: int = Field(default=4, ge=1, le=8)
 
 
@@ -350,6 +356,14 @@ def _dynamic_analysis(symbol: str, df: pd.DataFrame, data_source: str) -> dict[s
     average_volume20 = float(volume.iloc[-21:-1].mean())
     volume_ratio20 = float(latest["volume"]) / average_volume20 if average_volume20 else 0.0
 
+    amount_series = pd.to_numeric(work.get("amount", pd.Series(index=work.index, dtype=float)), errors="coerce").fillna(0)
+    if float(amount_series.iloc[-20:].sum()) > 0:
+        average_amount20 = float(amount_series.iloc[-20:].mean())
+    else:
+        # 腾讯历史接口通常只有成交量。A股成交量通常以“手”为单位，因此乘100估算成交额。
+        estimated_amount = volume * close * 100
+        average_amount20 = float(estimated_amount.iloc[-20:].mean())
+
     previous_high20 = float(close.iloc[-21:-1].max())
     high20 = float(close.iloc[-20:].max())
     low20 = float(close.iloc[-20:].min())
@@ -364,6 +378,8 @@ def _dynamic_analysis(symbol: str, df: pd.DataFrame, data_source: str) -> dict[s
 
     daily_returns = close.pct_change()
     volatility20 = float(daily_returns.iloc[-20:].std(ddof=0) * 100)
+    latest_day_return = float(daily_returns.iloc[-1] * 100)
+    recent_limit_up_count = int((daily_returns.iloc[-5:] >= 0.095).sum())
     macd_hist = float(latest["macdHist"])
     previous_macd_hist = float(previous["macdHist"])
     turnover_rate = float(latest.get("turnoverRate", 0.0) or 0.0)
@@ -480,6 +496,30 @@ def _dynamic_analysis(symbol: str, df: pd.DataFrame, data_source: str) -> dict[s
     else:
         risk_level = "MEDIUM"
 
+    filter_reasons: list[str] = []
+    if score < 60:
+        filter_reasons.append("综合评分低于60")
+    if risk_level == "HIGH":
+        filter_reasons.append("风险等级为HIGH")
+    if average_amount20 < 50_000_000:
+        filter_reasons.append("近20日平均成交额低于5000万元")
+    if atr_pct > 7:
+        filter_reasons.append("ATR波动超过7%")
+    if return20 > 25:
+        filter_reasons.append("近20日涨幅超过25%，追高风险较大")
+    if return20 < -10:
+        filter_reasons.append("近20日跌幅超过10%")
+    if drawdown20 < -12:
+        filter_reasons.append("较20日高点回撤超过12%")
+    if volume_ratio20 < 0.65:
+        filter_reasons.append("成交活跃度不足")
+    if latest_day_return >= 9.5:
+        filter_reasons.append("最新交易日接近涨停，不宜追价")
+    if recent_limit_up_count >= 2:
+        filter_reasons.append("近5日出现多次涨停，短线波动过大")
+
+    candidate_eligible = len(filter_reasons) == 0
+
     if not bullish:
         bullish.append("当前尚未出现明确的短线优势信号")
     if not bearish:
@@ -505,6 +545,8 @@ def _dynamic_analysis(symbol: str, df: pd.DataFrame, data_source: str) -> dict[s
         "bullish": bullish,
         "bearish": bearish,
         "riskLevel": risk_level,
+        "candidateEligible": candidate_eligible,
+        "filterReasons": filter_reasons,
         "metrics": {
             "latestClose": _round(latest_close),
             "return5Pct": _round(return5),
@@ -516,6 +558,9 @@ def _dynamic_analysis(symbol: str, df: pd.DataFrame, data_source: str) -> dict[s
             "ma60": _round(ma60),
             "rsi14": _round(rsi14),
             "volumeRatio20": _round(volume_ratio20),
+            "averageAmount20": _round(average_amount20),
+            "latestDayReturnPct": _round(latest_day_return),
+            "recentLimitUpCount": recent_limit_up_count,
             "atr14Pct": _round(atr_pct),
             "volatility20Pct": _round(volatility20),
             "drawdown20Pct": _round(drawdown20),
@@ -671,6 +716,42 @@ def universe(includeSt: bool = False) -> dict[str, Any]:
     }
 
 
+@app.post("/market/history-batch")
+def history_batch(req: HistoryBatchRequest) -> dict[str, Any]:
+    symbols = list(dict.fromkeys(req.symbols))
+    items: list[dict[str, Any]] = []
+    failures: dict[str, str] = {}
+
+    def load_one(symbol: str) -> dict[str, Any]:
+        if not symbol.isdigit() or len(symbol) != 6 or not _is_main_board(symbol):
+            raise ValueError("仅支持沪深主板6位股票代码")
+        df, source = _load_history(symbol, max(req.days, 80))
+        return {
+            "symbol": symbol,
+            "dataSource": source,
+            "bars": _bars_to_records(symbol, df, source, req.days),
+        }
+
+    with ThreadPoolExecutor(max_workers=min(req.maxWorkers, len(symbols))) as executor:
+        futures = {executor.submit(load_one, symbol): symbol for symbol in symbols}
+        for future in as_completed(futures):
+            symbol = futures[future]
+            try:
+                items.append(future.result())
+            except Exception as exc:
+                detail = exc.detail if isinstance(exc, HTTPException) else str(exc)
+                failures[symbol] = detail
+
+    items.sort(key=lambda item: item.get("symbol", ""))
+    return {
+        "requested": len(symbols),
+        "success": len(items),
+        "failed": len(failures),
+        "items": items,
+        "failures": failures,
+    }
+
+
 @app.post("/market/analyze-batch")
 def analyze_batch(req: ScanBatchRequest) -> dict[str, Any]:
     symbols = list(dict.fromkeys(req.symbols))
@@ -707,7 +788,7 @@ def health() -> dict[str, Any]:
         "provider": "AKShare-MultiSource",
         "providers": ["Tencent", "Sina", "Eastmoney", "Local-Cache"],
         "aiProvider": os.getenv("AI_PROVIDER", "local"),
-        "version": "1.2.0",
+        "version": "1.2.2",
     }
 
 

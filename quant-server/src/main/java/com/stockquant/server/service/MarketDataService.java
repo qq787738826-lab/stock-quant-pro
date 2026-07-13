@@ -64,6 +64,16 @@ public class MarketDataService {
             Map<String, String> failures
     ) {}
 
+    public record HistoryBatch(
+            int requested,
+            int success,
+            int failed,
+            int persistedBars,
+            Map<String, Integer> counts,
+            Map<String, String> sources,
+            Map<String, String> failures
+    ) {}
+
     private final RestTemplate restTemplate;
     private final String baseUrl;
     private final JdbcTemplate jdbcTemplate;
@@ -183,6 +193,83 @@ public class MarketDataService {
         );
     }
 
+    @SuppressWarnings("unchecked")
+    public HistoryBatch syncHistoryBatch(List<String> symbols, int days) {
+        if (symbols == null || symbols.isEmpty()) {
+            return new HistoryBatch(0, 0, 0, 0, Map.of(), Map.of(), Map.of());
+        }
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("symbols", symbols);
+        body.put("days", Math.max(30, Math.min(days, 500)));
+        body.put("maxWorkers", Math.min(6, Math.max(1, symbols.size())));
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setAccept(List.of(MediaType.APPLICATION_JSON));
+
+        ResponseEntity<Map> response = restTemplate.exchange(
+                baseUrl + "/market/history-batch",
+                HttpMethod.POST,
+                new HttpEntity<>(body, headers),
+                Map.class
+        );
+        Map<String, Object> payload = response.getBody();
+        if (payload == null) {
+            throw new IllegalStateException("批量行情更新接口返回空数据");
+        }
+
+        Map<String, Integer> counts = new LinkedHashMap<>();
+        Map<String, String> sources = new LinkedHashMap<>();
+        Map<String, String> failures = new LinkedHashMap<>();
+        int persistedBars = 0;
+
+        Object rawItems = payload.get("items");
+        if (rawItems instanceof List<?> list) {
+            for (Object raw : list) {
+                if (!(raw instanceof Map<?, ?> map)) {
+                    continue;
+                }
+                String symbol = string(map.get("symbol"));
+                String source = string(map.get("dataSource"));
+                List<Bar> bars = new ArrayList<>();
+                Object rawBars = map.get("bars");
+                if (rawBars instanceof List<?> barList) {
+                    for (Object rawBar : barList) {
+                        if (rawBar instanceof Map<?, ?> barMap) {
+                            bars.add(mapBar(barMap));
+                        }
+                    }
+                }
+                bars.sort((a, b) -> a.tradeDate().compareTo(b.tradeDate()));
+                persistBars(symbol, bars);
+                counts.put(symbol, bars.size());
+                sources.put(symbol, source);
+                persistedBars += bars.size();
+            }
+        }
+
+        Object rawFailures = payload.get("failures");
+        if (rawFailures instanceof Map<?, ?> map) {
+            map.forEach((key, value) -> failures.put(string(key), string(value)));
+        }
+
+        return new HistoryBatch(
+                intValue(payload.get("requested"), symbols.size()),
+                intValue(payload.get("success"), counts.size()),
+                intValue(payload.get("failed"), failures.size()),
+                persistedBars,
+                counts,
+                sources,
+                failures
+        );
+    }
+
+    public List<Bar> localHistory(String symbol, int days) {
+        validateSymbol(symbol);
+        return loadBars(symbol, Math.max(30, Math.min(days, 3000)));
+    }
+
     public void persistBars(String symbol, List<Bar> bars) {
         if (bars == null || bars.isEmpty()) {
             return;
@@ -271,6 +358,8 @@ public class MarketDataService {
 
     private AnalysisItem mapAnalysis(Map<?, ?> map) {
         Map<String, Object> metrics = objectMap(map.get("metrics"));
+        metrics.put("candidateEligible", boolDefault(map.get("candidateEligible"), false));
+        metrics.put("filterReasons", stringList(map.get("filterReasons")));
         List<Bar> bars = new ArrayList<>();
         Object rawBars = map.get("bars");
         if (rawBars instanceof List<?> list) {
