@@ -7,23 +7,34 @@ import threading
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import numpy as np
 import pandas as pd
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
-app = FastAPI(title="Stock Quant AI & Data Service", version="1.1.1")
+app = FastAPI(title="Stock Quant AI & Data Service", version="1.2.0")
 
 
 class AnalyzeRequest(BaseModel):
     symbol: str = Field(pattern=r"^\d{6}$")
 
 
+class ScanBatchRequest(BaseModel):
+    symbols: list[str] = Field(min_length=1, max_length=50)
+    days: int = Field(default=120, ge=80, le=500)
+    includeBars: bool = True
+    maxWorkers: int = Field(default=4, ge=1, le=8)
+
+
 _CACHE_TTL_SECONDS = 300
 _HISTORY_CACHE: dict[str, tuple[datetime, pd.DataFrame, str]] = {}
 _CACHE_LOCK = threading.Lock()
 _DISK_CACHE_DIR = Path(__file__).resolve().parents[1] / "data" / "history-cache"
+_UNIVERSE_CACHE_PATH = Path(__file__).resolve().parents[1] / "data" / "universe-cache.json"
+_UNIVERSE_MEMORY_CACHE: tuple[datetime, list[dict[str, Any]]] | None = None
+_UNIVERSE_LOCK = threading.Lock()
 
 
 def _exchange_symbol(symbol: str) -> str:
@@ -518,6 +529,177 @@ def _dynamic_analysis(symbol: str, df: pd.DataFrame, data_source: str) -> dict[s
 
 
 
+def _is_main_board(symbol: str) -> bool:
+    return symbol.startswith(("000", "001", "002", "003", "600", "601", "603", "605"))
+
+
+def _exchange_name(symbol: str) -> str:
+    if symbol.startswith(("600", "601", "603", "605")):
+        return "SH"
+    if symbol.startswith(("000", "001", "002", "003")):
+        return "SZ"
+    if symbol.startswith(("688", "689")):
+        return "SH"
+    if symbol.startswith(("300", "301")):
+        return "SZ"
+    return "BJ"
+
+
+def _normalize_universe(raw: pd.DataFrame) -> list[dict[str, Any]]:
+    if raw is None or raw.empty:
+        raise RuntimeError("股票列表数据源返回空结果")
+
+    code_column = next((c for c in ("code", "证券代码", "A股代码", "代码") if c in raw.columns), None)
+    name_column = next((c for c in ("name", "证券简称", "A股简称", "名称") if c in raw.columns), None)
+    if code_column is None or name_column is None:
+        raise RuntimeError(f"股票列表字段无法识别：{list(raw.columns)}")
+
+    records: list[dict[str, Any]] = []
+    for _, row in raw.iterrows():
+        symbol = str(row.get(code_column, "")).strip()
+        if symbol.endswith(".0"):
+            symbol = symbol[:-2]
+        symbol = symbol.zfill(6)
+        name = str(row.get(name_column, "")).strip()
+        if not symbol.isdigit() or len(symbol) != 6 or not _is_main_board(symbol):
+            continue
+        is_st = "ST" in name.upper() or "退" in name
+        records.append({
+            "symbol": symbol,
+            "name": name or symbol,
+            "exchange": _exchange_name(symbol),
+            "board": "MAIN",
+            "isSt": is_st,
+            "isActive": "退" not in name,
+            "dataSource": "AKShare-CodeName",
+        })
+
+    records.sort(key=lambda item: item["symbol"])
+    if not records:
+        raise RuntimeError("过滤后没有沪深主板股票")
+    return records
+
+
+def _save_universe_cache(records: list[dict[str, Any]]) -> None:
+    _UNIVERSE_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    _UNIVERSE_CACHE_PATH.write_text(
+        json.dumps({
+            "savedAt": datetime.now(timezone.utc).isoformat(),
+            "records": records,
+        }, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+
+def _load_universe_cache() -> list[dict[str, Any]] | None:
+    if not _UNIVERSE_CACHE_PATH.exists():
+        return None
+    try:
+        payload = json.loads(_UNIVERSE_CACHE_PATH.read_text(encoding="utf-8"))
+        records = payload.get("records", [])
+        return records if records else None
+    except Exception:
+        return None
+
+
+def _load_universe(include_st: bool = False) -> tuple[list[dict[str, Any]], str]:
+    global _UNIVERSE_MEMORY_CACHE
+    now = datetime.now(timezone.utc)
+
+    with _UNIVERSE_LOCK:
+        if _UNIVERSE_MEMORY_CACHE is not None:
+            cached_at, cached_records = _UNIVERSE_MEMORY_CACHE
+            if (now - cached_at).total_seconds() < 3600:
+                rows = cached_records if include_st else [r for r in cached_records if not r["isSt"]]
+                return rows, "Memory-Cache"
+
+    try:
+        import akshare as ak
+        raw = _call_with_timeout(ak.stock_info_a_code_name, 30.0, "AKShare-CodeName")
+        records = _normalize_universe(raw)
+        _save_universe_cache(records)
+        with _UNIVERSE_LOCK:
+            _UNIVERSE_MEMORY_CACHE = (now, records)
+        rows = records if include_st else [r for r in records if not r["isSt"]]
+        return rows, "AKShare-CodeName"
+    except Exception as exc:
+        records = _load_universe_cache()
+        if records:
+            with _UNIVERSE_LOCK:
+                _UNIVERSE_MEMORY_CACHE = (now, records)
+            rows = records if include_st else [r for r in records if not r["isSt"]]
+            return rows, f"Local-Cache({exc.__class__.__name__})"
+        raise HTTPException(503, f"股票列表获取失败且没有本地缓存：{exc}") from exc
+
+
+def _bars_to_records(symbol: str, df: pd.DataFrame, source: str, days: int) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    for _, row in df.tail(days).iterrows():
+        records.append({
+            "symbol": symbol,
+            "dataSource": source,
+            "tradeDate": pd.Timestamp(row["tradeDate"]).date().isoformat(),
+            "open": float(row["open"]),
+            "high": float(row["high"]),
+            "low": float(row["low"]),
+            "close": float(row["close"]),
+            "volume": int(row["volume"]),
+            "amount": float(row.get("amount", 0) or 0),
+            "turnoverRate": float(row.get("turnoverRate", 0) or 0),
+        })
+    return records
+
+
+def _scan_one_symbol(symbol: str, days: int, include_bars: bool) -> dict[str, Any]:
+    if not symbol.isdigit() or len(symbol) != 6 or not _is_main_board(symbol):
+        raise ValueError("仅支持沪深主板6位股票代码")
+    history_days = max(days, 260)
+    df, source = _load_history(symbol, history_days)
+    result = _dynamic_analysis(symbol, df, source)
+    if include_bars:
+        result["bars"] = _bars_to_records(symbol, df, source, days)
+    return result
+
+
+@app.get("/market/universe")
+def universe(includeSt: bool = False) -> dict[str, Any]:
+    records, source = _load_universe(includeSt)
+    return {
+        "source": source,
+        "count": len(records),
+        "items": records,
+    }
+
+
+@app.post("/market/analyze-batch")
+def analyze_batch(req: ScanBatchRequest) -> dict[str, Any]:
+    symbols = list(dict.fromkeys(req.symbols))
+    items: list[dict[str, Any]] = []
+    failures: dict[str, str] = {}
+
+    with ThreadPoolExecutor(max_workers=min(req.maxWorkers, len(symbols))) as executor:
+        futures = {
+            executor.submit(_scan_one_symbol, symbol, req.days, req.includeBars): symbol
+            for symbol in symbols
+        }
+        for future in as_completed(futures):
+            symbol = futures[future]
+            try:
+                items.append(future.result())
+            except Exception as exc:
+                detail = exc.detail if isinstance(exc, HTTPException) else str(exc)
+                failures[symbol] = detail
+
+    items.sort(key=lambda item: (-int(item.get("score", 0)), item.get("symbol", "")))
+    return {
+        "requested": len(symbols),
+        "success": len(items),
+        "failed": len(failures),
+        "items": items,
+        "failures": failures,
+    }
+
+
 @app.get("/health")
 def health() -> dict[str, Any]:
     return {
@@ -525,7 +707,7 @@ def health() -> dict[str, Any]:
         "provider": "AKShare-MultiSource",
         "providers": ["Tencent", "Sina", "Eastmoney", "Local-Cache"],
         "aiProvider": os.getenv("AI_PROVIDER", "local"),
-        "version": "1.1.1",
+        "version": "1.2.0",
     }
 
 
@@ -537,23 +719,7 @@ def history(symbol: str, days: int = 120) -> list[dict[str, Any]]:
     days = max(30, min(days, 3000))
     df, source = _load_history(symbol, days)
 
-    result: list[dict[str, Any]] = []
-    for _, row in df.tail(days).iterrows():
-        result.append(
-            {
-                "symbol": symbol,
-                "dataSource": source,
-                "tradeDate": pd.Timestamp(row["tradeDate"]).date().isoformat(),
-                "open": float(row["open"]),
-                "high": float(row["high"]),
-                "low": float(row["low"]),
-                "close": float(row["close"]),
-                "volume": int(row["volume"]),
-                "amount": float(row.get("amount", 0) or 0),
-                "turnoverRate": float(row.get("turnoverRate", 0) or 0),
-            }
-        )
-    return result
+    return _bars_to_records(symbol, df, source, days)
 
 
 @app.post("/ai/analyze")

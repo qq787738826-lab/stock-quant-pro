@@ -1,8 +1,8 @@
 {
   "name": "stock-quant-pro",
-  "version": "1.0.0",
-  "frozenAt": "2026-07-12",
-  "sourceFileCount": 79,
+  "version": "1.2.0",
+  "releasedAt": "2026-07-13",
+  "baseline": "stock-quant-pro(1).zip",
   "modules": [
     "quant-core",
     "quant-server",
@@ -10,11 +10,19 @@
     "quant-web",
     "quant-desktop"
   ],
+  "features": [
+    "market-universe-sync",
+    "postgres-daily-bars",
+    "async-full-market-scan",
+    "scan-ranking",
+    "dynamic-analysis",
+    "backtest-links"
+  ],
   "validation": [
     "python syntax",
-    "JDK17 core compile",
-    "Vue production build",
-    "Electron TypeScript compile",
+    "Java 17 core compile",
+    "Java new modules compile with API stubs",
+    "Vue TypeScript check",
     "XML/JSON parse"
   ]
 }

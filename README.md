@@ -1,62 +1,56 @@
-# Stock Quant Pro（A股短线量化终端）
+# Stock Quant Pro 1.2.0（A股短线量化终端）
 
-面向 Windows 个人投资者的专业量化基础版。默认覆盖沪深主板 A 股，排除创业板、科创板、北交所、ST、退市整理、新股与停牌证券；持仓周期 2–10 个交易日。
+面向 Windows 个人投资者的本地量化研究软件。当前版本覆盖沪深主板 A 股，默认排除创业板、科创板、北交所、ST 和退市股票，核心周期为 2–10 个交易日。
 
-## 已包含
+## 1.2.0 已完成
 
-- Vue 3 + TypeScript + Electron 桌面端
-- Spring Boot 3.2.8 + JDK 17 核心服务
-- Python 3.11 + FastAPI + AKShare 免费数据/AI辅助服务
-- PostgreSQL 16 + Flyway 数据库迁移
-- 多因子短线评分、交易计划、风险控制、回测、模拟持仓
-- 人工确认委托（不自动操作券商客户端）
-- 在线 AI 可选、本地规则分析自动降级
-- Windows 一键初始化、启动、构建脚本
+- 沪深主板股票列表同步并保存到 PostgreSQL
+- 全市场异步扫描任务、进度查询和失败统计
+- 扫描结果持久化、自动排名、交易计划生成
+- 扫描时自动保存近 120 个交易日 K 线到本地数据库
+- 腾讯、 新浪、东财和本地缓存的行情降级链路
+- 全市场行情库、数据管理中心、智能选股排行榜
+- 候选股票一键进入动态分析和回测
+- MA5/10/20/60、RSI14、MACD、量比、ATR、收益率、回撤和波动率评分
+- 每个交易日 16:10 自动创建全市场扫描任务
 
-## 安全边界
+## 技术栈
 
-本项目是投研与交易辅助软件，不保证收益。真实下单必须由用户人工确认。默认不保存券商密码，不注入或控制券商客户端，不绕过券商风控。程序化交易及数据使用应遵守适用法律、交易所规则、券商协议和数据源条款。
+- Java 17、Spring Boot 3.2.8、Flyway
+- PostgreSQL 16
+- Python 3.11、FastAPI、AKShare、Pandas、NumPy
+- Vue 3、TypeScript、Electron、ECharts
 
-## 环境
+## 首次启动
 
-- Windows 10/11 64 位
-- JDK 17
-- Maven 由 `mvnw.cmd` 首次自动准备（也可自行安装 Maven 3.9+）
-- Node.js 22.18+
-- Python 3.11.x 64 位
-- PostgreSQL 16（默认端口 5432）
+1. 将 `.env.example` 复制为 `.env`，填写 PostgreSQL 密码。
+2. 运行 `scripts\01-init-python.cmd`。
+3. 运行 `scripts\02-init-database.cmd`。
+4. 运行 `scripts\03-start-dev.cmd`。
 
-## 首次运行
+使用 IDEA 时：
 
-1. 复制 `.env.example` 为 `.env`，修改数据库密码。
-2. 双击 `scripts\\01-init-python.cmd`。
-3. 双击 `scripts\\02-init-database.cmd`。
-4. 双击 `scripts\\03-start-dev.cmd`。
-5. Electron 窗口未自动出现时，在 `quant-desktop` 执行 `npm run dev`。
+1. 启动 `QuantServerApplication`。
+2. 在 `quant-ai` 目录启动：
+   `\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8001`
+3. 在 `quant-desktop` 目录执行：`npm run dev`。
 
 默认地址：
 
-- 核心 API：http://localhost:8080
-- AI/行情服务：http://localhost:8001
-- Web：http://localhost:5173
+- Java API：`http://127.0.0.1:8080`
+- Python 行情服务：`http://127.0.0.1:8001`
+- Web：`http://localhost:5173`
 
-## 生产构建
+## 第一次使用全市场扫描
 
-运行 `scripts\\04-build-all.cmd`。生成内容位于各模块的 `target` / `dist` 目录。
+1. 打开“数据管理”。
+2. 点击“同步股票列表”。
+3. 扫描数量填写 `200` 可先做小范围验证；填写 `0` 表示扫描全部沪深主板。
+4. 点击“启动全市场扫描”。
+5. 在“智能选股”查看最新排名。
 
-## 项目结构
+首次扫描需要从外部数据源获取历史行情，耗时会较长。成功获取后会写入 PostgreSQL 和 Python 本地缓存，后续速度会明显提高。
 
-```text
-stock-quant-pro
-├─ quant-core       Java 指标、策略、风控、回测核心
-├─ quant-server     Spring Boot API、任务、数据库
-├─ quant-ai         FastAPI、AKShare、AI降级分析
-├─ quant-web        Vue 3 量化终端界面
-├─ quant-desktop    Electron 桌面壳
-├─ database         手工建库脚本
-├─ installer        安装打包配置说明
-├─ scripts          Windows 初始化/启动/构建脚本
-└─ docs             架构、接口、使用与维护文档
-```
+## 风险与边界
 
-详细说明见 `docs/`。
+本软件仅用于投研、回测和人工交易辅助，不保证收益。当前不会连接券商自动下单，也不会保存券商密码。免费行情可能延迟、缺失或临时不可用，真实交易前必须在券商终端再次核对。

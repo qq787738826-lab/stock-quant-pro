@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import { api } from '../api'
 
 type Metrics = {
@@ -37,6 +38,7 @@ type AnalysisResult = {
   disclaimer: string
 }
 
+const route = useRoute()
 const symbol = ref('600000')
 const result = ref<AnalysisResult>()
 const err = ref('')
@@ -71,6 +73,10 @@ async function go() {
     loading.value = false
   }
 }
+onMounted(() => {
+  const querySymbol = String(route.query.symbol || '')
+  if (/^\d{6}$/.test(querySymbol)) { symbol.value = querySymbol; go() }
+})
 </script>
 
 <template>
