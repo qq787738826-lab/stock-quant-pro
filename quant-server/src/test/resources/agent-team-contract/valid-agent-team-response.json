@@ -1,0 +1,71 @@
+{
+  "schemaVersion": "1.0",
+  "taskId": 77,
+  "contextHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "tradeDate": "2026-07-14",
+  "ruleVersion": "local-rules-1",
+  "executionMode": "LOCAL_RULES",
+  "agentRuns": [
+    {
+      "schemaVersion": "1.0", "taskId": 77, "runId": 101, "agentCode": "DATA_QUALITY",
+      "status": "INSUFFICIENT_DATA", "gateStatus": "BLOCKED", "decision": "REJECT", "veto": false,
+      "score": 0, "confidence": 0, "summary": "分析上下文数据不足，数据质量门禁已阻断本次团队分析。",
+      "findings": [], "evidence": [],
+      "errors": [{ "code": "CONTEXT_DATA_UNAVAILABLE", "message": "Java提供的只读分析上下文当前不可用，未执行推断。" }],
+      "contextHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "ruleVersion": "local-rules-1", "executionMode": "LOCAL_RULES", "generatedAt": "2026-07-14T13:02:00+08:00"
+    },
+    {
+      "schemaVersion": "1.0", "taskId": 77, "runId": 102, "agentCode": "MARKET_REGIME",
+      "status": "INSUFFICIENT_DATA", "gateStatus": "NOT_APPLICABLE", "decision": "NOT_APPLICABLE", "veto": false,
+      "score": 0, "confidence": 0, "summary": "因数据质量门禁阻断，未执行市场环境分析。",
+      "findings": [], "evidence": [], "errors": [],
+      "contextHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "ruleVersion": "local-rules-1", "executionMode": "LOCAL_RULES", "generatedAt": "2026-07-14T05:02:00Z"
+    },
+    {
+      "schemaVersion": "1.0", "taskId": 77, "runId": 103, "agentCode": "TECHNICAL_ANALYSIS",
+      "status": "INSUFFICIENT_DATA", "gateStatus": "NOT_APPLICABLE", "decision": "NOT_APPLICABLE", "veto": false,
+      "score": 0, "confidence": 0, "summary": "因数据质量门禁阻断，未执行技术分析。",
+      "findings": [], "evidence": [], "errors": [],
+      "contextHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "ruleVersion": "local-rules-1", "executionMode": "LOCAL_RULES", "generatedAt": "2026-07-14T05:02:00Z"
+    },
+    {
+      "schemaVersion": "1.0", "taskId": 77, "runId": 104, "agentCode": "STRATEGY_BACKTEST",
+      "status": "INSUFFICIENT_DATA", "gateStatus": "NOT_APPLICABLE", "decision": "NOT_APPLICABLE", "veto": false,
+      "score": 0, "confidence": 0, "summary": "因数据质量门禁阻断，未执行策略回测分析。",
+      "findings": [], "evidence": [], "errors": [],
+      "contextHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "ruleVersion": "local-rules-1", "executionMode": "LOCAL_RULES", "generatedAt": "2026-07-14T05:02:00Z"
+    },
+    {
+      "schemaVersion": "1.0", "taskId": 77, "runId": 105, "agentCode": "ANNOUNCEMENT_RISK",
+      "status": "INSUFFICIENT_DATA", "gateStatus": "NOT_APPLICABLE", "decision": "NOT_APPLICABLE", "veto": false,
+      "score": 0, "confidence": 0, "summary": "因数据质量门禁阻断，未执行公告事件风险分析。",
+      "findings": [], "evidence": [], "errors": [],
+      "contextHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "ruleVersion": "local-rules-1", "executionMode": "LOCAL_RULES", "generatedAt": "2026-07-14T05:02:00Z"
+    },
+    {
+      "schemaVersion": "1.0", "taskId": 77, "runId": 106, "agentCode": "POSITION_RISK",
+      "status": "INSUFFICIENT_DATA", "gateStatus": "NOT_APPLICABLE", "decision": "NOT_APPLICABLE", "veto": false,
+      "score": 0, "confidence": 0, "summary": "因数据质量门禁阻断且无真实仓位证据，未执行资金仓位风控分析。",
+      "findings": [], "evidence": [], "errors": [],
+      "contextHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "ruleVersion": "local-rules-1", "executionMode": "LOCAL_RULES", "generatedAt": "2026-07-14T05:02:00Z"
+    }
+  ],
+  "evidence": [],
+  "vetoes": [],
+  "finalDecision": {
+    "schemaVersion": "1.0", "taskId": 77, "decision": "BLOCKED_BY_DATA_QUALITY", "gateStatus": "BLOCKED",
+    "vetoed": false, "score": 0, "confidence": 0,
+    "summary": "分析上下文数据不足，总控决策已按数据质量门禁阻断。",
+    "findings": [], "sourceRunIds": [101, 102, 103, 104, 105, 106], "vetoIds": [],
+    "contextHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "tradeDate": "2026-07-14", "ruleVersion": "local-rules-1", "executionMode": "LOCAL_RULES",
+    "generatedAt": "2026-07-14T13:02:00+08:00"
+  },
+  "generatedAt": "2026-07-14T05:02:00Z"
+}

@@ -1,0 +1,164 @@
+package com.stockquant.server.agent;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.json.JsonMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.stockquant.server.agent.exception.AgentTeamException;
+import com.stockquant.server.agent.model.AgentModels.AgentTeamRequest;
+import com.stockquant.server.agent.model.AgentModels.AgentTeamResponse;
+import com.stockquant.server.agent.model.AgentTypes.AgentCode;
+import com.stockquant.server.agent.model.AgentTypes.ExecutionMode;
+import com.stockquant.server.agent.validation.AgentResponseValidator;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.util.HashSet;
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+class AgentCrossLanguageContractTest {
+
+    private ObjectMapper mapper;
+    private AgentTeamRequest request;
+    private AgentTeamResponse response;
+
+    @BeforeEach
+    void setUp() throws IOException {
+        mapper = JsonMapper.builder()
+                .addModule(new JavaTimeModule())
+                .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
+                .build();
+        request = read("valid-agent-team-request.json", AgentTeamRequest.class);
+        response = read("valid-agent-team-response.json", AgentTeamResponse.class);
+    }
+
+    @Test
+    void javaOutboundRequestUsesPythonCompatibleCamelCaseIsoDateTimesAndRoundTrips() throws Exception {
+        JsonNode serialized = mapper.readTree(mapper.writeValueAsBytes(request));
+
+        assertTrue(serialized.has("taskId"));
+        assertFalse(serialized.has("task_id"));
+        assertTrue(serialized.path("runIds").isObject());
+        assertTrue(serialized.path("runIds").has("dataQuality"));
+        assertTrue(serialized.path("runIds").has("marketRegime"));
+        assertTrue(serialized.path("runIds").has("technicalAnalysis"));
+        assertTrue(serialized.path("runIds").has("strategyBacktest"));
+        assertTrue(serialized.path("runIds").has("announcementRisk"));
+        assertTrue(serialized.path("runIds").has("positionRisk"));
+        assertFalse(serialized.has("run_ids"));
+        assertFalse(serialized.path("runIds").has("data_quality"));
+
+        assertTrue(serialized.path("tradeDate").isTextual());
+        assertEquals("2026-07-14", serialized.path("tradeDate").textValue());
+        assertTrue(serialized.path("requestedAt").isTextual());
+        String requestedAt = serialized.path("requestedAt").textValue();
+        assertTrue(requestedAt.endsWith("Z"));
+        assertEquals(Instant.parse("2026-07-14T05:01:00Z"), Instant.parse(requestedAt));
+        assertTrue(serialized.path("contextSnapshot").isObject());
+
+        AgentTeamRequest roundTrip = mapper.treeToValue(serialized, AgentTeamRequest.class);
+        assertEquals(request.taskId(), roundTrip.taskId());
+        assertEquals(request.runIds(), roundTrip.runIds());
+        assertEquals(request.tradeDate(), roundTrip.tradeDate());
+        assertEquals(request.requestedAt(), roundTrip.requestedAt());
+        assertEquals(request.contextHash(), roundTrip.contextHash());
+    }
+
+    @Test
+    void sharedRequestDeserializesWithExactJavaIdentifiersAndCamelCase() throws Exception {
+        assertEquals("1.0", request.schemaVersion());
+        assertEquals(77, request.taskId());
+        assertEquals("600000", request.symbol());
+        assertEquals(LocalDate.of(2026, 7, 14), request.tradeDate());
+        assertEquals("a".repeat(64), request.contextHash());
+        assertEquals("local-rules-1", request.ruleVersion());
+        assertEquals(ExecutionMode.LOCAL_RULES, request.executionMode());
+        List<Long> ids = List.copyOf(request.runIds().byAgentCode().values());
+        assertEquals(6, ids.size());
+        assertEquals(6, new HashSet<>(ids).size());
+        assertEquals(101, request.runIds().dataQuality());
+        assertEquals(102, request.runIds().marketRegime());
+        assertEquals(103, request.runIds().technicalAnalysis());
+        assertEquals(104, request.runIds().strategyBacktest());
+        assertEquals(105, request.runIds().announcementRisk());
+        assertEquals(106, request.runIds().positionRisk());
+
+        JsonNode serialized = mapper.readTree(mapper.writeValueAsBytes(request));
+        assertTrue(serialized.has("taskId"));
+        assertTrue(serialized.path("runIds").has("dataQuality"));
+        assertFalse(serialized.has("task_id"));
+    }
+
+    @Test
+    void sharedResponseDeserializesAndPassesJavaSemanticValidator() {
+        assertEquals(6, response.agentRuns().size());
+        assertEquals(AgentCode.PROFESSIONAL_AGENTS,
+                response.agentRuns().stream().map(run -> run.agentCode()).toList());
+        assertEquals(6, response.agentRuns().stream().map(run -> run.agentCode()).distinct().count());
+        assertEquals(request.runIds().byAgentCode().values().stream().collect(java.util.stream.Collectors.toSet()),
+                new HashSet<>(response.finalDecision().sourceRunIds()));
+        new AgentResponseValidator().validate(request, response);
+    }
+
+    @Test
+    void zAndOffsetDateTimesDeserializeToTheSameInstant() {
+        Instant expected = Instant.parse("2026-07-14T05:02:00Z");
+        assertEquals(Instant.parse("2026-07-14T05:01:00Z"), request.requestedAt());
+        assertEquals(expected, response.generatedAt());
+        response.agentRuns().forEach(run -> assertEquals(expected, run.generatedAt()));
+        assertEquals(expected, response.finalDecision().generatedAt());
+    }
+
+    @Test
+    void invalidEnumAndTimezoneLessTimestampAreRejected() throws Exception {
+        JsonNode invalidEnum = responseNode();
+        ((com.fasterxml.jackson.databind.node.ObjectNode) invalidEnum).put("executionMode", "PAID_MODEL");
+        assertThrows(JsonProcessingException.class,
+                () -> mapper.treeToValue(invalidEnum, AgentTeamResponse.class));
+
+        JsonNode noZone = responseNode();
+        ((com.fasterxml.jackson.databind.node.ObjectNode) noZone).put("generatedAt", "2026-07-14T05:02:00");
+        assertThrows(JsonProcessingException.class,
+                () -> mapper.treeToValue(noZone, AgentTeamResponse.class));
+    }
+
+    @Test
+    void mismatchedRunIdMappingIsRejectedByJavaValidator() throws Exception {
+        JsonNode invalid = responseNode();
+        ((com.fasterxml.jackson.databind.node.ObjectNode) invalid.path("agentRuns").get(0)).put("runId", 999);
+        AgentTeamResponse mismatched = mapper.treeToValue(invalid, AgentTeamResponse.class);
+        assertThrows(AgentTeamException.class,
+                () -> new AgentResponseValidator().validate(request, mismatched));
+    }
+
+    private JsonNode responseNode() throws IOException {
+        try (InputStream stream = resource("valid-agent-team-response.json")) {
+            return mapper.readTree(stream);
+        }
+    }
+
+    private <T> T read(String name, Class<T> type) throws IOException {
+        try (InputStream stream = resource(name)) {
+            return mapper.readValue(stream, type);
+        }
+    }
+
+    private InputStream resource(String name) {
+        InputStream stream = getClass().getResourceAsStream("/agent-team-contract/" + name);
+        if (stream == null) {
+            throw new IllegalStateException("共享契约夹具不存在：" + name);
+        }
+        return stream;
+    }
+}

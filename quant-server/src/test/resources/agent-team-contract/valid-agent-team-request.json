@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "1.0",
+  "taskId": 77,
+  "runIds": {
+    "dataQuality": 101,
+    "marketRegime": 102,
+    "technicalAnalysis": 103,
+    "strategyBacktest": 104,
+    "announcementRisk": 105,
+    "positionRisk": 106
+  },
+  "symbol": "600000",
+  "tradeDate": "2026-07-14",
+  "contextHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "contextSchemaVersion": "1.0",
+  "ruleVersion": "local-rules-1",
+  "executionMode": "LOCAL_RULES",
+  "contextSnapshot": {
+    "security": { "available": false, "reason": "上下文暂不可用", "queriedAt": "2026-07-14T13:00:00+08:00", "queryScope": {} },
+    "marketData": { "available": false, "reason": "上下文暂不可用", "queriedAt": "2026-07-14T13:00:00+08:00", "queryScope": {} },
+    "marketBreadth": { "available": false, "reason": "上下文暂不可用", "queriedAt": "2026-07-14T13:00:00+08:00", "queryScope": {} },
+    "scanResult": { "available": false, "reason": "上下文暂不可用", "queriedAt": "2026-07-14T13:00:00+08:00", "queryScope": {} },
+    "technicalMetrics": { "available": false, "reason": "上下文暂不可用", "queriedAt": "2026-07-14T13:00:00+08:00", "queryScope": {} },
+    "backtestContext": { "available": false, "reason": "上下文暂不可用", "queriedAt": "2026-07-14T13:00:00+08:00", "queryScope": {} },
+    "securityEvents": { "available": false, "reason": "上下文暂不可用", "queriedAt": "2026-07-14T13:00:00+08:00", "queryScope": {} },
+    "portfolioContext": { "available": false, "reason": "上下文暂不可用", "queriedAt": "2026-07-14T13:00:00+08:00", "queryScope": {} },
+    "dataQualityContext": { "available": false, "reason": "上下文暂不可用", "queriedAt": "2026-07-14T13:00:00+08:00", "queryScope": {} }
+  },
+  "requestedAt": "2026-07-14T13:01:00+08:00"
+}
