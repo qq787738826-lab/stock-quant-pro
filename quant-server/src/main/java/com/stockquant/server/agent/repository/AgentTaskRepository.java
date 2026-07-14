@@ -89,7 +89,7 @@ public class AgentTaskRepository {
                 tradeDate,
                 context.schemaVersion(),
                 AgentJdbcSupport.writeJson(objectMapper, context.value()),
-                context.generatedAt(),
+                AgentJdbcSupport.timestamptz(context.generatedAt()),
                 context.contextHash(),
                 ruleVersion,
                 executionMode.name(),

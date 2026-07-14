@@ -1,0 +1,14 @@
+spring:
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+stockquant:
+  agent-team:
+    enabled: true
+    connect-timeout: 2s
+    read-timeout: 5s
+    executor:
+      core-pool-size: 1
+      max-pool-size: 1
+      queue-capacity: 10

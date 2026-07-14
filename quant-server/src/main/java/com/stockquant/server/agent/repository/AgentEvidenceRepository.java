@@ -55,8 +55,8 @@ public class AgentEvidenceRepository {
                     item.sourceRef(),
                     item.symbol(),
                     item.tradeDate(),
-                    item.observedAt(),
-                    item.collectedAt(),
+                    AgentJdbcSupport.timestamptz(item.observedAt()),
+                    AgentJdbcSupport.timestamptz(item.collectedAt()),
                     item.contentHash(),
                     AgentJdbcSupport.writeJson(objectMapper, item.fields())
             );

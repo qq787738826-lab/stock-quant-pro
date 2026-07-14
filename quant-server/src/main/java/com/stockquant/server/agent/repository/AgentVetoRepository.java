@@ -46,7 +46,7 @@ public class AgentVetoRepository {
                     veto.vetoCode(),
                     veto.reason(),
                     AgentJdbcSupport.textArray(veto.evidenceIds()),
-                    veto.createdAt()
+                    AgentJdbcSupport.timestamptz(veto.createdAt())
             );
             persistedIds.put(veto.vetoId(), id);
         }

@@ -8,6 +8,7 @@ import com.stockquant.server.agent.exception.AgentTeamException;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 
 final class AgentJdbcSupport {
 
@@ -40,6 +41,10 @@ final class AgentJdbcSupport {
             return timestamp.toInstant();
         }
         return (Instant) value;
+    }
+
+    static OffsetDateTime timestamptz(Instant value) {
+        return value == null ? null : value.atOffset(ZoneOffset.UTC);
     }
 
     static String textArray(Iterable<String> values) {

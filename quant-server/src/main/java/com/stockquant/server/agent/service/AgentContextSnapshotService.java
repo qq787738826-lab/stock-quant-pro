@@ -3,6 +3,7 @@ package com.stockquant.server.agent.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.stockquant.server.agent.model.AgentModels.ContextSnapshot;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.Clock;
@@ -23,6 +24,7 @@ public class AgentContextSnapshotService {
     private final AgentContextHashService hashService;
     private final Clock clock;
 
+    @Autowired
     public AgentContextSnapshotService(ObjectMapper objectMapper, AgentContextHashService hashService) {
         this(objectMapper, hashService, Clock.systemUTC());
     }

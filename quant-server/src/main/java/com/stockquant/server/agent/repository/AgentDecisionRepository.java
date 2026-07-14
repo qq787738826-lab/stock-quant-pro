@@ -64,7 +64,7 @@ public class AgentDecisionRepository {
                 decision.tradeDate(),
                 decision.ruleVersion(),
                 decision.executionMode().name(),
-                decision.generatedAt(),
+                AgentJdbcSupport.timestamptz(decision.generatedAt()),
                 duration.toMillis()
         );
     }

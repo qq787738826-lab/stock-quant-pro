@@ -12,6 +12,7 @@ import com.stockquant.server.agent.repository.AgentTaskRepository;
 import com.stockquant.server.agent.validation.AgentResponseValidator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.Clock;
@@ -34,6 +35,7 @@ public class AgentTaskWorker {
     private final AgentSafeErrorMapper safeErrorMapper;
     private final Clock clock;
 
+    @Autowired
     public AgentTaskWorker(
             AgentTaskRepository taskRepository,
             AgentRunRepository runRepository,
