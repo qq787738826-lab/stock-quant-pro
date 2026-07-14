@@ -30,6 +30,16 @@ quant:
     scan-default-limit: 0
     scan-batch-size: 12
     history-days: 120
+stockquant:
+  agent-team:
+    enabled: ${AGENT_TEAM_ENABLED:false}
+    base-url: ${AGENT_TEAM_BASE_URL:${quant.ai-service-url}}
+    connect-timeout: 5s
+    read-timeout: 60s
+    executor:
+      core-pool-size: 1
+      max-pool-size: 2
+      queue-capacity: 20
 logging:
   file:
     name: logs/quant-server.log
