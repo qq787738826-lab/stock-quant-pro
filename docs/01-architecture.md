@@ -42,3 +42,23 @@
 ```
 
 所有成交由用户在客户端人工确认，不连接券商账户。
+
+## 1.4.0 股票智能体团队契约（阶段1A）
+
+1.4.0 采用“Java权威任务与持久化、Python无状态统一分析、Vue只调用Java”的边界：
+
+```text
+Vue → Java agentTask/agentRuns → Python /agents/team/analyze
+    ← Java校验并持久化 evidence/vetoes/agentDecision ←
+```
+
+- Java创建团队级任务和六个专业智能体运行记录，生成不可变上下文快照并计算SHA-256哈希。
+- Java每个团队任务只调用一次Python统一分析接口。
+- Python不访问智能体任务表，不修改Java分配的任务ID和运行ID。
+- `agentRuns`只包含六个专业智能体；总控不是普通运行记录，其最终结果只保存到独立`agent_decisions`。
+- 数据质量使用`gateStatus=BLOCKED`，不产生正式否决。
+- 公告智能体只输出公告风险；只有资金仓位风控智能体可以产生正式否决。
+- 总控不能解除正式否决，智能体不能修改模拟账户资金、持仓、委托或成交。
+- 默认且当前唯一执行模式为`LOCAL_RULES`，不接入付费模型。
+
+详细契约见[股票智能体团队架构](06-agent-team-architecture.md)和[证据契约](07-agent-evidence-contract.md)。

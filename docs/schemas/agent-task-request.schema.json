@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stockquant.local/schemas/agent-task-request.schema.json",
+  "title": "Stock Quant Pro Agent Task Request",
+  "description": "Vue-to-Java request for one team-level analysis task.",
+  "type": "object",
+  "required": ["symbol", "tradeDate", "executionMode", "ruleVersion", "forceRefresh", "triggerType"],
+  "properties": {
+    "symbol": { "type": "string", "pattern": "^[0-9]{6}$" },
+    "tradeDate": { "type": "string", "format": "date" },
+    "executionMode": { "type": "string", "const": "LOCAL_RULES" },
+    "ruleVersion": { "type": "string", "minLength": 1 },
+    "forceRefresh": { "type": "boolean" },
+    "triggerType": {
+      "type": "string",
+      "enum": ["MANUAL", "SCAN_CANDIDATE", "SCHEDULED", "RETRY"]
+    }
+  },
+  "additionalProperties": false
+}

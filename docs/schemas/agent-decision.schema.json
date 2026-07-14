@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stockquant.local/schemas/agent-decision.schema.json",
+  "title": "Stock Quant Pro Chief Agent Decision",
+  "description": "Final chief decision kept separate from professional agent runs.",
+  "type": "object",
+  "required": [
+    "schemaVersion", "taskId", "decision", "gateStatus", "vetoed", "score",
+    "confidence", "summary", "findings", "sourceRunIds", "vetoIds", "contextHash",
+    "tradeDate", "ruleVersion", "executionMode", "generatedAt"
+  ],
+  "properties": {
+    "schemaVersion": { "type": "string", "const": "1.0" },
+    "taskId": { "type": "integer", "minimum": 1 },
+    "decision": {
+      "type": "string",
+      "enum": [
+        "REJECTED_BY_VETO", "BLOCKED_BY_DATA_QUALITY", "INSUFFICIENT_DATA",
+        "RESEARCH_ONLY", "WATCH", "PASS_TO_MANUAL_REVIEW"
+      ]
+    },
+    "gateStatus": {
+      "type": "string",
+      "enum": ["PASS", "WARN", "BLOCKED", "NOT_APPLICABLE"]
+    },
+    "vetoed": { "type": "boolean" },
+    "score": { "type": "integer", "minimum": 0, "maximum": 100 },
+    "confidence": { "type": "integer", "minimum": 0, "maximum": 100 },
+    "summary": { "type": "string" },
+    "findings": {
+      "type": "array",
+      "items": { "$ref": "agent-output.schema.json#/$defs/finding" }
+    },
+    "sourceRunIds": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "integer", "minimum": 1 }
+    },
+    "vetoIds": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "contextHash": { "$ref": "agent-output.schema.json#/$defs/sha256" },
+    "tradeDate": { "type": "string", "format": "date" },
+    "ruleVersion": { "type": "string", "minLength": 1 },
+    "executionMode": { "$ref": "agent-output.schema.json#/$defs/executionMode" },
+    "generatedAt": { "$ref": "agent-output.schema.json#/$defs/dateTimeWithZone" }
+  },
+  "additionalProperties": false
+}

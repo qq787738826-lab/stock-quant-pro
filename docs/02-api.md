@@ -80,3 +80,38 @@ POST /api/portfolio/refresh-risk
 GET  /api/portfolio/risk-events
 POST /api/portfolio/risk-events/{id}/resolve
 ```
+
+## 1.4.0 股票智能体团队接口契约（阶段1A，尚未实现）
+
+### Java对Vue公开的计划接口
+
+```text
+POST /api/agent-tasks
+GET  /api/agent-tasks/{taskId}
+GET  /api/agent-tasks/{taskId}/runs
+GET  /api/agent-tasks/{taskId}/evidence
+GET  /api/agent-tasks/{taskId}/decision
+GET  /api/agent-tasks/history
+```
+
+Vue只能调用上述Java接口，不能直接调用Python智能体接口。
+
+### Java调用Python的内部统一接口
+
+```text
+POST /agents/team/analyze
+```
+
+Java为每个团队任务只调用一次该接口。Python返回六个专业智能体结果、证据、正式否决和独立的总控最终决策。Python不读取或写入智能体任务数据库表，也不修改Java生成的`taskId`、六个专业智能体`runIds`或`contextHash`。
+
+`agent-task-request.schema.json`是Vue调用Java创建团队任务的请求；`agent-team-request.schema.json`是Java调用Python执行只读分析的请求，两者不是同一个接口契约。Java到Python的请求携带六个专业智能体`runIds`和不可变上下文快照，Python不得修改`taskId`、`runIds`或`contextHash`。
+
+请求与响应契约：
+
+- [团队任务请求Schema](schemas/agent-task-request.schema.json)
+- [Java到Python团队分析请求Schema](schemas/agent-team-request.schema.json)
+- [单智能体输出Schema](schemas/agent-output.schema.json)
+- [团队响应Schema](schemas/agent-team-response.schema.json)
+- [总控最终决策Schema](schemas/agent-decision.schema.json)
+
+本节只冻结1.4.0阶段1A契约，接口尚未进入生产代码。

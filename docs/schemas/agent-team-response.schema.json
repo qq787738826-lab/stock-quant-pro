@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stockquant.local/schemas/agent-team-response.schema.json",
+  "title": "Stock Quant Pro Agent Team Response",
+  "description": "Single Python response containing professional runs, evidence, vetoes and a separate chief decision.",
+  "type": "object",
+  "required": [
+    "schemaVersion", "taskId", "contextHash", "tradeDate", "ruleVersion",
+    "executionMode", "agentRuns", "evidence", "vetoes", "finalDecision", "generatedAt"
+  ],
+  "properties": {
+    "schemaVersion": { "type": "string", "const": "1.0" },
+    "taskId": { "type": "integer", "minimum": 1 },
+    "contextHash": { "$ref": "agent-output.schema.json#/$defs/sha256" },
+    "tradeDate": { "type": "string", "format": "date" },
+    "ruleVersion": { "type": "string", "minLength": 1 },
+    "executionMode": { "$ref": "agent-output.schema.json#/$defs/executionMode" },
+    "agentRuns": {
+      "type": "array",
+      "description": "Exactly six professional agent outputs. The chief decision is never an agentRuns item.",
+      "minItems": 6,
+      "maxItems": 6,
+      "items": { "$ref": "agent-output.schema.json" }
+    },
+    "evidence": {
+      "type": "array",
+      "description": "Authoritative evidence collection that Java validates, deduplicates by evidenceId and persists.",
+      "items": { "$ref": "agent-output.schema.json#/$defs/evidence" }
+    },
+    "vetoes": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/veto" }
+    },
+    "finalDecision": { "$ref": "agent-decision.schema.json" },
+    "generatedAt": { "$ref": "agent-output.schema.json#/$defs/dateTimeWithZone" }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "veto": {
+      "type": "object",
+      "required": [
+        "vetoId", "taskId", "runId", "agentCode", "vetoCode", "reason", "evidenceIds", "createdAt"
+      ],
+      "properties": {
+        "vetoId": { "type": "string", "minLength": 1 },
+        "taskId": { "type": "integer", "minimum": 1 },
+        "runId": { "type": "integer", "minimum": 1 },
+        "agentCode": { "type": "string", "const": "POSITION_RISK" },
+        "vetoCode": { "type": "string", "minLength": 1 },
+        "reason": { "type": "string", "minLength": 1 },
+        "evidenceIds": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "createdAt": { "$ref": "agent-output.schema.json#/$defs/dateTimeWithZone" }
+      },
+      "additionalProperties": false
+    }
+  }
+}
