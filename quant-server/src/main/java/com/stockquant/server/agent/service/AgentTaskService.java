@@ -6,12 +6,14 @@ import com.stockquant.server.agent.model.AgentModels.AgentTask;
 import com.stockquant.server.agent.model.AgentModels.CacheKey;
 import com.stockquant.server.agent.model.AgentModels.ContextSnapshot;
 import com.stockquant.server.agent.model.AgentModels.CreatedTask;
+import com.stockquant.server.agent.model.AgentModels.FormalVeto;
 import com.stockquant.server.agent.model.AgentModels.PageResult;
 import com.stockquant.server.agent.model.AgentTypes.ExecutionMode;
 import com.stockquant.server.agent.repository.AgentDecisionRepository;
 import com.stockquant.server.agent.repository.AgentEvidenceRepository;
 import com.stockquant.server.agent.repository.AgentRunRepository;
 import com.stockquant.server.agent.repository.AgentTaskRepository;
+import com.stockquant.server.agent.repository.AgentVetoRepository;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 
@@ -24,6 +26,7 @@ public class AgentTaskService {
     private final AgentRunRepository runRepository;
     private final AgentEvidenceRepository evidenceRepository;
     private final AgentDecisionRepository decisionRepository;
+    private final AgentVetoRepository vetoRepository;
     private final AgentCacheService cacheService;
     private final AgentContextSnapshotService contextSnapshotService;
     private final AgentTaskCreationTransaction creationTransaction;
@@ -33,6 +36,7 @@ public class AgentTaskService {
             AgentRunRepository runRepository,
             AgentEvidenceRepository evidenceRepository,
             AgentDecisionRepository decisionRepository,
+            AgentVetoRepository vetoRepository,
             AgentCacheService cacheService,
             AgentContextSnapshotService contextSnapshotService,
             AgentTaskCreationTransaction creationTransaction
@@ -41,6 +45,7 @@ public class AgentTaskService {
         this.runRepository = runRepository;
         this.evidenceRepository = evidenceRepository;
         this.decisionRepository = decisionRepository;
+        this.vetoRepository = vetoRepository;
         this.cacheService = cacheService;
         this.contextSnapshotService = contextSnapshotService;
         this.creationTransaction = creationTransaction;
@@ -100,6 +105,11 @@ public class AgentTaskService {
     public Object decision(long taskId) {
         requireTask(taskId);
         return decisionRepository.findByTaskId(taskId).orElse(null);
+    }
+
+    public List<FormalVeto> vetoes(long taskId) {
+        requireTask(taskId);
+        return vetoRepository.findByTaskId(taskId);
     }
 
     public PageResult<AgentTask> history(int page, int size) {

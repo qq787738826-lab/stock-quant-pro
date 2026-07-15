@@ -2,6 +2,7 @@ package com.stockquant.server.agent.api;
 
 import com.stockquant.server.agent.model.AgentModels.AgentTask;
 import com.stockquant.server.agent.model.AgentModels.CreatedTask;
+import com.stockquant.server.agent.model.AgentModels.FormalVeto;
 import com.stockquant.server.agent.model.AgentModels.PageResult;
 import com.stockquant.server.agent.service.AgentTaskService;
 import com.stockquant.server.api.ApiResponse;
@@ -13,6 +14,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/agent-tasks")
@@ -47,6 +50,11 @@ public class AgentTaskController {
     @GetMapping("/{taskId}/decision")
     public ApiResponse<?> decision(@PathVariable long taskId) {
         return ApiResponse.ok(taskService.decision(taskId));
+    }
+
+    @GetMapping("/{taskId}/vetoes")
+    public ApiResponse<List<FormalVeto>> vetoes(@PathVariable long taskId) {
+        return ApiResponse.ok(taskService.vetoes(taskId));
     }
 
     @GetMapping("/history")

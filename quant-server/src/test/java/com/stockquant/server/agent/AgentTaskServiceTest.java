@@ -12,6 +12,7 @@ import com.stockquant.server.agent.repository.AgentDecisionRepository;
 import com.stockquant.server.agent.repository.AgentEvidenceRepository;
 import com.stockquant.server.agent.repository.AgentRunRepository;
 import com.stockquant.server.agent.repository.AgentTaskRepository;
+import com.stockquant.server.agent.repository.AgentVetoRepository;
 import com.stockquant.server.agent.service.AgentCacheService;
 import com.stockquant.server.agent.service.AgentContextSnapshotService;
 import com.stockquant.server.agent.service.AgentTaskCreationTransaction;
@@ -45,6 +46,7 @@ class AgentTaskServiceTest {
     @Mock AgentRunRepository runRepository;
     @Mock AgentEvidenceRepository evidenceRepository;
     @Mock AgentDecisionRepository decisionRepository;
+    @Mock AgentVetoRepository vetoRepository;
     @Mock AgentCacheService cacheService;
     @Mock AgentContextSnapshotService contextService;
     @Mock AgentTaskCreationTransaction creationTransaction;
@@ -56,7 +58,7 @@ class AgentTaskServiceTest {
     @BeforeEach
     void setUp() {
         service = new AgentTaskService(
-                taskRepository, runRepository, evidenceRepository, decisionRepository,
+                taskRepository, runRepository, evidenceRepository, decisionRepository, vetoRepository,
                 cacheService, contextService, creationTransaction
         );
         request = new CreateAgentTaskRequest(
