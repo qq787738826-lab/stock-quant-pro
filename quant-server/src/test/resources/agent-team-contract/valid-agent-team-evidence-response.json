@@ -1,0 +1,70 @@
+{
+  "schemaVersion": "1.0",
+  "taskId": 77,
+  "contextHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "tradeDate": "2026-07-14",
+  "ruleVersion": "local-rules-1",
+  "executionMode": "LOCAL_RULES",
+  "agentRuns": [
+    {
+      "schemaVersion": "1.0", "taskId": 77, "runId": 101, "agentCode": "DATA_QUALITY",
+      "status": "COMPLETED", "gateStatus": "PASS", "decision": "PASS", "veto": false,
+      "score": 100, "confidence": 100, "summary": "数据完整性检查通过。",
+      "findings": [{"findingId":"dq-1","code":"DATA_PRESENT","severity":"INFO","title":"行情可用","detail":"查询返回了行情记录。","evidenceIds":["e-market"]}],
+      "evidence": [], "errors": [], "contextHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "ruleVersion": "local-rules-1", "executionMode": "LOCAL_RULES", "generatedAt": "2026-07-14T05:02:00Z"
+    },
+    {
+      "schemaVersion": "1.0", "taskId": 77, "runId": 102, "agentCode": "MARKET_REGIME",
+      "status": "COMPLETED", "gateStatus": "PASS", "decision": "PASS", "veto": false,
+      "score": 60, "confidence": 80, "summary": "市场环境证据可供研究。",
+      "findings": [{"findingId":"market-1","code":"MARKET_OBSERVED","severity":"INFO","title":"市场记录","detail":"使用同一行情证据进行市场判断。","evidenceIds":["e-market"]}],
+      "evidence": [], "errors": [], "contextHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "ruleVersion": "local-rules-1", "executionMode": "LOCAL_RULES", "generatedAt": "2026-07-14T05:02:00Z"
+    },
+    {
+      "schemaVersion": "1.0", "taskId": 77, "runId": 103, "agentCode": "TECHNICAL_ANALYSIS",
+      "status": "COMPLETED", "gateStatus": "WARN", "decision": "WARN", "veto": false,
+      "score": 50, "confidence": 70, "summary": "技术指标仅供研究。",
+      "findings": [{"findingId":"technical-1","code":"INDICATOR_OBSERVED","severity":"WARN","title":"指标记录","detail":"指标存在但不形成交易指令。","evidenceIds":["e-technical"]}],
+      "evidence": [], "errors": [], "contextHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "ruleVersion": "local-rules-1", "executionMode": "LOCAL_RULES", "generatedAt": "2026-07-14T05:02:00Z"
+    },
+    {
+      "schemaVersion": "1.0", "taskId": 77, "runId": 104, "agentCode": "STRATEGY_BACKTEST",
+      "status": "COMPLETED", "gateStatus": "WARN", "decision": "WARN", "veto": false,
+      "score": 40, "confidence": 60, "summary": "本夹具不计算真实回测结论。",
+      "findings": [], "evidence": [], "errors": [], "contextHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "ruleVersion": "local-rules-1", "executionMode": "LOCAL_RULES", "generatedAt": "2026-07-14T05:02:00Z"
+    },
+    {
+      "schemaVersion": "1.0", "taskId": 77, "runId": 105, "agentCode": "ANNOUNCEMENT_RISK",
+      "status": "COMPLETED", "gateStatus": "PASS", "decision": "PASS", "veto": false,
+      "score": 30, "confidence": 50, "summary": "本夹具不声明公告事实。",
+      "findings": [], "evidence": [], "errors": [], "contextHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "ruleVersion": "local-rules-1", "executionMode": "LOCAL_RULES", "generatedAt": "2026-07-14T05:02:00Z"
+    },
+    {
+      "schemaVersion": "1.0", "taskId": 77, "runId": 106, "agentCode": "POSITION_RISK",
+      "status": "COMPLETED", "gateStatus": "PASS", "decision": "PASS", "veto": false,
+      "score": 0, "confidence": 40, "summary": "仓位证据未触发正式否决。",
+      "findings": [{"findingId":"position-1","code":"POSITION_OBSERVED","severity":"INFO","title":"仓位记录","detail":"只读仓位状态未触发本夹具否决。","evidenceIds":["e-portfolio"]}],
+      "evidence": [], "errors": [], "contextHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "ruleVersion": "local-rules-1", "executionMode": "LOCAL_RULES", "generatedAt": "2026-07-14T05:02:00Z"
+    }
+  ],
+  "evidence": [
+    {"evidenceId":"e-market","category":"MARKET_DATA","sourceType":"DATABASE","sourceName":"contract-fixture","sourceRef":"market:600000:2026-07-14","symbol":"600000","tradeDate":"2026-07-14","observedAt":"2026-07-14T05:00:00Z","collectedAt":"2026-07-14T05:01:00Z","fields":{"recordCount":1},"contentHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
+    {"evidenceId":"e-technical","category":"TECHNICAL_INDICATOR","sourceType":"JAVA_ENGINE","sourceName":"contract-fixture","sourceRef":"indicator:600000:2026-07-14","symbol":"600000","tradeDate":"2026-07-14","observedAt":"2026-07-14T05:00:00Z","collectedAt":"2026-07-14T05:01:00Z","fields":{"indicatorCount":1},"contentHash":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"},
+    {"evidenceId":"e-portfolio","category":"PORTFOLIO_STATE","sourceType":"DATABASE","sourceName":"contract-fixture","sourceRef":"portfolio:readonly:2026-07-14","symbol":"600000","tradeDate":"2026-07-14","observedAt":"2026-07-14T05:00:00Z","collectedAt":"2026-07-14T05:01:00Z","fields":{"readOnly":true},"contentHash":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"}
+  ],
+  "vetoes": [],
+  "finalDecision": {
+    "schemaVersion":"1.0","taskId":77,"decision":"WATCH","gateStatus":"WARN","vetoed":false,
+    "score":50,"confidence":70,"summary":"证据场景仅进入人工观察。","findings":[],
+    "sourceRunIds":[101,102,103,104,105,106],"vetoIds":[],
+    "contextHash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","tradeDate":"2026-07-14",
+    "ruleVersion":"local-rules-1","executionMode":"LOCAL_RULES","generatedAt":"2026-07-14T05:02:00Z"
+  },
+  "generatedAt": "2026-07-14T05:02:00Z"
+}

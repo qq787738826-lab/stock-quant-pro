@@ -1,0 +1,27 @@
+{
+  "schemaVersion":"1.0","taskId":77,
+  "contextHash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "tradeDate":"2026-07-14","ruleVersion":"local-rules-1","executionMode":"LOCAL_RULES",
+  "agentRuns":[
+    {"schemaVersion":"1.0","taskId":77,"runId":101,"agentCode":"DATA_QUALITY","status":"COMPLETED","gateStatus":"PASS","decision":"PASS","veto":false,"score":100,"confidence":100,"summary":"数据质量允许继续。","findings":[],"evidence":[],"errors":[],"contextHash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","ruleVersion":"local-rules-1","executionMode":"LOCAL_RULES","generatedAt":"2026-07-14T05:02:00Z"},
+    {"schemaVersion":"1.0","taskId":77,"runId":102,"agentCode":"MARKET_REGIME","status":"COMPLETED","gateStatus":"WARN","decision":"WARN","veto":false,"score":50,"confidence":60,"summary":"市场结果仅供研究。","findings":[],"evidence":[],"errors":[],"contextHash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","ruleVersion":"local-rules-1","executionMode":"LOCAL_RULES","generatedAt":"2026-07-14T05:02:00Z"},
+    {"schemaVersion":"1.0","taskId":77,"runId":103,"agentCode":"TECHNICAL_ANALYSIS","status":"COMPLETED","gateStatus":"WARN","decision":"WARN","veto":false,"score":50,"confidence":60,"summary":"技术结果仅供研究。","findings":[],"evidence":[],"errors":[],"contextHash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","ruleVersion":"local-rules-1","executionMode":"LOCAL_RULES","generatedAt":"2026-07-14T05:02:00Z"},
+    {"schemaVersion":"1.0","taskId":77,"runId":104,"agentCode":"STRATEGY_BACKTEST","status":"COMPLETED","gateStatus":"WARN","decision":"WARN","veto":false,"score":50,"confidence":60,"summary":"回测结果仅供研究。","findings":[],"evidence":[],"errors":[],"contextHash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","ruleVersion":"local-rules-1","executionMode":"LOCAL_RULES","generatedAt":"2026-07-14T05:02:00Z"},
+    {"schemaVersion":"1.0","taskId":77,"runId":105,"agentCode":"ANNOUNCEMENT_RISK","status":"COMPLETED","gateStatus":"WARN","decision":"REJECT","veto":false,"score":20,"confidence":80,"summary":"公告风险结论不直接形成正式否决。","findings":[{"findingId":"announcement-1","code":"EVENT_RISK","severity":"HIGH","title":"事件风险","detail":"公告风险由POSITION_RISK决定是否正式否决。","evidenceIds":["e-risk"]}],"evidence":[],"errors":[],"contextHash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","ruleVersion":"local-rules-1","executionMode":"LOCAL_RULES","generatedAt":"2026-07-14T05:02:00Z"},
+    {"schemaVersion":"1.0","taskId":77,"runId":106,"agentCode":"POSITION_RISK","status":"COMPLETED","gateStatus":"BLOCKED","decision":"REJECT","veto":true,"score":0,"confidence":90,"summary":"风险证据触发正式否决。","findings":[{"findingId":"position-risk-1","code":"FORMAL_RISK","severity":"CRITICAL","title":"正式风险否决","detail":"POSITION_RISK基于风险证据生成正式否决。","evidenceIds":["e-risk"]}],"evidence":[],"errors":[],"contextHash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","ruleVersion":"local-rules-1","executionMode":"LOCAL_RULES","generatedAt":"2026-07-14T05:02:00Z"}
+  ],
+  "evidence":[
+    {"evidenceId":"e-risk","category":"SECURITY_EVENT","sourceType":"DATABASE","sourceName":"contract-fixture","sourceRef":"event:600000:risk","symbol":"600000","tradeDate":"2026-07-14","observedAt":"2026-07-14T05:00:00Z","collectedAt":"2026-07-14T05:01:00Z","fields":{"riskLevel":"CRITICAL"},"contentHash":"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"}
+  ],
+  "vetoes":[
+    {"vetoId":"veto-risk-1","taskId":77,"runId":106,"agentCode":"POSITION_RISK","vetoCode":"EVENT_RISK_LIMIT","reason":"风险证据触发仓位风控否决。","evidenceIds":["e-risk"],"createdAt":"2026-07-14T05:02:00Z"}
+  ],
+  "finalDecision":{
+    "schemaVersion":"1.0","taskId":77,"decision":"REJECTED_BY_VETO","gateStatus":"BLOCKED","vetoed":true,
+    "score":0,"confidence":90,"summary":"总控继承POSITION_RISK正式否决。","findings":[],
+    "sourceRunIds":[101,102,103,104,105,106],"vetoIds":["veto-risk-1"],
+    "contextHash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","tradeDate":"2026-07-14",
+    "ruleVersion":"local-rules-1","executionMode":"LOCAL_RULES","generatedAt":"2026-07-14T05:02:00Z"
+  },
+  "generatedAt":"2026-07-14T05:02:00Z"
+}

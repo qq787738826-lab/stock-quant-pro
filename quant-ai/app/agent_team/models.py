@@ -148,7 +148,15 @@ class Finding(StrictModel):
     @field_validator("evidenceIds")
     @classmethod
     def require_unique_evidence_ids(cls, values: list[str]) -> list[str]:
-        return _require_unique(values, "Finding.evidenceIds")
+        return _require_unique(_require_non_blank(values, "Finding.evidenceIds"),
+                               "Finding.evidenceIds")
+
+    @model_validator(mode="after")
+    def require_non_blank_fields(self) -> Finding:
+        _require_non_blank(
+            [self.findingId, self.code, self.title, self.detail], "Finding字段"
+        )
+        return self
 
 
 class Evidence(StrictModel):
@@ -163,6 +171,13 @@ class Evidence(StrictModel):
     collectedAt: AwareDatetime
     fields: Annotated[dict[str, Any], Field(min_length=1)]
     contentHash: Sha256
+
+    @model_validator(mode="after")
+    def require_non_blank_fields(self) -> Evidence:
+        _require_non_blank(
+            [self.evidenceId, self.sourceName, self.sourceRef], "Evidence字段"
+        )
+        return self
 
 
 class AgentError(StrictModel):
@@ -192,6 +207,8 @@ class AgentOutput(StrictModel):
 
     @model_validator(mode="after")
     def validate_veto_semantics(self) -> AgentOutput:
+        if not self.summary.strip():
+            raise ValueError("AgentOutput.summary不能为空")
         if not self.veto:
             return self
         if self.agentCode is not AgentCode.POSITION_RISK:
@@ -216,7 +233,15 @@ class FormalVeto(StrictModel):
     @field_validator("evidenceIds")
     @classmethod
     def require_unique_evidence_ids(cls, values: list[str]) -> list[str]:
-        return _require_unique(values, "FormalVeto.evidenceIds")
+        return _require_unique(_require_non_blank(values, "FormalVeto.evidenceIds"),
+                               "FormalVeto.evidenceIds")
+
+    @model_validator(mode="after")
+    def require_non_blank_fields(self) -> FormalVeto:
+        _require_non_blank(
+            [self.vetoId, self.vetoCode, self.reason], "FormalVeto字段"
+        )
+        return self
 
 
 class FinalDecision(StrictModel):
@@ -245,7 +270,14 @@ class FinalDecision(StrictModel):
     @field_validator("vetoIds")
     @classmethod
     def require_unique_veto_ids(cls, values: list[str]) -> list[str]:
-        return _require_unique(values, "FinalDecision.vetoIds")
+        return _require_unique(_require_non_blank(values, "FinalDecision.vetoIds"),
+                               "FinalDecision.vetoIds")
+
+    @model_validator(mode="after")
+    def require_non_blank_summary(self) -> FinalDecision:
+        if not self.summary.strip():
+            raise ValueError("FinalDecision.summary不能为空")
+        return self
 
 
 class AgentTeamResponse(StrictModel):
@@ -261,8 +293,92 @@ class AgentTeamResponse(StrictModel):
     finalDecision: FinalDecision
     generatedAt: AwareDatetime
 
+    @model_validator(mode="after")
+    def validate_team_consistency(self) -> AgentTeamResponse:
+        expected_codes = set(AgentCode)
+        codes = [run.agentCode for run in self.agentRuns]
+        if len(set(codes)) != len(codes) or set(codes) != expected_codes:
+            raise ValueError("agentRuns必须恰好包含六个不同的专业智能体")
+
+        run_ids = [run.runId for run in self.agentRuns]
+        if len(set(run_ids)) != len(run_ids):
+            raise ValueError("agentRuns.runId必须彼此唯一")
+        runs_by_code = {run.agentCode: run for run in self.agentRuns}
+
+        for run in self.agentRuns:
+            if (run.taskId != self.taskId or run.contextHash != self.contextHash
+                    or run.ruleVersion != self.ruleVersion
+                    or run.executionMode != self.executionMode):
+                raise ValueError("agentRun身份字段与团队响应不一致")
+
+        evidence_by_id: dict[str, Evidence] = {}
+        for item in self.evidence:
+            if item.evidenceId in evidence_by_id:
+                raise ValueError("顶层evidenceId必须唯一")
+            evidence_by_id[item.evidenceId] = item
+
+        def validate_findings(findings: list[Finding]) -> None:
+            for finding in findings:
+                if any(evidence_id not in evidence_by_id for evidence_id in finding.evidenceIds):
+                    raise ValueError("finding引用的evidenceId必须存在于顶层evidence")
+
+        for run in self.agentRuns:
+            validate_findings(run.findings)
+            subset_ids: set[str] = set()
+            for item in run.evidence:
+                if item.evidenceId in subset_ids:
+                    raise ValueError("单智能体evidenceId不能重复")
+                subset_ids.add(item.evidenceId)
+                if evidence_by_id.get(item.evidenceId) != item:
+                    raise ValueError("单智能体evidence必须是顶层权威evidence的相同子集")
+
+        veto_ids: set[str] = set()
+        position_run = runs_by_code[AgentCode.POSITION_RISK]
+        for veto in self.vetoes:
+            if veto.vetoId in veto_ids:
+                raise ValueError("顶层vetoId必须唯一")
+            veto_ids.add(veto.vetoId)
+            if (veto.taskId != self.taskId or veto.runId != position_run.runId
+                    or veto.agentCode is not AgentCode.POSITION_RISK):
+                raise ValueError("正式veto必须属于当前POSITION_RISK运行")
+            if any(evidence_id not in evidence_by_id for evidence_id in veto.evidenceIds):
+                raise ValueError("正式veto引用的evidenceId必须存在于顶层evidence")
+
+        if position_run.veto != bool(self.vetoes):
+            raise ValueError("POSITION_RISK输出veto与正式veto集合不一致")
+
+        final = self.finalDecision
+        if (final.taskId != self.taskId or final.contextHash != self.contextHash
+                or final.tradeDate != self.tradeDate or final.ruleVersion != self.ruleVersion
+                or final.executionMode != self.executionMode):
+            raise ValueError("finalDecision身份字段与团队响应不一致")
+        validate_findings(final.findings)
+        if len(final.sourceRunIds) != 6 or set(final.sourceRunIds) != set(run_ids):
+            raise ValueError("sourceRunIds必须恰好包含六个专业智能体runId")
+        if set(final.vetoIds) != veto_ids:
+            raise ValueError("finalDecision.vetoIds必须完整引用正式veto集合")
+
+        if self.vetoes:
+            if not final.vetoed or final.decision is not FinalDecisionCode.REJECTED_BY_VETO:
+                raise ValueError("存在正式veto时总控必须REJECTED_BY_VETO且vetoed=true")
+        elif final.vetoed or final.vetoIds or final.decision is FinalDecisionCode.REJECTED_BY_VETO:
+            raise ValueError("不存在正式veto时总控不得处于正式否决状态")
+
+        data_quality = runs_by_code[AgentCode.DATA_QUALITY]
+        if data_quality.gateStatus is GateStatus.BLOCKED and not self.vetoes:
+            if (final.decision is not FinalDecisionCode.BLOCKED_BY_DATA_QUALITY
+                    or final.gateStatus is not GateStatus.BLOCKED or final.vetoed):
+                raise ValueError("数据质量阻断且无正式veto时总控决策不一致")
+        return self
+
 
 def _require_unique(values: list[Any], field_name: str) -> list[Any]:
     if len(values) != len(set(values)):
         raise ValueError(f"{field_name}不允许重复元素")
+    return values
+
+
+def _require_non_blank(values: list[str], field_name: str) -> list[str]:
+    if any(not value.strip() for value in values):
+        raise ValueError(f"{field_name}不能为空")
     return values

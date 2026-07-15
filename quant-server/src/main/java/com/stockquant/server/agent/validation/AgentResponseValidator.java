@@ -77,7 +77,12 @@ public class AgentResponseValidator {
         Map<String, Evidence> authoritative = authoritativeEvidence(response.evidence());
         for (AgentOutput run : runs) {
             validateFindings(run.findings(), authoritative);
+            Set<String> subsetIds = new HashSet<>();
             for (Evidence subset : safe(run.evidence())) {
+                require(subset != null && notBlank(subset.evidenceId()),
+                        "单智能体evidenceId不能为空");
+                require(subsetIds.add(subset.evidenceId()),
+                        "单智能体evidenceId不能重复：" + subset.evidenceId());
                 Evidence topLevel = authoritative.get(subset.evidenceId());
                 require(topLevel != null, "单智能体证据不在顶层权威证据集合：" + subset.evidenceId());
                 require(sameEvidence(topLevel, subset), "相同evidenceId内容冲突：" + subset.evidenceId());
@@ -121,6 +126,8 @@ public class AgentResponseValidator {
         require(!sourceRunIds.isEmpty(), "sourceRunIds不能为空");
         require(new HashSet<>(sourceRunIds).size() == sourceRunIds.size(), "sourceRunIds不能重复");
         require(sourceRunIds.stream().allMatch(expectedRunIds::contains), "sourceRunIds包含未知或其他任务运行");
+        require(new HashSet<>(sourceRunIds).equals(expectedRunIds),
+                "sourceRunIds必须恰好包含6个Java权威runId");
 
         Set<String> decisionVetoIds = new HashSet<>(safe(decision.vetoIds()));
         require(decisionVetoIds.size() == safe(decision.vetoIds()).size(), "finalDecision vetoIds不能重复");
@@ -149,6 +156,8 @@ public class AgentResponseValidator {
         if (dataQuality.gateStatus() == GateStatus.BLOCKED && vetoes.isEmpty()) {
             require(decision.decision() == FinalDecisionCode.BLOCKED_BY_DATA_QUALITY,
                     "数据质量阻断时必须BLOCKED_BY_DATA_QUALITY");
+            require(decision.gateStatus() == GateStatus.BLOCKED,
+                    "数据质量阻断时finalDecision gateStatus必须为BLOCKED");
         }
     }
 
@@ -199,7 +208,10 @@ public class AgentResponseValidator {
     }
 
     private static void validateEvidenceIds(List<String> ids, Map<String, Evidence> evidence) {
+        Set<String> unique = new HashSet<>();
         for (String id : safe(ids)) {
+            require(notBlank(id), "引用的evidenceId不能为空");
+            require(unique.add(id), "引用的evidenceId不能重复：" + id);
             require(evidence.containsKey(id), "引用的evidenceId不存在：" + id);
         }
     }
@@ -212,6 +224,7 @@ public class AgentResponseValidator {
                 && Objects.equals(left.symbol(), right.symbol())
                 && Objects.equals(left.tradeDate(), right.tradeDate())
                 && Objects.equals(left.observedAt(), right.observedAt())
+                && Objects.equals(left.collectedAt(), right.collectedAt())
                 && Objects.equals(left.contentHash(), right.contentHash())
                 && jsonEquals(left.fields(), right.fields());
     }
