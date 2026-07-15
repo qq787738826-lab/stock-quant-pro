@@ -9,15 +9,119 @@ if ((Resolve-Path -LiteralPath (Get-Location)).Path -ne (Resolve-Path -LiteralPa
     throw 'This script must be run from the repository root.'
 }
 
+function Get-ProcessEnvironmentVariable([string]$Name) {
+    return [System.Environment]::GetEnvironmentVariable(
+        $Name, [System.EnvironmentVariableTarget]::Process)
+}
+
+function Set-ProcessEnvironmentVariable([string]$Name, [string]$Value) {
+    [System.Environment]::SetEnvironmentVariable(
+        $Name, $Value, [System.EnvironmentVariableTarget]::Process)
+}
+
+function Remove-ProcessEnvironmentVariable([string]$Name) {
+    [System.Environment]::SetEnvironmentVariable(
+        $Name, $null, [System.EnvironmentVariableTarget]::Process)
+}
+
+function Normalize-DuplicateProcessEnvironmentNames {
+    $environment = [System.Environment]::GetEnvironmentVariables(
+        [System.EnvironmentVariableTarget]::Process)
+    $groups = [System.Collections.Generic.Dictionary[string,System.Collections.Generic.List[string]]]::new(
+        [System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($environmentName in $environment.Keys) {
+        $name = [string]$environmentName
+        if (-not $groups.ContainsKey($name)) {
+            $groups[$name] = [System.Collections.Generic.List[string]]::new()
+        }
+        $groups[$name].Add($name)
+    }
+    $snapshots = [System.Collections.Generic.List[object]]::new()
+    foreach ($group in $groups.Values) {
+        if ($group.Count -lt 2) {
+            continue
+        }
+        $names = @($group | Sort-Object)
+        $canonicalName = $names[0]
+        $entries = [System.Collections.Generic.List[object]]::new()
+        foreach ($name in $names) {
+            $entries.Add([pscustomobject]@{
+                Name = $name
+                Value = [string]$environment[$name]
+            }) | Out-Null
+        }
+        $referenceValue = $entries[0].Value
+        $hasConflict = @($entries | Where-Object {
+            -not [string]::Equals($_.Value, $referenceValue, [System.StringComparison]::Ordinal)
+        }).Count -gt 0
+        if ($hasConflict) {
+            throw ('Duplicate process environment variable names have conflicting values: ' +
+                ($names -join ', '))
+        }
+        $snapshots.Add([pscustomobject]@{
+            CanonicalName = $canonicalName
+            Entries = @($entries)
+        }) | Out-Null
+    }
+    foreach ($snapshot in $snapshots) {
+        foreach ($entry in $snapshot.Entries) {
+            Remove-ProcessEnvironmentVariable -Name $entry.Name
+        }
+        Set-ProcessEnvironmentVariable -Name $snapshot.CanonicalName -Value $snapshot.Entries[0].Value
+    }
+    return @($snapshots)
+}
+
+function Restore-DuplicateProcessEnvironmentNames([object[]]$Snapshots) {
+    foreach ($snapshot in $Snapshots) {
+        Remove-ProcessEnvironmentVariable -Name $snapshot.CanonicalName
+        foreach ($entry in $snapshot.Entries) {
+            Set-ProcessEnvironmentVariable -Name $entry.Name -Value $entry.Value
+        }
+    }
+}
+
+function Test-DuplicateProcessEnvironmentSnapshot([object[]]$Snapshots) {
+    $environment = [System.Environment]::GetEnvironmentVariables(
+        [System.EnvironmentVariableTarget]::Process)
+    foreach ($snapshot in $Snapshots) {
+        $matchingNames = @($environment.Keys | Where-Object {
+            [string]::Equals([string]$_, $snapshot.CanonicalName,
+                [System.StringComparison]::OrdinalIgnoreCase)
+        } | ForEach-Object { [string]$_ })
+        if ($matchingNames.Count -ne $snapshot.Entries.Count) {
+            return $false
+        }
+        foreach ($entry in $snapshot.Entries) {
+            $exactName = @($matchingNames | Where-Object {
+                [string]::Equals($_, $entry.Name, [System.StringComparison]::Ordinal)
+            })
+            if ($exactName.Count -ne 1 -or
+                    -not [string]::Equals([string]$environment[$exactName[0]], $entry.Value,
+                        [System.StringComparison]::Ordinal)) {
+                return $false
+            }
+        }
+    }
+    return $true
+}
+
 $requiredDatabaseVariables = @(
     'STOCK_QUANT_TEST_DB_URL',
     'STOCK_QUANT_TEST_DB_USERNAME',
     'STOCK_QUANT_TEST_DB_PASSWORD'
 )
 foreach ($name in $requiredDatabaseVariables) {
-    if (-not (Test-Path ("Env:" + $name)) -or [string]::IsNullOrWhiteSpace((Get-Item ("Env:" + $name)).Value)) {
+    if ([string]::IsNullOrWhiteSpace((Get-ProcessEnvironmentVariable -Name $name))) {
         throw ("Required test database environment variable is missing: " + $name)
     }
+}
+if ((Get-ProcessEnvironmentVariable -Name 'STOCK_QUANT_TEST_DB_URL') -cne
+        'jdbc:postgresql://127.0.0.1:5432/stock_quant_test') {
+    throw 'The test database URL is not the dedicated stock_quant_test URL.'
+}
+if ((Get-ProcessEnvironmentVariable -Name 'STOCK_QUANT_TEST_DB_USERNAME') -cne 'stock_quant_test') {
+    throw 'The test database username is not stock_quant_test.'
 }
 
 $pythonCandidates = @(
@@ -39,21 +143,31 @@ if (-not $python) {
     }
 }
 
-$sensitiveNames = @(
+$sensitiveNames = [System.Collections.Generic.HashSet[string]]::new(
+    [System.StringComparer]::OrdinalIgnoreCase)
+$explicitSensitiveNames = @(
     'AI_PROVIDER', 'AI_SERVICE_URL',
     'STOCK_QUANT_PYTHON_BASE_URL',
     'STOCK_QUANT_TEST_DB_URL', 'STOCK_QUANT_TEST_DB_USERNAME', 'STOCK_QUANT_TEST_DB_PASSWORD',
     'DATABASE_URL', 'SPRING_DATASOURCE_URL', 'SPRING_DATASOURCE_USERNAME',
     'SPRING_DATASOURCE_PASSWORD', 'PGHOST', 'PGPORT', 'PGDATABASE', 'PGUSER', 'PGPASSWORD'
 )
+$explicitSensitiveNames | ForEach-Object { $sensitiveNames.Add($_) | Out-Null }
 $sensitivePattern = '(?i)(OPENAI|ANTHROPIC|DEEPSEEK|DASHSCOPE|LLM|AKSHARE|TUSHARE|MARKET|QUOTE|BROKER|TRADING|TRADE|API[_-]?KEY|TOKEN|SECRET)'
-$sensitiveNames += Get-ChildItem Env: | Where-Object { $_.Name -match $sensitivePattern } |
-        Select-Object -ExpandProperty Name
-$sensitiveNames = @($sensitiveNames | Sort-Object -Unique)
+$processEnvironment = [System.Environment]::GetEnvironmentVariables(
+    [System.EnvironmentVariableTarget]::Process)
+foreach ($environmentName in $processEnvironment.Keys) {
+    $name = [string]$environmentName
+    if ($name -match $sensitivePattern) {
+        $sensitiveNames.Add($name) | Out-Null
+    }
+}
+$sensitiveNames = @($sensitiveNames | Sort-Object)
 
-$baseUrlExisted = Test-Path Env:STOCK_QUANT_PYTHON_BASE_URL
-$originalBaseUrl = if ($baseUrlExisted) { $env:STOCK_QUANT_PYTHON_BASE_URL } else { $null }
-$savedEnvironment = @{}
+$originalBaseUrl = Get-ProcessEnvironmentVariable -Name 'STOCK_QUANT_PYTHON_BASE_URL'
+$baseUrlExisted = $null -ne $originalBaseUrl
+$savedEnvironment = [System.Collections.Generic.Dictionary[string,string]]::new(
+    [System.StringComparer]::OrdinalIgnoreCase)
 $removedEnvironmentNames = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
 $quantAi = Join-Path $repoRoot 'quant-ai'
 $stdoutLog = Join-Path ([System.IO.Path]::GetTempPath()) ("stock-quant-python-smoke-" + [guid]::NewGuid() + '.out.log')
@@ -65,6 +179,8 @@ $trackedProcessIds = @()
 $executionSucceeded = $false
 $environmentRestored = $false
 $baseUrlRestored = $false
+$duplicateEnvironmentRestored = $false
+$duplicateEnvironmentSnapshot = @()
 $processRemaining = $false
 $agentPostCount = 0
 $post200Count = 0
@@ -73,10 +189,12 @@ $failureReason = $null
 
 function Restore-SensitiveEnvironment([switch]$ExcludePythonBaseUrl) {
     foreach ($entry in $savedEnvironment.GetEnumerator()) {
-        if ($ExcludePythonBaseUrl -and $entry.Key -eq 'STOCK_QUANT_PYTHON_BASE_URL') {
+        if ($ExcludePythonBaseUrl -and
+                [string]::Equals($entry.Key, 'STOCK_QUANT_PYTHON_BASE_URL',
+                    [System.StringComparison]::OrdinalIgnoreCase)) {
             continue
         }
-        Set-Item ("Env:" + $entry.Key) $entry.Value
+        Set-ProcessEnvironmentVariable -Name $entry.Key -Value $entry.Value
     }
 }
 
@@ -103,10 +221,13 @@ try {
     New-Item -ItemType File -Path $stdoutLog, $stderrLog -Force | Out-Null
 
     # All parent environment mutations are protected by this try/finally.
+    # Start-Process also requires a case-insensitively unique process environment.
+    $duplicateEnvironmentSnapshot = @(Normalize-DuplicateProcessEnvironmentNames)
     foreach ($name in $sensitiveNames) {
-        if (Test-Path ("Env:" + $name)) {
-            $savedEnvironment[$name] = (Get-Item ("Env:" + $name)).Value
-            Remove-Item ("Env:" + $name)
+        $value = Get-ProcessEnvironmentVariable -Name $name
+        if ($null -ne $value) {
+            $savedEnvironment[$name] = $value
+            Remove-ProcessEnvironmentVariable -Name $name
             $removedEnvironmentNames.Add($name) | Out-Null
         }
     }
@@ -187,8 +308,8 @@ try {
         throw 'Python FastAPI service did not become ready within the bounded timeout.'
     }
 
-    $env:STOCK_QUANT_PYTHON_BASE_URL = "http://127.0.0.1:$port"
-    & (Join-Path $repoRoot 'mvnw.cmd') '-pl' 'quant-server' '-am' '-Dtest=AgentPythonServicePostgresSmokeTest' '-Dsurefire.failIfNoSpecifiedTests=false' 'test'
+    Set-ProcessEnvironmentVariable -Name 'STOCK_QUANT_PYTHON_BASE_URL' -Value "http://127.0.0.1:$port"
+    & (Join-Path $repoRoot 'mvnw.cmd') '-o' '-pl' 'quant-server' '-am' '-Dtest=AgentPythonServicePostgresSmokeTest' '-Dsurefire.failIfNoSpecifiedTests=false' 'test'
     $mavenExitCode = $LASTEXITCODE
     if ($mavenExitCode -ne 0) {
         $finalExitCode = $mavenExitCode
@@ -216,9 +337,9 @@ try {
 
     try {
         if ($baseUrlExisted) {
-            $env:STOCK_QUANT_PYTHON_BASE_URL = $originalBaseUrl
+            Set-ProcessEnvironmentVariable -Name 'STOCK_QUANT_PYTHON_BASE_URL' -Value $originalBaseUrl
         } else {
-            Remove-Item Env:STOCK_QUANT_PYTHON_BASE_URL -ErrorAction SilentlyContinue
+            Remove-ProcessEnvironmentVariable -Name 'STOCK_QUANT_PYTHON_BASE_URL'
         }
         $baseUrlRestored = $true
     } catch {
@@ -285,10 +406,37 @@ try {
         $finalExitCode = 1
     }
 
-    if ($executionSucceeded -and -not $processRemaining -and $agentPostCount -eq 1 -and $post200Count -eq 1) {
+    # No new child process may be started after restoring the original duplicate-name environment.
+    try {
+        Restore-DuplicateProcessEnvironmentNames -Snapshots $duplicateEnvironmentSnapshot
+        if (-not (Test-DuplicateProcessEnvironmentSnapshot -Snapshots $duplicateEnvironmentSnapshot)) {
+            throw 'Duplicate process environment variable snapshot verification failed.'
+        }
+        $duplicateEnvironmentRestored = $true
+    } catch {
+        $duplicateEnvironmentRestored = $false
+        $executionSucceeded = $false
+        $finalExitCode = 1
+        if (-not $failureReason) {
+            $failureReason = 'Failed to restore duplicate process environment variable names.'
+        }
+    }
+
+    if (-not $duplicateEnvironmentRestored) {
+        $executionSucceeded = $false
+        $finalExitCode = 1
+    }
+    Write-Output ("DUPLICATE_ENVIRONMENT_RESTORED=" + $duplicateEnvironmentRestored)
+
+    $finalSucceeded = $executionSucceeded -and $environmentRestored -and $baseUrlRestored -and
+            $duplicateEnvironmentRestored -and -not $processRemaining -and
+            $agentPostCount -eq 1 -and $post200Count -eq 1 -and
+            [string]::IsNullOrEmpty($failureReason)
+    if ($finalSucceeded) {
         Remove-Item -LiteralPath $stdoutLog, $stderrLog -ErrorAction SilentlyContinue
         $finalExitCode = 0
     } else {
+        $finalExitCode = 1
         Write-Output ("Python smoke stdout log retained at: " + $stdoutLog)
         Write-Output ("Python smoke stderr log retained at: " + $stderrLog)
     }
