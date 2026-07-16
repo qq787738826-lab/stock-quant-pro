@@ -6,6 +6,7 @@
 - 目标版本：1.4.0
 - 当前分支：feature/1.4.0-agent-team
 - 当前开发目标：股票智能体团队
+- 智能体团队的当前阶段、真实能力与下一阶段入口，以 `docs/agent-team/CURRENT_STATE.md` 为唯一事实来源。
 
 ## 技术栈
 

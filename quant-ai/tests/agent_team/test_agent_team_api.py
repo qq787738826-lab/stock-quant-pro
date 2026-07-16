@@ -34,7 +34,7 @@ AGENT_CODES = [
 def valid_request() -> dict:
     unavailable = {
         "available": False,
-        "reason": "阶段1C-1尚未提供该上下文",
+        "reason": "该只读上下文尚未接入现有业务数据源",
         "queriedAt": "2026-07-14T05:00:00Z",
         "queryScope": {},
     }
