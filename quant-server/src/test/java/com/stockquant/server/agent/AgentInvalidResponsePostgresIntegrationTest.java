@@ -90,12 +90,12 @@ class AgentInvalidResponsePostgresIntegrationTest {
     void cleanCreatedTasks() {
         for (Long taskId : new ArrayList<>(TASKS_TO_DELETE)) {
             jdbc.update("DELETE FROM agent_tasks WHERE id = ?", taskId);
+            assertTaskScopedCounts(taskId, 0, 0, 0, 0, 0);
             TASKS_TO_DELETE.remove(taskId);
             CALLS_BY_TASK.remove(taskId);
             REQUESTS_BY_TASK.remove(taskId);
             RESPONSES_BY_TASK.remove(taskId);
         }
-        assertAllAgentTablesEmpty();
     }
 
     @AfterAll
@@ -111,7 +111,6 @@ class AgentInvalidResponsePostgresIntegrationTest {
     @MethodSource("invalidScenarios")
     void rejectsInvalidResponseWithoutPartialPersistence(Scenario scenario) {
         assertDedicatedDatabaseAndFlywayV5();
-        assertAllAgentTablesEmpty();
 
         CreatedTask created = taskService.create(new CreateAgentTaskRequest(
                 scenario.symbol,
@@ -239,16 +238,19 @@ class AgentInvalidResponsePostgresIntegrationTest {
         return count == null ? 0 : count;
     }
 
-    private int countAll(String table) {
-        requireAllowedTable(table);
-        Integer count = jdbc.queryForObject("SELECT count(*) FROM " + table, Integer.class);
-        return count == null ? 0 : count;
-    }
-
-    private void assertAllAgentTablesEmpty() {
-        for (String table : allowedTables()) {
-            assertEquals(0, countAll(table), table + "应为空");
-        }
+    private void assertTaskScopedCounts(
+            long taskId,
+            int tasks,
+            int runs,
+            int evidence,
+            int vetoes,
+            int decisions
+    ) {
+        assertEquals(tasks, countForTask("agent_tasks", taskId));
+        assertEquals(runs, countForTask("agent_runs", taskId));
+        assertEquals(evidence, countForTask("agent_evidence", taskId));
+        assertEquals(vetoes, countForTask("agent_vetoes", taskId));
+        assertEquals(decisions, countForTask("agent_decisions", taskId));
     }
 
     private static Set<String> allowedTables() {

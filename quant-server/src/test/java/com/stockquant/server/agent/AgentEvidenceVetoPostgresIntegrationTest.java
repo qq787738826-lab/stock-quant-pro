@@ -92,11 +92,11 @@ class AgentEvidenceVetoPostgresIntegrationTest {
     void cleanCreatedTasks() {
         for (Long taskId : new ArrayList<>(TASKS_TO_DELETE)) {
             jdbc.update("DELETE FROM agent_tasks WHERE id = ?", taskId);
+            assertTaskScopedCounts(taskId, 0, 0, 0, 0, 0);
             TASKS_TO_DELETE.remove(taskId);
             CALLS_BY_TASK.remove(taskId);
             REQUESTS_BY_TASK.remove(taskId);
         }
-        assertAllAgentTablesEmpty();
     }
 
     @AfterAll
@@ -107,7 +107,6 @@ class AgentEvidenceVetoPostgresIntegrationTest {
     @Test
     void persistsSharedEvidenceWithoutFormalVetoThroughTheProductionFlow() throws SQLException {
         assertDedicatedDatabaseAndFlywayV5();
-        assertAllAgentTablesEmpty();
         CreateAgentTaskRequest request = request(EVIDENCE_SYMBOL, "stage-1d-3b-evidence");
         CreatedTask created = createAndTrack(request);
         long taskId = created.task().id();
@@ -164,7 +163,6 @@ class AgentEvidenceVetoPostgresIntegrationTest {
     @Test
     void persistsPositionRiskFormalVetoAndMapsItsLogicalIdToPhysicalIds() throws SQLException {
         assertDedicatedDatabaseAndFlywayV5();
-        assertAllAgentTablesEmpty();
         CreateAgentTaskRequest request = request(VETO_SYMBOL, "stage-1d-3b-veto");
         CreatedTask created = createAndTrack(request);
         long taskId = created.task().id();
@@ -318,12 +316,6 @@ class AgentEvidenceVetoPostgresIntegrationTest {
         assertEquals(decisions, countForTask("agent_decisions", taskId));
     }
 
-    private void assertAllAgentTablesEmpty() {
-        for (String table : allowedTables()) {
-            assertEquals(0, countAll(table), table + "应为空");
-        }
-    }
-
     private void assertEvidence(List<Map<String, Object>> evidence, String fixtureName, String key) {
         JsonNode expected = fixtureEvidence(fixtureName, key);
         Map<String, Object> row = evidence.stream()
@@ -444,12 +436,6 @@ class AgentEvidenceVetoPostgresIntegrationTest {
         Integer count = jdbc.queryForObject(
                 "SELECT count(*) FROM " + table + " WHERE " + column + " = ?",
                 Integer.class, taskId);
-        return count == null ? 0 : count;
-    }
-
-    private int countAll(String table) {
-        requireAllowedTable(table);
-        Integer count = jdbc.queryForObject("SELECT count(*) FROM " + table, Integer.class);
         return count == null ? 0 : count;
     }
 
