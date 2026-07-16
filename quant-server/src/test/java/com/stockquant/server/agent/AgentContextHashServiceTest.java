@@ -45,7 +45,8 @@ class AgentContextHashServiceTest {
                 "backtestContext", "securityEvents", "portfolioContext", "dataQualityContext"
         }) {
             assertFalse(snapshot.value().path(section).path("available").asBoolean());
-            assertFalse(snapshot.value().path(section).path("reason").asText().isBlank());
+            assertEquals("该只读上下文尚未接入现有业务数据源",
+                    snapshot.value().path(section).path("reason").asText());
             assertFalse(snapshot.value().path(section).path("queriedAt").asText().isBlank());
         }
     }

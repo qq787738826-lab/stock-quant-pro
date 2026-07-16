@@ -41,7 +41,7 @@ public class AgentContextSnapshotService {
         for (String section : CONTEXT_SECTIONS) {
             ObjectNode unavailable = root.putObject(section);
             unavailable.put("available", false);
-            unavailable.put("reason", "阶段1C-1尚未接入该只读上下文查询");
+            unavailable.put("reason", "该只读上下文尚未接入现有业务数据源");
             unavailable.put("queriedAt", queriedAt.toString());
             ObjectNode queryScope = unavailable.putObject("queryScope");
             queryScope.put("symbol", symbol);
