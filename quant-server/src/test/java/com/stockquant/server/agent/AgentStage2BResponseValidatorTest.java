@@ -147,6 +147,83 @@ class AgentStage2BResponseValidatorTest {
                 source.vetoes(), invalid, source.generatedAt()));
     }
 
+    @Test
+    void nanosecondRequestedAtAndMicrosecondCollectedAtAreAccepted() {
+        Instant requestedAt = Instant.parse("2026-07-14T05:00:00.123456789Z");
+        Instant collectedAt = Instant.parse("2026-07-14T05:00:00.123456Z");
+        ObjectNode context = context();
+        AgentTeamRequest request = request(context, requestedAt);
+        AgentTeamResponse response = withEvidenceTimes(
+                context, AgentTestFixtures.NOW, collectedAt);
+
+        assertDoesNotThrow(() -> validator.validate(request, response));
+    }
+
+    @Test
+    void nanosecondQueriedAtAndMicrosecondObservedAtAreAccepted() {
+        ObjectNode context = context("2026-07-14T05:00:00.123456789Z");
+        AgentTeamRequest request = request(context, AgentTestFixtures.NOW);
+        AgentTeamResponse response = withEvidenceTimes(
+                context, Instant.parse("2026-07-14T05:00:00.123456Z"), AgentTestFixtures.NOW);
+
+        assertDoesNotThrow(() -> validator.validate(request, response));
+    }
+
+    @Test
+    void collectedAtDifferenceOfOneMicrosecondIsRejected() {
+        Instant requestedAt = Instant.parse("2026-07-14T05:00:00.123456789Z");
+        ObjectNode context = context();
+        AgentTeamRequest request = request(context, requestedAt);
+        AgentTeamResponse response = withEvidenceTimes(
+                context, AgentTestFixtures.NOW,
+                Instant.parse("2026-07-14T05:00:00.123457Z"));
+
+        assertThrows(AgentTeamException.class, () -> validator.validate(request, response));
+    }
+
+    @Test
+    void observedAtDifferenceOfOneMicrosecondIsRejected() {
+        ObjectNode context = context("2026-07-14T05:00:00.123456789Z");
+        AgentTeamRequest request = request(context, AgentTestFixtures.NOW);
+        AgentTeamResponse response = withEvidenceTimes(
+                context, Instant.parse("2026-07-14T05:00:00.123457Z"), AgentTestFixtures.NOW);
+
+        assertThrows(AgentTeamException.class, () -> validator.validate(request, response));
+    }
+
+    @Test
+    void invalidQueriedAtTextIsRejected() {
+        ObjectNode context = context("not-an-instant");
+        AgentTeamRequest request = request(context, AgentTestFixtures.NOW);
+        AgentTeamResponse response = withEvidenceTimes(
+                context, AgentTestFixtures.NOW, AgentTestFixtures.NOW);
+
+        assertThrows(AgentTeamException.class, () -> validator.validate(request, response));
+    }
+
+    @Test
+    void sourceRefHashSymbolAndTradeDateMismatchesRemainRejected() {
+        AgentTeamResponse source = response(
+                RunStatus.COMPLETED, GateStatus.PASS, RunDecision.PASS, 100, 100, List.of(), true);
+        Evidence evidence = source.evidence().get(0);
+        assertRejected(withEvidence(source, new Evidence(
+                evidence.evidenceId(), evidence.category(), evidence.sourceType(), evidence.sourceName(),
+                "otherSnapshot", evidence.symbol(), evidence.tradeDate(), evidence.observedAt(),
+                evidence.collectedAt(), evidence.fields(), evidence.contentHash())));
+        assertRejected(withEvidence(source, new Evidence(
+                evidence.evidenceId(), evidence.category(), evidence.sourceType(), evidence.sourceName(),
+                evidence.sourceRef(), "600001", evidence.tradeDate(), evidence.observedAt(),
+                evidence.collectedAt(), evidence.fields(), evidence.contentHash())));
+        assertRejected(withEvidence(source, new Evidence(
+                evidence.evidenceId(), evidence.category(), evidence.sourceType(), evidence.sourceName(),
+                evidence.sourceRef(), evidence.symbol(), evidence.tradeDate().plusDays(1),
+                evidence.observedAt(), evidence.collectedAt(), evidence.fields(), evidence.contentHash())));
+        assertRejected(withEvidence(source, new Evidence(
+                evidence.evidenceId(), evidence.category(), evidence.sourceType(), evidence.sourceName(),
+                evidence.sourceRef(), evidence.symbol(), evidence.tradeDate(), evidence.observedAt(),
+                evidence.collectedAt(), evidence.fields(), "0".repeat(64))));
+    }
+
     private void validate(AgentTeamResponse response) {
         validator.validate(request(), response);
     }
@@ -160,20 +237,28 @@ class AgentStage2BResponseValidatorTest {
     }
 
     private AgentTeamRequest request(ObjectNode value) {
+        return request(value, AgentTestFixtures.NOW);
+    }
+
+    private AgentTeamRequest request(ObjectNode value, Instant requestedAt) {
         return new AgentTeamRequest(
                 "1.0", 1, RunIds.from(AgentTestFixtures.runs(1)), "600000",
                 AgentTestFixtures.TRADE_DATE, AgentTestFixtures.HASH, "1.0", RULE_VERSION,
-                ExecutionMode.LOCAL_RULES, value, AgentTestFixtures.NOW);
+                ExecutionMode.LOCAL_RULES, value, requestedAt);
     }
 
     private ObjectNode context() {
+        return context(AgentTestFixtures.NOW.toString());
+    }
+
+    private ObjectNode context(String queriedAt) {
         ObjectNode context = mapper.createObjectNode();
         context.putObject("security").put("available", true);
         context.putObject("marketData").put("available", true);
         context.putObject("technicalMetrics").put("available", true);
         context.putObject("dataQualityContext")
                 .put("available", true)
-                .put("queriedAt", AgentTestFixtures.NOW.toString());
+                .put("queriedAt", queriedAt);
         for (String name : List.of(
                 "marketBreadth", "scanResult", "backtestContext", "securityEvents", "portfolioContext")) {
             context.putObject(name).put("available", false);
@@ -193,6 +278,26 @@ class AgentStage2BResponseValidatorTest {
                 "AgentContextSnapshotService", "contextSnapshot", "600000",
                 AgentTestFixtures.TRADE_DATE, AgentTestFixtures.NOW, AgentTestFixtures.NOW,
                 fields, AgentTestFixtures.HASH);
+    }
+
+    private AgentTeamResponse withEvidenceTimes(
+            ObjectNode context,
+            Instant observedAt,
+            Instant collectedAt
+    ) {
+        AgentTeamResponse source = response(
+                RunStatus.COMPLETED, GateStatus.PASS, RunDecision.PASS, 100, 100, List.of(), true);
+        Evidence evidence = source.evidence().get(0);
+        ObjectNode fields = mapper.createObjectNode();
+        for (String name : List.of(
+                "security", "marketData", "technicalMetrics", "dataQualityContext")) {
+            fields.set(name, context.get(name).deepCopy());
+        }
+        Evidence changed = new Evidence(
+                evidence.evidenceId(), evidence.category(), evidence.sourceType(), evidence.sourceName(),
+                evidence.sourceRef(), evidence.symbol(), evidence.tradeDate(), observedAt, collectedAt,
+                fields, evidence.contentHash());
+        return withEvidence(source, changed);
     }
 
     private Finding finding(String code, Severity severity) {

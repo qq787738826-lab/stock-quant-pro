@@ -19,6 +19,10 @@ import com.stockquant.server.agent.model.AgentTypes.RunStatus;
 import com.stockquant.server.agent.model.AgentTypes.Severity;
 import org.springframework.stereotype.Component;
 
+import java.time.DateTimeException;
+import java.time.Instant;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.EnumSet;
@@ -309,7 +313,8 @@ public class AgentResponseValidator {
                         && ("dq-context-" + request.contextHash()).equals(evidence.evidenceId())
                         && Objects.equals(request.symbol(), evidence.symbol())
                         && Objects.equals(request.tradeDate(), evidence.tradeDate())
-                        && Objects.equals(request.requestedAt(), evidence.collectedAt())
+                        && sameInstantAtMicrosecondPrecision(
+                                request.requestedAt(), evidence.collectedAt())
                         && Objects.equals(request.contextHash(), evidence.contentHash()),
                 "阶段2B质量证据元数据不一致");
 
@@ -324,8 +329,8 @@ public class AgentResponseValidator {
         require(!containsForbiddenEvidenceConclusion(fields),
                 "阶段2B质量证据不得包含gate、decision、score、finding或veto结论");
         String queriedAt = snapshot.path("dataQualityContext").path("queriedAt").asText(null);
-        require(evidence.observedAt() != null
-                        && Objects.equals(evidence.observedAt().toString(), queriedAt),
+        Instant queriedAtInstant = parseInstant(queriedAt);
+        require(sameInstantAtMicrosecondPrecision(queriedAtInstant, evidence.observedAt()),
                 "阶段2B质量证据observedAt必须来自dataQualityContext.queriedAt");
     }
 
@@ -445,6 +450,23 @@ public class AgentResponseValidator {
 
     private static boolean jsonEquals(JsonNode left, JsonNode right) {
         return Objects.equals(left, right);
+    }
+
+    private static Instant parseInstant(String value) {
+        if (!notBlank(value)) {
+            return null;
+        }
+        try {
+            return Instant.from(DateTimeFormatter.ISO_DATE_TIME.parse(value));
+        } catch (DateTimeException error) {
+            return null;
+        }
+    }
+
+    private static boolean sameInstantAtMicrosecondPrecision(Instant left, Instant right) {
+        return left != null && right != null
+                && left.truncatedTo(ChronoUnit.MICROS)
+                .equals(right.truncatedTo(ChronoUnit.MICROS));
     }
 
     private static void requireRange(Integer value, String field) {

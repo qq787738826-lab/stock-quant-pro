@@ -1,9 +1,9 @@
-# 阶段 2B 验收候选：确定性 DATA_QUALITY 规则门禁
+# 阶段 2B 验收：确定性 DATA_QUALITY 规则门禁
 
 ## 1. 状态与边界
 
-本文记录阶段 2B 的实现候选和验收口径，不代表阶段 2B 已完成正式验收。
-`CURRENT_STATE.md` 和 `ROADMAP.md` 在独立验收通过前保持不变。
+本文记录阶段 2B 的冻结实现、验收口径和真实闭环结果。阶段 2B 已完成正式验收；
+下一阶段唯一入口为阶段 2C，但阶段 2C 尚未开始。
 
 阶段 2B 仅消费 Java 冻结并传入的四类上下文：
 
@@ -102,6 +102,13 @@ Java 响应校验器仅在阶段 2B 规则版本下额外校验：
 - finding 代码唯一、固定顺序、固定严重性和统一证据引用；
 - 其余五个规则仍为未实现状态；
 - DATA_QUALITY gate 与总控决策一致。
+- `requestedAt/collectedAt` 与 `dataQualityContext.queriedAt/observedAt` 按跨语言可传输的
+  微秒精度比较：双方非空并统一截断到 `ChronoUnit.MICROS` 后必须完全相等；相差
+  1 微秒即拒绝。
+
+时间比较是 Java 纳秒 `Instant` 经 Python/Pydantic `datetime` 往返时的传输精度
+规范化，不是毫秒容差或任意时间窗口。`queriedAt` 必须仍可解析为带时区的合法时刻，
+解析失败直接拒绝；阶段 2A 冻结事实和 `contextHash` 不做预先截断或改写。
 
 旧规则版本和既有共享夹具不启用这些新增约束。
 
@@ -141,11 +148,12 @@ Java 响应校验器仅在阶段 2B 规则版本下额外校验：
 | Python `compileall` | 通过 |
 | Python `unittest discover` | 49 项，0 失败，0 跳过 |
 | Python 阶段 2B 定向测试 | 13 项，0 失败，0 跳过 |
-| Java 阶段 2B 与既有响应校验定向测试 | 39 项，0 失败，0 跳过 |
-| Java 完整 Agent 回归 | 158 项，0 失败，9 项因缺少显式集成环境变量安全跳过 |
-| `quant-server` 全量回归 | 159 项，0 失败，9 项因缺少显式集成环境变量安全跳过 |
+| Java 阶段 2B 定向测试 | 13 项，0 失败，0 错误，0 跳过 |
+| Java 阶段 2B 与既有响应校验定向测试 | 45 项，0 失败，0 错误，0 跳过 |
+| Java 完整 Agent 回归 | 164 项，0 失败，0 错误，9 项因缺少显式集成环境变量安全跳过 |
+| `quant-server` 全量回归 | 165 项，0 失败，0 错误，9 项因缺少显式集成环境变量安全跳过 |
 | `quant-core` 独立回归 | 1 项，0 失败，0 跳过 |
-| PostgreSQL/真实 Python 阶段 2B 烟测 | 测试类已编译；四个必需环境变量均未提供，1 项安全跳过，未执行真实闭环 |
+| PostgreSQL/Java/真实 Python 阶段 2B 烟测 | 1 项，0 失败，0 错误，0 跳过，`BUILD SUCCESS` |
 | Vue 类型检查与生产构建 | 通过；生产构建转换 2247 个模块，仅有依赖注释和大包非阻断提示 |
 | `git diff --check` | 通过 |
 
@@ -158,14 +166,24 @@ Java 全量回归中的 9 个跳过项均属于现有显式环境门禁：
 - `AgentReadonlyContextPostgresIntegrationTest`：1 项，缺少测试数据库环境变量；
 - `AgentTaskPostgresIntegrationTest`：3 项，缺少测试数据库环境变量。
 
-本窗口检查到 `STOCK_QUANT_TEST_DB_URL`、`STOCK_QUANT_TEST_DB_USERNAME`、
-`STOCK_QUANT_TEST_DB_PASSWORD` 和 `STOCK_QUANT_PYTHON_BASE_URL` 均未设置。
-因此没有读取 `.env`、猜测数据库密码、连接数据库或启动长期服务，也没有生成真实任务、
-数据库基线与清理后数量。PostgreSQL/真实 Python 闭环仍需在具备专用测试库和回环
-Python 服务变量的独立验收环境中执行。
+真实闭环使用专用本地数据库 `stock_quant_test`、受限角色 `stock_quant_test` 和
+`127.0.0.1:8001` Python 回环服务，实际验证：
+
+- 任务进入 `PARTIAL`，恰好持久化六个专业智能体 run，不存在第七个总控 run；
+- DATA_QUALITY 为 `COMPLETED/WARN/WARN/50/100`，`veto=false`；
+- 正式 veto 数量为 0；
+- finalDecision 为 `INSUFFICIENT_DATA/WARN/0/0`，`vetoed=false`；
+- 唯一 DATA_QUALITY evidence 通过 Java 校验，finding 引用真实 evidence；
+- `contextSnapshot` 和 `contextHash` 未被 Python 修改；
+- 其他五个未实现智能体安全降级，摘要不声称被数据质量阻断；
+- 测试任务、六 run、evidence、decision、测试证券和 61 条 QFQ 日线按标识精确清理。
+
+测试前后数据库基线一致：`agent_tasks/agent_runs/agent_evidence/agent_vetoes/agent_decisions`
+为 `2/12/0/0/2`，`securities/daily_bars` 为 `0/0`；测试数据源记录为 0。Python
+测试服务已停止，8001 端口已释放，临时环境变量、日志和盘符映射均已清理。
 
 ## 8. 当前结论
 
-阶段 2B 的实现、版本化共享契约与真实闭环测试代码已形成验收候选，静态和本地全量
-回归通过。由于真实 PostgreSQL、Java、Python 闭环未执行，阶段 2B 不能标记为完成。
-`CURRENT_STATE.md` 和 `ROADMAP.md` 保持不变，也不进入阶段 2C。
+阶段 2B 的确定性 DATA_QUALITY 规则门禁、版本化共享契约、Java 双重校验和真实
+PostgreSQL/Java/Python 闭环均已通过验收。阶段 2B 标记为完成；下一阶段唯一入口为
+阶段 2C，但阶段 2C 仍为未开始。
