@@ -23,22 +23,24 @@
 - 验收条件：四类上下文可复现、哈希稳定、无写操作、缺失数据不伪造。
 - 阶段边界：2A 只完成上下文事实层和确定性技术指标，不实现 DATA_QUALITY 规则门禁，不升级六智能体分析规则，也不产生投资建议。
 
-## 2B：DATA_QUALITY 规则门禁（未开始）
+## 2B：DATA_QUALITY 规则门禁（已完成）
 
-- 阶段位置：下一阶段唯一入口，尚未开始。
+- 阶段位置：已完成并通过真实 PostgreSQL、Java、Python 闭环验收。
 - 目标：基于阶段 2A 的只读事实实现 DATA_QUALITY 数据质量规则门禁，不回写或改写 `contextSnapshot`。
 - 输入：2A 已冻结的 `security`、`marketData`、`technicalMetrics` 和 `dataQualityContext` 只读事实。
 - 输出：可解释的缺失、时效、一致性 findings 与 gateStatus。
 - 依赖：2A 已完成并验收。
 - 禁止范围：正式 veto、投资推荐、LLM。
 - 验收条件：规则边界、证据引用、阻断与非阻断样例跨语言一致。
+- 验收结果：规则版本 `1.4.0-stage-2b-dq-v1`；四种状态映射、`veto=false`、唯一权威 evidence、微秒精度跨语言时间规范化、六 run 和总控持久化均已通过。
 
 ## 2C：第二批只读研究上下文（未开始）
 
+- 阶段位置：下一阶段唯一入口，尚未开始。
 - 目标：仅从现有 PostgreSQL 接入 `marketBreadth`、`scanResult` 和 `backtestContext`。
 - 输入：现有市场宽度、扫描结果和回测业务表及其已审计语义。
 - 输出：确定性、可追溯、可复现的三类只读 `contextSnapshot`。
-- 依赖：2A，以及相关业务表结构和字段语义审计。
+- 依赖：2A、2B 已完成，以及相关业务表结构和字段语义审计。
 - 禁止范围：外部数据补数、Python 直连业务数据库、智能体评分、LLM 和交易写操作。
 - 验收条件：三类上下文来源明确、哈希稳定、缺失数据安全降级且不产生数据库写操作。
 

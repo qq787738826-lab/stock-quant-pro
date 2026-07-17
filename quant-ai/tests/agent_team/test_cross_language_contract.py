@@ -17,6 +17,24 @@ from app.agent_team.orchestrator import AgentTeamOrchestrator
 
 FIXTURE_DIR = (Path(__file__).resolve().parents[3]
                / "quant-server" / "src" / "test" / "resources" / "agent-team-contract")
+STAGE_2B_RESPONSE_FIXTURES = {
+    "stage-2b-invalid-context-response.json": (
+        "INSUFFICIENT_DATA", "BLOCKED", "REJECT", 0, 0,
+        "BLOCKED_BY_DATA_QUALITY", "BLOCKED",
+    ),
+    "stage-2b-blocked-response.json": (
+        "COMPLETED", "BLOCKED", "REJECT", 0, 100,
+        "BLOCKED_BY_DATA_QUALITY", "BLOCKED",
+    ),
+    "stage-2b-warn-response.json": (
+        "COMPLETED", "WARN", "WARN", 50, 100,
+        "INSUFFICIENT_DATA", "WARN",
+    ),
+    "stage-2b-pass-response.json": (
+        "COMPLETED", "PASS", "PASS", 100, 100,
+        "INSUFFICIENT_DATA", "PASS",
+    ),
+}
 
 
 def fixture(name: str) -> dict:
@@ -33,6 +51,50 @@ def without_generated_at(value):
 
 
 class CrossLanguageContractTest(unittest.TestCase):
+    def test_stage_2b_shared_fixtures_cover_all_frozen_mappings(self):
+        request_payload = fixture("stage-2b-valid-request.json")
+        request = AgentTeamRequest.model_validate(request_payload)
+        self.assertEqual("1.4.0-stage-2b-dq-v1", request.ruleVersion)
+        expected_fields = {
+            key: request_payload["contextSnapshot"][key]
+            for key in ("security", "marketData", "technicalMetrics", "dataQualityContext")
+        }
+
+        for name, expected in STAGE_2B_RESPONSE_FIXTURES.items():
+            with self.subTest(name=name):
+                response = AgentTeamResponse.model_validate(fixture(name))
+                data_quality = response.agentRuns[0]
+                actual = (
+                    data_quality.status.value,
+                    data_quality.gateStatus.value,
+                    data_quality.decision.value,
+                    data_quality.score,
+                    data_quality.confidence,
+                    response.finalDecision.decision.value,
+                    response.finalDecision.gateStatus.value,
+                )
+                self.assertEqual(expected, actual)
+                self.assertFalse(data_quality.veto)
+                self.assertEqual([], response.vetoes)
+                if data_quality.status.value == "COMPLETED":
+                    self.assertEqual(1, len(response.evidence))
+                    self.assertEqual(response.evidence, data_quality.evidence)
+                    self.assertEqual(expected_fields, response.evidence[0].fields)
+                    evidence_ids = {item.evidenceId for item in response.evidence}
+                    for finding in data_quality.findings:
+                        self.assertTrue(set(finding.evidenceIds) <= evidence_ids)
+                else:
+                    self.assertEqual([], response.evidence)
+                    self.assertEqual([], data_quality.evidence)
+
+    def test_stage_2b_pass_fixture_matches_deterministic_orchestrator(self):
+        request = AgentTeamRequest.model_validate(fixture("stage-2b-valid-request.json"))
+        expected = fixture("stage-2b-pass-response.json")
+        with patch.object(socket.socket, "connect", side_effect=AssertionError("network called")), \
+                patch.object(sqlite3, "connect", side_effect=AssertionError("database called")):
+            actual = AgentTeamOrchestrator().analyze(request).model_dump(mode="json")
+        self.assertEqual(without_generated_at(expected), without_generated_at(actual))
+
     def test_shared_request_and_response_are_accepted_by_pydantic(self):
         request = AgentTeamRequest.model_validate(fixture("valid-agent-team-request.json"))
         response = AgentTeamResponse.model_validate(fixture("valid-agent-team-response.json"))

@@ -11,6 +11,10 @@ import com.stockquant.server.agent.model.AgentModels.AgentTeamRequest;
 import com.stockquant.server.agent.model.AgentModels.AgentTeamResponse;
 import com.stockquant.server.agent.model.AgentTypes.AgentCode;
 import com.stockquant.server.agent.model.AgentTypes.ExecutionMode;
+import com.stockquant.server.agent.model.AgentTypes.FinalDecisionCode;
+import com.stockquant.server.agent.model.AgentTypes.GateStatus;
+import com.stockquant.server.agent.model.AgentTypes.RunDecision;
+import com.stockquant.server.agent.model.AgentTypes.RunStatus;
 import com.stockquant.server.agent.validation.AgentResponseValidator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -112,6 +116,46 @@ class AgentCrossLanguageContractTest {
     }
 
     @Test
+    void stage2BSharedFixturesPassJavaValidatorAndCoverFrozenMappings() throws Exception {
+        AgentTeamRequest stage2BRequest = read("stage-2b-valid-request.json", AgentTeamRequest.class);
+        List<Stage2BExpectation> scenarios = List.of(
+                new Stage2BExpectation(
+                        "stage-2b-invalid-context-response.json",
+                        RunStatus.INSUFFICIENT_DATA, GateStatus.BLOCKED, RunDecision.REJECT,
+                        0, 0, FinalDecisionCode.BLOCKED_BY_DATA_QUALITY),
+                new Stage2BExpectation(
+                        "stage-2b-blocked-response.json",
+                        RunStatus.COMPLETED, GateStatus.BLOCKED, RunDecision.REJECT,
+                        0, 100, FinalDecisionCode.BLOCKED_BY_DATA_QUALITY),
+                new Stage2BExpectation(
+                        "stage-2b-warn-response.json",
+                        RunStatus.COMPLETED, GateStatus.WARN, RunDecision.WARN,
+                        50, 100, FinalDecisionCode.INSUFFICIENT_DATA),
+                new Stage2BExpectation(
+                        "stage-2b-pass-response.json",
+                        RunStatus.COMPLETED, GateStatus.PASS, RunDecision.PASS,
+                        100, 100, FinalDecisionCode.INSUFFICIENT_DATA)
+        );
+
+        AgentResponseValidator validator = new AgentResponseValidator();
+        for (Stage2BExpectation scenario : scenarios) {
+            AgentTeamResponse stage2BResponse = read(scenario.name(), AgentTeamResponse.class);
+            validator.validate(stage2BRequest, stage2BResponse);
+            var dataQuality = stage2BResponse.agentRuns().get(0);
+            assertEquals(scenario.status(), dataQuality.status(), scenario.name());
+            assertEquals(scenario.gate(), dataQuality.gateStatus(), scenario.name());
+            assertEquals(scenario.decision(), dataQuality.decision(), scenario.name());
+            assertEquals(scenario.score(), dataQuality.score(), scenario.name());
+            assertEquals(scenario.confidence(), dataQuality.confidence(), scenario.name());
+            assertFalse(dataQuality.veto(), scenario.name());
+            assertEquals(scenario.finalDecision(), stage2BResponse.finalDecision().decision(), scenario.name());
+            if (dataQuality.status() == RunStatus.COMPLETED) {
+                assertEquals(stage2BResponse.evidence(), dataQuality.evidence(), scenario.name());
+            }
+        }
+    }
+
+    @Test
     void zAndOffsetDateTimesDeserializeToTheSameInstant() {
         Instant expected = Instant.parse("2026-07-14T05:02:00Z");
         assertEquals(Instant.parse("2026-07-14T05:01:00Z"), request.requestedAt());
@@ -161,4 +205,14 @@ class AgentCrossLanguageContractTest {
         }
         return stream;
     }
+
+    private record Stage2BExpectation(
+            String name,
+            RunStatus status,
+            GateStatus gate,
+            RunDecision decision,
+            int score,
+            int confidence,
+            FinalDecisionCode finalDecision
+    ) {}
 }
