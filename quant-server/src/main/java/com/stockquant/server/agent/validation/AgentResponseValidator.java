@@ -10,9 +10,13 @@ import com.stockquant.server.agent.model.AgentModels.Finding;
 import com.stockquant.server.agent.model.AgentModels.FinalDecision;
 import com.stockquant.server.agent.model.AgentModels.FormalVeto;
 import com.stockquant.server.agent.model.AgentTypes.AgentCode;
+import com.stockquant.server.agent.model.AgentTypes.EvidenceCategory;
+import com.stockquant.server.agent.model.AgentTypes.EvidenceSourceType;
 import com.stockquant.server.agent.model.AgentTypes.FinalDecisionCode;
 import com.stockquant.server.agent.model.AgentTypes.GateStatus;
+import com.stockquant.server.agent.model.AgentTypes.RunDecision;
 import com.stockquant.server.agent.model.AgentTypes.RunStatus;
+import com.stockquant.server.agent.model.AgentTypes.Severity;
 import org.springframework.stereotype.Component;
 
 import java.util.HashMap;
@@ -25,6 +29,60 @@ import java.util.Set;
 
 @Component
 public class AgentResponseValidator {
+
+    private static final String STAGE_2B_DATA_QUALITY_RULE_VERSION = "1.4.0-stage-2b-dq-v1";
+    private static final List<String> STAGE_2B_RULE_ORDER = List.of(
+            "QUERY_SCOPE_INCONSISTENT",
+            "REQUEST_DATE_INCONSISTENT",
+            "EFFECTIVE_DATE_FACT_CONTRADICTION",
+            "EFFECTIVE_DATE_INCONSISTENT",
+            "NATURAL_DAY_LAG_INCONSISTENT",
+            "EXACT_TRADE_DATE_INCONSISTENT",
+            "SECURITY_AVAILABILITY_INCONSISTENT",
+            "SECURITY_SYMBOL_INCONSISTENT",
+            "SECURITY_QUALITY_FACTS_INCONSISTENT",
+            "SECURITY_FIELDS_INCONSISTENT",
+            "BAR_COUNT_INCONSISTENT",
+            "REQUIRED_BAR_COUNT_INCONSISTENT",
+            "ADJUST_TYPE_INCONSISTENT",
+            "FORMULA_VERSION_INCONSISTENT",
+            "DUPLICATE_PROTECTION_INCONSISTENT",
+            "INVALID_BAR_DATES_INCONSISTENT",
+            "OPTIONAL_FIELD_COUNT_INCONSISTENT",
+            "NATURAL_DAY_GAP_INCONSISTENT",
+            "TECHNICAL_AVAILABILITY_INCONSISTENT",
+            "SECURITY_RECORD_MISSING",
+            "SECURITY_PLACEHOLDER_SUSPECTED",
+            "SECURITY_SOURCE_UNKNOWN",
+            "MARKET_DATA_MISSING",
+            "INSUFFICIENT_DAILY_BARS",
+            "INVALID_DAILY_BARS",
+            "TECHNICAL_METRICS_UNAVAILABLE",
+            "MARKET_DATA_TOO_STALE",
+            "REQUEST_DATE_NOT_EXACT",
+            "SECURITY_POINT_IN_TIME_UNVERIFIED",
+            "MISSING_SECURITY_FIELDS",
+            "OPTIONAL_MARKET_FIELDS_MISSING",
+            "LARGE_NATURAL_DAY_GAP",
+            "TRADING_CALENDAR_UNAVAILABLE",
+            "SOURCE_CONSISTENCY_UNASSESSABLE",
+            "SECURITY_SCOPE_FACT"
+    );
+    private static final Set<String> STAGE_2B_WARN_CODES = Set.of(
+            "REQUEST_DATE_NOT_EXACT",
+            "SECURITY_POINT_IN_TIME_UNVERIFIED",
+            "MISSING_SECURITY_FIELDS",
+            "OPTIONAL_MARKET_FIELDS_MISSING",
+            "LARGE_NATURAL_DAY_GAP"
+    );
+    private static final Set<String> STAGE_2B_INFO_CODES = Set.of(
+            "TRADING_CALENDAR_UNAVAILABLE",
+            "SOURCE_CONSISTENCY_UNASSESSABLE",
+            "SECURITY_SCOPE_FACT"
+    );
+    private static final Set<String> STAGE_2B_FORBIDDEN_EVIDENCE_CONCLUSION_FIELDS = Set.of(
+            "gate", "gatestatus", "decision", "score", "finding", "findings", "veto"
+    );
 
     private static final Set<RunStatus> PYTHON_RESULT_STATUSES = EnumSet.of(
             RunStatus.COMPLETED,
@@ -159,6 +217,162 @@ public class AgentResponseValidator {
             require(decision.gateStatus() == GateStatus.BLOCKED,
                     "数据质量阻断时finalDecision gateStatus必须为BLOCKED");
         }
+        if (STAGE_2B_DATA_QUALITY_RULE_VERSION.equals(request.ruleVersion())) {
+            validateStage2BDataQuality(request, response, runs, dataQuality);
+        }
+    }
+
+    private static void validateStage2BDataQuality(
+            AgentTeamRequest request,
+            AgentTeamResponse response,
+            List<AgentOutput> runs,
+            AgentOutput dataQuality
+    ) {
+        FinalDecision decision = response.finalDecision();
+        require(response.vetoes().isEmpty() && !decision.vetoed() && decision.vetoIds().isEmpty(),
+                "阶段2B DATA_QUALITY规则不得产生正式veto");
+        require(runs.stream().noneMatch(AgentOutput::veto),
+                "阶段2B六个专业智能体均不得产生正式veto");
+
+        if (dataQuality.status() == RunStatus.INSUFFICIENT_DATA) {
+            require(dataQuality.gateStatus() == GateStatus.BLOCKED
+                            && dataQuality.decision() == RunDecision.REJECT
+                            && dataQuality.score() == 0 && dataQuality.confidence() == 0,
+                    "阶段2B无效上下文状态映射不一致");
+            require(dataQuality.findings().isEmpty() && dataQuality.evidence().isEmpty()
+                            && response.evidence().isEmpty() && !dataQuality.errors().isEmpty(),
+                    "阶段2B无效上下文不得生成证据或finding且必须返回错误");
+        } else {
+            require(dataQuality.status() == RunStatus.COMPLETED,
+                    "阶段2B有效DATA_QUALITY status必须为COMPLETED");
+            validateStage2BEvidence(request, response, dataQuality);
+            validateStage2BFindings(dataQuality);
+            boolean blocked = dataQuality.findings().stream()
+                    .anyMatch(finding -> finding.severity() == Severity.HIGH);
+            boolean warned = dataQuality.findings().stream()
+                    .anyMatch(finding -> finding.severity() == Severity.WARN);
+            GateStatus expectedGate = blocked ? GateStatus.BLOCKED
+                    : warned ? GateStatus.WARN : GateStatus.PASS;
+            RunDecision expectedDecision = blocked ? RunDecision.REJECT
+                    : warned ? RunDecision.WARN : RunDecision.PASS;
+            int expectedScore = blocked ? 0 : warned ? 50 : 100;
+            require(dataQuality.gateStatus() == expectedGate
+                            && dataQuality.decision() == expectedDecision
+                            && dataQuality.score() == expectedScore
+                            && dataQuality.confidence() == 100
+                            && dataQuality.errors().isEmpty(),
+                    "阶段2B有效DATA_QUALITY状态映射不一致");
+        }
+
+        for (AgentOutput run : runs) {
+            if (run.agentCode() == AgentCode.DATA_QUALITY) {
+                continue;
+            }
+            require(run.status() == RunStatus.INSUFFICIENT_DATA
+                            && run.gateStatus() == GateStatus.NOT_APPLICABLE
+                            && run.decision() == RunDecision.NOT_APPLICABLE
+                            && !run.veto() && run.score() == 0 && run.confidence() == 0
+                            && run.findings().isEmpty() && run.evidence().isEmpty(),
+                    "阶段2B其余五个未实现规则必须保持数据不足状态");
+        }
+
+        require(Objects.equals(decision.findings(), dataQuality.findings()),
+                "阶段2B总控finding必须来自DATA_QUALITY运行");
+        if (dataQuality.gateStatus() == GateStatus.BLOCKED) {
+            require(decision.decision() == FinalDecisionCode.BLOCKED_BY_DATA_QUALITY
+                            && decision.gateStatus() == GateStatus.BLOCKED
+                            && decision.score() == 0
+                            && Objects.equals(decision.confidence(), dataQuality.confidence()),
+                    "阶段2B DATA_QUALITY阻断时finalDecision状态映射不一致");
+        } else {
+            require(decision.decision() == FinalDecisionCode.INSUFFICIENT_DATA
+                            && decision.gateStatus() == dataQuality.gateStatus()
+                            && decision.score() == 0 && decision.confidence() == 0,
+                    "阶段2B DATA_QUALITY未阻断时finalDecision状态映射不一致");
+            require(!decision.summary().contains("数据质量门禁阻断"),
+                    "阶段2B DATA_QUALITY未阻断时总控摘要不得声称数据质量阻断");
+        }
+    }
+
+    private static void validateStage2BEvidence(
+            AgentTeamRequest request,
+            AgentTeamResponse response,
+            AgentOutput dataQuality
+    ) {
+        require(dataQuality.evidence().size() == 1 && response.evidence().size() == 1,
+                "阶段2B有效上下文必须生成唯一质量证据");
+        Evidence evidence = dataQuality.evidence().get(0);
+        require(evidence.category() == EvidenceCategory.DATA_QUALITY
+                        && evidence.sourceType() == EvidenceSourceType.JAVA_ENGINE
+                        && "AgentContextSnapshotService".equals(evidence.sourceName())
+                        && "contextSnapshot".equals(evidence.sourceRef())
+                        && ("dq-context-" + request.contextHash()).equals(evidence.evidenceId())
+                        && Objects.equals(request.symbol(), evidence.symbol())
+                        && Objects.equals(request.tradeDate(), evidence.tradeDate())
+                        && Objects.equals(request.requestedAt(), evidence.collectedAt())
+                        && Objects.equals(request.contextHash(), evidence.contentHash()),
+                "阶段2B质量证据元数据不一致");
+
+        JsonNode fields = evidence.fields();
+        JsonNode snapshot = request.contextSnapshot();
+        Set<String> allowed = Set.of(
+                "security", "marketData", "technicalMetrics", "dataQualityContext");
+        require(fields.size() == allowed.size()
+                        && allowed.stream().allMatch(fields::has)
+                        && allowed.stream().allMatch(name -> Objects.equals(fields.get(name), snapshot.get(name))),
+                "阶段2B质量证据fields必须直接投影四类冻结上下文");
+        require(!containsForbiddenEvidenceConclusion(fields),
+                "阶段2B质量证据不得包含gate、decision、score、finding或veto结论");
+        String queriedAt = snapshot.path("dataQualityContext").path("queriedAt").asText(null);
+        require(evidence.observedAt() != null
+                        && Objects.equals(evidence.observedAt().toString(), queriedAt),
+                "阶段2B质量证据observedAt必须来自dataQualityContext.queriedAt");
+    }
+
+    private static void validateStage2BFindings(AgentOutput dataQuality) {
+        Set<String> seen = new HashSet<>();
+        int previousRank = -1;
+        String evidenceId = dataQuality.evidence().get(0).evidenceId();
+        for (Finding finding : dataQuality.findings()) {
+            int rank = STAGE_2B_RULE_ORDER.indexOf(finding.code());
+            require(rank >= 0, "阶段2B出现未冻结的finding代码：" + finding.code());
+            require(seen.add(finding.code()), "阶段2B同一finding代码最多出现一次：" + finding.code());
+            require(rank > previousRank, "阶段2B finding未按固定规则代码顺序输出");
+            previousRank = rank;
+            Severity expectedSeverity = STAGE_2B_INFO_CODES.contains(finding.code())
+                    ? Severity.INFO
+                    : STAGE_2B_WARN_CODES.contains(finding.code()) ? Severity.WARN : Severity.HIGH;
+            require(finding.severity() == expectedSeverity,
+                    "阶段2B finding严重性不符合冻结规则：" + finding.code());
+            require(finding.evidenceIds().equals(List.of(evidenceId)),
+                    "阶段2B finding必须仅引用统一质量证据");
+        }
+    }
+
+    private static boolean containsForbiddenEvidenceConclusion(JsonNode value) {
+        if (value == null) {
+            return false;
+        }
+        if (value.isObject()) {
+            var fields = value.fields();
+            while (fields.hasNext()) {
+                var field = fields.next();
+                String normalized = field.getKey().replace("_", "").toLowerCase(java.util.Locale.ROOT);
+                if (STAGE_2B_FORBIDDEN_EVIDENCE_CONCLUSION_FIELDS.contains(normalized)
+                        || containsForbiddenEvidenceConclusion(field.getValue())) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        if (value.isArray()) {
+            for (JsonNode item : value) {
+                if (containsForbiddenEvidenceConclusion(item)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private static void validateRunVeto(AgentOutput run) {

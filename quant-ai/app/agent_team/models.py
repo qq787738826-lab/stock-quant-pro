@@ -11,6 +11,7 @@ PositiveId = Annotated[int, Field(gt=0)]
 Score = Annotated[int, Field(ge=0, le=100)]
 Sha256 = Annotated[str, Field(pattern=r"^[a-f0-9]{64}$")]
 Symbol = Annotated[str, Field(pattern=r"^[0-9]{6}$")]
+STAGE_2B_DATA_QUALITY_RULE_VERSION = "1.4.0-stage-2b-dq-v1"
 
 
 class StrictModel(BaseModel):
@@ -369,7 +370,95 @@ class AgentTeamResponse(StrictModel):
             if (final.decision is not FinalDecisionCode.BLOCKED_BY_DATA_QUALITY
                     or final.gateStatus is not GateStatus.BLOCKED or final.vetoed):
                 raise ValueError("数据质量阻断且无正式veto时总控决策不一致")
+        if self.ruleVersion == STAGE_2B_DATA_QUALITY_RULE_VERSION:
+            self._validate_stage_2b_data_quality(runs_by_code)
         return self
+
+    def _validate_stage_2b_data_quality(
+        self,
+        runs_by_code: dict[AgentCode, AgentOutput],
+    ) -> None:
+        data_quality = runs_by_code[AgentCode.DATA_QUALITY]
+        final = self.finalDecision
+
+        if data_quality.veto or self.vetoes or final.vetoed or final.vetoIds:
+            raise ValueError("阶段2B DATA_QUALITY规则不得产生正式veto")
+
+        if data_quality.status is RunStatus.INSUFFICIENT_DATA:
+            expected = (GateStatus.BLOCKED, AgentDecision.REJECT, 0, 0)
+            if data_quality.evidence or data_quality.findings or not data_quality.errors:
+                raise ValueError("阶段2B无效上下文不得生成证据或finding且必须返回错误")
+        elif data_quality.status is RunStatus.COMPLETED:
+            expected_by_gate = {
+                GateStatus.BLOCKED: (AgentDecision.REJECT, 0, 100),
+                GateStatus.WARN: (AgentDecision.WARN, 50, 100),
+                GateStatus.PASS: (AgentDecision.PASS, 100, 100),
+            }
+            if data_quality.gateStatus not in expected_by_gate:
+                raise ValueError("阶段2B有效DATA_QUALITY gateStatus必须为PASS、WARN或BLOCKED")
+            decision, score, confidence = expected_by_gate[data_quality.gateStatus]
+            expected = (data_quality.gateStatus, decision, score, confidence)
+            if (len(data_quality.evidence) != 1 or len(self.evidence) != 1
+                    or self.evidence != data_quality.evidence or data_quality.errors):
+                raise ValueError("阶段2B有效上下文必须生成唯一质量证据且不得返回错误")
+            evidence = data_quality.evidence[0]
+            if (evidence.category is not EvidenceCategory.DATA_QUALITY
+                    or evidence.sourceType is not EvidenceSourceType.JAVA_ENGINE
+                    or evidence.sourceName != "AgentContextSnapshotService"
+                    or evidence.sourceRef != "contextSnapshot"
+                    or evidence.evidenceId != f"dq-context-{self.contextHash}"
+                    or evidence.contentHash != self.contextHash
+                    or evidence.tradeDate != self.tradeDate
+                    or set(evidence.fields) != {
+                        "security", "marketData", "technicalMetrics", "dataQualityContext"
+                    }):
+                raise ValueError("阶段2B质量证据元数据或四类事实投影不一致")
+        else:
+            raise ValueError("阶段2B DATA_QUALITY status必须为COMPLETED或INSUFFICIENT_DATA")
+
+        actual = (
+            data_quality.gateStatus,
+            data_quality.decision,
+            data_quality.score,
+            data_quality.confidence,
+        )
+        if actual != expected:
+            raise ValueError("阶段2B DATA_QUALITY状态映射不一致")
+
+        for code, run in runs_by_code.items():
+            if code is AgentCode.DATA_QUALITY:
+                continue
+            if (run.status is not RunStatus.INSUFFICIENT_DATA
+                    or run.gateStatus is not GateStatus.NOT_APPLICABLE
+                    or run.decision is not AgentDecision.NOT_APPLICABLE
+                    or run.veto or run.score != 0 or run.confidence != 0
+                    or run.findings or run.evidence):
+                raise ValueError("阶段2B其余五个未实现规则必须保持数据不足状态")
+
+        if data_quality.gateStatus is GateStatus.BLOCKED:
+            final_expected = (
+                FinalDecisionCode.BLOCKED_BY_DATA_QUALITY,
+                GateStatus.BLOCKED,
+                0,
+                data_quality.confidence,
+            )
+        else:
+            final_expected = (
+                FinalDecisionCode.INSUFFICIENT_DATA,
+                data_quality.gateStatus,
+                0,
+                0,
+            )
+            if "数据质量门禁阻断" in final.summary:
+                raise ValueError("DATA_QUALITY未阻断时总控摘要不得声称数据质量阻断")
+        final_actual = (
+            final.decision,
+            final.gateStatus,
+            final.score,
+            final.confidence,
+        )
+        if final_actual != final_expected:
+            raise ValueError("阶段2B finalDecision状态映射不一致")
 
 
 def _require_unique(values: list[Any], field_name: str) -> list[Any]:

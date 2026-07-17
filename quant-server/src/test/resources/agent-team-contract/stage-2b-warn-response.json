@@ -1,0 +1,374 @@
+{
+  "schemaVersion": "1.0",
+  "taskId": 88,
+  "contextHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "tradeDate": "2026-07-14",
+  "ruleVersion": "1.4.0-stage-2b-dq-v1",
+  "executionMode": "LOCAL_RULES",
+  "agentRuns": [
+    {
+      "schemaVersion": "1.0",
+      "taskId": 88,
+      "runId": 201,
+      "agentCode": "DATA_QUALITY",
+      "status": "COMPLETED",
+      "gateStatus": "WARN",
+      "decision": "WARN",
+      "veto": false,
+      "score": 50,
+      "confidence": 100,
+      "summary": "数据质量规则执行完成，存在非阻断警告。",
+      "findings": [
+        {
+          "findingId": "fixture-security-point-in-time-unverified",
+          "code": "SECURITY_POINT_IN_TIME_UNVERIFIED",
+          "severity": "WARN",
+          "title": "证券属性不具备点时保证",
+          "detail": "阶段2B共享契约场景：证券属性不具备点时保证",
+          "evidenceIds": [
+            "dq-context-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "evidenceId": "dq-context-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "category": "DATA_QUALITY",
+          "sourceType": "JAVA_ENGINE",
+          "sourceName": "AgentContextSnapshotService",
+          "sourceRef": "contextSnapshot",
+          "symbol": "600000",
+          "tradeDate": "2026-07-14",
+          "observedAt": "2026-07-14T05:00:00Z",
+          "collectedAt": "2026-07-14T05:01:00Z",
+          "fields": {
+            "security": {
+              "available": true,
+              "queriedAt": "2026-07-14T05:00:00Z",
+              "queryScope": {
+                "symbol": "600000",
+                "tradeDate": "2026-07-14"
+              },
+              "symbol": "600000",
+              "name": "测试证券",
+              "board": "MAIN",
+              "industry": "银行",
+              "listDate": "1999-11-10",
+              "isSt": false,
+              "isActive": true,
+              "dataSource": "LOCAL",
+              "qualityFacts": {
+                "placeholderSuspected": false,
+                "sourceKnown": true,
+                "pointInTimeGuaranteed": true
+              }
+            },
+            "marketData": {
+              "available": true,
+              "queriedAt": "2026-07-14T05:00:00Z",
+              "queryScope": {
+                "symbol": "600000",
+                "tradeDate": "2026-07-14"
+              },
+              "adjustType": "QFQ",
+              "requestedTradeDate": "2026-07-14",
+              "effectiveTradeDate": "2026-07-14",
+              "exactTradeDateMatch": true,
+              "actualBars": 61,
+              "bars": []
+            },
+            "technicalMetrics": {
+              "available": true,
+              "queriedAt": "2026-07-14T05:00:00Z",
+              "queryScope": {
+                "symbol": "600000",
+                "tradeDate": "2026-07-14"
+              },
+              "formulaVersion": "JAVA_INDICATORS_V1",
+              "adjustType": "QFQ",
+              "requestedTradeDate": "2026-07-14",
+              "effectiveTradeDate": "2026-07-14",
+              "requiredBars": 61,
+              "actualBars": 61,
+              "values": {}
+            },
+            "dataQualityContext": {
+              "available": true,
+              "queriedAt": "2026-07-14T05:00:00Z",
+              "queryScope": {
+                "symbol": "600000",
+                "tradeDate": "2026-07-14"
+              },
+              "facts": {
+                "securityRecordPresent": true,
+                "securityPlaceholderSuspected": false,
+                "securitySourceKnown": true,
+                "securityPointInTimeGuaranteed": true,
+                "loadedBarCount": 61,
+                "requiredBarsForTechnicalMetrics": 61,
+                "exactTradeDatePresent": true,
+                "requestedTradeDate": "2026-07-14",
+                "effectiveTradeDate": "2026-07-14",
+                "naturalDayLag": 0,
+                "tradingCalendarAvailable": true,
+                "missingAmountCount": 0,
+                "missingTurnoverRateCount": 0,
+                "invalidBarCount": 0,
+                "invalidBarDates": [],
+                "maximumObservedNaturalDayGap": 1,
+                "duplicateProtection": "PRIMARY_KEY_SYMBOL_TRADE_DATE_ADJUST_TYPE",
+                "sourceConsistencyAssessable": true,
+                "adjustTypesObserved": [
+                  "QFQ"
+                ],
+                "missingSecurityFields": []
+              }
+            }
+          },
+          "contentHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        }
+      ],
+      "errors": [],
+      "contextHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "ruleVersion": "1.4.0-stage-2b-dq-v1",
+      "executionMode": "LOCAL_RULES",
+      "generatedAt": "2026-07-14T05:02:00Z"
+    },
+    {
+      "schemaVersion": "1.0",
+      "taskId": 88,
+      "runId": 202,
+      "agentCode": "MARKET_REGIME",
+      "status": "INSUFFICIENT_DATA",
+      "gateStatus": "NOT_APPLICABLE",
+      "decision": "NOT_APPLICABLE",
+      "veto": false,
+      "score": 0,
+      "confidence": 0,
+      "summary": "市场环境规则尚未实现，未执行市场环境分析。",
+      "findings": [],
+      "evidence": [],
+      "errors": [],
+      "contextHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "ruleVersion": "1.4.0-stage-2b-dq-v1",
+      "executionMode": "LOCAL_RULES",
+      "generatedAt": "2026-07-14T05:02:00Z"
+    },
+    {
+      "schemaVersion": "1.0",
+      "taskId": 88,
+      "runId": 203,
+      "agentCode": "TECHNICAL_ANALYSIS",
+      "status": "INSUFFICIENT_DATA",
+      "gateStatus": "NOT_APPLICABLE",
+      "decision": "NOT_APPLICABLE",
+      "veto": false,
+      "score": 0,
+      "confidence": 0,
+      "summary": "技术分析规则尚未实现，未执行技术分析。",
+      "findings": [],
+      "evidence": [],
+      "errors": [],
+      "contextHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "ruleVersion": "1.4.0-stage-2b-dq-v1",
+      "executionMode": "LOCAL_RULES",
+      "generatedAt": "2026-07-14T05:02:00Z"
+    },
+    {
+      "schemaVersion": "1.0",
+      "taskId": 88,
+      "runId": 204,
+      "agentCode": "STRATEGY_BACKTEST",
+      "status": "INSUFFICIENT_DATA",
+      "gateStatus": "NOT_APPLICABLE",
+      "decision": "NOT_APPLICABLE",
+      "veto": false,
+      "score": 0,
+      "confidence": 0,
+      "summary": "策略回测规则尚未实现，未执行策略回测分析。",
+      "findings": [],
+      "evidence": [],
+      "errors": [],
+      "contextHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "ruleVersion": "1.4.0-stage-2b-dq-v1",
+      "executionMode": "LOCAL_RULES",
+      "generatedAt": "2026-07-14T05:02:00Z"
+    },
+    {
+      "schemaVersion": "1.0",
+      "taskId": 88,
+      "runId": 205,
+      "agentCode": "ANNOUNCEMENT_RISK",
+      "status": "INSUFFICIENT_DATA",
+      "gateStatus": "NOT_APPLICABLE",
+      "decision": "NOT_APPLICABLE",
+      "veto": false,
+      "score": 0,
+      "confidence": 0,
+      "summary": "公告事件风险规则尚未实现，未执行公告事件风险分析。",
+      "findings": [],
+      "evidence": [],
+      "errors": [],
+      "contextHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "ruleVersion": "1.4.0-stage-2b-dq-v1",
+      "executionMode": "LOCAL_RULES",
+      "generatedAt": "2026-07-14T05:02:00Z"
+    },
+    {
+      "schemaVersion": "1.0",
+      "taskId": 88,
+      "runId": 206,
+      "agentCode": "POSITION_RISK",
+      "status": "INSUFFICIENT_DATA",
+      "gateStatus": "NOT_APPLICABLE",
+      "decision": "NOT_APPLICABLE",
+      "veto": false,
+      "score": 0,
+      "confidence": 0,
+      "summary": "资金仓位风控规则尚未实现且无真实仓位证据，未执行资金仓位风控分析。",
+      "findings": [],
+      "evidence": [],
+      "errors": [],
+      "contextHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "ruleVersion": "1.4.0-stage-2b-dq-v1",
+      "executionMode": "LOCAL_RULES",
+      "generatedAt": "2026-07-14T05:02:00Z"
+    }
+  ],
+  "evidence": [
+    {
+      "evidenceId": "dq-context-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "category": "DATA_QUALITY",
+      "sourceType": "JAVA_ENGINE",
+      "sourceName": "AgentContextSnapshotService",
+      "sourceRef": "contextSnapshot",
+      "symbol": "600000",
+      "tradeDate": "2026-07-14",
+      "observedAt": "2026-07-14T05:00:00Z",
+      "collectedAt": "2026-07-14T05:01:00Z",
+      "fields": {
+        "security": {
+          "available": true,
+          "queriedAt": "2026-07-14T05:00:00Z",
+          "queryScope": {
+            "symbol": "600000",
+            "tradeDate": "2026-07-14"
+          },
+          "symbol": "600000",
+          "name": "测试证券",
+          "board": "MAIN",
+          "industry": "银行",
+          "listDate": "1999-11-10",
+          "isSt": false,
+          "isActive": true,
+          "dataSource": "LOCAL",
+          "qualityFacts": {
+            "placeholderSuspected": false,
+            "sourceKnown": true,
+            "pointInTimeGuaranteed": true
+          }
+        },
+        "marketData": {
+          "available": true,
+          "queriedAt": "2026-07-14T05:00:00Z",
+          "queryScope": {
+            "symbol": "600000",
+            "tradeDate": "2026-07-14"
+          },
+          "adjustType": "QFQ",
+          "requestedTradeDate": "2026-07-14",
+          "effectiveTradeDate": "2026-07-14",
+          "exactTradeDateMatch": true,
+          "actualBars": 61,
+          "bars": []
+        },
+        "technicalMetrics": {
+          "available": true,
+          "queriedAt": "2026-07-14T05:00:00Z",
+          "queryScope": {
+            "symbol": "600000",
+            "tradeDate": "2026-07-14"
+          },
+          "formulaVersion": "JAVA_INDICATORS_V1",
+          "adjustType": "QFQ",
+          "requestedTradeDate": "2026-07-14",
+          "effectiveTradeDate": "2026-07-14",
+          "requiredBars": 61,
+          "actualBars": 61,
+          "values": {}
+        },
+        "dataQualityContext": {
+          "available": true,
+          "queriedAt": "2026-07-14T05:00:00Z",
+          "queryScope": {
+            "symbol": "600000",
+            "tradeDate": "2026-07-14"
+          },
+          "facts": {
+            "securityRecordPresent": true,
+            "securityPlaceholderSuspected": false,
+            "securitySourceKnown": true,
+            "securityPointInTimeGuaranteed": true,
+            "loadedBarCount": 61,
+            "requiredBarsForTechnicalMetrics": 61,
+            "exactTradeDatePresent": true,
+            "requestedTradeDate": "2026-07-14",
+            "effectiveTradeDate": "2026-07-14",
+            "naturalDayLag": 0,
+            "tradingCalendarAvailable": true,
+            "missingAmountCount": 0,
+            "missingTurnoverRateCount": 0,
+            "invalidBarCount": 0,
+            "invalidBarDates": [],
+            "maximumObservedNaturalDayGap": 1,
+            "duplicateProtection": "PRIMARY_KEY_SYMBOL_TRADE_DATE_ADJUST_TYPE",
+            "sourceConsistencyAssessable": true,
+            "adjustTypesObserved": [
+              "QFQ"
+            ],
+            "missingSecurityFields": []
+          }
+        }
+      },
+      "contentHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    }
+  ],
+  "vetoes": [],
+  "finalDecision": {
+    "schemaVersion": "1.0",
+    "taskId": 88,
+    "decision": "INSUFFICIENT_DATA",
+    "gateStatus": "WARN",
+    "vetoed": false,
+    "score": 0,
+    "confidence": 0,
+    "summary": "DATA_QUALITY检查未阻断；其余五个专业规则尚未实现，无法形成团队结论。",
+    "findings": [
+      {
+        "findingId": "fixture-security-point-in-time-unverified",
+        "code": "SECURITY_POINT_IN_TIME_UNVERIFIED",
+        "severity": "WARN",
+        "title": "证券属性不具备点时保证",
+        "detail": "阶段2B共享契约场景：证券属性不具备点时保证",
+        "evidenceIds": [
+          "dq-context-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        ]
+      }
+    ],
+    "sourceRunIds": [
+      201,
+      202,
+      203,
+      204,
+      205,
+      206
+    ],
+    "vetoIds": [],
+    "contextHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "tradeDate": "2026-07-14",
+    "ruleVersion": "1.4.0-stage-2b-dq-v1",
+    "executionMode": "LOCAL_RULES",
+    "generatedAt": "2026-07-14T05:02:00Z"
+  },
+  "generatedAt": "2026-07-14T05:02:00Z"
+}

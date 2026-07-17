@@ -34,7 +34,7 @@ const router = useRouter()
 const form = reactive<CreateAgentTaskRequest>({
   symbol: '',
   tradeDate: localIsoDate(),
-  ruleVersion: '1.4.0-local-rules',
+  ruleVersion: '1.4.0-stage-2b-dq-v1',
   executionMode: 'LOCAL_RULES',
   triggerType: 'MANUAL',
   forceRefresh: false,

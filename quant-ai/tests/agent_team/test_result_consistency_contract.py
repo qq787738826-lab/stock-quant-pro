@@ -19,11 +19,15 @@ def fixture(name: str) -> dict:
 
 
 class ResultConsistencyContractTest(unittest.TestCase):
-    def test_all_three_shared_legal_scenarios_pass_and_remain_camel_case(self):
+    def test_all_shared_legal_scenarios_pass_and_remain_camel_case(self):
         for name in (
             "valid-agent-team-response.json",
             "valid-agent-team-evidence-response.json",
             "valid-agent-team-veto-response.json",
+            "stage-2b-invalid-context-response.json",
+            "stage-2b-blocked-response.json",
+            "stage-2b-warn-response.json",
+            "stage-2b-pass-response.json",
         ):
             with self.subTest(name=name):
                 response = AgentTeamResponse.model_validate(fixture(name))
@@ -31,6 +35,31 @@ class ResultConsistencyContractTest(unittest.TestCase):
                 self.assertIn("agentRuns", serialized)
                 self.assertIn("sourceRunIds", serialized["finalDecision"])
                 self.assertNotIn("agent_runs", serialized)
+
+    def test_stage_2b_shared_fixtures_enforce_versioned_mappings_and_evidence_subset(self):
+        for name in (
+            "stage-2b-blocked-response.json",
+            "stage-2b-warn-response.json",
+            "stage-2b-pass-response.json",
+        ):
+            with self.subTest(name=name):
+                payload = fixture(name)
+                response = AgentTeamResponse.model_validate(payload)
+                self.assertEqual(response.evidence, response.agentRuns[0].evidence)
+
+                wrong_mapping = copy.deepcopy(payload)
+                wrong_mapping["agentRuns"][0]["score"] = 99
+                self.assert_invalid(wrong_mapping)
+
+                conflicting_subset = copy.deepcopy(payload)
+                conflicting_subset["agentRuns"][0]["evidence"][0]["sourceRef"] = "other"
+                self.assert_invalid(conflicting_subset)
+
+        invalid = AgentTeamResponse.model_validate(
+            fixture("stage-2b-invalid-context-response.json")
+        )
+        self.assertEqual(0, invalid.agentRuns[0].confidence)
+        self.assertEqual([], invalid.evidence)
 
     def test_evidence_references_and_uniqueness_are_enforced(self):
         cases = []
