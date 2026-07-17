@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.fasterxml.jackson.databind.node.NumericNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.stockquant.server.agent.exception.AgentTeamException;
 import org.springframework.stereotype.Service;
@@ -57,12 +58,15 @@ public class AgentContextHashService {
             node.forEach(item -> result.add(normalize(item)));
             return result;
         }
-        if (node.isFloatingPointNumber()) {
+        if (node.isNumber()) {
+            if (((NumericNode) node).isNaN()) {
+                throw new IllegalArgumentException("contextHash不支持NaN或Infinity数值");
+            }
             BigDecimal stable = node.decimalValue().stripTrailingZeros();
+            if (stable.signum() == 0) {
+                stable = BigDecimal.ZERO;
+            }
             return JsonNodeFactory.instance.numberNode(stable);
-        }
-        if (node.isIntegralNumber()) {
-            return JsonNodeFactory.instance.numberNode(node.bigIntegerValue());
         }
         return node.deepCopy();
     }

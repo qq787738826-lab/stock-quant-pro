@@ -13,21 +13,23 @@
 - 禁止范围：真实行情、持仓、公告、LLM、评分策略、交易。
 - 验收条件：分层测试、真实闭环、安全启停、状态治理均可审计。
 
-## 2A：现有 PostgreSQL 第一批只读上下文（下一阶段）
+## 2A：现有 PostgreSQL 第一批只读上下文（已完成）
 
 - 目标：仅接入 security、marketData、technicalMetrics、dataQualityContext。
 - 输入：现有 PostgreSQL 已有业务表。
-- 输出：确定性只读 contextSnapshot 与真实可追溯数据质量信息。
+- 输出：由 Java 基于冻结的本地 PostgreSQL 事实生成确定性只读 `contextSnapshot`；`dataQualityContext` 只包含数据质量事实。
 - 依赖：1D-4 验收完成、表语义审计。
 - 禁止范围：新外部数据源、公告、持仓、LLM、交易、真实评分扩张。
 - 验收条件：四类上下文可复现、哈希稳定、无写操作、缺失数据不伪造。
+- 阶段边界：2A 只完成上下文事实层和确定性技术指标，不实现 DATA_QUALITY 规则门禁，不升级六智能体分析规则，也不产生投资建议。
 
-## 2B：DATA_QUALITY 真实规则（未开始）
+## 2B：DATA_QUALITY 规则门禁（未开始）
 
-- 目标：基于第一批上下文实现数据质量门禁。
-- 输入：2A 的四类只读上下文。
+- 阶段位置：下一阶段唯一入口，尚未开始。
+- 目标：基于阶段 2A 的只读事实实现 DATA_QUALITY 数据质量规则门禁，不回写或改写 `contextSnapshot`。
+- 输入：2A 已冻结的 `security`、`marketData`、`technicalMetrics` 和 `dataQualityContext` 只读事实。
 - 输出：可解释的缺失、时效、一致性 findings 与 gateStatus。
-- 依赖：2A。
+- 依赖：2A 已完成并验收。
 - 禁止范围：正式 veto、投资推荐、LLM。
 - 验收条件：规则边界、证据引用、阻断与非阻断样例跨语言一致。
 
