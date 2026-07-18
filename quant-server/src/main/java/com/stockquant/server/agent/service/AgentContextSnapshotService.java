@@ -27,7 +27,7 @@ public class AgentContextSnapshotService {
 
     public static final String CONTEXT_SCHEMA_VERSION = "1.0";
     private static final List<String> UNAVAILABLE_SECTIONS = List.of(
-            "marketBreadth", "scanResult", "backtestContext", "securityEvents", "portfolioContext"
+            "securityEvents", "portfolioContext"
     );
     private static final String UNAVAILABLE_REASON = "该只读上下文尚未接入现有业务数据源";
 
@@ -36,6 +36,8 @@ public class AgentContextSnapshotService {
     private final AgentContextReadRepository readRepository;
     private final AgentTechnicalMetricsService technicalMetricsService;
     private final AgentDataQualityContextService dataQualityContextService;
+    private final AgentMarketBreadthContextService marketBreadthContextService;
+    private final AgentScanResultContextService scanResultContextService;
     private final Clock clock;
 
     @Autowired
@@ -44,11 +46,14 @@ public class AgentContextSnapshotService {
             AgentContextHashService hashService,
             AgentContextReadRepository readRepository,
             AgentTechnicalMetricsService technicalMetricsService,
-            AgentDataQualityContextService dataQualityContextService
+            AgentDataQualityContextService dataQualityContextService,
+            AgentMarketBreadthContextService marketBreadthContextService,
+            AgentScanResultContextService scanResultContextService
     ) {
         this(
                 objectMapper, hashService, readRepository, technicalMetricsService,
-                dataQualityContextService, Clock.systemUTC()
+                dataQualityContextService, marketBreadthContextService,
+                scanResultContextService, Clock.systemUTC()
         );
     }
 
@@ -58,6 +63,8 @@ public class AgentContextSnapshotService {
             AgentContextReadRepository readRepository,
             AgentTechnicalMetricsService technicalMetricsService,
             AgentDataQualityContextService dataQualityContextService,
+            AgentMarketBreadthContextService marketBreadthContextService,
+            AgentScanResultContextService scanResultContextService,
             Clock clock
     ) {
         this.objectMapper = objectMapper;
@@ -65,6 +72,8 @@ public class AgentContextSnapshotService {
         this.readRepository = readRepository;
         this.technicalMetricsService = technicalMetricsService;
         this.dataQualityContextService = dataQualityContextService;
+        this.marketBreadthContextService = marketBreadthContextService;
+        this.scanResultContextService = scanResultContextService;
         this.clock = clock;
     }
 
@@ -84,12 +93,15 @@ public class AgentContextSnapshotService {
         ObjectNode root = objectMapper.createObjectNode();
         root.set("security", securityContext(security, symbol, tradeDate, queriedAt));
         root.set("marketData", marketDataContext(dailyBars, symbol, tradeDate, queriedAt));
-        for (String section : UNAVAILABLE_SECTIONS) {
-            root.set(section, unavailableContext(symbol, tradeDate, queriedAt));
-        }
+        root.set("marketBreadth", marketBreadthContextService.create(symbol, tradeDate, queriedAt));
+        root.set("scanResult", scanResultContextService.create(symbol, tradeDate, queriedAt));
         root.set("technicalMetrics", technicalMetricsContext(
                 technicalMetrics, dailyBars, symbol, tradeDate, queriedAt
         ));
+        root.set("backtestContext", backtestContext(symbol, tradeDate, queriedAt));
+        for (String section : UNAVAILABLE_SECTIONS) {
+            root.set(section, unavailableContext(symbol, tradeDate, queriedAt));
+        }
         root.set("dataQualityContext", dataQualityContext(dataQuality, symbol, tradeDate, queriedAt));
         return new ContextSnapshot(CONTEXT_SCHEMA_VERSION, root, queriedAt, hashService.hash(root));
     }
@@ -228,6 +240,32 @@ public class AgentContextSnapshotService {
     private ObjectNode unavailableContext(String symbol, LocalDate tradeDate, Instant queriedAt) {
         ObjectNode context = baseContext(false, symbol, tradeDate, queriedAt);
         context.put("reason", UNAVAILABLE_REASON);
+        return context;
+    }
+
+    private ObjectNode backtestContext(String symbol, LocalDate tradeDate, Instant queriedAt) {
+        ObjectNode context = baseContext(false, symbol, tradeDate, queriedAt);
+        context.put("reasonCode", "BACKTEST_INPUT_CUTOFF_UNVERIFIABLE");
+        context.put("reason", "Existing backtest records do not persist a verifiable input data cutoff.");
+        context.put("sourceType", "DATABASE");
+        ArrayNode tables = context.putArray("sourceTables");
+        List.of("backtest_runs", "scan_backtest_results", "scan_backtest_tasks").forEach(tables::add);
+        context.put("sourceStatus", "UNAVAILABLE");
+        context.putNull("producer");
+        context.putNull("producerVersion");
+        context.put("versionAvailable", false);
+        context.put("requestedTradeDate", tradeDate.toString());
+        context.putNull("effectiveTradeDate");
+        context.put("exactTradeDateMatch", false);
+        context.put("pointInTimeGuaranteed", false);
+        context.put("readSelectionFutureExcluded", false);
+        context.put("producerInputCutoffGuaranteed", false);
+        context.put("futureDataExcluded", false);
+        context.put("timestampTimezoneSemantics", "LEGACY_DATABASE_LOCAL_TIMESTAMP_WITHOUT_TIME_ZONE");
+        ArrayNode limitations = context.putArray("limitations");
+        List.of("INPUT_END_DATE_NOT_PERSISTED", "INPUT_START_DATE_NOT_PERSISTED",
+                "SCAN_BACKTEST_READ_HAS_NO_DATE_CUTOFF", "STRATEGY_VERSION_NOT_PERSISTED")
+                .forEach(limitations::add);
         return context;
     }
 

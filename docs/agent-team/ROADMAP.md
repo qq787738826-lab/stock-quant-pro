@@ -34,23 +34,25 @@
 - 验收条件：规则边界、证据引用、阻断与非阻断样例跨语言一致。
 - 验收结果：规则版本 `1.4.0-stage-2b-dq-v1`；四种状态映射、`veto=false`、唯一权威 evidence、微秒精度跨语言时间规范化、六 run 和总控持久化均已通过。
 
-## 2C：第二批只读研究上下文（未开始）
+## 2C：第二批只读研究上下文（已完成）
 
-- 阶段位置：下一阶段唯一入口，尚未开始。
-- 目标：仅从现有 PostgreSQL 接入 `marketBreadth`、`scanResult` 和 `backtestContext`。
+- 阶段位置：已完成正式技术验收和真实 PostgreSQL 闭环验收。
+- 目标：仅从现有 PostgreSQL 接入 `marketBreadth`、`scanResult`，并审计 `backtestContext` 的安全可用边界。
 - 输入：现有市场宽度、扫描结果和回测业务表及其已审计语义。
-- 输出：确定性、可追溯、可复现的三类只读 `contextSnapshot`。
+- 输出：确定性、可追溯、可复现的 `marketBreadth` 与 `scanResult` 只读事实；`backtestContext` 因输入截止证据不可验证而保持结构化安全不可用。
 - 依赖：2A、2B 已完成，以及相关业务表结构和字段语义审计。
 - 禁止范围：外部数据补数、Python 直连业务数据库、智能体评分、LLM 和交易写操作。
 - 验收条件：三类上下文来源明确、哈希稳定、缺失数据安全降级且不产生数据库写操作。
+- 验收结果：`marketBreadth` 与 `scanResult` 已安全接入；`backtestContext` 使用 `BACKTEST_INPUT_CUTOFF_UNVERIFIABLE` 保持不可用；无 Flyway 和外层 Schema 变化，JSONB、Hash、无副作用、精确清理及测试前基线恢复均通过。
 
 ## 2D：MARKET_REGIME 真实规则（未开始）
 
+- 阶段位置：下一阶段唯一入口，尚未开始。
 - 目标：对可用市场数据做确定性市场环境分类。
 - 输入：`marketData`、`marketBreadth`、`scanResult`、`technicalMetrics` 和 DATA_QUALITY 结果。
-- 输出：有证据的 regime finding、score、confidence。
-- 依赖：2A、2B、2C。
-- 禁止范围：外部行情补数、收益承诺、LLM 决策。
+- 输出：确定性的 regime finding、score 和 confidence，以及可追溯证据。
+- 依赖：2A、2B、2C 全部完成。
+- 禁止范围：外部行情补数、LLM 权威分类、收益承诺、投资推荐和交易写操作。
 - 验收条件：历史样例可复现，缺数安全降级，不越过数据门禁。
 
 ## 2E：TECHNICAL_ANALYSIS 真实规则（未开始）
@@ -67,7 +69,7 @@
 - 目标：解释现有回测结果及其稳定性，不创建交易策略捷径。
 - 输入：现有 Java 回测上下文及证据。
 - 输出：适用性、样本、风险和稳定性 findings。
-- 依赖：2C 已完成可靠的 `backtestContext` 接入。
+- 依赖：先独立完成可靠的 `backtestContext` 接入；阶段 2C 未满足该条件。
 - 禁止范围：实盘承诺、自动参数寻优后直接交易、虚构回测。
 - 验收条件：无前视、版本可追溯、空样本安全降级。
 

@@ -10,6 +10,8 @@ import com.stockquant.server.agent.service.AgentContextHashService;
 import com.stockquant.server.agent.service.AgentContextSnapshotService;
 import com.stockquant.server.agent.service.AgentDataQualityContextService;
 import com.stockquant.server.agent.service.AgentTechnicalMetricsService;
+import com.stockquant.server.agent.service.AgentMarketBreadthContextService;
+import com.stockquant.server.agent.service.AgentScanResultContextService;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -24,6 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.*;
 
 class AgentContextHashServiceTest {
 
@@ -137,23 +140,30 @@ class AgentContextHashServiceTest {
     }
 
     @Test
-    void snapshotContainsFourRealSectionsAndFiveExplicitUnavailableReadOnlySections() {
+    void snapshotContainsStage2CResearchSectionsAndTwoLegacyUnavailableSections() {
         AgentContextReadRepository repository = mock(AgentContextReadRepository.class);
         when(repository.findSecurity("600000")).thenReturn(Optional.empty());
         when(repository.findQfqDailyBars("600000", AgentTestFixtures.TRADE_DATE)).thenReturn(List.of());
         when(repository.findAdjustTypes("600000", AgentTestFixtures.TRADE_DATE)).thenReturn(List.of());
+        AgentMarketBreadthContextService breadth = mock(AgentMarketBreadthContextService.class);
+        AgentScanResultContextService scan = mock(AgentScanResultContextService.class);
+        ObjectNode unavailable = objectMapper.createObjectNode().put("available", false).put("reason", "test");
+        when(breadth.create(anyString(), any(), any())).thenReturn(unavailable.deepCopy());
+        when(scan.create(anyString(), any(), any())).thenReturn(unavailable.deepCopy());
         AgentContextSnapshotService snapshots = new AgentContextSnapshotService(
                 objectMapper, service, repository,
-                new AgentTechnicalMetricsService(), new AgentDataQualityContextService());
+                new AgentTechnicalMetricsService(), new AgentDataQualityContextService(), breadth, scan);
         var snapshot = snapshots.create("600000", AgentTestFixtures.TRADE_DATE);
-        for (String section : new String[]{
-                "marketBreadth", "scanResult", "backtestContext", "securityEvents", "portfolioContext"
-        }) {
+        for (String section : new String[]{"securityEvents", "portfolioContext"}) {
             assertFalse(snapshot.value().path(section).path("available").asBoolean());
             assertEquals("该只读上下文尚未接入现有业务数据源",
                     snapshot.value().path(section).path("reason").asText());
             assertFalse(snapshot.value().path(section).path("queriedAt").asText().isBlank());
         }
+        assertFalse(snapshot.value().path("marketBreadth").path("available").asBoolean());
+        assertFalse(snapshot.value().path("scanResult").path("available").asBoolean());
+        assertEquals("BACKTEST_INPUT_CUTOFF_UNVERIFIABLE",
+                snapshot.value().path("backtestContext").path("reasonCode").asText());
         assertFalse(snapshot.value().path("security").path("available").asBoolean());
         assertFalse(snapshot.value().path("marketData").path("available").asBoolean());
         assertFalse(snapshot.value().path("technicalMetrics").path("available").asBoolean());

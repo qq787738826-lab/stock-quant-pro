@@ -16,6 +16,7 @@ import com.stockquant.server.agent.model.AgentTypes.GateStatus;
 import com.stockquant.server.agent.model.AgentTypes.RunDecision;
 import com.stockquant.server.agent.model.AgentTypes.RunStatus;
 import com.stockquant.server.agent.validation.AgentResponseValidator;
+import com.stockquant.server.agent.service.AgentContextHashService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -23,6 +24,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.nio.charset.StandardCharsets;
+import java.math.BigDecimal;
 import java.util.HashSet;
 import java.util.List;
 
@@ -152,6 +155,44 @@ class AgentCrossLanguageContractTest {
             if (dataQuality.status() == RunStatus.COMPLETED) {
                 assertEquals(stage2BResponse.evidence(), dataQuality.evidence(), scenario.name());
             }
+        }
+    }
+
+    @Test
+    void stage2CSharedRequestUsesProductionHashAndFrozenResearchContracts() throws Exception {
+        AgentTeamRequest stage2C = read("stage-2c-valid-request.json", AgentTeamRequest.class);
+        String recalculated = new AgentContextHashService(mapper).hash(stage2C.contextSnapshot());
+        assertEquals(stage2C.contextHash(), recalculated, "STAGE_2C_PRODUCTION_HASH=" + recalculated);
+        assertEquals("1.0", stage2C.schemaVersion());
+        assertEquals("1.0", stage2C.contextSchemaVersion());
+        assertEquals("1.4.0-stage-2b-dq-v1", stage2C.ruleVersion());
+        assertEquals(6, new HashSet<>(stage2C.runIds().byAgentCode().values()).size());
+        JsonNode snapshot = stage2C.contextSnapshot();
+        assertEquals(9, snapshot.size());
+        JsonNode breadth = snapshot.path("marketBreadth");
+        assertTrue(breadth.path("available").asBoolean());
+        assertFalse(breadth.path("pointInTimeGuaranteed").asBoolean());
+        assertTrue(breadth.path("barFutureDataExcluded").asBoolean());
+        assertFalse(breadth.path("universePointInTimeGuaranteed").asBoolean());
+        assertFalse(breadth.path("futureDataExcluded").asBoolean());
+        assertEquals(0, new BigDecimal("0.60000000").compareTo(breadth.path("coverageRatio").decimalValue()));
+        try (InputStream stream = resource("stage-2c-valid-request.json")) {
+            assertTrue(new String(stream.readAllBytes(), StandardCharsets.UTF_8)
+                    .contains("\"coverageRatio\": 0.60000000"));
+        }
+        JsonNode scan = snapshot.path("scanResult");
+        assertTrue(scan.path("symbolParticipationKnown").asBoolean());
+        assertTrue(scan.path("symbolResultAvailable").asBoolean());
+        assertTrue(scan.has("sourceScanScore"));
+        for (String forbidden : List.of("score", "bullish", "bearish", "summary",
+                "buyLow", "buyHigh", "stopLoss", "target1", "target2", "suggestedWeight")) {
+            assertFalse(scan.has(forbidden));
+        }
+        assertEquals("BACKTEST_INPUT_CUTOFF_UNVERIFIABLE",
+                snapshot.path("backtestContext").path("reasonCode").asText());
+        AgentTeamRequest stage2B = read("stage-2b-valid-request.json", AgentTeamRequest.class);
+        for (String section : List.of("security", "marketData", "technicalMetrics", "dataQualityContext")) {
+            assertEquals(stage2B.contextSnapshot().path(section), snapshot.path(section));
         }
     }
 
