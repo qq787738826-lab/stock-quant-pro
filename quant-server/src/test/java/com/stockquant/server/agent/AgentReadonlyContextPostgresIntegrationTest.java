@@ -214,8 +214,15 @@ class AgentReadonlyContextPostgresIntegrationTest {
             assertFalse(quality.has(forbidden));
             assertFalse(quality.path("facts").has(forbidden));
         }
-        for (String section : List.of(
-                "marketBreadth", "scanResult", "backtestContext", "securityEvents", "portfolioContext")) {
+        assertTrue(snapshot.path("marketBreadth").has("available"));
+        assertFalse(snapshot.path("marketBreadth").path("pointInTimeGuaranteed").asBoolean());
+        assertFalse(snapshot.path("marketBreadth").path("futureDataExcluded").asBoolean());
+        assertTrue(snapshot.path("scanResult").has("available"));
+        assertFalse(snapshot.path("scanResult").path("pointInTimeGuaranteed").asBoolean());
+        assertFalse(snapshot.path("scanResult").path("futureDataExcluded").asBoolean());
+        assertEquals("BACKTEST_INPUT_CUTOFF_UNVERIFIABLE",
+                snapshot.path("backtestContext").path("reasonCode").asText());
+        for (String section : List.of("securityEvents", "portfolioContext")) {
             assertFalse(snapshot.path(section).path("available").asBoolean());
             assertEquals("该只读上下文尚未接入现有业务数据源", snapshot.path(section).path("reason").asText());
         }

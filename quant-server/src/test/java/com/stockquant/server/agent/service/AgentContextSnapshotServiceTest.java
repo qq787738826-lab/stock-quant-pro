@@ -208,9 +208,21 @@ class AgentContextSnapshotServiceTest {
     }
 
     private AgentContextSnapshotService service(AgentContextReadRepository repository, Instant instant) {
+        AgentMarketBreadthContextService breadth = mock(AgentMarketBreadthContextService.class);
+        AgentScanResultContextService scan = mock(AgentScanResultContextService.class);
+        when(breadth.create(SYMBOL, TRADE_DATE, instant)).thenReturn(unavailableResearch("marketBreadth", instant));
+        when(scan.create(SYMBOL, TRADE_DATE, instant)).thenReturn(unavailableResearch("scanResult", instant));
         return new AgentContextSnapshotService(
                 objectMapper, hashService, repository, new AgentTechnicalMetricsService(),
-                new AgentDataQualityContextService(), Clock.fixed(instant, ZoneOffset.UTC));
+                new AgentDataQualityContextService(), breadth, scan,
+                Clock.fixed(instant, ZoneOffset.UTC));
+    }
+
+    private com.fasterxml.jackson.databind.node.ObjectNode unavailableResearch(String section, Instant instant) {
+        var node = objectMapper.createObjectNode();
+        node.put("available", false); node.put("queriedAt", instant.toString());
+        var scope = node.putObject("queryScope"); scope.put("symbol", SYMBOL); scope.put("tradeDate", TRADE_DATE.toString());
+        node.put("reason", section + " unavailable"); return node;
     }
 
     private AgentContextReadRepository emptyRepository() {
