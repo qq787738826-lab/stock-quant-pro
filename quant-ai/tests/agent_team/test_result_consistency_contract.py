@@ -28,6 +28,11 @@ class ResultConsistencyContractTest(unittest.TestCase):
             "stage-2b-blocked-response.json",
             "stage-2b-warn-response.json",
             "stage-2b-pass-response.json",
+            "stage-2d-positive-response.json",
+            "stage-2d-mixed-response.json",
+            "stage-2d-negative-response.json",
+            "stage-2d-blocked-response.json",
+            "stage-2d-insufficient-response.json",
         ):
             with self.subTest(name=name):
                 response = AgentTeamResponse.model_validate(fixture(name))
@@ -35,6 +40,31 @@ class ResultConsistencyContractTest(unittest.TestCase):
                 self.assertIn("agentRuns", serialized)
                 self.assertIn("sourceRunIds", serialized["finalDecision"])
                 self.assertNotIn("agent_runs", serialized)
+
+    def test_stage_2d_shared_invalid_response_is_rejected(self):
+        self.assert_invalid(fixture("stage-2d-invalid-response.json"))
+
+    def test_stage_2d_evidence_and_final_findings_keep_frozen_order(self):
+        payload = fixture("stage-2d-positive-response.json")
+        response = AgentTeamResponse.model_validate(payload)
+        self.assertEqual(["DATA_QUALITY", "MARKET_BREADTH"],
+                         [item.category.value for item in response.evidence])
+        self.assertEqual(
+            [item.findingId for item in response.agentRuns[1].findings],
+            [item.findingId for item in response.finalDecision.findings],
+        )
+
+        wrong_evidence_order = copy.deepcopy(payload)
+        wrong_evidence_order["evidence"].reverse()
+        self.assert_invalid(wrong_evidence_order)
+
+        wrong_finding_order = copy.deepcopy(payload)
+        wrong_finding_order["agentRuns"][1]["findings"].reverse()
+        self.assert_invalid(wrong_finding_order)
+
+        wrong_source_run_order = copy.deepcopy(payload)
+        wrong_source_run_order["finalDecision"]["sourceRunIds"].reverse()
+        self.assert_invalid(wrong_source_run_order)
 
     def test_stage_2b_shared_fixtures_enforce_versioned_mappings_and_evidence_subset(self):
         for name in (

@@ -18,6 +18,7 @@ from .models import (
     FinalDecisionCode,
     GateStatus,
     STAGE_2B_DATA_QUALITY_RULE_VERSION,
+    STAGE_2D_MARKET_REGIME_RULE_VERSION,
 )
 
 
@@ -26,6 +27,7 @@ class ChiefDecisionService:
         self,
         request: AgentTeamRequest,
         data_quality: AgentOutput,
+        market_regime: AgentOutput,
         generated_at: datetime,
     ) -> FinalDecision:
         if request.ruleVersion == STAGE_2B_DATA_QUALITY_RULE_VERSION:
@@ -52,6 +54,43 @@ class ChiefDecisionService:
                 confidence=confidence,
                 summary=summary,
                 findings=list(data_quality.findings),
+                sourceRunIds=[run_id for _, run_id in request.runIds.ordered()],
+                vetoIds=[],
+                contextHash=request.contextHash,
+                tradeDate=request.tradeDate,
+                ruleVersion=request.ruleVersion,
+                executionMode=request.executionMode,
+                generatedAt=generated_at,
+            )
+        if request.ruleVersion == STAGE_2D_MARKET_REGIME_RULE_VERSION:
+            if data_quality.gateStatus is GateStatus.BLOCKED:
+                decision = FinalDecisionCode.BLOCKED_BY_DATA_QUALITY
+                gate_status = GateStatus.BLOCKED
+                confidence = data_quality.confidence
+                findings = list(data_quality.findings)
+                summary = (
+                    "DATA_QUALITY上下文无效，总控已按安全门禁阻断。"
+                    if data_quality.confidence == 0
+                    else "DATA_QUALITY规则发现阻断事实，总控已停止后续分析。"
+                )
+            else:
+                decision = FinalDecisionCode.INSUFFICIENT_DATA
+                gate_status = data_quality.gateStatus
+                confidence = 0
+                findings = [*data_quality.findings, *market_regime.findings]
+                summary = (
+                    "DATA_QUALITY检查未阻断，当前证券池市场宽度状态规则已按受限边界执行；"
+                    "其余四个专业规则尚未实现，无法形成团队结论。"
+                )
+            return FinalDecision(
+                taskId=request.taskId,
+                decision=decision,
+                gateStatus=gate_status,
+                vetoed=False,
+                score=0,
+                confidence=confidence,
+                summary=summary,
+                findings=findings,
                 sourceRunIds=[run_id for _, run_id in request.runIds.ordered()],
                 vetoIds=[],
                 contextHash=request.contextHash,
@@ -99,6 +138,8 @@ class AgentTeamOrchestrator:
             agent.analyze(request, generated_at, data_quality.gateStatus)
             for agent in self._agents[1:]
         )
+        market_regime = runs[1]
+        evidence = [*data_quality.evidence, *market_regime.evidence]
         return AgentTeamResponse(
             taskId=request.taskId,
             contextHash=request.contextHash,
@@ -106,8 +147,13 @@ class AgentTeamOrchestrator:
             ruleVersion=request.ruleVersion,
             executionMode=request.executionMode,
             agentRuns=runs,
-            evidence=list(data_quality.evidence),
+            evidence=evidence,
             vetoes=[],
-            finalDecision=self._chief.decide(request, data_quality, generated_at),
+            finalDecision=self._chief.decide(
+                request,
+                data_quality,
+                market_regime,
+                generated_at,
+            ),
             generatedAt=generated_at,
         )

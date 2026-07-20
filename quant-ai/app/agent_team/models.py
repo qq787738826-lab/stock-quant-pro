@@ -12,6 +12,7 @@ Score = Annotated[int, Field(ge=0, le=100)]
 Sha256 = Annotated[str, Field(pattern=r"^[a-f0-9]{64}$")]
 Symbol = Annotated[str, Field(pattern=r"^[0-9]{6}$")]
 STAGE_2B_DATA_QUALITY_RULE_VERSION = "1.4.0-stage-2b-dq-v1"
+STAGE_2D_MARKET_REGIME_RULE_VERSION = "1.4.0-stage-2d-market-regime-v1"
 
 
 class StrictModel(BaseModel):
@@ -372,6 +373,8 @@ class AgentTeamResponse(StrictModel):
                 raise ValueError("数据质量阻断且无正式veto时总控决策不一致")
         if self.ruleVersion == STAGE_2B_DATA_QUALITY_RULE_VERSION:
             self._validate_stage_2b_data_quality(runs_by_code)
+        elif self.ruleVersion == STAGE_2D_MARKET_REGIME_RULE_VERSION:
+            self._validate_stage_2d_market_regime(runs_by_code)
         return self
 
     def _validate_stage_2b_data_quality(
@@ -459,6 +462,214 @@ class AgentTeamResponse(StrictModel):
         )
         if final_actual != final_expected:
             raise ValueError("阶段2B finalDecision状态映射不一致")
+
+    def _validate_stage_2d_market_regime(
+        self,
+        runs_by_code: dict[AgentCode, AgentOutput],
+    ) -> None:
+        data_quality = runs_by_code[AgentCode.DATA_QUALITY]
+        market_regime = runs_by_code[AgentCode.MARKET_REGIME]
+        final = self.finalDecision
+
+        if self.vetoes or final.vetoed or final.vetoIds \
+                or data_quality.veto or market_regime.veto:
+            raise ValueError("阶段2D-1规则不得产生正式veto")
+
+        if data_quality.status is RunStatus.INSUFFICIENT_DATA:
+            expected_dq = (GateStatus.BLOCKED, AgentDecision.REJECT, 0, 0)
+            if data_quality.evidence or data_quality.findings or not data_quality.errors:
+                raise ValueError("阶段2D-1无效DATA_QUALITY上下文必须安全阻断")
+        elif data_quality.status is RunStatus.COMPLETED:
+            expected_by_gate = {
+                GateStatus.BLOCKED: (AgentDecision.REJECT, 0, 100),
+                GateStatus.WARN: (AgentDecision.WARN, 50, 100),
+                GateStatus.PASS: (AgentDecision.PASS, 100, 100),
+            }
+            if data_quality.gateStatus not in expected_by_gate:
+                raise ValueError("阶段2D-1必须完整复用阶段2B DATA_QUALITY门禁")
+            decision, score, confidence = expected_by_gate[data_quality.gateStatus]
+            expected_dq = (data_quality.gateStatus, decision, score, confidence)
+            if len(data_quality.evidence) != 1 or data_quality.errors:
+                raise ValueError("阶段2D-1有效DATA_QUALITY必须保留唯一质量证据")
+            evidence = data_quality.evidence[0]
+            if (evidence.category is not EvidenceCategory.DATA_QUALITY
+                    or evidence.sourceType is not EvidenceSourceType.JAVA_ENGINE
+                    or evidence.sourceName != "AgentContextSnapshotService"
+                    or evidence.sourceRef != "contextSnapshot"
+                    or evidence.evidenceId != f"dq-context-{self.contextHash}"
+                    or evidence.contentHash != self.contextHash
+                    or evidence.tradeDate != self.tradeDate
+                    or set(evidence.fields) != {
+                        "security", "marketData", "technicalMetrics", "dataQualityContext"
+                    }):
+                raise ValueError("阶段2D-1 DATA_QUALITY证据必须保持阶段2B直接投影契约")
+        else:
+            raise ValueError("阶段2D-1 DATA_QUALITY状态无效")
+
+        actual_dq = (
+            data_quality.gateStatus,
+            data_quality.decision,
+            data_quality.score,
+            data_quality.confidence,
+        )
+        if actual_dq != expected_dq:
+            raise ValueError("阶段2D-1 DATA_QUALITY状态映射不一致")
+
+        for code in (
+            AgentCode.TECHNICAL_ANALYSIS,
+            AgentCode.STRATEGY_BACKTEST,
+            AgentCode.ANNOUNCEMENT_RISK,
+            AgentCode.POSITION_RISK,
+        ):
+            run = runs_by_code[code]
+            if (run.status is not RunStatus.INSUFFICIENT_DATA
+                    or run.gateStatus is not GateStatus.NOT_APPLICABLE
+                    or run.decision is not AgentDecision.NOT_APPLICABLE
+                    or run.veto or run.score != 0 or run.confidence != 0
+                    or run.findings or run.evidence):
+                raise ValueError("阶段2D-1其余四个专业智能体必须保持未实现状态")
+
+        expected_source_run_ids = [runs_by_code[code].runId for code in AgentCode]
+        if final.sourceRunIds != expected_source_run_ids:
+            raise ValueError("阶段2D-1 sourceRunIds必须保持六智能体固定顺序")
+
+        if data_quality.gateStatus is GateStatus.BLOCKED:
+            if (market_regime.status is not RunStatus.INSUFFICIENT_DATA
+                    or market_regime.gateStatus is not GateStatus.NOT_APPLICABLE
+                    or market_regime.decision is not AgentDecision.NOT_APPLICABLE
+                    or market_regime.score != 0 or market_regime.confidence != 0
+                    or market_regime.findings or market_regime.evidence or market_regime.errors):
+                raise ValueError("DATA_QUALITY阻断时阶段2D-1宽度规则不得执行")
+            if self.evidence != data_quality.evidence:
+                raise ValueError("DATA_QUALITY阻断时顶层仅允许质量证据")
+            expected_final = (
+                FinalDecisionCode.BLOCKED_BY_DATA_QUALITY,
+                GateStatus.BLOCKED,
+                0,
+                data_quality.confidence,
+            )
+            if final.findings != data_quality.findings:
+                raise ValueError("DATA_QUALITY阻断时总控不得增加宽度finding")
+        else:
+            self._validate_stage_2d_market_regime_run(market_regime)
+            expected_evidence = [*data_quality.evidence, *market_regime.evidence]
+            if self.evidence != expected_evidence:
+                raise ValueError("阶段2D-1顶层证据必须按DATA_QUALITY、MARKET_REGIME排序")
+            expected_final = (
+                FinalDecisionCode.INSUFFICIENT_DATA,
+                data_quality.gateStatus,
+                0,
+                0,
+            )
+            if final.findings != [*data_quality.findings, *market_regime.findings]:
+                raise ValueError("阶段2D-1总控finding必须按DATA_QUALITY、MARKET_REGIME拼接")
+
+        actual_final = (
+            final.decision,
+            final.gateStatus,
+            final.score,
+            final.confidence,
+        )
+        if actual_final != expected_final:
+            raise ValueError("阶段2D-1 finalDecision必须保持安全不足状态")
+
+    def _validate_stage_2d_market_regime_run(self, run: AgentOutput) -> None:
+        if run.gateStatus not in (GateStatus.PASS, GateStatus.WARN):
+            raise ValueError("阶段2D-1 MARKET_REGIME必须继承DATA_QUALITY PASS或WARN")
+
+        input_error = (
+            run.status is RunStatus.INSUFFICIENT_DATA
+            and not run.findings
+            and not run.evidence
+            and len(run.errors) == 1
+            and run.errors[0].code == "MARKET_BREADTH_INPUT_INVALID"
+        )
+        if input_error:
+            if (run.decision is not AgentDecision.NOT_APPLICABLE
+                    or run.score != 0 or run.confidence != 0):
+                raise ValueError("阶段2D-1非法输入必须安全降级")
+            return
+
+        if len(run.evidence) != 1 or run.errors:
+            raise ValueError("阶段2D-1可解析宽度输入必须生成唯一证据且不得返回错误")
+        evidence = run.evidence[0]
+        expected_fields = {
+            "available", "reasonCode", "sourceType", "sourceTables", "sourceStatus",
+            "producer", "producerVersion", "versionAvailable", "requestedTradeDate",
+            "effectiveTradeDate", "previousEffectiveTradeDate", "exactTradeDateMatch",
+            "pointInTimeGuaranteed", "barFutureDataExcluded",
+            "universePointInTimeGuaranteed", "futureDataExcluded",
+            "timestampTimezoneSemantics", "adjustType", "selectionRule", "universeCount",
+            "coveredSymbolCount", "comparableSymbolCount", "advancingCount",
+            "decliningCount", "unchangedCount", "missingCurrentBarCount",
+            "missingPreviousBarCount", "coverageRatio", "limitations",
+        }
+        market_breadth = evidence.fields.get("marketBreadth")
+        if (evidence.evidenceId != f"mr-breadth-{self.contextHash}"
+                or evidence.category is not EvidenceCategory.MARKET_BREADTH
+                or evidence.sourceType is not EvidenceSourceType.JAVA_ENGINE
+                or evidence.sourceName != "AgentMarketBreadthContextService"
+                or evidence.sourceRef != "contextSnapshot.marketBreadth"
+                or evidence.tradeDate != self.tradeDate
+                or evidence.contentHash != self.contextHash
+                or set(evidence.fields) != {"marketBreadth"}
+                or not isinstance(market_breadth, dict)
+                or set(market_breadth) != expected_fields):
+            raise ValueError("阶段2D-1 MARKET_REGIME证据元数据或字段白名单不一致")
+
+        severities = {
+            "MARKET_BREADTH_FACT_INCONSISTENT": Severity.HIGH,
+            "MARKET_BREADTH_UNAVAILABLE": Severity.WARN,
+            "MARKET_BREADTH_LOW_COVERAGE": Severity.WARN,
+            "MARKET_BREADTH_DATE_NOT_EXACT": Severity.WARN,
+            "MARKET_BREADTH_POINT_IN_TIME_UNVERIFIED": Severity.WARN,
+            "MARKET_BREADTH_POSITIVE": Severity.INFO,
+            "MARKET_BREADTH_MIXED": Severity.INFO,
+            "MARKET_BREADTH_NEGATIVE": Severity.INFO,
+        }
+        order = tuple(severities)
+        codes = [finding.code for finding in run.findings]
+        if (len(codes) != len(set(codes))
+                or any(code not in severities for code in codes)
+                or codes != sorted(codes, key=order.index)):
+            raise ValueError("阶段2D-1 MARKET_REGIME finding白名单、唯一性或顺序无效")
+        for finding in run.findings:
+            rank = order.index(finding.code) + 1
+            expected_id = (
+                f"mr-{rank:02d}-{finding.code.lower().replace('_', '-')}"
+                f"-{self.contextHash}"
+            )
+            if (finding.severity is not severities[finding.code]
+                    or finding.findingId != expected_id
+                    or finding.evidenceIds != [evidence.evidenceId]):
+                raise ValueError("阶段2D-1 MARKET_REGIME finding内容与证据引用无效")
+
+        direction_codes = {
+            "MARKET_BREADTH_POSITIVE",
+            "MARKET_BREADTH_MIXED",
+            "MARKET_BREADTH_NEGATIVE",
+        }
+        if run.status is RunStatus.COMPLETED:
+            directions = direction_codes.intersection(codes)
+            if (run.decision is not AgentDecision.WARN
+                    or run.confidence != 0
+                    or codes[:1] != ["MARKET_BREADTH_POINT_IN_TIME_UNVERIFIED"]
+                    or len(directions) != 1 or len(codes) != 2):
+                raise ValueError("阶段2D-1有效宽度分类状态不一致")
+            direction = next(iter(directions))
+            if ((direction == "MARKET_BREADTH_POSITIVE" and run.score <= 50)
+                    or (direction == "MARKET_BREADTH_MIXED" and run.score != 50)
+                    or (direction == "MARKET_BREADTH_NEGATIVE" and run.score >= 50)):
+                raise ValueError("阶段2D-1宽度方向与score不一致")
+        elif run.status is RunStatus.INSUFFICIENT_DATA:
+            blockers = set(order[:5])
+            if (run.decision is not AgentDecision.NOT_APPLICABLE
+                    or run.score != 0 or run.confidence != 0
+                    or len(codes) != 1 or codes[0] not in blockers
+                    or direction_codes.intersection(codes)):
+                raise ValueError("阶段2D-1宽度资格不足不得产生方向或低分映射")
+        else:
+            raise ValueError("阶段2D-1 MARKET_REGIME status必须为COMPLETED或INSUFFICIENT_DATA")
 
 
 def _require_unique(values: list[Any], field_name: str) -> list[Any]:

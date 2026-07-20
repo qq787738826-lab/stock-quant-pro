@@ -159,6 +159,84 @@ class AgentCrossLanguageContractTest {
     }
 
     @Test
+    void stage2DSharedFixturesPassJavaValidatorAndFreezeRestrictedBreadthMappings() throws Exception {
+        List<Stage2DExpectation> scenarios = List.of(
+                new Stage2DExpectation("positive", RunStatus.COMPLETED, GateStatus.PASS,
+                        RunDecision.WARN, 75,
+                        List.of("MARKET_BREADTH_POINT_IN_TIME_UNVERIFIED", "MARKET_BREADTH_POSITIVE")),
+                new Stage2DExpectation("mixed", RunStatus.COMPLETED, GateStatus.PASS,
+                        RunDecision.WARN, 50,
+                        List.of("MARKET_BREADTH_POINT_IN_TIME_UNVERIFIED", "MARKET_BREADTH_MIXED")),
+                new Stage2DExpectation("negative", RunStatus.COMPLETED, GateStatus.PASS,
+                        RunDecision.WARN, 25,
+                        List.of("MARKET_BREADTH_POINT_IN_TIME_UNVERIFIED", "MARKET_BREADTH_NEGATIVE")),
+                new Stage2DExpectation("blocked", RunStatus.INSUFFICIENT_DATA,
+                        GateStatus.NOT_APPLICABLE, RunDecision.NOT_APPLICABLE, 0, List.of()),
+                new Stage2DExpectation("insufficient", RunStatus.INSUFFICIENT_DATA,
+                        GateStatus.PASS, RunDecision.NOT_APPLICABLE, 0,
+                        List.of("MARKET_BREADTH_LOW_COVERAGE"))
+        );
+
+        AgentResponseValidator validator = new AgentResponseValidator();
+        for (Stage2DExpectation scenario : scenarios) {
+            AgentTeamRequest stage2DRequest = read(
+                    "stage-2d-" + scenario.stem() + "-request.json", AgentTeamRequest.class);
+            AgentTeamResponse stage2DResponse = read(
+                    "stage-2d-" + scenario.stem() + "-response.json", AgentTeamResponse.class);
+            validator.validate(stage2DRequest, stage2DResponse);
+
+            var marketRegime = stage2DResponse.agentRuns().get(1);
+            assertEquals("1.4.0-stage-2d-market-regime-v1", stage2DRequest.ruleVersion());
+            assertEquals(scenario.status(), marketRegime.status(), scenario.stem());
+            assertEquals(scenario.gate(), marketRegime.gateStatus(), scenario.stem());
+            assertEquals(scenario.decision(), marketRegime.decision(), scenario.stem());
+            assertEquals(scenario.score(), marketRegime.score(), scenario.stem());
+            assertEquals(0, marketRegime.confidence(), scenario.stem());
+            assertFalse(marketRegime.veto(), scenario.stem());
+            assertEquals(scenario.findingCodes(),
+                    marketRegime.findings().stream().map(finding -> finding.code()).toList(),
+                    scenario.stem());
+            assertEquals(stage2DResponse.agentRuns().stream().map(run -> run.runId()).toList(),
+                    stage2DResponse.finalDecision().sourceRunIds(), scenario.stem());
+            assertEquals(scenario.stem().equals("blocked")
+                            ? FinalDecisionCode.BLOCKED_BY_DATA_QUALITY
+                            : FinalDecisionCode.INSUFFICIENT_DATA,
+                    stage2DResponse.finalDecision().decision(), scenario.stem());
+
+            if (scenario.stem().equals("blocked")) {
+                assertTrue(marketRegime.evidence().isEmpty());
+                assertEquals(stage2DResponse.agentRuns().get(0).evidence(), stage2DResponse.evidence());
+            } else {
+                assertEquals(2, stage2DResponse.evidence().size(), scenario.stem());
+                assertEquals("DATA_QUALITY", stage2DResponse.evidence().get(0).category().name());
+                assertEquals("MARKET_BREADTH", stage2DResponse.evidence().get(1).category().name());
+                assertEquals(marketRegime.evidence().get(0), stage2DResponse.evidence().get(1));
+                assertEquals(1, marketRegime.evidence().get(0).fields().size());
+                assertTrue(marketRegime.evidence().get(0).fields().has("marketBreadth"));
+            }
+
+            stage2DResponse.agentRuns().subList(2, 6).forEach(run -> {
+                assertEquals(RunStatus.INSUFFICIENT_DATA, run.status());
+                assertEquals(GateStatus.NOT_APPLICABLE, run.gateStatus());
+                assertEquals(RunDecision.NOT_APPLICABLE, run.decision());
+                assertFalse(run.veto());
+                assertEquals(0, run.score());
+                assertEquals(0, run.confidence());
+                assertTrue(run.findings().isEmpty());
+                assertTrue(run.evidence().isEmpty());
+            });
+        }
+    }
+
+    @Test
+    void stage2DSharedInvalidResponseIsRejectedByJavaValidator() throws Exception {
+        AgentTeamRequest stage2DRequest = read("stage-2d-positive-request.json", AgentTeamRequest.class);
+        AgentTeamResponse invalid = read("stage-2d-invalid-response.json", AgentTeamResponse.class);
+        assertThrows(AgentTeamException.class,
+                () -> new AgentResponseValidator().validate(stage2DRequest, invalid));
+    }
+
+    @Test
     void stage2CSharedRequestUsesProductionHashAndFrozenResearchContracts() throws Exception {
         AgentTeamRequest stage2C = read("stage-2c-valid-request.json", AgentTeamRequest.class);
         String recalculated = new AgentContextHashService(mapper).hash(stage2C.contextSnapshot());
@@ -255,5 +333,14 @@ class AgentCrossLanguageContractTest {
             int score,
             int confidence,
             FinalDecisionCode finalDecision
+    ) {}
+
+    private record Stage2DExpectation(
+            String stem,
+            RunStatus status,
+            GateStatus gate,
+            RunDecision decision,
+            int score,
+            List<String> findingCodes
     ) {}
 }

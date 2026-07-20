@@ -1,6 +1,7 @@
 package com.stockquant.server.agent;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -37,6 +38,43 @@ class AgentResultConsistencyContractTest {
         assertValid("valid-agent-team-response.json");
         assertValid("valid-agent-team-evidence-response.json");
         assertValid("valid-agent-team-veto-response.json");
+    }
+
+    @Test
+    void stage2DSharedFixturesPassAndInvalidFixtureFails() throws Exception {
+        for (String stem : new String[]{"positive", "mixed", "negative", "blocked", "insufficient"}) {
+            AgentTeamRequest stage2DRequest = read(
+                    "stage-2d-" + stem + "-request.json", AgentTeamRequest.class);
+            AgentTeamResponse stage2DResponse = read(
+                    "stage-2d-" + stem + "-response.json", AgentTeamResponse.class);
+            assertDoesNotThrow(() -> validator.validate(stage2DRequest, stage2DResponse), stem);
+        }
+
+        AgentTeamRequest positive = read("stage-2d-positive-request.json", AgentTeamRequest.class);
+        AgentTeamResponse invalid = read("stage-2d-invalid-response.json", AgentTeamResponse.class);
+        assertThrows(AgentResponseValidationException.class,
+                () -> validator.validate(positive, invalid));
+    }
+
+    @Test
+    void stage2DTopLevelEvidenceAndSourceRunIdsKeepFrozenOrder() throws Exception {
+        AgentTeamRequest positive = read("stage-2d-positive-request.json", AgentTeamRequest.class);
+        ObjectNode wrongEvidenceOrder = fixtureTree("stage-2d-positive-response.json");
+        var evidence = wrongEvidenceOrder.withArray("evidence");
+        JsonNode first = evidence.get(0).deepCopy();
+        JsonNode second = evidence.get(1).deepCopy();
+        evidence.set(0, second);
+        evidence.set(1, first);
+        assertThrows(AgentResponseValidationException.class, () -> validator.validate(
+                positive, mapper.treeToValue(wrongEvidenceOrder, AgentTeamResponse.class)));
+
+        ObjectNode wrongRunOrder = fixtureTree("stage-2d-positive-response.json");
+        var sourceRunIds = decision(wrongRunOrder).withArray("sourceRunIds");
+        JsonNode firstRun = sourceRunIds.get(0).deepCopy();
+        sourceRunIds.set(0, sourceRunIds.get(1).deepCopy());
+        sourceRunIds.set(1, firstRun);
+        assertThrows(AgentResponseValidationException.class, () -> validator.validate(
+                positive, mapper.treeToValue(wrongRunOrder, AgentTeamResponse.class)));
     }
 
     @Test
