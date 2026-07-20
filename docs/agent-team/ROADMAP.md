@@ -45,15 +45,31 @@
 - 验收条件：三类上下文来源明确、哈希稳定、缺失数据安全降级且不产生数据库写操作。
 - 验收结果：`marketBreadth` 与 `scanResult` 已安全接入；`backtestContext` 使用 `BACKTEST_INPUT_CUTOFF_UNVERIFIABLE` 保持不可用；无 Flyway 和外层 Schema 变化，JSONB、Hash、无副作用、精确清理及测试前基线恢复均通过。
 
-## 2D：MARKET_REGIME 真实规则（未开始）
+## 2D：MARKET_REGIME 真实规则（进行中）
 
-- 阶段位置：下一阶段唯一入口，尚未开始。
-- 目标：对可用市场数据做确定性市场环境分类。
-- 输入：`marketData`、`marketBreadth`、`scanResult`、`technicalMetrics` 和 DATA_QUALITY 结果。
-- 输出：确定性的 regime finding、score 和 confidence，以及可追溯证据。
+- 阶段位置：阶段 2D-1 已完成实现和真实闭环验收；完整阶段 2D 尚未完成。
 - 依赖：2A、2B、2C 全部完成。
 - 禁止范围：外部行情补数、LLM 权威分类、收益承诺、投资推荐和交易写操作。
-- 验收条件：历史样例可复现，缺数安全降级，不越过数据门禁。
+- 下一阶段唯一入口：阶段 2D-2 设计审计——历史证券池治理和无前视市场级上下文；该阶段尚未开始。
+
+### 2D-1：当前证券池宽度状态规则（已完成）
+
+- 输入：仅使用冻结的 `marketBreadth`；DATA_QUALITY 只作为前置门禁，`marketData`、`technicalMetrics` 和 `scanResult` 不参与该规则。
+- 输出：仅对冻结请求当前日期形成正向、混合或负向宽度finding及确定性score；confidence固定为0。
+- 安全边界：MARKET_REGIME不产生正式veto，总控不升级，仍保持 `finalDecision=INSUFFICIENT_DATA`。
+- 验收结果：已通过自动化回归和真实 PostgreSQL/Python/Java 闭环；JSONB/Hash、非法响应原子失败、精确清理与测试前基线恢复均通过。
+- 能力边界：当前证券池不是历史版本，不支持历史无前视分类；本规则不构成完整 MARKET_REGIME、牛熊判断、收益预测、投资建议或交易信号。
+
+### 2D-2：历史证券池治理与完整 MARKET_REGIME 前置能力（未开始）
+
+- 目标：建立历史证券池或每日 universe 快照。
+- 目标：治理历史上市、退市、ST、active 和 board 状态。
+- 目标：接入并冻结交易日历。
+- 目标：形成历史无前视的市场宽度上下文。
+- 目标：建立可重复的历史样例。
+- 目标：建立评测集和规则阈值治理。
+- 阶段位置：阶段 2D-2 尚未开始；本次只更新路线图，没有创建阶段 2D-2 分支、修改数据库或开发历史证券池。
+- 完成门槛：完成阶段 2D-2 实现和独立验收前，完整阶段 2D 不得标记完成。
 
 ## 2E：TECHNICAL_ANALYSIS 真实规则（未开始）
 

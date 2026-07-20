@@ -1,0 +1,21 @@
+{
+  "schemaVersion": "1.0",
+  "taskId": 91,
+  "runIds": {"dataQuality": 311, "marketRegime": 312, "technicalAnalysis": 313, "strategyBacktest": 314, "announcementRisk": 315, "positionRisk": 316},
+  "symbol": "600000",
+  "tradeDate": "2026-07-14",
+  "contextHash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "contextSchemaVersion": "1.0",
+  "ruleVersion": "1.4.0-stage-2d-market-regime-v1",
+  "executionMode": "LOCAL_RULES",
+  "contextSnapshot": {
+    "security": {"available": true, "queriedAt": "2026-07-14T05:00:00Z", "queryScope": {"symbol": "600000", "tradeDate": "2026-07-14"}, "symbol": "600000", "name": "测试证券", "board": "MAIN", "industry": "银行", "listDate": "1999-11-10", "isSt": false, "isActive": true, "dataSource": "LOCAL", "qualityFacts": {"placeholderSuspected": false, "sourceKnown": true, "pointInTimeGuaranteed": true}},
+    "marketData": {"available": true, "queriedAt": "2026-07-14T05:00:00Z", "queryScope": {"symbol": "600000", "tradeDate": "2026-07-14"}, "adjustType": "QFQ", "requestedTradeDate": "2026-07-14", "effectiveTradeDate": "2026-07-14", "exactTradeDateMatch": true, "actualBars": 61, "bars": []},
+    "marketBreadth": {"available": true, "queriedAt": "2026-07-14T05:00:00Z", "queryScope": {"symbol": "600000", "tradeDate": "2026-07-14"}, "reasonCode": null, "reason": null, "sourceType": "DATABASE", "sourceTables": ["daily_bars", "securities"], "sourceStatus": "AVAILABLE", "producer": "AgentMarketBreadthContextService", "producerVersion": "MARKET_BREADTH_V1", "versionAvailable": true, "requestedTradeDate": "2026-07-14", "effectiveTradeDate": "2026-07-14", "previousEffectiveTradeDate": "2026-07-13", "exactTradeDateMatch": true, "pointInTimeGuaranteed": false, "barFutureDataExcluded": true, "universePointInTimeGuaranteed": false, "futureDataExcluded": false, "timestampTimezoneSemantics": "TRADE_DATES_ARE_LOCAL_DATE_QUERIED_AT_IS_UTC_INSTANT", "adjustType": "QFQ", "selectionRule": "CURRENT_MAIN_ACTIVE_NON_ST_UNIVERSE_UNIFIED_EFFECTIVE_DATE", "universeCount": 4, "coveredSymbolCount": 4, "comparableSymbolCount": 4, "advancingCount": 2, "decliningCount": 2, "unchangedCount": 0, "missingCurrentBarCount": 0, "missingPreviousBarCount": 0, "coverageRatio": 1.00000000, "limitations": ["CURRENT_SECURITIES_ATTRIBUTES_ARE_NOT_HISTORICALLY_VERSIONED"]},
+    "scanResult": {"available": false},
+    "technicalMetrics": {"available": true, "queriedAt": "2026-07-14T05:00:00Z", "queryScope": {"symbol": "600000", "tradeDate": "2026-07-14"}, "formulaVersion": "JAVA_INDICATORS_V1", "adjustType": "QFQ", "requestedTradeDate": "2026-07-14", "effectiveTradeDate": "2026-07-14", "requiredBars": 61, "actualBars": 61, "values": {}},
+    "backtestContext": {"available": false}, "securityEvents": {"available": false}, "portfolioContext": {"available": false},
+    "dataQualityContext": {"available": true, "queriedAt": "2026-07-14T05:00:00Z", "queryScope": {"symbol": "600000", "tradeDate": "2026-07-14"}, "facts": {"securityRecordPresent": true, "securityPlaceholderSuspected": false, "securitySourceKnown": true, "securityPointInTimeGuaranteed": true, "loadedBarCount": 61, "requiredBarsForTechnicalMetrics": 61, "exactTradeDatePresent": true, "requestedTradeDate": "2026-07-14", "effectiveTradeDate": "2026-07-14", "naturalDayLag": 0, "tradingCalendarAvailable": true, "missingAmountCount": 0, "missingTurnoverRateCount": 0, "invalidBarCount": 0, "invalidBarDates": [], "maximumObservedNaturalDayGap": 1, "duplicateProtection": "PRIMARY_KEY_SYMBOL_TRADE_DATE_ADJUST_TYPE", "sourceConsistencyAssessable": true, "adjustTypesObserved": ["QFQ"], "missingSecurityFields": []}}
+  },
+  "requestedAt": "2026-07-14T05:01:00Z"
+}

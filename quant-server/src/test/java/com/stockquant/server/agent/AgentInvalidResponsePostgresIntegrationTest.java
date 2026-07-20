@@ -344,6 +344,11 @@ class AgentInvalidResponsePostgresIntegrationTest {
             case FINAL_DECISION_VETO_MISMATCH -> finalDecision.put("vetoed", false);
             case SCORE_OUT_OF_RANGE -> ((ObjectNode) response.withArray("agentRuns").get(0))
                     .put("score", 101);
+            case STAGE_2D_INVALID_MARKET_REGIME -> {
+                // The shared Stage 2D fixture already contains the deliberately invalid
+                // MARKET_REGIME confidence value. Keep it unchanged so this database test
+                // exercises the same cross-language invalid response contract.
+            }
             case MALFORMED_JSON -> throw new IllegalStateException("malformed场景已提前处理");
         }
         return STUB_MAPPER.writeValueAsBytes(response);
@@ -396,7 +401,8 @@ class AgentInvalidResponsePostgresIntegrationTest {
         Map<String, JsonNode> fixtures = new HashMap<>();
         for (String name : Set.of(
                 "valid-agent-team-evidence-response.json",
-                "valid-agent-team-veto-response.json")) {
+                "valid-agent-team-veto-response.json",
+                "stage-2d-invalid-response.json")) {
             try (InputStream input = AgentInvalidResponsePostgresIntegrationTest.class
                     .getResourceAsStream("/agent-team-contract/" + name)) {
                 if (input == null) {
@@ -466,6 +472,9 @@ class AgentInvalidResponsePostgresIntegrationTest {
         SCORE_OUT_OF_RANGE(
                 "score越界", "600745", "invalid-score-range",
                 "valid-agent-team-evidence-response.json"),
+        STAGE_2D_INVALID_MARKET_REGIME(
+                "阶段2D-1非法MARKET_REGIME响应原子失败", "600747",
+                "1.4.0-stage-2d-market-regime-v1", "stage-2d-invalid-response.json"),
         MALFORMED_JSON(
                 "无法反序列化JSON", "600746", "invalid-malformed-json", null);
 

@@ -35,6 +35,17 @@ STAGE_2B_RESPONSE_FIXTURES = {
         "INSUFFICIENT_DATA", "PASS",
     ),
 }
+STAGE_2D_FIXTURE_SCENARIOS = {
+    "positive": ("COMPLETED", "PASS", "WARN", 75,
+                 ["MARKET_BREADTH_POINT_IN_TIME_UNVERIFIED", "MARKET_BREADTH_POSITIVE"]),
+    "mixed": ("COMPLETED", "PASS", "WARN", 50,
+              ["MARKET_BREADTH_POINT_IN_TIME_UNVERIFIED", "MARKET_BREADTH_MIXED"]),
+    "negative": ("COMPLETED", "PASS", "WARN", 25,
+                 ["MARKET_BREADTH_POINT_IN_TIME_UNVERIFIED", "MARKET_BREADTH_NEGATIVE"]),
+    "blocked": ("INSUFFICIENT_DATA", "NOT_APPLICABLE", "NOT_APPLICABLE", 0, []),
+    "insufficient": ("INSUFFICIENT_DATA", "PASS", "NOT_APPLICABLE", 0,
+                     ["MARKET_BREADTH_LOW_COVERAGE"]),
+}
 
 
 def fixture(name: str) -> dict:
@@ -51,6 +62,69 @@ def without_generated_at(value):
 
 
 class CrossLanguageContractTest(unittest.TestCase):
+    def test_stage_2d_shared_fixtures_match_the_deterministic_orchestrator(self):
+        for stem, expected in STAGE_2D_FIXTURE_SCENARIOS.items():
+            with self.subTest(stem=stem):
+                request = AgentTeamRequest.model_validate(
+                    fixture(f"stage-2d-{stem}-request.json")
+                )
+                expected_payload = fixture(f"stage-2d-{stem}-response.json")
+                response = AgentTeamResponse.model_validate(expected_payload)
+                with patch.object(socket.socket, "connect",
+                                  side_effect=AssertionError("network called")), \
+                        patch.object(sqlite3, "connect",
+                                     side_effect=AssertionError("database called")):
+                    actual = AgentTeamOrchestrator().analyze(request).model_dump(mode="json")
+                self.assertEqual(without_generated_at(expected_payload),
+                                 without_generated_at(actual))
+
+                market_regime = response.agentRuns[1]
+                self.assertEqual("1.4.0-stage-2d-market-regime-v1", request.ruleVersion)
+                self.assertEqual(expected[:4], (
+                    market_regime.status.value,
+                    market_regime.gateStatus.value,
+                    market_regime.decision.value,
+                    market_regime.score,
+                ))
+                self.assertEqual(0, market_regime.confidence)
+                self.assertFalse(market_regime.veto)
+                self.assertEqual(expected[4], [item.code for item in market_regime.findings])
+                self.assertEqual(list(request.runIds.ordered()), [
+                    (run.agentCode, run.runId) for run in response.agentRuns
+                ])
+                self.assertEqual([run.runId for run in response.agentRuns],
+                                 response.finalDecision.sourceRunIds)
+                self.assertEqual(
+                    "BLOCKED_BY_DATA_QUALITY" if stem == "blocked" else "INSUFFICIENT_DATA",
+                    response.finalDecision.decision.value,
+                )
+                self.assertEqual([], response.vetoes)
+
+                if stem == "blocked":
+                    self.assertEqual([], market_regime.evidence)
+                    self.assertEqual(response.agentRuns[0].evidence, response.evidence)
+                else:
+                    self.assertEqual(1, len(market_regime.evidence))
+                    self.assertEqual(
+                        [response.agentRuns[0].evidence[0].evidenceId,
+                         market_regime.evidence[0].evidenceId],
+                        [item.evidenceId for item in response.evidence],
+                    )
+                    self.assertEqual({"marketBreadth"},
+                                     set(market_regime.evidence[0].fields))
+
+                for run in response.agentRuns[2:]:
+                    self.assertEqual("INSUFFICIENT_DATA", run.status.value)
+                    self.assertEqual("NOT_APPLICABLE", run.gateStatus.value)
+                    self.assertEqual("NOT_APPLICABLE", run.decision.value)
+                    self.assertEqual((False, 0, 0, [], []),
+                                     (run.veto, run.score, run.confidence,
+                                      run.findings, run.evidence))
+
+    def test_stage_2d_shared_invalid_response_is_rejected(self):
+        with self.assertRaises(ValidationError):
+            AgentTeamResponse.model_validate(fixture("stage-2d-invalid-response.json"))
+
     def test_stage_2b_shared_fixtures_cover_all_frozen_mappings(self):
         request_payload = fixture("stage-2b-valid-request.json")
         request = AgentTeamRequest.model_validate(request_payload)

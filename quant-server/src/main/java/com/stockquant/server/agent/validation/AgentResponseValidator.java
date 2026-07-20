@@ -2,6 +2,7 @@ package com.stockquant.server.agent.validation;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.stockquant.server.agent.exception.AgentResponseValidationException;
+import com.stockquant.server.agent.model.AgentModels.AgentError;
 import com.stockquant.server.agent.model.AgentModels.AgentOutput;
 import com.stockquant.server.agent.model.AgentModels.AgentTeamRequest;
 import com.stockquant.server.agent.model.AgentModels.AgentTeamResponse;
@@ -19,13 +20,18 @@ import com.stockquant.server.agent.model.AgentTypes.RunStatus;
 import com.stockquant.server.agent.model.AgentTypes.Severity;
 import org.springframework.stereotype.Component;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.DateTimeException;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.EnumSet;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -35,6 +41,72 @@ import java.util.Set;
 public class AgentResponseValidator {
 
     private static final String STAGE_2B_DATA_QUALITY_RULE_VERSION = "1.4.0-stage-2b-dq-v1";
+    private static final String STAGE_2D_MARKET_REGIME_RULE_VERSION =
+            "1.4.0-stage-2d-market-regime-v1";
+    private static final ZoneId STAGE_2D_MARKET_ZONE = ZoneId.of("Asia/Shanghai");
+    private static final BigDecimal STAGE_2D_MIN_COVERAGE_RATIO = new BigDecimal("1.00000000");
+    private static final int STAGE_2D_MIN_COMPARABLE_SYMBOL_COUNT = 2;
+    private static final List<String> STAGE_2D_MARKET_BREADTH_FIELDS = List.of(
+            "available",
+            "reasonCode",
+            "sourceType",
+            "sourceTables",
+            "sourceStatus",
+            "producer",
+            "producerVersion",
+            "versionAvailable",
+            "requestedTradeDate",
+            "effectiveTradeDate",
+            "previousEffectiveTradeDate",
+            "exactTradeDateMatch",
+            "pointInTimeGuaranteed",
+            "barFutureDataExcluded",
+            "universePointInTimeGuaranteed",
+            "futureDataExcluded",
+            "timestampTimezoneSemantics",
+            "adjustType",
+            "selectionRule",
+            "universeCount",
+            "coveredSymbolCount",
+            "comparableSymbolCount",
+            "advancingCount",
+            "decliningCount",
+            "unchangedCount",
+            "missingCurrentBarCount",
+            "missingPreviousBarCount",
+            "coverageRatio",
+            "limitations"
+    );
+    private static final List<String> STAGE_2D_FINDING_ORDER = List.of(
+            "MARKET_BREADTH_FACT_INCONSISTENT",
+            "MARKET_BREADTH_UNAVAILABLE",
+            "MARKET_BREADTH_LOW_COVERAGE",
+            "MARKET_BREADTH_DATE_NOT_EXACT",
+            "MARKET_BREADTH_POINT_IN_TIME_UNVERIFIED",
+            "MARKET_BREADTH_POSITIVE",
+            "MARKET_BREADTH_MIXED",
+            "MARKET_BREADTH_NEGATIVE"
+    );
+    private static final Map<String, String> STAGE_2D_FINDING_TITLES = Map.of(
+            "MARKET_BREADTH_FACT_INCONSISTENT", "当前证券池宽度事实不一致",
+            "MARKET_BREADTH_UNAVAILABLE", "当前证券池宽度事实不可用",
+            "MARKET_BREADTH_LOW_COVERAGE", "当前证券池宽度覆盖不足",
+            "MARKET_BREADTH_DATE_NOT_EXACT", "当前证券池宽度日期未精确命中",
+            "MARKET_BREADTH_POINT_IN_TIME_UNVERIFIED", "当前证券池宽度时点属性不可验证",
+            "MARKET_BREADTH_POSITIVE", "当前证券池宽度偏正向",
+            "MARKET_BREADTH_MIXED", "当前证券池宽度混合",
+            "MARKET_BREADTH_NEGATIVE", "当前证券池宽度偏负向"
+    );
+    private static final Map<String, String> STAGE_2D_FINDING_DETAILS = Map.of(
+            "MARKET_BREADTH_FACT_INCONSISTENT", "市场宽度来源、版本、日期、计数或比例事实无法互相验证。",
+            "MARKET_BREADTH_UNAVAILABLE", "本地只读市场宽度上下文未提供可比较事实，未形成宽度方向。",
+            "MARKET_BREADTH_LOW_COVERAGE", "当前证券池宽度覆盖率未达到1.00000000或可比较证券少于2只，未形成宽度方向。",
+            "MARKET_BREADTH_DATE_NOT_EXACT", "有效交易日未精确匹配请求交易日，未形成宽度方向。",
+            "MARKET_BREADTH_POINT_IN_TIME_UNVERIFIED", "当前证券池不是历史版本，结果仅描述冻结请求时的当前证券池宽度状态。",
+            "MARKET_BREADTH_POSITIVE", "可比较证券中上涨数量多于下跌数量，仅描述冻结的当前证券池宽度事实。",
+            "MARKET_BREADTH_MIXED", "可比较证券中上涨数量等于下跌数量，仅描述冻结的当前证券池宽度事实。",
+            "MARKET_BREADTH_NEGATIVE", "可比较证券中下跌数量多于上涨数量，仅描述冻结的当前证券池宽度事实。"
+    );
     private static final List<String> STAGE_2B_RULE_ORDER = List.of(
             "QUERY_SCOPE_INCONSISTENT",
             "REQUEST_DATE_INCONSISTENT",
@@ -223,6 +295,8 @@ public class AgentResponseValidator {
         }
         if (STAGE_2B_DATA_QUALITY_RULE_VERSION.equals(request.ruleVersion())) {
             validateStage2BDataQuality(request, response, runs, dataQuality);
+        } else if (STAGE_2D_MARKET_REGIME_RULE_VERSION.equals(request.ruleVersion())) {
+            validateStage2DMarketBreadth(request, response, runs, dataQuality);
         }
     }
 
@@ -238,47 +312,18 @@ public class AgentResponseValidator {
         require(runs.stream().noneMatch(AgentOutput::veto),
                 "阶段2B六个专业智能体均不得产生正式veto");
 
+        validateStage2BDataQualityOutput(request, dataQuality);
+
         if (dataQuality.status() == RunStatus.INSUFFICIENT_DATA) {
-            require(dataQuality.gateStatus() == GateStatus.BLOCKED
-                            && dataQuality.decision() == RunDecision.REJECT
-                            && dataQuality.score() == 0 && dataQuality.confidence() == 0,
-                    "阶段2B无效上下文状态映射不一致");
-            require(dataQuality.findings().isEmpty() && dataQuality.evidence().isEmpty()
-                            && response.evidence().isEmpty() && !dataQuality.errors().isEmpty(),
-                    "阶段2B无效上下文不得生成证据或finding且必须返回错误");
+            require(response.evidence().isEmpty(),
+                    "阶段2B无效上下文不得生成顶层证据");
         } else {
-            require(dataQuality.status() == RunStatus.COMPLETED,
-                    "阶段2B有效DATA_QUALITY status必须为COMPLETED");
-            validateStage2BEvidence(request, response, dataQuality);
-            validateStage2BFindings(dataQuality);
-            boolean blocked = dataQuality.findings().stream()
-                    .anyMatch(finding -> finding.severity() == Severity.HIGH);
-            boolean warned = dataQuality.findings().stream()
-                    .anyMatch(finding -> finding.severity() == Severity.WARN);
-            GateStatus expectedGate = blocked ? GateStatus.BLOCKED
-                    : warned ? GateStatus.WARN : GateStatus.PASS;
-            RunDecision expectedDecision = blocked ? RunDecision.REJECT
-                    : warned ? RunDecision.WARN : RunDecision.PASS;
-            int expectedScore = blocked ? 0 : warned ? 50 : 100;
-            require(dataQuality.gateStatus() == expectedGate
-                            && dataQuality.decision() == expectedDecision
-                            && dataQuality.score() == expectedScore
-                            && dataQuality.confidence() == 100
-                            && dataQuality.errors().isEmpty(),
-                    "阶段2B有效DATA_QUALITY状态映射不一致");
+            require(response.evidence().size() == 1
+                            && sameEvidence(response.evidence().get(0), dataQuality.evidence().get(0)),
+                    "阶段2B顶层证据必须恰好等于DATA_QUALITY证据");
         }
 
-        for (AgentOutput run : runs) {
-            if (run.agentCode() == AgentCode.DATA_QUALITY) {
-                continue;
-            }
-            require(run.status() == RunStatus.INSUFFICIENT_DATA
-                            && run.gateStatus() == GateStatus.NOT_APPLICABLE
-                            && run.decision() == RunDecision.NOT_APPLICABLE
-                            && !run.veto() && run.score() == 0 && run.confidence() == 0
-                            && run.findings().isEmpty() && run.evidence().isEmpty(),
-                    "阶段2B其余五个未实现规则必须保持数据不足状态");
-        }
+        validateUnimplementedRuns(runs, Set.of(AgentCode.DATA_QUALITY), "阶段2B");
 
         require(Objects.equals(decision.findings(), dataQuality.findings()),
                 "阶段2B总控finding必须来自DATA_QUALITY运行");
@@ -298,12 +343,67 @@ public class AgentResponseValidator {
         }
     }
 
-    private static void validateStage2BEvidence(
+    private static void validateStage2BDataQualityOutput(
             AgentTeamRequest request,
-            AgentTeamResponse response,
             AgentOutput dataQuality
     ) {
-        require(dataQuality.evidence().size() == 1 && response.evidence().size() == 1,
+
+        if (dataQuality.status() == RunStatus.INSUFFICIENT_DATA) {
+            require(dataQuality.gateStatus() == GateStatus.BLOCKED
+                            && dataQuality.decision() == RunDecision.REJECT
+                            && dataQuality.score() == 0 && dataQuality.confidence() == 0,
+                    "阶段2B无效上下文状态映射不一致");
+            require(dataQuality.findings().isEmpty() && dataQuality.evidence().isEmpty()
+                            && !dataQuality.errors().isEmpty(),
+                    "阶段2B无效上下文不得生成证据或finding且必须返回错误");
+        } else {
+            require(dataQuality.status() == RunStatus.COMPLETED,
+                    "阶段2B有效DATA_QUALITY status必须为COMPLETED");
+            validateStage2BEvidence(request, dataQuality);
+            validateStage2BFindings(dataQuality);
+            boolean blocked = dataQuality.findings().stream()
+                    .anyMatch(finding -> finding.severity() == Severity.HIGH);
+            boolean warned = dataQuality.findings().stream()
+                    .anyMatch(finding -> finding.severity() == Severity.WARN);
+            GateStatus expectedGate = blocked ? GateStatus.BLOCKED
+                    : warned ? GateStatus.WARN : GateStatus.PASS;
+            RunDecision expectedDecision = blocked ? RunDecision.REJECT
+                    : warned ? RunDecision.WARN : RunDecision.PASS;
+            int expectedScore = blocked ? 0 : warned ? 50 : 100;
+            require(dataQuality.gateStatus() == expectedGate
+                            && dataQuality.decision() == expectedDecision
+                            && dataQuality.score() == expectedScore
+                            && dataQuality.confidence() == 100
+                            && dataQuality.errors().isEmpty(),
+                    "阶段2B有效DATA_QUALITY状态映射不一致");
+        }
+    }
+
+    private static void validateUnimplementedRuns(
+            List<AgentOutput> runs,
+            Set<AgentCode> implemented,
+            String stage
+    ) {
+        for (AgentOutput run : runs) {
+            if (implemented.contains(run.agentCode())) {
+                continue;
+            }
+            require(run.status() == RunStatus.INSUFFICIENT_DATA
+                            && run.gateStatus() == GateStatus.NOT_APPLICABLE
+                            && run.decision() == RunDecision.NOT_APPLICABLE
+                            && !run.veto() && run.score() == 0 && run.confidence() == 0
+                            && run.findings().isEmpty() && run.evidence().isEmpty(),
+                    stage + "未实现的专业规则必须保持数据不足状态");
+            require(run.errors().isEmpty(),
+                    stage + "未实现的专业规则不得返回错误");
+        }
+    }
+
+    private static void validateStage2BEvidence(
+            AgentTeamRequest request,
+            AgentOutput dataQuality
+    ) {
+        require(dataQuality.evidence().size() == 1,
                 "阶段2B有效上下文必须生成唯一质量证据");
         Evidence evidence = dataQuality.evidence().get(0);
         require(evidence.category() == EvidenceCategory.DATA_QUALITY
@@ -351,6 +451,574 @@ public class AgentResponseValidator {
                     "阶段2B finding严重性不符合冻结规则：" + finding.code());
             require(finding.evidenceIds().equals(List.of(evidenceId)),
                     "阶段2B finding必须仅引用统一质量证据");
+        }
+    }
+
+    private static void validateStage2DMarketBreadth(
+            AgentTeamRequest request,
+            AgentTeamResponse response,
+            List<AgentOutput> runs,
+            AgentOutput dataQuality
+    ) {
+        FinalDecision decision = response.finalDecision();
+        require(response.vetoes().isEmpty() && !decision.vetoed() && decision.vetoIds().isEmpty(),
+                "阶段2D-1不得产生正式veto");
+        require(runs.stream().noneMatch(AgentOutput::veto),
+                "阶段2D-1六个专业智能体均不得产生正式veto");
+        validateStage2BDataQualityOutput(request, dataQuality);
+
+        AgentOutput marketRegime = runs.stream()
+                .filter(run -> run.agentCode() == AgentCode.MARKET_REGIME)
+                .findFirst().orElseThrow();
+        validateUnimplementedRuns(
+                runs,
+                Set.of(AgentCode.DATA_QUALITY, AgentCode.MARKET_REGIME),
+                "阶段2D-1");
+
+        if (dataQuality.gateStatus() == GateStatus.BLOCKED) {
+            validateStage2DBlockedMarketRegime(marketRegime);
+        } else {
+            require(dataQuality.gateStatus() == GateStatus.PASS
+                            || dataQuality.gateStatus() == GateStatus.WARN,
+                    "阶段2D-1 DATA_QUALITY门禁必须为PASS、WARN或BLOCKED");
+            validateStage2DMarketRegimeOutput(request, marketRegime, dataQuality.gateStatus());
+        }
+
+        validateStage2DTopLevelEvidence(response, dataQuality, marketRegime);
+        validateStage2DFinalDecision(request, decision, dataQuality, marketRegime);
+    }
+
+    private static void validateStage2DBlockedMarketRegime(AgentOutput marketRegime) {
+        require(marketRegime.status() == RunStatus.INSUFFICIENT_DATA
+                        && marketRegime.gateStatus() == GateStatus.NOT_APPLICABLE
+                        && marketRegime.decision() == RunDecision.NOT_APPLICABLE
+                        && !marketRegime.veto()
+                        && marketRegime.score() == 0
+                        && marketRegime.confidence() == 0
+                        && marketRegime.findings().isEmpty()
+                        && marketRegime.evidence().isEmpty()
+                        && marketRegime.errors().isEmpty(),
+                "DATA_QUALITY阻断时阶段2D-1 MARKET_REGIME不得执行");
+        require("DATA_QUALITY门禁已阻断，未执行当前证券池市场宽度状态规则。"
+                        .equals(marketRegime.summary()),
+                "DATA_QUALITY阻断时阶段2D-1 MARKET_REGIME摘要不一致");
+    }
+
+    private static void validateStage2DMarketRegimeOutput(
+            AgentTeamRequest request,
+            AgentOutput marketRegime,
+            GateStatus dataQualityGate
+    ) {
+        Stage2DMarketBreadth breadth = parseStage2DMarketBreadth(request.contextSnapshot());
+        if (breadth == null) {
+            validateStage2DInputInvalid(marketRegime, dataQualityGate);
+            return;
+        }
+
+        Evidence evidence = validateStage2DMarketBreadthEvidence(request, marketRegime, breadth);
+        Stage2DExpected expected = stage2DExpected(request, breadth);
+        require(marketRegime.gateStatus() == dataQualityGate && !marketRegime.veto(),
+                "阶段2D-1 MARKET_REGIME必须继承DATA_QUALITY门禁且veto=false");
+        require(marketRegime.errors().isEmpty(),
+                "可解析的阶段2D-1 marketBreadth不得返回错误");
+        require(expected.summary().equals(marketRegime.summary()),
+                "阶段2D-1 MARKET_REGIME摘要不符合冻结规则");
+
+        if (expected.classified()) {
+            require(marketRegime.status() == RunStatus.COMPLETED
+                            && marketRegime.decision() == RunDecision.WARN
+                            && marketRegime.score() == expected.score()
+                            && marketRegime.confidence() == 0,
+                    "阶段2D-1有效宽度分类状态、score或confidence不一致");
+        } else {
+            require(marketRegime.status() == RunStatus.INSUFFICIENT_DATA
+                            && marketRegime.decision() == RunDecision.NOT_APPLICABLE
+                            && marketRegime.score() == 0
+                            && marketRegime.confidence() == 0,
+                    "阶段2D-1资格不足时必须保持INSUFFICIENT_DATA");
+        }
+        validateStage2DFindings(request, marketRegime.findings(), evidence, expected.findingCodes());
+    }
+
+    private static void validateStage2DInputInvalid(
+            AgentOutput marketRegime,
+            GateStatus dataQualityGate
+    ) {
+        require(marketRegime.status() == RunStatus.INSUFFICIENT_DATA
+                        && marketRegime.gateStatus() == dataQualityGate
+                        && marketRegime.decision() == RunDecision.NOT_APPLICABLE
+                        && !marketRegime.veto()
+                        && marketRegime.score() == 0
+                        && marketRegime.confidence() == 0
+                        && marketRegime.findings().isEmpty()
+                        && marketRegime.evidence().isEmpty()
+                        && marketRegime.errors().size() == 1,
+                "阶段2D-1无法解析marketBreadth时必须安全降级");
+        AgentError error = marketRegime.errors().get(0);
+        require("MARKET_BREADTH_INPUT_INVALID".equals(error.code())
+                        && "marketBreadth上下文无法按阶段2D-1冻结契约安全解析。".equals(error.message()),
+                "阶段2D-1无法解析marketBreadth时错误代码或消息不一致");
+        require("当前证券池市场宽度输入无法安全解析，未形成宽度方向。".equals(marketRegime.summary()),
+                "阶段2D-1无法解析marketBreadth时摘要不一致");
+    }
+
+    private static Stage2DExpected stage2DExpected(
+            AgentTeamRequest request,
+            Stage2DMarketBreadth breadth
+    ) {
+        if (!stage2DFactsConsistent(request, breadth)) {
+            return Stage2DExpected.insufficient(
+                    "MARKET_BREADTH_FACT_INCONSISTENT",
+                    "当前证券池市场宽度事实不一致，未形成宽度方向。");
+        }
+        if (!breadth.available() || breadth.universeCount() == 0 || breadth.comparableSymbolCount() == 0) {
+            return Stage2DExpected.insufficient(
+                    "MARKET_BREADTH_UNAVAILABLE",
+                    "当前证券池市场宽度事实不可用，未形成宽度方向。");
+        }
+        if (breadth.coverageRatio() == null
+                || breadth.coverageRatio().compareTo(STAGE_2D_MIN_COVERAGE_RATIO) != 0
+                || breadth.comparableSymbolCount() < STAGE_2D_MIN_COMPARABLE_SYMBOL_COUNT) {
+            return Stage2DExpected.insufficient(
+                    "MARKET_BREADTH_LOW_COVERAGE",
+                    "当前证券池市场宽度覆盖不足，未形成宽度方向。");
+        }
+        if (!breadth.exactTradeDateMatch()
+                || !Objects.equals(breadth.effectiveTradeDate(), request.tradeDate())) {
+            return Stage2DExpected.insufficient(
+                    "MARKET_BREADTH_DATE_NOT_EXACT",
+                    "当前证券池市场宽度日期未精确命中，未形成宽度方向。");
+        }
+        LocalDate frozenCurrentDate = request.requestedAt()
+                .atZone(STAGE_2D_MARKET_ZONE)
+                .toLocalDate();
+        if (!Objects.equals(request.tradeDate(), frozenCurrentDate)) {
+            return Stage2DExpected.insufficient(
+                    "MARKET_BREADTH_POINT_IN_TIME_UNVERIFIED",
+                    "请求日期不是冻结请求时的上海自然日，历史或未来日期未形成宽度方向。");
+        }
+
+        BigDecimal netBreadthRatio = ratio(
+                breadth.advancingCount() - breadth.decliningCount(),
+                breadth.comparableSymbolCount());
+        int score = netBreadthRatio.add(BigDecimal.ONE)
+                .multiply(BigDecimal.valueOf(50))
+                .setScale(0, RoundingMode.HALF_UP)
+                .intValueExact();
+        String directionCode;
+        String stateText;
+        if (netBreadthRatio.signum() > 0) {
+            directionCode = "MARKET_BREADTH_POSITIVE";
+            stateText = "偏正向";
+        } else if (netBreadthRatio.signum() < 0) {
+            directionCode = "MARKET_BREADTH_NEGATIVE";
+            stateText = "偏负向";
+        } else {
+            directionCode = "MARKET_BREADTH_MIXED";
+            stateText = "混合";
+        }
+        return new Stage2DExpected(
+                true,
+                score,
+                List.of("MARKET_BREADTH_POINT_IN_TIME_UNVERIFIED", directionCode),
+                "当前证券池市场宽度状态" + stateText + "；证券池时点属性不可验证，confidence固定为0。");
+    }
+
+    private static boolean stage2DFactsConsistent(
+            AgentTeamRequest request,
+            Stage2DMarketBreadth value
+    ) {
+        int[] counts = {
+                value.universeCount(), value.coveredSymbolCount(), value.comparableSymbolCount(),
+                value.advancingCount(), value.decliningCount(), value.unchangedCount(),
+                value.missingCurrentBarCount(), value.missingPreviousBarCount()
+        };
+        for (int count : counts) {
+            if (count < 0) return false;
+        }
+        if (!(value.comparableSymbolCount() <= value.coveredSymbolCount()
+                && value.coveredSymbolCount() <= value.universeCount())) return false;
+        if ((long) value.advancingCount() + value.decliningCount() + value.unchangedCount()
+                != value.comparableSymbolCount()) return false;
+        if ((long) value.coveredSymbolCount() + value.missingCurrentBarCount()
+                != value.universeCount()) return false;
+        if ((long) value.comparableSymbolCount() + value.missingPreviousBarCount()
+                != value.coveredSymbolCount()) return false;
+
+        BigDecimal expectedCoverage = value.universeCount() == 0
+                ? null : ratio(value.comparableSymbolCount(), value.universeCount());
+        if (expectedCoverage == null) {
+            if (value.coverageRatio() != null) return false;
+        } else if (value.coverageRatio() == null
+                || value.coverageRatio().compareTo(expectedCoverage) != 0) {
+            return false;
+        }
+
+        if (!Objects.equals(value.queryScopeSymbol(), request.symbol())
+                || !Objects.equals(value.queryScopeTradeDate(), request.tradeDate())
+                || !Objects.equals(value.requestedTradeDate(), request.tradeDate())) return false;
+        if (value.effectiveTradeDate() != null
+                && value.effectiveTradeDate().isAfter(request.tradeDate())) return false;
+        if (value.previousEffectiveTradeDate() != null
+                && (value.effectiveTradeDate() == null
+                || !value.previousEffectiveTradeDate().isBefore(value.effectiveTradeDate()))) return false;
+        if (value.available() && value.previousEffectiveTradeDate() == null) return false;
+
+        return "DATABASE".equals(value.sourceType())
+                && value.sourceTables().equals(List.of("daily_bars", "securities"))
+                && (value.available() ? "AVAILABLE" : "UNAVAILABLE").equals(value.sourceStatus())
+                && "AgentMarketBreadthContextService".equals(value.producer())
+                && "MARKET_BREADTH_V1".equals(value.producerVersion())
+                && value.versionAvailable()
+                && !value.pointInTimeGuaranteed()
+                && value.barFutureDataExcluded()
+                && !value.universePointInTimeGuaranteed()
+                && !value.futureDataExcluded()
+                && "TRADE_DATES_ARE_LOCAL_DATE_QUERIED_AT_IS_UTC_INSTANT"
+                .equals(value.timestampTimezoneSemantics())
+                && "QFQ".equals(value.adjustType())
+                && "CURRENT_MAIN_ACTIVE_NON_ST_UNIVERSE_UNIFIED_EFFECTIVE_DATE"
+                .equals(value.selectionRule())
+                && value.limitations().equals(
+                List.of("CURRENT_SECURITIES_ATTRIBUTES_ARE_NOT_HISTORICALLY_VERSIONED"))
+                && Objects.equals(value.reasonCode(), expectedStage2DReasonCode(value))
+                && value.available() == (value.reasonCode() == null);
+    }
+
+    private static String expectedStage2DReasonCode(Stage2DMarketBreadth value) {
+        if (value.universeCount() == 0) return "NO_ELIGIBLE_UNIVERSE";
+        if (value.effectiveTradeDate() == null) return "NO_EFFECTIVE_TRADE_DATE";
+        if (value.previousEffectiveTradeDate() == null) return "NO_PREVIOUS_EFFECTIVE_TRADE_DATE";
+        if (value.comparableSymbolCount() == 0) return "ZERO_COMPARABLE_SYMBOLS";
+        return null;
+    }
+
+    private static Evidence validateStage2DMarketBreadthEvidence(
+            AgentTeamRequest request,
+            AgentOutput marketRegime,
+            Stage2DMarketBreadth breadth
+    ) {
+        require(marketRegime.evidence().size() == 1,
+                "阶段2D-1可解析marketBreadth必须生成唯一证据");
+        Evidence evidence = marketRegime.evidence().get(0);
+        require(("mr-breadth-" + request.contextHash()).equals(evidence.evidenceId())
+                        && evidence.category() == EvidenceCategory.MARKET_BREADTH
+                        && evidence.sourceType() == EvidenceSourceType.JAVA_ENGINE
+                        && "AgentMarketBreadthContextService".equals(evidence.sourceName())
+                        && "contextSnapshot.marketBreadth".equals(evidence.sourceRef())
+                        && Objects.equals(request.symbol(), evidence.symbol())
+                        && Objects.equals(request.tradeDate(), evidence.tradeDate())
+                        && sameInstantAtMicrosecondPrecision(breadth.queriedAt(), evidence.observedAt())
+                        && sameInstantAtMicrosecondPrecision(request.requestedAt(), evidence.collectedAt())
+                        && Objects.equals(request.contextHash(), evidence.contentHash()),
+                "阶段2D-1 marketBreadth证据元数据不一致");
+
+        JsonNode fields = evidence.fields();
+        JsonNode projection = fields == null ? null : fields.get("marketBreadth");
+        JsonNode source = request.contextSnapshot().get("marketBreadth");
+        require(fields != null && fields.isObject() && fields.size() == 1
+                        && projection != null && projection.isObject()
+                        && projection.size() == STAGE_2D_MARKET_BREADTH_FIELDS.size()
+                        && STAGE_2D_MARKET_BREADTH_FIELDS.stream().allMatch(projection::has)
+                        && STAGE_2D_MARKET_BREADTH_FIELDS.stream()
+                        .allMatch(name -> stage2DJsonEquals(projection.get(name), source.get(name))),
+                "阶段2D-1 marketBreadth证据fields必须严格匹配冻结白名单投影");
+        require(!containsForbiddenEvidenceConclusion(fields),
+                "阶段2D-1 marketBreadth证据不得包含结论字段");
+        return evidence;
+    }
+
+    private static void validateStage2DFindings(
+            AgentTeamRequest request,
+            List<Finding> actual,
+            Evidence evidence,
+            List<String> expectedCodes
+    ) {
+        require(actual.size() == expectedCodes.size(),
+                "阶段2D-1 finding数量不符合冻结规则");
+        for (int index = 0; index < expectedCodes.size(); index++) {
+            String code = expectedCodes.get(index);
+            Finding finding = actual.get(index);
+            int rank = STAGE_2D_FINDING_ORDER.indexOf(code) + 1;
+            Severity expectedSeverity = rank == 1
+                    ? Severity.HIGH : rank <= 5 ? Severity.WARN : Severity.INFO;
+            String expectedId = "mr-%02d-%s-%s".formatted(
+                    rank,
+                    code.toLowerCase(java.util.Locale.ROOT).replace('_', '-'),
+                    request.contextHash());
+            require(code.equals(finding.code())
+                            && expectedId.equals(finding.findingId())
+                            && finding.severity() == expectedSeverity
+                            && STAGE_2D_FINDING_TITLES.get(code).equals(finding.title())
+                            && STAGE_2D_FINDING_DETAILS.get(code).equals(finding.detail())
+                            && finding.evidenceIds().equals(List.of(evidence.evidenceId())),
+                    "阶段2D-1 finding内容、顺序或证据引用不一致：" + code);
+        }
+    }
+
+    private static void validateStage2DTopLevelEvidence(
+            AgentTeamResponse response,
+            AgentOutput dataQuality,
+            AgentOutput marketRegime
+    ) {
+        List<Evidence> expected = new ArrayList<>();
+        expected.addAll(dataQuality.evidence());
+        expected.addAll(marketRegime.evidence());
+        require(response.evidence().size() == expected.size(),
+                "阶段2D-1顶层evidence数量不一致");
+        for (int index = 0; index < expected.size(); index++) {
+            require(sameEvidence(response.evidence().get(index), expected.get(index)),
+                    "阶段2D-1顶层evidence必须按DATA_QUALITY、MARKET_REGIME顺序输出");
+        }
+    }
+
+    private static void validateStage2DFinalDecision(
+            AgentTeamRequest request,
+            FinalDecision decision,
+            AgentOutput dataQuality,
+            AgentOutput marketRegime
+    ) {
+        List<Finding> expectedFindings = new ArrayList<>(dataQuality.findings());
+        if (dataQuality.gateStatus() != GateStatus.BLOCKED) {
+            expectedFindings.addAll(marketRegime.findings());
+        }
+        require(Objects.equals(decision.findings(), expectedFindings),
+                "阶段2D-1总控finding必须按DATA_QUALITY、MARKET_REGIME顺序精确拼接");
+        List<Long> expectedRunIds = AgentCode.PROFESSIONAL_AGENTS.stream()
+                .map(code -> request.runIds().byAgentCode().get(code))
+                .toList();
+        require(decision.sourceRunIds().equals(expectedRunIds),
+                "阶段2D-1 sourceRunIds必须按固定六智能体顺序输出");
+        require(!decision.vetoed() && decision.vetoIds().isEmpty()
+                        && decision.score() == 0,
+                "阶段2D-1总控不得产生veto或非零score");
+        if (dataQuality.gateStatus() == GateStatus.BLOCKED) {
+            require(decision.decision() == FinalDecisionCode.BLOCKED_BY_DATA_QUALITY
+                            && decision.gateStatus() == GateStatus.BLOCKED
+                            && Objects.equals(decision.confidence(), dataQuality.confidence()),
+                    "阶段2D-1 DATA_QUALITY阻断时总控状态不一致");
+        } else {
+            require(decision.decision() == FinalDecisionCode.INSUFFICIENT_DATA
+                            && decision.gateStatus() == dataQuality.gateStatus()
+                            && decision.confidence() == 0,
+                    "阶段2D-1总控不得因宽度规则提前升级团队结论");
+        }
+        require(!containsForbiddenStage2DSummary(decision.summary()),
+                "阶段2D-1总控摘要不得包含投资建议、交易指令或完整市场环境声明");
+    }
+
+    private static boolean containsForbiddenStage2DSummary(String summary) {
+        if (!notBlank(summary)) return true;
+        String normalized = summary.toUpperCase(java.util.Locale.ROOT);
+        return normalized.contains("RISK_ON")
+                || normalized.contains("RISK_OFF")
+                || summary.contains("投资建议")
+                || summary.contains("买入")
+                || summary.contains("卖出")
+                || summary.contains("交易指令")
+                || summary.contains("完整市场环境");
+    }
+
+    private static BigDecimal ratio(int numerator, int denominator) {
+        return BigDecimal.valueOf(numerator)
+                .divide(BigDecimal.valueOf(denominator), 8, RoundingMode.HALF_UP);
+    }
+
+    private static Stage2DMarketBreadth parseStage2DMarketBreadth(JsonNode snapshot) {
+        JsonNode value = snapshot == null ? null : snapshot.get("marketBreadth");
+        if (value == null || !value.isObject()
+                || !isBoolean(value, "available")
+                || !isText(value, "queriedAt")
+                || !nullableText(value, "reasonCode")
+                || !isText(value, "sourceType")
+                || !stringArray(value, "sourceTables")
+                || !isText(value, "sourceStatus")
+                || !isText(value, "producer")
+                || !isText(value, "producerVersion")
+                || !isBoolean(value, "versionAvailable")
+                || !isText(value, "requestedTradeDate")
+                || !nullableText(value, "effectiveTradeDate")
+                || !nullableText(value, "previousEffectiveTradeDate")
+                || !isBoolean(value, "exactTradeDateMatch")
+                || !isBoolean(value, "pointInTimeGuaranteed")
+                || !isBoolean(value, "barFutureDataExcluded")
+                || !isBoolean(value, "universePointInTimeGuaranteed")
+                || !isBoolean(value, "futureDataExcluded")
+                || !isText(value, "timestampTimezoneSemantics")
+                || !isText(value, "adjustType")
+                || !isText(value, "selectionRule")
+                || !isInt(value, "universeCount")
+                || !isInt(value, "coveredSymbolCount")
+                || !isInt(value, "comparableSymbolCount")
+                || !isInt(value, "advancingCount")
+                || !isInt(value, "decliningCount")
+                || !isInt(value, "unchangedCount")
+                || !isInt(value, "missingCurrentBarCount")
+                || !isInt(value, "missingPreviousBarCount")
+                || !nullableNumber(value, "coverageRatio")
+                || !stringArray(value, "limitations")) {
+            return null;
+        }
+        JsonNode scope = value.get("queryScope");
+        if (scope == null || !scope.isObject()
+                || !isText(scope, "symbol") || !isText(scope, "tradeDate")) {
+            return null;
+        }
+        try {
+            Instant queriedAt = parseInstant(value.get("queriedAt").textValue());
+            if (queriedAt == null) return null;
+            return new Stage2DMarketBreadth(
+                    value,
+                    value.get("available").booleanValue(),
+                    queriedAt,
+                    scope.get("symbol").textValue(),
+                    LocalDate.parse(scope.get("tradeDate").textValue()),
+                    nullableTextValue(value.get("reasonCode")),
+                    value.get("sourceType").textValue(),
+                    textList(value.get("sourceTables")),
+                    value.get("sourceStatus").textValue(),
+                    value.get("producer").textValue(),
+                    value.get("producerVersion").textValue(),
+                    value.get("versionAvailable").booleanValue(),
+                    LocalDate.parse(value.get("requestedTradeDate").textValue()),
+                    nullableDateValue(value.get("effectiveTradeDate")),
+                    nullableDateValue(value.get("previousEffectiveTradeDate")),
+                    value.get("exactTradeDateMatch").booleanValue(),
+                    value.get("pointInTimeGuaranteed").booleanValue(),
+                    value.get("barFutureDataExcluded").booleanValue(),
+                    value.get("universePointInTimeGuaranteed").booleanValue(),
+                    value.get("futureDataExcluded").booleanValue(),
+                    value.get("timestampTimezoneSemantics").textValue(),
+                    value.get("adjustType").textValue(),
+                    value.get("selectionRule").textValue(),
+                    value.get("universeCount").intValue(),
+                    value.get("coveredSymbolCount").intValue(),
+                    value.get("comparableSymbolCount").intValue(),
+                    value.get("advancingCount").intValue(),
+                    value.get("decliningCount").intValue(),
+                    value.get("unchangedCount").intValue(),
+                    value.get("missingCurrentBarCount").intValue(),
+                    value.get("missingPreviousBarCount").intValue(),
+                    value.get("coverageRatio").isNull()
+                            ? null : value.get("coverageRatio").decimalValue(),
+                    textList(value.get("limitations")));
+        } catch (DateTimeException | ArithmeticException error) {
+            return null;
+        }
+    }
+
+    private static boolean isBoolean(JsonNode object, String field) {
+        return object.has(field) && object.get(field).isBoolean();
+    }
+
+    private static boolean isText(JsonNode object, String field) {
+        return object.has(field) && object.get(field).isTextual();
+    }
+
+    private static boolean nullableText(JsonNode object, String field) {
+        return object.has(field) && (object.get(field).isNull() || object.get(field).isTextual());
+    }
+
+    private static boolean nullableNumber(JsonNode object, String field) {
+        return object.has(field) && (object.get(field).isNull() || object.get(field).isNumber());
+    }
+
+    private static boolean isInt(JsonNode object, String field) {
+        return object.has(field) && object.get(field).isIntegralNumber()
+                && object.get(field).canConvertToInt();
+    }
+
+    private static boolean stringArray(JsonNode object, String field) {
+        if (!object.has(field) || !object.get(field).isArray()) return false;
+        for (JsonNode item : object.get(field)) {
+            if (!item.isTextual()) return false;
+        }
+        return true;
+    }
+
+    private static String nullableTextValue(JsonNode node) {
+        return node.isNull() ? null : node.textValue();
+    }
+
+    private static LocalDate nullableDateValue(JsonNode node) {
+        return node.isNull() ? null : LocalDate.parse(node.textValue());
+    }
+
+    private static List<String> textList(JsonNode array) {
+        List<String> result = new ArrayList<>();
+        array.forEach(item -> result.add(item.textValue()));
+        return List.copyOf(result);
+    }
+
+    private static boolean stage2DJsonEquals(JsonNode left, JsonNode right) {
+        if (left == null || right == null) return left == right;
+        if (left.isNumber() && right.isNumber()) {
+            return left.decimalValue().compareTo(right.decimalValue()) == 0;
+        }
+        if (left.isObject() && right.isObject()) {
+            if (left.size() != right.size()) return false;
+            var fields = left.fields();
+            while (fields.hasNext()) {
+                var field = fields.next();
+                if (!right.has(field.getKey())
+                        || !stage2DJsonEquals(field.getValue(), right.get(field.getKey()))) return false;
+            }
+            return true;
+        }
+        if (left.isArray() && right.isArray()) {
+            if (left.size() != right.size()) return false;
+            for (int index = 0; index < left.size(); index++) {
+                if (!stage2DJsonEquals(left.get(index), right.get(index))) return false;
+            }
+            return true;
+        }
+        return left.getNodeType() == right.getNodeType() && left.equals(right);
+    }
+
+    private record Stage2DMarketBreadth(
+            JsonNode source,
+            boolean available,
+            Instant queriedAt,
+            String queryScopeSymbol,
+            LocalDate queryScopeTradeDate,
+            String reasonCode,
+            String sourceType,
+            List<String> sourceTables,
+            String sourceStatus,
+            String producer,
+            String producerVersion,
+            boolean versionAvailable,
+            LocalDate requestedTradeDate,
+            LocalDate effectiveTradeDate,
+            LocalDate previousEffectiveTradeDate,
+            boolean exactTradeDateMatch,
+            boolean pointInTimeGuaranteed,
+            boolean barFutureDataExcluded,
+            boolean universePointInTimeGuaranteed,
+            boolean futureDataExcluded,
+            String timestampTimezoneSemantics,
+            String adjustType,
+            String selectionRule,
+            int universeCount,
+            int coveredSymbolCount,
+            int comparableSymbolCount,
+            int advancingCount,
+            int decliningCount,
+            int unchangedCount,
+            int missingCurrentBarCount,
+            int missingPreviousBarCount,
+            BigDecimal coverageRatio,
+            List<String> limitations
+    ) {}
+
+    private record Stage2DExpected(
+            boolean classified,
+            int score,
+            List<String> findingCodes,
+            String summary
+    ) {
+        private static Stage2DExpected insufficient(String findingCode, String summary) {
+            return new Stage2DExpected(false, 0, List.of(findingCode), summary);
         }
     }
 
