@@ -2,9 +2,7 @@
 
 ## 状态
 
-阶段2D-2A实现候选。代码、静态迁移合同、非数据库Java回归和Python兼容回归已经完成；当前Codex进程未提供专用PostgreSQL测试变量，因此真实PostgreSQL 16硬门槛尚未执行，本分支尚未提交或推送。
-
-只有 `AgentStage2D2ATemporalMarketFoundationPostgresIntegrationTest` 在 `stock_quant_test` / `stock_quant_test` 上实际运行且结果满足 `Tests run > 0`、0失败、0错误、0跳过和 `BUILD SUCCESS` 后，才能将状态更新为“阶段2D-2A实现候选，已完成本阶段代码和测试，等待独立验收及合并”。
+阶段2D-2A实现候选，已完成本阶段代码和测试，等待独立验收及合并。
 
 - 来源集成基线：`3b88bfcc174f67b4abcffb8f54c4c9bfed9d62bf`
 - 任务分支：`codex/1.4.0-2d2a-temporal-market-foundation`
@@ -151,35 +149,15 @@ V6不会：
 - Python `unittest discover -s tests`：68项全部通过。
 - `git diff --check`：通过。
 
-新增真实数据库测试 `AgentStage2D2ATemporalMarketFoundationPostgresIntegrationTest` 已编译，并在无变量回归中安全跳过1项。该跳过不是数据库验收通过。
+真实PostgreSQL 16闭环已通过专用测试 `AgentStage2D2ATemporalMarketFoundationPostgresIntegrationTest`：
 
-真实测试设计覆盖：V1至V6顺序迁移、四表/约束/索引、dataset与event幂等、事件append-only、相邻valid和knowledge区间、security与calendar数据库重叠拒绝、更正前后as-of回放、BACKFILLED_INFERRED、SSE/SZSE隔离、节假日、临时休市、上一/下一开市日推导、非法区间和更正原子回滚。测试先检查完整symbol和calendar自然键命名空间，清理时按supersedes叶节点到根节点删除事件，并核对新表、`securities`、`daily_bars` 和Agent五表的前后基线恢复；这些数据库行为仍须由上述真实PostgreSQL硬门槛实际证明。
+- Tests run: 1
+- Failures: 0
+- Errors: 0
+- Skipped: 0
+- BUILD SUCCESS
 
-当前进程缺少：
-
-- `STOCK_QUANT_TEST_DB_URL`
-- `STOCK_QUANT_TEST_DB_USERNAME`
-- `STOCK_QUANT_TEST_DB_PASSWORD`
-
-因此没有连接数据库、没有执行V6，也没有产生任何数据库夹具。应在设置了专用变量的同一普通PowerShell中，从仓库根目录执行：
-
-```powershell
-$repo = Join-Path $env:USERPROFILE ".m2\repository"
-$mvnArgs = @(
-    "-o"
-    "-llr"
-    "-Dmaven.repo.local=$repo"
-    "-pl"
-    "quant-server"
-    "-am"
-    "-Dtest=AgentStage2D2ATemporalMarketFoundationPostgresIntegrationTest"
-    "-Dsurefire.failIfNoSpecifiedTests=false"
-    "test"
-)
-& mvn @mvnArgs
-```
-
-权威通过条件是该类实际运行、`Skipped=0`、0失败、0错误并且 `BUILD SUCCESS`；同时测试内置身份门必须确认数据库和用户均严格为 `stock_quant_test`。
+真实测试验证了V1至V6顺序迁移、四表/约束/索引、dataset与event幂等、事件append-only、相邻valid和knowledge区间、security与calendar数据库重叠拒绝、更正前后as-of回放、BACKFILLED_INFERRED、SSE/SZSE隔离、节假日、临时休市、上一/下一开市日推导、非法区间和更正原子回滚。测试先检查完整symbol和calendar自然键命名空间，清理时按supersedes叶节点到根节点删除事件，并确认新表、`securities`、`daily_bars` 和Agent五表恢复测试前基线。
 
 ## 当前限制与后续入口
 
