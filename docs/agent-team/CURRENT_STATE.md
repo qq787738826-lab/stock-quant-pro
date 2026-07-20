@@ -18,7 +18,7 @@
 - 阶段 2D-1 验收来源分支：`codex/1.4.0-2d1-market-breadth-state`
 - 阶段 2D-1 实现提交：`b956d02a65b5d5d27179013983ff4b501302fd47`
 - 阶段 2D-1 规则版本：`1.4.0-stage-2d-market-regime-v1`
-- 阶段 2D-1 来源任务分支已完成验收，等待单独批准合并到集成分支。
+- 阶段 2D-1 已通过任务分支完成实现与验收，并已合并到集成分支；集成提交：`ff461d9f851e7ec37390dda6c15a67987f672dc7`。
 - `master`：`27d9099 chore: checkpoint Stock Quant Pro 1.3.1 and remove tracked cache`
 - 版本号仍保持 `1.3.1`；尚未发布 `1.4.0`。
 
