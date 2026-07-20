@@ -216,10 +216,12 @@ class AgentInvalidResponsePostgresIntegrationTest {
                 "SELECT current_database() AS database_name, current_user AS user_name");
         assertEquals("stock_quant_test", identity.get("database_name"));
         assertEquals("stock_quant_test", identity.get("user_name"));
-        assertEquals("5", jdbc.queryForObject("""
-                SELECT version FROM flyway_schema_history
-                WHERE success = TRUE ORDER BY installed_rank DESC LIMIT 1
-                """, String.class));
+        assertEquals(1, jdbc.queryForObject("""
+                SELECT count(*) FROM flyway_schema_history
+                WHERE version = '5' AND success = TRUE
+                """, Integer.class));
+        assertEquals(0, jdbc.queryForObject(
+                "SELECT count(*) FROM flyway_schema_history WHERE success = FALSE", Integer.class));
     }
 
     private String taskStatus(long taskId) {
