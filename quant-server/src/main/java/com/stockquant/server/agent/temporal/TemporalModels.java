@@ -240,8 +240,6 @@ public final class TemporalModels {
             TradingSessionType sessionType,
             Instant sessionOpenAt,
             Instant sessionCloseAt,
-            LocalDate previousOpenDate,
-            LocalDate nextOpenDate,
             Instant knownFrom,
             Instant knownTo,
             String source,
@@ -260,7 +258,6 @@ public final class TemporalModels {
             sessionOpenAt = TemporalValidation.optionalInstant(sessionOpenAt);
             sessionCloseAt = TemporalValidation.optionalInstant(sessionCloseAt);
             TemporalValidation.session(open, sessionType, sessionOpenAt, sessionCloseAt);
-            TemporalValidation.adjacentOpenDates(tradeDate, previousOpenDate, nextOpenDate);
             knownFrom = TemporalValidation.instant(knownFrom, "knownFrom");
             knownTo = TemporalValidation.optionalInstant(knownTo);
             TemporalValidation.halfOpenInstantRange(knownFrom, knownTo, "knowledge interval");
@@ -283,8 +280,6 @@ public final class TemporalModels {
             TradingSessionType sessionType,
             Instant sessionOpenAt,
             Instant sessionCloseAt,
-            LocalDate previousOpenDate,
-            LocalDate nextOpenDate,
             Instant knownFrom,
             Instant knownTo,
             String source,
@@ -301,7 +296,6 @@ public final class TemporalModels {
             sessionOpenAt = TemporalValidation.optionalInstant(sessionOpenAt);
             sessionCloseAt = TemporalValidation.optionalInstant(sessionCloseAt);
             TemporalValidation.session(open, sessionType, sessionOpenAt, sessionCloseAt);
-            TemporalValidation.adjacentOpenDates(tradeDate, previousOpenDate, nextOpenDate);
             knownFrom = TemporalValidation.instant(knownFrom, "knownFrom");
             knownTo = TemporalValidation.optionalInstant(knownTo);
             TemporalValidation.halfOpenInstantRange(knownFrom, knownTo, "knowledge interval");

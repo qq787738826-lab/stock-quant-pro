@@ -18,7 +18,7 @@ public class TradingCalendarRevisionRepository {
 
     private static final String COLUMNS = """
             id, dataset_version_id, exchange, trade_date, is_open, session_type,
-            session_open_at, session_close_at, previous_open_date, next_open_date,
+            session_open_at, session_close_at,
             known_from, known_to, source, source_version, source_record_id,
             source_revision, trust_level, payload_hash, recorded_at
             """;
@@ -70,10 +70,10 @@ public class TradingCalendarRevisionRepository {
         List<TradingCalendarRevision> rows = jdbcTemplate.query("""
                 INSERT INTO trading_calendar_revisions(
                     dataset_version_id, exchange, trade_date, is_open, session_type,
-                    session_open_at, session_close_at, previous_open_date, next_open_date,
+                    session_open_at, session_close_at,
                     known_from, known_to, source, source_version, source_record_id,
                     source_revision, trust_level, payload_hash, recorded_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (source, source_version, source_record_id, source_revision,
                              exchange, trade_date)
                 DO NOTHING
@@ -83,7 +83,6 @@ public class TradingCalendarRevisionRepository {
                 command.open(), command.sessionType().name(),
                 TemporalJdbcSupport.timestamptz(command.sessionOpenAt()),
                 TemporalJdbcSupport.timestamptz(command.sessionCloseAt()),
-                command.previousOpenDate(), command.nextOpenDate(),
                 TemporalJdbcSupport.timestamptz(command.knownFrom()),
                 TemporalJdbcSupport.timestamptz(command.knownTo()),
                 command.source(), command.sourceVersion(), command.sourceRecordId(),
@@ -176,8 +175,6 @@ public class TradingCalendarRevisionRepository {
                 TradingSessionType.valueOf(resultSet.getString("session_type")),
                 TemporalJdbcSupport.instant(resultSet.getObject("session_open_at")),
                 TemporalJdbcSupport.instant(resultSet.getObject("session_close_at")),
-                resultSet.getObject("previous_open_date", LocalDate.class),
-                resultSet.getObject("next_open_date", LocalDate.class),
                 TemporalJdbcSupport.instant(resultSet.getObject("known_from")),
                 TemporalJdbcSupport.instant(resultSet.getObject("known_to")),
                 resultSet.getString("source"),

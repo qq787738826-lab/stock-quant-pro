@@ -38,7 +38,7 @@
 
 `source + source_version + source_record_id + source_revision`
 
-更正必须新增事件，并通过 `supersedes_event_id` 指向旧事件。数据库触发器拒绝 `UPDATE`，保证生产事实不会原地覆盖；测试仍可按已记录dataset ID精确删除夹具。该表故意不引用当前态 `securities`，因此已经退市或不在当前投影中的历史symbol仍能作为权威事实保存。
+事件payload冻结为 `SECURITY_STATUS_EVENT_V1`，必须包含规范化 `resultingState`；增量事件只能改变其事件类型允许的字段，history逐字段必须与事件确定性计算结果一致。payload哈希由规范化JSON确定性计算并校验。更正必须新增事件，并通过 `supersedes_event_id` 指向旧事件。数据库触发器拒绝 `UPDATE`、`DELETE` 和 `TRUNCATE`，保证生产事实不会原地覆盖或移除。该表故意不引用当前态 `securities`，因此已经退市或不在当前投影中的历史symbol仍能作为权威事实保存。
 
 ### security_status_history
 
@@ -50,6 +50,8 @@
 - 相邻区间允许。
 - 更正先关闭旧 `known_to`，再插入新版本；旧版本继续保留。
 - `recorded_at` 只是数据库记录时刻，不能代替 `known_from`。
+
+数据库触发器只允许一次合法的 `known_to: NULL -> 非NULL` 关闭；修改其他字段、重新开放或二次关闭knowledge区间，以及 `DELETE`、`TRUNCATE` 均被拒绝。
 
 数据库启用 `btree_gist`，通过 `symbol + daterange(valid) + tstzrange(knowledge)` exclusion constraint拒绝valid与knowledge同时重叠的矩形。重叠保护不是Java预检查。
 
@@ -66,9 +68,9 @@
 - `HOLIDAY`
 - `TEMPORARY_CLOSURE`
 
-开市日必须有合法的 `session_open_at` 和 `session_close_at`，且收盘晚于开盘；闭市日不得保存session时刻。`previous_open_date` 必须早于本交易日，`next_open_date` 必须晚于本交易日。
+开市日必须有合法的 `session_open_at` 和 `session_close_at`，且收盘晚于开盘；闭市日不得保存session时刻。表中不持久化 `previous_open_date` 或 `next_open_date`。
 
-同一 `exchange + trade_date` 的knowledge区间使用GiST exclusion constraint防重叠。临时休市或日历更正关闭旧knowledge版本并新增版本。Java查询上一/下一开市日时根据as-of日历行重新推导，不盲信存储的previous/next提示字段。
+同一 `exchange + trade_date` 的knowledge区间使用GiST exclusion constraint防重叠。临时休市或日历更正关闭旧knowledge版本并新增版本。Java查询上一/下一开市日时根据同exchange、同knowledge cutoff的as-of日历事实动态推导。日历修订同样只允许一次合法关闭knowledge区间，并禁止其他原地修改、删除和清空。
 
 幂等键为：
 
@@ -141,9 +143,9 @@ V6不会：
 
 当前已执行：
 
-- 时态模型、服务与迁移合同定向：12项，0失败，0错误，0跳过，BUILD SUCCESS。
-- 完整Agent回归：190项，0失败，0错误，12项环境门禁跳过，BUILD SUCCESS。
-- quant-server全量：203项，0失败，0错误，12项环境门禁跳过，BUILD SUCCESS。
+- 时态模型、服务与迁移合同定向：17项，0失败，0错误，0跳过，BUILD SUCCESS。
+- 完整Agent回归：191项，0失败，0错误，13项环境门禁跳过，BUILD SUCCESS。
+- quant-server全量：209项，0失败，0错误，13项环境门禁跳过，BUILD SUCCESS。
 - quant-core全量：1项，0失败，0错误，0跳过，BUILD SUCCESS。
 - Python `compileall app tests`：通过。
 - Python `unittest discover -s tests`：68项全部通过。
@@ -151,13 +153,13 @@ V6不会：
 
 真实PostgreSQL 16闭环已通过专用测试 `AgentStage2D2ATemporalMarketFoundationPostgresIntegrationTest`：
 
-- Tests run: 1
+- Tests run: 2
 - Failures: 0
 - Errors: 0
 - Skipped: 0
 - BUILD SUCCESS
 
-真实测试验证了V1至V6顺序迁移、四表/约束/索引、dataset与event幂等、事件append-only、相邻valid和knowledge区间、security与calendar数据库重叠拒绝、更正前后as-of回放、BACKFILLED_INFERRED、SSE/SZSE隔离、节假日、临时休市、上一/下一开市日推导、非法区间和更正原子回滚。测试先检查完整symbol和calendar自然键命名空间，清理时按supersedes叶节点到根节点删除事件，并确认新表、`securities`、`daily_bars` 和Agent五表恢复测试前基线。
+真实测试在每次执行时创建唯一 `stage_2d2a_it_<uuid>` Schema，并将DataSource、Flyway default schema及schema history全部隔离到该Schema，从V1至V6顺序迁移。测试验证四表/约束/索引、dataset与event并发幂等、事件及dataset不可变、history与calendar仅允许一次knowledge关闭、相邻valid和knowledge区间、security与calendar数据库重叠拒绝、更正前后as-of回放、BACKFILLED_INFERRED、SSE/SZSE隔离、节假日、临时休市、上一/下一开市日动态推导、非法区间和更正原子回滚。并发测试使用两个不同PostgreSQL backend PID请求同一更正，断言只产生一个新逻辑版本、旧版本正确关闭、仅一个开放knowledge版本且不存在valid/knowledge重叠。测试结束仅删除本轮随机Schema，并确认Schema已不存在且public业务表和Flyway基线未变化。
 
 ## 当前限制与后续入口
 

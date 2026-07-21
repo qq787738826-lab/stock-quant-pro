@@ -45,8 +45,16 @@ class TemporalMarketFoundationMigrationTest {
         assertTrue(normalized.contains("where known_to is null"));
         assertTrue(normalized.contains("backfilled_inferred"));
         assertTrue(normalized.contains("jsonb not null default '{}'::jsonb"));
-        assertTrue(normalized.contains("trg_security_status_events_append_only"));
-        assertTrue(normalized.contains("before update on security_status_events"));
+        for (String table : List.of(
+                "market_data_dataset_versions", "security_status_events",
+                "security_status_history", "trading_calendar_revisions")) {
+            assertTrue(normalized.contains("before truncate on " + table));
+        }
+        assertTrue(normalized.contains("before update or delete on security_status_events"));
+        assertTrue(normalized.contains("before update or delete on security_status_history"));
+        assertTrue(normalized.contains("before update or delete on trading_calendar_revisions"));
+        assertFalse(normalized.contains("previous_open_date"));
+        assertFalse(normalized.contains("next_open_date"));
 
         for (String forbiddenTable : List.of(
                 "security_universe_snapshot",
@@ -58,7 +66,7 @@ class TemporalMarketFoundationMigrationTest {
         )) {
             assertFalse(normalized.contains("create table " + forbiddenTable), forbiddenTable);
         }
-        for (String destructive : List.of("truncate ", "drop table", "delete from", "alter table securities",
+        for (String destructive : List.of("drop table", "delete from", "alter table securities",
                 "alter table daily_bars", "insert into securities", "insert into daily_bars")) {
             assertFalse(normalized.contains(destructive), destructive);
         }

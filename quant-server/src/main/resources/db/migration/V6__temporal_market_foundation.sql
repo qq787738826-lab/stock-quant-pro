@@ -33,6 +33,23 @@ CREATE TABLE market_data_dataset_versions (
     )
 );
 
+CREATE FUNCTION reject_temporal_immutable_mutation()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    RAISE EXCEPTION '% is immutable; % is forbidden', TG_TABLE_NAME, TG_OP
+        USING ERRCODE = '55000';
+END;
+$$;
+
+CREATE TRIGGER trg_market_dataset_versions_immutable_rows
+    BEFORE UPDATE OR DELETE ON market_data_dataset_versions
+    FOR EACH ROW EXECUTE FUNCTION reject_temporal_immutable_mutation();
+CREATE TRIGGER trg_market_dataset_versions_no_truncate
+    BEFORE TRUNCATE ON market_data_dataset_versions
+    FOR EACH STATEMENT EXECUTE FUNCTION reject_temporal_immutable_mutation();
+
 CREATE INDEX idx_market_dataset_type_range
     ON market_data_dataset_versions (dataset_type, range_start, range_end, fetched_at DESC);
 CREATE INDEX idx_market_dataset_source_version
@@ -101,21 +118,12 @@ CREATE UNIQUE INDEX uq_security_status_events_superseded_once
     ON security_status_events (supersedes_event_id)
     WHERE supersedes_event_id IS NOT NULL;
 
-CREATE FUNCTION reject_security_status_event_update()
-RETURNS TRIGGER
-LANGUAGE plpgsql
-AS $$
-BEGIN
-    RAISE EXCEPTION
-        'security_status_events is append-only; append a superseding event instead'
-        USING ERRCODE = '55000';
-END;
-$$;
-
-CREATE TRIGGER trg_security_status_events_append_only
-    BEFORE UPDATE ON security_status_events
-    FOR EACH ROW
-    EXECUTE FUNCTION reject_security_status_event_update();
+CREATE TRIGGER trg_security_status_events_immutable_rows
+    BEFORE UPDATE OR DELETE ON security_status_events
+    FOR EACH ROW EXECUTE FUNCTION reject_temporal_immutable_mutation();
+CREATE TRIGGER trg_security_status_events_no_truncate
+    BEFORE TRUNCATE ON security_status_events
+    FOR EACH STATEMENT EXECUTE FUNCTION reject_temporal_immutable_mutation();
 
 CREATE TABLE security_status_history (
     id BIGSERIAL PRIMARY KEY,
@@ -166,6 +174,30 @@ CREATE TABLE security_status_history (
     ) DEFERRABLE INITIALLY IMMEDIATE
 );
 
+CREATE FUNCTION allow_only_temporal_knowledge_close()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    IF TG_OP = 'UPDATE'
+       AND OLD.known_to IS NULL
+       AND NEW.known_to IS NOT NULL
+       AND NEW.known_to > OLD.known_from
+       AND (to_jsonb(NEW) - 'known_to') = (to_jsonb(OLD) - 'known_to') THEN
+        RETURN NEW;
+    END IF;
+    RAISE EXCEPTION '% only permits one NULL-to-value known_to close; % is forbidden',
+        TG_TABLE_NAME, TG_OP USING ERRCODE = '55000';
+END;
+$$;
+
+CREATE TRIGGER trg_security_status_history_guard_rows
+    BEFORE UPDATE OR DELETE ON security_status_history
+    FOR EACH ROW EXECUTE FUNCTION allow_only_temporal_knowledge_close();
+CREATE TRIGGER trg_security_status_history_no_truncate
+    BEFORE TRUNCATE ON security_status_history
+    FOR EACH STATEMENT EXECUTE FUNCTION reject_temporal_immutable_mutation();
+
 CREATE INDEX idx_security_status_history_dataset
     ON security_status_history (dataset_version_id);
 CREATE INDEX idx_security_status_history_event
@@ -192,8 +224,6 @@ CREATE TABLE trading_calendar_revisions (
     session_type VARCHAR(32) NOT NULL,
     session_open_at TIMESTAMPTZ,
     session_close_at TIMESTAMPTZ,
-    previous_open_date DATE,
-    next_open_date DATE,
     known_from TIMESTAMPTZ NOT NULL,
     known_to TIMESTAMPTZ,
     source VARCHAR(128) NOT NULL,
@@ -224,12 +254,6 @@ CREATE TABLE trading_calendar_revisions (
             AND session_close_at IS NULL
         )
     ),
-    CONSTRAINT ck_trading_calendar_revisions_previous_date CHECK (
-        previous_open_date IS NULL OR previous_open_date < trade_date
-    ),
-    CONSTRAINT ck_trading_calendar_revisions_next_date CHECK (
-        next_open_date IS NULL OR next_open_date > trade_date
-    ),
     CONSTRAINT ck_trading_calendar_revisions_known_range CHECK (
         known_to IS NULL OR known_to > known_from
     ),
@@ -251,6 +275,13 @@ CREATE TABLE trading_calendar_revisions (
         tstzrange(known_from, known_to, '[)') WITH &&
     ) DEFERRABLE INITIALLY IMMEDIATE
 );
+
+CREATE TRIGGER trg_trading_calendar_revisions_guard_rows
+    BEFORE UPDATE OR DELETE ON trading_calendar_revisions
+    FOR EACH ROW EXECUTE FUNCTION allow_only_temporal_knowledge_close();
+CREATE TRIGGER trg_trading_calendar_revisions_no_truncate
+    BEFORE TRUNCATE ON trading_calendar_revisions
+    FOR EACH STATEMENT EXECUTE FUNCTION reject_temporal_immutable_mutation();
 
 CREATE INDEX idx_trading_calendar_revisions_dataset
     ON trading_calendar_revisions (dataset_version_id);

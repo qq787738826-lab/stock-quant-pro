@@ -70,7 +70,8 @@ public class TemporalMarketFoundationService {
         DatasetVersion dataset = requireDataset(command.datasetVersionId());
         verifyDatasetProvenance(
                 dataset, command.source(), command.sourceVersion(), command.trustLevel());
-        verifySupersededEvent(command);
+        SecurityStatusEvent supersededEvent = verifySupersededEvent(command);
+        verifyEventPayload(command, supersededEvent);
         Instant recordedAt = recordedAt();
         TemporalValidation.notBefore(recordedAt, command.knownAt(), "recordedAt", "knownAt");
         SecurityStatusEvent result = securityEvents.insertIfAbsent(command, recordedAt)
@@ -264,9 +265,15 @@ public class TemporalMarketFoundationService {
                 .orElseThrow(() -> conflict("security status event does not exist"));
     }
 
-    private void verifySupersededEvent(AppendSecurityStatusEventCommand command) {
+    private SecurityStatusEvent verifySupersededEvent(AppendSecurityStatusEventCommand command) {
         if (command.supersedesEventId() == null) {
-            return;
+            if (command.eventType() != SecurityStatusEventType.FULL_STATUS_SNAPSHOT) {
+                throw conflict("incremental security events require a superseded event");
+            }
+            return null;
+        }
+        if (command.eventType() == SecurityStatusEventType.FULL_STATUS_SNAPSHOT) {
+            throw conflict("FULL_STATUS_SNAPSHOT cannot supersede another event");
         }
         SecurityStatusEvent superseded = requireSecurityEvent(command.supersedesEventId());
         if (!superseded.symbol().equals(command.symbol())
@@ -275,6 +282,27 @@ public class TemporalMarketFoundationService {
         }
         if (!command.knownAt().isAfter(superseded.knownAt())) {
             throw conflict("a superseding event must advance knowledge time");
+        }
+        return superseded;
+    }
+
+    private static void verifyEventPayload(
+            AppendSecurityStatusEventCommand command,
+            SecurityStatusEvent superseded
+    ) {
+        try {
+            var resulting = SecurityStatusEventPayloadContract.parse(command.payload());
+            var previous = superseded == null
+                    ? null
+                    : SecurityStatusEventPayloadContract.parse(superseded.payload());
+            SecurityStatusEventPayloadContract.validateTransition(
+                    command.eventType(), previous, resulting);
+            if (!SecurityStatusEventPayloadContract.hash(command.payload())
+                    .equals(command.payloadHash())) {
+                throw conflict("security event payload hash does not match canonical payload");
+            }
+        } catch (IllegalArgumentException error) {
+            throw conflict("invalid security event payload: " + error.getMessage());
         }
     }
 
@@ -287,7 +315,8 @@ public class TemporalMarketFoundationService {
         verifyDatasetProvenance(
                 dataset, command.source(), command.sourceVersion(), command.trustLevel());
         verifyStatusLineage(
-                command.symbol(), command.validFrom(), command.validTo(), command.knownFrom(),
+                command.symbol(), command.exchange(), command.board(), command.listed(),
+                command.active(), command.st(), command.validFrom(), command.validTo(), command.knownFrom(),
                 command.datasetVersionId(), command.source(), command.sourceVersion(),
                 command.trustLevel(), event, dataset);
         if (supersededVersion != null
@@ -298,6 +327,11 @@ public class TemporalMarketFoundationService {
 
     private static void verifyStatusLineage(
             String symbol,
+            MarketExchange exchange,
+            String board,
+            boolean listed,
+            boolean active,
+            boolean st,
             LocalDate validFrom,
             LocalDate validTo,
             Instant knownFrom,
@@ -314,6 +348,19 @@ public class TemporalMarketFoundationService {
                 || !event.source().equals(source)
                 || !event.sourceVersion().equals(sourceVersion)) {
             throw conflict("security status projection provenance is inconsistent");
+        }
+        SecurityStatusEventPayloadContract.SecurityStatusState resulting;
+        try {
+            resulting = SecurityStatusEventPayloadContract.parse(event.payload());
+        } catch (IllegalArgumentException error) {
+            throw conflict("security status source event payload is invalid");
+        }
+        if (resulting.exchange() != exchange
+                || !resulting.board().equals(board)
+                || resulting.listed() != listed
+                || resulting.active() != active
+                || resulting.st() != st) {
+            throw conflict("security status projection differs from its source event state");
         }
         if (validFrom.isBefore(event.effectiveFrom())
                 || (event.effectiveTo() != null
@@ -349,7 +396,8 @@ public class TemporalMarketFoundationService {
         DatasetVersion dataset = requireDataset(value.datasetVersionId());
         SecurityStatusEvent event = requireSecurityEvent(value.sourceEventId());
         verifyStatusLineage(
-                value.symbol(), value.validFrom(), value.validTo(), value.knownFrom(),
+                value.symbol(), value.exchange(), value.board(), value.listed(),
+                value.active(), value.st(), value.validFrom(), value.validTo(), value.knownFrom(),
                 value.datasetVersionId(), value.source(), value.sourceVersion(),
                 value.trustLevel(), event, dataset);
         TemporalTrustLevel conservative = TemporalTrustLevel.mostConservative(
@@ -476,8 +524,6 @@ public class TemporalMarketFoundationService {
                 || command.sessionType() != value.sessionType()
                 || !Objects.equals(command.sessionOpenAt(), value.sessionOpenAt())
                 || !Objects.equals(command.sessionCloseAt(), value.sessionCloseAt())
-                || !Objects.equals(command.previousOpenDate(), value.previousOpenDate())
-                || !Objects.equals(command.nextOpenDate(), value.nextOpenDate())
                 || !command.knownFrom().equals(value.knownFrom())
                 || !Objects.equals(command.knownTo(), value.knownTo())
                 || !command.source().equals(value.source())

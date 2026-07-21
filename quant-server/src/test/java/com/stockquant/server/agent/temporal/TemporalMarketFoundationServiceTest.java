@@ -70,6 +70,39 @@ class TemporalMarketFoundationServiceTest {
     }
 
     @Test
+    void rejectsPayloadHashMismatchBeforeWritingEvent() {
+        when(datasets.findById(1)).thenReturn(Optional.of(dataset(
+                1, TemporalTrustLevel.OBSERVED)));
+        AppendSecurityStatusEventCommand valid = eventCommand(
+                10, null, KNOWN_1, TemporalTrustLevel.OBSERVED);
+        AppendSecurityStatusEventCommand invalid = new AppendSecurityStatusEventCommand(
+                valid.datasetVersionId(), valid.symbol(), valid.eventType(),
+                valid.effectiveFrom(), valid.effectiveTo(), valid.publishedAt(), valid.knownAt(),
+                valid.source(), valid.sourceVersion(), valid.sourceRecordId(), valid.sourceRevision(),
+                valid.trustLevel(), valid.payload(), "f".repeat(64), valid.supersedesEventId());
+
+        assertThrows(TemporalDataConflictException.class,
+                () -> service.appendSecurityStatusEvent(invalid));
+        verify(events, never()).insertIfAbsent(invalid, RECORDED);
+    }
+
+    @Test
+    void rejectsProjectionThatDiffersFromEventResultingState() {
+        DatasetVersion dataset = dataset(1, TemporalTrustLevel.OBSERVED);
+        SecurityStatusEvent event = event(10, null, KNOWN_1, TemporalTrustLevel.OBSERVED);
+        PublishSecurityStatusVersionCommand inconsistent = statusCommand(
+                10, KNOWN_1, true, TemporalTrustLevel.OBSERVED);
+        when(datasets.findById(1)).thenReturn(Optional.of(dataset));
+        when(events.findById(10)).thenReturn(Optional.of(event));
+
+        assertThrows(TemporalDataConflictException.class,
+                () -> service.publishSecurityStatusVersion(inconsistent));
+        verify(history, never()).insertIfAbsent(
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
     void returnsSameSecurityCorrectionAfterAnotherCallerClosedAndInserted() {
         DatasetVersion dataset = dataset(1, TemporalTrustLevel.OBSERVED);
         SecurityStatusEvent replacementEvent = event(
@@ -147,11 +180,14 @@ class TemporalMarketFoundationServiceTest {
             Instant knownAt,
             TemporalTrustLevel trust
     ) {
+        var payload = SecurityStatusEventPayloadContract.payload(
+                new SecurityStatusEventPayloadContract.SecurityStatusState(
+                        MarketExchange.SSE, "MAIN", true, true, false));
         return new AppendSecurityStatusEventCommand(
                 1, "600000", SecurityStatusEventType.FULL_STATUS_SNAPSHOT,
                 VALID_FROM, null, knownAt.minusSeconds(1), knownAt,
                 SOURCE, VERSION, "event-" + ignoredId, "1", trust,
-                new ObjectMapper().createObjectNode(), HASH, supersedes);
+                payload, SecurityStatusEventPayloadContract.hash(payload), supersedes);
     }
 
     private static SecurityStatusEvent event(
@@ -160,11 +196,17 @@ class TemporalMarketFoundationServiceTest {
             Instant knownAt,
             TemporalTrustLevel trust
     ) {
+        boolean st = id == 20;
+        var payload = SecurityStatusEventPayloadContract.payload(
+                new SecurityStatusEventPayloadContract.SecurityStatusState(
+                        MarketExchange.SSE, "MAIN", true, true, st));
         return new SecurityStatusEvent(
-                id, 1, "600000", SecurityStatusEventType.FULL_STATUS_SNAPSHOT,
+                id, 1, "600000", id == 20
+                        ? SecurityStatusEventType.ST_CHANGE
+                        : SecurityStatusEventType.FULL_STATUS_SNAPSHOT,
                 VALID_FROM, null, knownAt.minusSeconds(1), knownAt, RECORDED,
                 SOURCE, VERSION, "event-" + id, "1", trust,
-                new ObjectMapper().createObjectNode(), HASH, supersedes);
+                payload, SecurityStatusEventPayloadContract.hash(payload), supersedes);
     }
 
     private static PublishSecurityStatusVersionCommand statusCommand(
@@ -205,7 +247,7 @@ class TemporalMarketFoundationServiceTest {
                 open ? TradingSessionType.REGULAR : TradingSessionType.TEMPORARY_CLOSURE,
                 open ? Instant.parse("2025-01-06T01:30:00Z") : null,
                 open ? Instant.parse("2025-01-06T07:00:00Z") : null,
-                null, null, knownFrom, null, SOURCE, VERSION,
+                knownFrom, null, SOURCE, VERSION,
                 "calendar-1", revision, trust, HASH);
     }
 
@@ -222,7 +264,7 @@ class TemporalMarketFoundationServiceTest {
         return new TradingCalendarRevision(
                 id, command.datasetVersionId(), command.exchange(), command.tradeDate(),
                 command.open(), command.sessionType(), command.sessionOpenAt(),
-                command.sessionCloseAt(), command.previousOpenDate(), command.nextOpenDate(),
+                command.sessionCloseAt(),
                 command.knownFrom(), knownTo, command.source(), command.sourceVersion(),
                 command.sourceRecordId(), command.sourceRevision(), command.trustLevel(),
                 command.payloadHash(), RECORDED);

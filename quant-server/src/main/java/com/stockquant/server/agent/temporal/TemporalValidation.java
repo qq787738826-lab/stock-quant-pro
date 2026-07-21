@@ -126,17 +126,4 @@ final class TemporalValidation {
         }
     }
 
-    static void adjacentOpenDates(
-            LocalDate tradeDate,
-            LocalDate previousOpenDate,
-            LocalDate nextOpenDate
-    ) {
-        required(tradeDate, "tradeDate");
-        if (previousOpenDate != null && !previousOpenDate.isBefore(tradeDate)) {
-            throw new IllegalArgumentException("previousOpenDate must be before tradeDate");
-        }
-        if (nextOpenDate != null && !nextOpenDate.isAfter(tradeDate)) {
-            throw new IllegalArgumentException("nextOpenDate must be after tradeDate");
-        }
-    }
 }

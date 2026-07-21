@@ -99,30 +99,30 @@ class TemporalModelsTest {
         Instant closesAt = Instant.parse("2025-01-02T07:00:00Z");
         new AppendTradingCalendarRevisionCommand(
                 1, MarketExchange.SSE, VALID_FROM, true, TradingSessionType.REGULAR,
-                opensAt, closesAt, VALID_FROM.minusDays(1), VALID_FROM.plusDays(1),
+                opensAt, closesAt,
                 KNOWN_FROM, null, "TEST", "v1", "calendar-1", "1",
                 TemporalTrustLevel.OBSERVED, HASH
         );
         new AppendTradingCalendarRevisionCommand(
                 1, MarketExchange.SZSE, VALID_FROM, false, TradingSessionType.HOLIDAY,
-                null, null, VALID_FROM.minusDays(1), VALID_FROM.plusDays(1),
+                null, null,
                 KNOWN_FROM, null, "TEST", "v1", "calendar-2", "1",
                 TemporalTrustLevel.OBSERVED, HASH
         );
 
         assertThrows(IllegalArgumentException.class, () -> new AppendTradingCalendarRevisionCommand(
                 1, MarketExchange.SSE, VALID_FROM, true, TradingSessionType.HOLIDAY,
-                opensAt, closesAt, null, null, KNOWN_FROM, null,
+                opensAt, closesAt, KNOWN_FROM, null,
                 "TEST", "v1", "calendar-3", "1", TemporalTrustLevel.OBSERVED, HASH
         ));
         assertThrows(IllegalArgumentException.class, () -> new AppendTradingCalendarRevisionCommand(
                 1, MarketExchange.SSE, VALID_FROM, false, TradingSessionType.TEMPORARY_CLOSURE,
-                opensAt, closesAt, null, null, KNOWN_FROM, null,
+                opensAt, closesAt, KNOWN_FROM, null,
                 "TEST", "v1", "calendar-4", "1", TemporalTrustLevel.OBSERVED, HASH
         ));
         assertThrows(IllegalArgumentException.class, () -> new AppendTradingCalendarRevisionCommand(
                 1, MarketExchange.SSE, VALID_FROM, true, TradingSessionType.REGULAR,
-                closesAt, opensAt, null, null, KNOWN_FROM, null,
+                closesAt, opensAt, KNOWN_FROM, null,
                 "TEST", "v1", "calendar-5", "1", TemporalTrustLevel.OBSERVED, HASH
         ));
     }
