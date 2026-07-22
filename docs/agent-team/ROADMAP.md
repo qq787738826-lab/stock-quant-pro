@@ -50,7 +50,7 @@
 - 阶段位置：阶段 2D-1 已完成实现和真实闭环验收；完整阶段 2D 尚未完成。
 - 依赖：2A、2B、2C 全部完成。
 - 禁止范围：外部行情补数、LLM 权威分类、收益承诺、投资推荐和交易写操作。
-- 下一阶段唯一入口：阶段 2D-2B-1B-1——TEST/DEMO event materialization foundation；不得跳过 TEST/DEMO 物化基础直接接入 FORMAL、实现 history 或生成 Universe。
+- 下一阶段唯一入口：阶段 2D-2B-1B-2 的正式来源与许可前置决策仍被阻断，approved source adapter 实现尚不能开始；不得把 2D-2B-2 或 Universe 视为可立即实施的下一阶段。
 
 ### 2D-1：当前证券池宽度状态规则（已完成）
 
@@ -73,13 +73,13 @@
 - 输出：dataset 版本、不可变证券状态事件、双时间证券状态历史、SSE/SZSE 版本化交易日历和 Java as-of 查询。
 - 冻结契约：`SECURITY_STATUS_EVENT_V1`、数据库不可变保护、上一/下一开市日动态推导。
 - 验收结果：真实 PostgreSQL 及并发测试 `2/0/0/0`；开发、独立审查、修复和修复后复审全部完成。
-- 能力边界：尚未生成历史 universe 快照，尚未治理 PIT 行情与公司行动，未实现 `marketBreadth V2`。
+- 能力边界：尚未生成历史 universe 快照，尚未治理 PIT 行情与公司行动，未实现 `MARKET_BREADTH_V2`。
 
 #### 2D-2B：证券状态/日历摄取与版本化每日 universe 快照（进行中）
 
-- 阶段位置：2D-2B-1A 已完成；完整 2D-2B 仍进行中。
+- 阶段位置：2D-2B-1A 与 2D-2B-1B-1 已完成；完整 2D-2B 仍进行中。
 - 目标：在来源、身份、时间、assurance 和 lineage 可审计的前提下，逐步形成可追溯、版本化、可重复查询的每日 universe 快照。
-- 禁止范围：PIT 行情与公司行动实现、`marketBreadth V2`、MARKET_REGIME 规则升级、投资建议和交易写操作。
+- 禁止范围：PIT 行情与公司行动实现、`MARKET_BREADTH_V2`、MARKET_REGIME 规则升级、投资建议和交易写操作。
 - 完成门槛：1B 事件摄取、2D-2B-2 双时间投影和 2D-2B-3 Universe 均完成独立验收前，不得标记完整 2D-2B 完成。
 
 ##### 2D-2B-1A：source-neutral ingestion foundation（已完成）
@@ -97,20 +97,21 @@
 - 验收结果：契约已冻结并通过独立 GitHub 审查；首个契约提交为 `c97d6a2c954f536eedd42796b1112aeaab421417`，复审修复提交为 `28c312dcbe26103c5f2b45c043ec6a8f81a08ae0`。
 - 能力边界：完成设计冻结仍不代表 event 物化实现开始或具备 PIT。
 
-##### 2D-2B-1B-1：TEST/DEMO event materialization foundation（未开始）
+##### 2D-2B-1B-1：TEST/DEMO event materialization foundation（已完成）
 
 - 目标：在 1B-0 冻结契约下实现显式 identity mapping、normalization result、V1 event 物化、唯一 lineage 与 `INGESTION_MANIFEST_V2_SECURITY_EVENT`。
-- 输入依赖：1B-0 独立审查并合入。
-- 阶段位置：下一阶段唯一入口，尚未开始。
-- 禁止范围：FORMAL、真实来源、V2 correction、history 写入、Universe 和扫描切换。
-- 验收条件：单元、migration、真实 PostgreSQL、两个 backend 并发、direct SQL 门禁与 Java/SQL 黄金 Hash 全部通过。
-- 能力边界：完成后仍无正式来源、PIT、history projection 或 Universe。
+- 实现结果：V8 已实现 `manifestContractVersion`、TEST/DEMO 稳定证券身份、显式 source identity mapping、`SECURITY_STATUS_RAW_TEST_V1`、V1 event 物化与复用、normalization result、唯一 event lineage、Manifest V2、Java/PostgreSQL 双重门禁，以及幂等、两个 backend 并发和原子失败保护。
+- 提交与合入：首次实现提交 `18151800d07fd7d2e6706b88869df5b7d0aa8ba0`；复审修复提交 `b6cb263f863f91753f043e0fa19e85501873111f`；独立 GitHub 复审 PASS；集成合并提交 `9aebcbf7d5a315d1edd61d85bf2944a454f72ffe`。
+- 本地验收证据：以下均为 Codex 本地执行结果，不是 GitHub Actions CI——V8 真实 PostgreSQL `6/0/0/0`、`Skipped=0`；2D-2A 兼容 PostgreSQL `2/0/0/0`；2D-2B-1A 兼容 PostgreSQL `2/0/0/0`；`quant-server` `255/0/0/21`；`quant-core` `1/0/0/0`；Python unittest 68 项通过；Python `compileall` 与 `git diff --check` 通过。`quant-server` 的 21 项跳过是非数据库全量回归中的环境门禁跳过，不是真实 PostgreSQL 测试。
+- 安全边界：FORMAL、真实来源、PIT_VERIFIED、V2 correction、history 写入、Universe 和扫描切换仍禁止；resolved event 在 2D-2B-2 前不得进入 history。
+- 能力边界：仍无正式证券状态来源、真实 source adapter、正式 history/calendar projection 或 Universe。
 
 ##### 2D-2B-1B-2：approved source adapter（外部决策阻断）
 
 - 目标：仅为经批准的证券状态来源实现 adapter，并冻结来源 instrument ID、revision、published/effective 时间、许可与持久化边界。
-- 输入依赖：来源和许可书面批准、稳定 instrument ID 可验证、1B-1 完成。
-- 阻断条件：来源、许可、本地持久化/历史回放权利或时间语义任一未验证即不得开始。
+- 输入依赖：1B-1 已完成；仍须取得正式证券状态来源、数据许可、本地持久化权利、历史回放权利、稳定 source instrument ID、revision 语义和 published/effective 时间语义的明确批准。
+- 阶段位置：上述外部前置决策仍被阻断，正式 adapter 实现尚不能开始；当前唯一入口是解决前置来源与许可决策，而不是编码 adapter。
+- 阻断条件：来源、数据许可、本地持久化权利、历史回放权利、稳定 source instrument ID、revision 语义或 published/effective 时间语义任一未验证即不得开始。
 - 禁止范围：不得以当前免费聚合源或 `securities` 当前态投影冒充正式 PIT 来源。
 - 能力边界：adapter 完成不等于真实来源闭环通过。
 
@@ -128,7 +129,7 @@
 - 输入依赖：1B 事件摄取链完成；V2、更正、knowledgeCutoff 和日历来源决策独立冻结。
 - 禁止范围：不生成 Universe，不读取 PIT 行情，不修改生产扫描。
 - 验收条件：双时间区间、无重叠、无空洞、更正保留、assurance、并发和真实 PostgreSQL 回放可审计。
-- 能力边界：完成后仍无不可变每日 Universe、PIT 行情或 `marketBreadth V2`。
+- 能力边界：完成后仍无不可变每日 Universe、PIT 行情或 `MARKET_BREADTH_V2`。
 
 ##### 2D-2B-3：Universe snapshot（未开始）
 
@@ -136,7 +137,7 @@
 - 输入依赖：2D-2B-2 完成，knowledgeCutoff 与 SSE/SZSE 组合日历规则冻结。
 - 禁止范围：不切换生产扫描，不修改 `MARKET_BREADTH_V1`，不开始 2D-2C。
 - 验收条件：无前视成员资格、输入 lineage、并发唯一发布、修订不覆盖、真实 PostgreSQL 和影子差异均可审计。
-- 能力边界：完成后仍无 PIT 行情、公司行动、`marketBreadth V2` 或完整 MARKET_REGIME。
+- 能力边界：完成后仍无 PIT 行情、公司行动、`MARKET_BREADTH_V2` 或完整 MARKET_REGIME。
 
 ## 2E：TECHNICAL_ANALYSIS 真实规则（未开始）
 
