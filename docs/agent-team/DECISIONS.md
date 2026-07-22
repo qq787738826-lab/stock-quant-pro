@@ -26,12 +26,12 @@
 
 ## 证券状态事件物化
 
-14. **稳定证券身份必须显式映射**：跨来源证券身份必须通过 `security_identity_registry` 与 `source_security_identity_mappings` 的显式关系解析；`sourceInstrumentId` 缺失时不得物化事件。symbol、名称、代码前缀、board 或 exchange 均不得被用来自动合并身份。
+14. **稳定证券身份必须显式映射**：跨来源证券身份必须通过 `security_identity_registry` 与 `source_security_identity_mappings` 的显式关系解析；`sourceInstrumentId` 缺失时不得物化事件。mappingLogicalKey 只使用稳定业务字段，mapping append-only 且 TEST/DEMO 隔离，mappingAssuranceLevel 参与 event assurance 保守传播；同 key 不同 identity 必须 conflict。symbol、名称、代码前缀、board 或 exchange 均不得被用来自动合并或修复身份。
 15. **active 表示上市资格而非当日可交易性**：`active` 表示证券仍具有目标市场上市与 Universe 资格。普通停牌、临时停牌、无成交或缺 bar 不改变 `active`；`active=true` 必须满足 `listed=true`，退市结果必须为 `listed=false, active=false`。
 16. **V1 事件转换不可放宽**：`SECURITY_STATUS_EVENT_V1` 继续复用现有完整 `resultingState` 和七类事件转换语义。初始链只能使用 `FULL_STATUS_SNAPSHOT`；增量事件只能改变冻结目标字段；多字段、身份或局部 valid 更正不得拆成多个 V1 事件。
-17. **raw revision 到事件的基数固定**：一条 raw revision 恰好产生一个 terminal normalization result，并产生零或一个 V1 event。`NO_STATE_CHANGE` 不创建 event，但必须保留 attempt、result 和 Manifest V2 审计；身份未解析或不支持的变化必须安全终止。
-18. **V6 event 主表保持唯一权威**：`security_status_events` 是唯一证券状态 event 主表；后续只允许增加稳定逻辑身份、namespace、assurance 以及独立 normalization/lineage 关系，不得创建第二套事件权威表。业务 Hash 禁止使用数据库物理 ID。
-19. **Event lineage 与 Manifest V2 独立版本化**：每个首次物化的逻辑 event 恰好一条 append-only raw→event lineage；复用 event 只新增本次 normalization result。`INGESTION_MANIFEST_V2_SECURITY_EVENT` 在 run 创建时冻结，不能修改 `INGESTION_MANIFEST_V1` 既有编码或在封存时切换版本。
+17. **raw、attempt、result 与 event 基数固定**：一条 raw revision 可以被多个 run 处理；每个 run/raw 可有连续的多个 terminal attempt，每个 attempt 恰好一个 result，每个 result 引用零或一个 event。相同 eventLogicalKey 全局最多一个 event 和一条 lineage；result 唯一边界是 attempt，不得错误地对 raw 建立全局唯一。AttemptStatus 与 normalization outcome 必须精确映射，`REJECTED` 不得替代 identity、contract 或 conflict 终态。
+18. **V6 event 主表保持唯一权威**：`security_status_events` 是唯一证券状态 event 主表；eventContractVersion 必须持久化，来源 revision 唯一键必须包含 recordNamespace。同一 namespace、securityLogicalKey、contract 最多一个 FULL 根，非根必须引用同链 predecessor，且一个 predecessor 最多一个后继；direct SQL 不能构造双根或跨 namespace、identity、contract 链。业务 Hash 禁止使用数据库物理 ID。
+19. **Event lineage 与 Manifest V2 独立版本化**：每个首次物化的逻辑 event 恰好一条 append-only raw→event lineage；复用 event 只新增本次 normalization result。`INGESTION_MANIFEST_V2_SECURITY_EVENT` 在 run 创建时冻结，覆盖该 run 全部 attempt/result；accepted/rejected 只取每条 raw 的最大连续 attemptNo，历史失败仍进入 manifest 但不重复计数。不能修改 `INGESTION_MANIFEST_V1` 既有编码或在封存时切换版本。
 20. **事件时间与原子性**：event `knownAt` 必须等于 terminal attempt 的 `derivedKnownFrom`，effective、published、observed、recorded 与 known 时间不得混用，`completedAt` 不进入业务 manifest。event、首次 lineage、attempt 与 normalization result 必须在数据库事务中原子提交，并由唯一约束、不可变 trigger 和锁共同保护。
 
 上述决策的完整字段、outcome、并发与验收契约见 [stage-2d2b1b-security-event-materialization-design.md](stage-2d2b1b-security-event-materialization-design.md)。它们只批准 TEST/DEMO 设计边界，不解除 FORMAL/PIT 门禁，也不代表 2D-2B-1B-1 已开始实现。

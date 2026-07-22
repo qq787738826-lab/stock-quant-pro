@@ -50,7 +50,7 @@
 - 阶段位置：阶段 2D-1 已完成实现和真实闭环验收；完整阶段 2D 尚未完成。
 - 依赖：2A、2B、2C 全部完成。
 - 禁止范围：外部行情补数、LLM 权威分类、收益承诺、投资推荐和交易写操作。
-- 下一阶段唯一入口：阶段 2D-2B-1B-0——证券状态事件物化契约冻结；不得跳过契约冻结直接实现 event、history 或 Universe。
+- 下一阶段唯一入口：阶段 2D-2B-1B-1——TEST/DEMO event materialization foundation；不得跳过 TEST/DEMO 物化基础直接接入 FORMAL、实现 history 或生成 Universe。
 
 ### 2D-1：当前证券池宽度状态规则（已完成）
 
@@ -89,18 +89,19 @@
 - 验收：单元、真实 PostgreSQL 随机 Schema、两个 backend 并发、不可变、幂等、冲突、封存和 public 基线保护均通过。
 - 能力边界：没有 event 物化、history/calendar projection 或 Universe；FORMAL 继续关闭。
 
-##### 2D-2B-1B-0：security event contract freeze（本任务）
+##### 2D-2B-1B-0：security event contract freeze（已完成）
 
 - 目标：冻结 TEST/DEMO security raw 到 `SECURITY_STATUS_EVENT_V1` 的显式稳定身份、active 语义、物化基数、normalization result、event lineage、Manifest V2、并发与原子失败契约。
 - 输出：[stage-2d2b1b-security-event-materialization-design.md](stage-2d2b1b-security-event-materialization-design.md) 及跨文档一致性决策。
 - 禁止范围：不创建迁移，不修改生产代码或测试，不接来源，不写 event/history，不生成 Universe。
-- 验收条件：文档交叉一致、阶段边界明确、验收矩阵完整、独立审查通过并合入集成分支。
+- 验收结果：契约已冻结并通过独立 GitHub 审查；首个契约提交为 `c97d6a2c954f536eedd42796b1112aeaab421417`。
 - 能力边界：完成设计冻结仍不代表 event 物化实现开始或具备 PIT。
 
 ##### 2D-2B-1B-1：TEST/DEMO event materialization foundation（未开始）
 
 - 目标：在 1B-0 冻结契约下实现显式 identity mapping、normalization result、V1 event 物化、唯一 lineage 与 `INGESTION_MANIFEST_V2_SECURITY_EVENT`。
 - 输入依赖：1B-0 独立审查并合入。
+- 阶段位置：下一阶段唯一入口，尚未开始。
 - 禁止范围：FORMAL、真实来源、V2 correction、history 写入、Universe 和扫描切换。
 - 验收条件：单元、migration、真实 PostgreSQL、两个 backend 并发、direct SQL 门禁与 Java/SQL 黄金 Hash 全部通过。
 - 能力边界：完成后仍无正式来源、PIT、history projection 或 Universe。
