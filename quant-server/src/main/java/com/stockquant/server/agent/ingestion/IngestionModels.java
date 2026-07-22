@@ -42,6 +42,11 @@ public final class IngestionModels {
         }
     }
 
+    public enum ManifestContractVersion {
+        INGESTION_MANIFEST_V1,
+        INGESTION_MANIFEST_V2_SECURITY_EVENT
+    }
+
     public enum AttemptStatus {
         COMPLETED,
         REJECTED,
@@ -129,6 +134,7 @@ public final class IngestionModels {
             int runAttemptNumber,
             LocalDate requestedRangeStart,
             LocalDate requestedRangeEnd,
+            ManifestContractVersion manifestContractVersion,
             RunStatus status,
             Instant startedAt,
             Instant sealedAt,
@@ -160,6 +166,8 @@ public final class IngestionModels {
             }
             IngestionValidation.closedDateRange(
                     requestedRangeStart, requestedRangeEnd, "requestedRange");
+            manifestContractVersion = IngestionValidation.required(
+                    manifestContractVersion, "manifestContractVersion");
             if (operationType == OperationType.RETRY
                     && (retryOfRunLogicalKey == null || runAttemptNumber <= 1)) {
                 throw new IllegalArgumentException(
@@ -176,6 +184,41 @@ public final class IngestionModels {
             sealedAt = IngestionValidation.optionalInstant(sealedAt);
             finishedAt = IngestionValidation.optionalInstant(finishedAt);
             manifestHash = IngestionValidation.optionalSha256(manifestHash, "manifestHash");
+        }
+
+        /** Compatibility constructor for the frozen V7 Manifest V1 domain shape. */
+        public IngestionRun(
+                long id,
+                String logicalKey,
+                long datasetVersionId,
+                String datasetLogicalKey,
+                DatasetType datasetType,
+                RunNamespace runNamespace,
+                OperationType operationType,
+                String requestKey,
+                String retryOfRunLogicalKey,
+                String rootRequestLogicalKey,
+                int runAttemptNumber,
+                LocalDate requestedRangeStart,
+                LocalDate requestedRangeEnd,
+                RunStatus status,
+                Instant startedAt,
+                Instant sealedAt,
+                Instant finishedAt,
+                String manifestHash,
+                Integer finalExpectedCount,
+                Integer finalReceivedCount,
+                Integer finalAcceptedCount,
+                Integer finalRejectedCount,
+                AssuranceLevel assuranceLevel,
+                Instant createdAt
+        ) {
+            this(id, logicalKey, datasetVersionId, datasetLogicalKey, datasetType, runNamespace,
+                    operationType, requestKey, retryOfRunLogicalKey, rootRequestLogicalKey,
+                    runAttemptNumber, requestedRangeStart, requestedRangeEnd,
+                    ManifestContractVersion.INGESTION_MANIFEST_V1, status, startedAt, sealedAt,
+                    finishedAt, manifestHash, finalExpectedCount, finalReceivedCount,
+                    finalAcceptedCount, finalRejectedCount, assuranceLevel, createdAt);
         }
 
         public boolean sealed() {

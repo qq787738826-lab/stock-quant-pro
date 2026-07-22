@@ -8,6 +8,7 @@ import com.stockquant.server.agent.ingestion.IngestionModels.AttemptStatus;
 import com.stockquant.server.agent.ingestion.IngestionModels.DatasetType;
 import com.stockquant.server.agent.ingestion.IngestionModels.IngestionRun;
 import com.stockquant.server.agent.ingestion.IngestionModels.ManifestEntry;
+import com.stockquant.server.agent.ingestion.IngestionModels.ManifestContractVersion;
 import com.stockquant.server.agent.ingestion.IngestionModels.OperationType;
 import com.stockquant.server.agent.ingestion.IngestionModels.ProcessingAttempt;
 import com.stockquant.server.agent.ingestion.IngestionModels.PublicationTimeVerification;
@@ -37,6 +38,7 @@ public class MarketDataIngestionRepository {
             dataset_type, run_namespace, operation_type, request_key, status,
             retry_of_run_logical_key, root_request_logical_key, run_attempt_number,
             requested_range_start, requested_range_end,
+            manifest_contract_version,
             started_at, sealed_at, finished_at, manifest_hash,
             final_expected_count, final_received_count, final_accepted_count,
             final_rejected_count, assurance_level, created_at
@@ -110,6 +112,7 @@ public class MarketDataIngestionRepository {
             int runAttemptNumber,
             LocalDate requestedRangeStart,
             LocalDate requestedRangeEnd,
+            ManifestContractVersion manifestContractVersion,
             Instant now
     ) {
         return jdbc.query("""
@@ -117,16 +120,16 @@ public class MarketDataIngestionRepository {
                     ingestion_run_logical_key, dataset_version_id, dataset_logical_key,
                     dataset_type, run_namespace, operation_type, request_key,
                     retry_of_run_logical_key, root_request_logical_key, run_attempt_number,
-                    requested_range_start, requested_range_end, status,
+                    requested_range_start, requested_range_end, manifest_contract_version, status,
                     started_at, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'RUNNING', ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'RUNNING', ?, ?)
                 ON CONFLICT DO NOTHING
                 RETURNING
                 """ + RUN_COLUMNS, this::mapRun,
                 logicalKey, datasetVersionId, datasetLogicalKey, datasetType.name(),
                 namespace.name(), operationType.name(), requestKey, retryOfRunLogicalKey,
                 rootRequestLogicalKey, runAttemptNumber, requestedRangeStart, requestedRangeEnd,
-                timestamp(now), timestamp(now))
+                manifestContractVersion.name(), timestamp(now), timestamp(now))
                 .stream().findFirst();
     }
 
@@ -250,6 +253,12 @@ public class MarketDataIngestionRepository {
                         + " WHERE ingestion_run_id=? AND raw_record_id=? AND attempt_no=?",
                 (rs, row) -> mapAttempt(type, rs), runId, rawRecordId, attemptNo)
                 .stream().findFirst();
+    }
+
+    public Optional<ProcessingAttempt> findAttemptById(DatasetType type, long attemptId) {
+        return jdbc.query(
+                "SELECT " + ATTEMPT_COLUMNS + " FROM " + attemptTable(type) + " WHERE id=?",
+                (rs, row) -> mapAttempt(type, rs), attemptId).stream().findFirst();
     }
 
     Optional<ProcessingAttempt> insertAttempt(
@@ -386,6 +395,7 @@ public class MarketDataIngestionRepository {
                 rs.getString("root_request_logical_key"), rs.getInt("run_attempt_number"),
                 rs.getObject("requested_range_start", LocalDate.class),
                 rs.getObject("requested_range_end", LocalDate.class),
+                ManifestContractVersion.valueOf(rs.getString("manifest_contract_version")),
                 RunStatus.valueOf(rs.getString("status")),
                 instant(rs.getObject("started_at")), instant(rs.getObject("sealed_at")),
                 instant(rs.getObject("finished_at")), rs.getString("manifest_hash"),

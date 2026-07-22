@@ -47,8 +47,9 @@ public class SecurityStatusEventRepository {
         var key = TemporalIdempotencyKeys.securityEvent(command);
         return jdbcTemplate.query(
                 "SELECT " + COLUMNS + " FROM security_status_events "
-                        + "WHERE source=? AND source_version=? "
-                        + "AND source_record_id=? AND source_revision=?",
+                        + "WHERE record_namespace='DEMO' AND source=? AND source_version=? "
+                        + "AND source_record_id=? AND source_revision=? "
+                        + "AND event_logical_key IS NULL",
                 this::map,
                 key.source(), key.sourceVersion(), key.sourceRecordId(), key.sourceRevision()
         ).stream().findFirst();
@@ -65,9 +66,11 @@ public class SecurityStatusEventRepository {
                     dataset_version_id, symbol, event_type, effective_from, effective_to,
                     published_at, known_at, recorded_at, source, source_version,
                     source_record_id, source_revision, trust_level, payload, payload_hash,
-                    supersedes_event_id
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?, ?)
-                ON CONFLICT (source, source_version, source_record_id, source_revision)
+                    supersedes_event_id, record_namespace, assurance_level
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?, ?,
+                          'DEMO', 'INFERRED_RESEARCH')
+                ON CONFLICT (record_namespace, source, source_version,
+                             source_record_id, source_revision)
                 DO NOTHING
                 RETURNING
                 """ + COLUMNS, this::map,
