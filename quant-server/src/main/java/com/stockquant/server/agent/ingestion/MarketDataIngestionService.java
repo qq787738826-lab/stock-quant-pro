@@ -8,6 +8,7 @@ import com.stockquant.server.agent.ingestion.IngestionModels.AttemptStatus;
 import com.stockquant.server.agent.ingestion.IngestionModels.DatasetType;
 import com.stockquant.server.agent.ingestion.IngestionModels.IngestionRun;
 import com.stockquant.server.agent.ingestion.IngestionModels.ManifestEntry;
+import com.stockquant.server.agent.ingestion.IngestionModels.ManifestContractVersion;
 import com.stockquant.server.agent.ingestion.IngestionModels.ProcessingAttempt;
 import com.stockquant.server.agent.ingestion.IngestionModels.RawRecord;
 import com.stockquant.server.agent.ingestion.IngestionModels.RecordAttemptCommand;
@@ -54,7 +55,27 @@ public class MarketDataIngestionService {
 
     @Transactional
     public IngestionRun startRun(StartRunCommand command) {
+        return startRun(command, ManifestContractVersion.INGESTION_MANIFEST_V1);
+    }
+
+    @Transactional
+    public IngestionRun startSecurityEventMaterializationRun(StartRunCommand command) {
         IngestionValidation.required(command, "command");
+        if (command.datasetType() != DatasetType.SECURITY_STATUS) {
+            throw conflict("security event materialization requires a SECURITY_STATUS dataset");
+        }
+        if (command.runNamespace() == IngestionModels.RunNamespace.FORMAL) {
+            throw conflict("FORMAL security event materialization is not approved");
+        }
+        return startRun(command, ManifestContractVersion.INGESTION_MANIFEST_V2_SECURITY_EVENT);
+    }
+
+    private IngestionRun startRun(
+            StartRunCommand command,
+            ManifestContractVersion manifestContractVersion
+    ) {
+        IngestionValidation.required(command, "command");
+        IngestionValidation.required(manifestContractVersion, "manifestContractVersion");
         if (command.runNamespace() == IngestionModels.RunNamespace.FORMAL) {
             throw conflict("FORMAL ingestion requires a separately approved source adapter");
         }
@@ -69,6 +90,9 @@ public class MarketDataIngestionService {
             retryParent = repository.findRunByLogicalKey(command.retryOfRunLogicalKey())
                     .orElseThrow(() -> conflict("RETRY parent ingestion run does not exist"));
             verifyRetryParent(command, datasetLogicalKey, retryParent);
+            if (retryParent.manifestContractVersion() != manifestContractVersion) {
+                throw conflict("RETRY run must preserve its manifest contract version");
+            }
             rootRequestLogicalKey = retryParent.rootRequestLogicalKey();
             runAttemptNumber = Math.addExact(retryParent.runAttemptNumber(), 1);
         } else {
@@ -88,12 +112,13 @@ public class MarketDataIngestionService {
                 runLogicalKey, dataset.id(), datasetLogicalKey, command.datasetType(),
                 command.runNamespace(), command.operationType(), command.requestKey(),
                 command.retryOfRunLogicalKey(), rootRequestLogicalKey, runAttemptNumber,
-                command.requestedRangeStart(), command.requestedRangeEnd(), now)
+                command.requestedRangeStart(), command.requestedRangeEnd(),
+                manifestContractVersion, now)
                 .orElseGet(() -> repository.findRunByRootAttempt(
                         rootRequestLogicalKey, runAttemptNumber).orElseThrow(
                                 () -> conflict("ingestion run conflict has no persisted winner")));
         verifyRun(command, datasetLogicalKey, runLogicalKey, rootRequestLogicalKey,
-                runAttemptNumber, value);
+                runAttemptNumber, manifestContractVersion, value);
         return value;
     }
 
@@ -123,6 +148,10 @@ public class MarketDataIngestionService {
         IngestionRun run = repository.lockRun(command.ingestionRunId())
                 .orElseThrow(() -> conflict("ingestion run does not exist"));
         DatasetVersion dataset = requireDataset(run.datasetVersionId());
+        if (run.manifestContractVersion()
+                == ManifestContractVersion.INGESTION_MANIFEST_V2_SECURITY_EVENT) {
+            throw conflict("Manifest V2 security runs require security event sealing");
+        }
         List<ManifestEntry> entries = repository.findManifestEntries(run.datasetType(), run.id());
         List<ProcessingAttempt> finalAttempts = repository.findFinalAttempts(
                 run.datasetType(), run.id());
@@ -194,6 +223,11 @@ public class MarketDataIngestionService {
     private ProcessingAttempt recordAttempt(DatasetType type, RecordAttemptCommand command) {
         IngestionValidation.required(command, "command");
         IngestionRun run = requireOpenRun(command.ingestionRunId(), type);
+        if (type == DatasetType.SECURITY_STATUS
+                && run.manifestContractVersion()
+                == ManifestContractVersion.INGESTION_MANIFEST_V2_SECURITY_EVENT) {
+            throw conflict("Manifest V2 security attempts require atomic event materialization");
+        }
         RawRecord raw = repository.findRawRecord(type, command.rawRecordId())
                 .orElseThrow(() -> conflict("raw record does not exist"));
         if (raw.datasetVersionId() != run.datasetVersionId()
@@ -305,6 +339,7 @@ public class MarketDataIngestionService {
             String logicalKey,
             String rootRequestLogicalKey,
             int runAttemptNumber,
+            ManifestContractVersion manifestContractVersion,
             IngestionRun value
     ) {
         if (value.datasetVersionId() != command.datasetVersionId()
@@ -315,6 +350,7 @@ public class MarketDataIngestionService {
                 || !Objects.equals(value.retryOfRunLogicalKey(), command.retryOfRunLogicalKey())
                 || !value.rootRequestLogicalKey().equals(rootRequestLogicalKey)
                 || value.runAttemptNumber() != runAttemptNumber
+                || value.manifestContractVersion() != manifestContractVersion
                 || !value.requestedRangeStart().equals(command.requestedRangeStart())
                 || !value.requestedRangeEnd().equals(command.requestedRangeEnd())
                 || !value.datasetLogicalKey().equals(datasetLogicalKey)

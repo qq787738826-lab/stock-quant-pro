@@ -172,10 +172,10 @@ class AgentStage2D2B1AIngestionFoundationPostgresIntegrationTest {
                     ingestion_run_logical_key, dataset_version_id, dataset_logical_key,
                     dataset_type, run_namespace, operation_type, request_key,
                     retry_of_run_logical_key, root_request_logical_key, run_attempt_number,
-                    requested_range_start, requested_range_end, status,
+                    requested_range_start, requested_range_end, manifest_contract_version, status,
                     started_at, created_at
                 ) VALUES (?, ?, ?, 'SECURITY_STATUS', 'FORMAL', 'INGEST', ?, NULL, ?, 1,
-                          ?, ?, 'RUNNING', ?, ?)
+                          ?, ?, 'INGESTION_MANIFEST_V1', 'RUNNING', ?, ?)
                 """, formalRunKey, securityDataset.id(),
                 securityRun.datasetLogicalKey(), "formal-direct", formalRootKey,
                 RANGE_START, RANGE_END, FETCHED_AT, FETCHED_AT);
@@ -1036,7 +1036,7 @@ class AgentStage2D2B1AIngestionFoundationPostgresIntegrationTest {
                 "SELECT current_database()", String.class));
         assertEquals("stock_quant_test", jdbc.queryForObject("SELECT current_user", String.class));
         assertEquals(TEST_SCHEMA, jdbc.queryForObject("SELECT current_schema()", String.class));
-        assertEquals(List.of("1", "2", "3", "4", "5", "6", "7"), jdbc.query(
+        assertEquals(List.of("1", "2", "3", "4", "5", "6", "7", "8"), jdbc.query(
                 "SELECT version FROM flyway_schema_history WHERE success=TRUE ORDER BY installed_rank",
                 (resultSet, row) -> resultSet.getString(1)));
         assertEquals(0, jdbc.queryForObject(
@@ -1048,7 +1048,7 @@ class AgentStage2D2B1AIngestionFoundationPostgresIntegrationTest {
             assertNotNull(jdbc.queryForObject("SELECT to_regclass(?)", String.class,
                     TEST_SCHEMA + "." + table));
         }
-        assertEquals(23, jdbc.queryForObject("""
+        assertEquals(26, jdbc.queryForObject("""
                 SELECT count(*) FROM pg_trigger trigger_record
                 JOIN pg_class table_record ON table_record.oid=trigger_record.tgrelid
                 JOIN pg_namespace schema_record ON schema_record.oid=table_record.relnamespace
@@ -1060,15 +1060,16 @@ class AgentStage2D2B1AIngestionFoundationPostgresIntegrationTest {
                     'trading_calendar_raw_records', 'trading_calendar_ingestion_run_records',
                     'trading_calendar_processing_attempts')
                 """, Integer.class, TEST_SCHEMA));
-        assertEquals(2, jdbc.queryForObject("""
+        assertEquals(3, jdbc.queryForObject("""
                 SELECT count(*) FROM pg_trigger trigger_record
                 JOIN pg_class table_record ON table_record.oid=trigger_record.tgrelid
                 JOIN pg_namespace schema_record ON schema_record.oid=table_record.relnamespace
                 WHERE schema_record.nspname=? AND trigger_record.tgdeferrable
                   AND trigger_record.tginitdeferred
                   AND trigger_record.tgname IN (
-                    'trg_security_status_raw_records_first_run_receipt',
-                    'trg_trading_calendar_raw_records_first_run_receipt')
+                     'trg_security_status_raw_records_first_run_receipt',
+                     'trg_trading_calendar_raw_records_first_run_receipt',
+                     'trg_security_status_processing_attempts_v2_result')
                 """, Integer.class, TEST_SCHEMA));
         for (String table : INGESTION_TABLES) {
             assertTrue(jdbc.queryForObject("""
