@@ -94,7 +94,7 @@
 - 目标：冻结 TEST/DEMO security raw 到 `SECURITY_STATUS_EVENT_V1` 的显式稳定身份、active 语义、物化基数、normalization result、event lineage、Manifest V2、并发与原子失败契约。
 - 输出：[stage-2d2b1b-security-event-materialization-design.md](stage-2d2b1b-security-event-materialization-design.md) 及跨文档一致性决策。
 - 禁止范围：不创建迁移，不修改生产代码或测试，不接来源，不写 event/history，不生成 Universe。
-- 验收结果：契约已冻结并通过独立 GitHub 审查；首个契约提交为 `c97d6a2c954f536eedd42796b1112aeaab421417`。
+- 验收结果：契约已冻结并通过独立 GitHub 审查；首个契约提交为 `c97d6a2c954f536eedd42796b1112aeaab421417`，复审修复提交为 `28c312dcbe26103c5f2b45c043ec6a8f81a08ae0`。
 - 能力边界：完成设计冻结仍不代表 event 物化实现开始或具备 PIT。
 
 ##### 2D-2B-1B-1：TEST/DEMO event materialization foundation（未开始）

@@ -27,6 +27,7 @@
 - 阶段 2D-2B-1A 已完成 source-neutral ingestion foundation，并已通过合并提交 `505d18ca2e06c039163eada8f2f09f95cee97f30` 合入集成分支。
 - 阶段 2D-2B-1B-0 文档任务分支：`codex/1.4.0-2d2b1b0-event-contract-freeze`
 - 阶段 2D-2B-1B-0 首个契约提交：`c97d6a2c954f536eedd42796b1112aeaab421417`
+- 阶段 2D-2B-1B-0 复审修复提交：`28c312dcbe26103c5f2b45c043ec6a8f81a08ae0`
 - 阶段 2D-2B-1B-0 证券状态事件物化契约已冻结并通过独立 GitHub 审查；生产实现尚未开始。
 - `master`：`27d9099 chore: checkpoint Stock Quant Pro 1.3.1 and remove tracked cache`
 - 版本号仍保持 `1.3.1`；尚未发布 `1.4.0`。

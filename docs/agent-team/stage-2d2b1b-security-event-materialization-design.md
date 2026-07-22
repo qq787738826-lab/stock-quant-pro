@@ -6,7 +6,8 @@
 
 - 来源集成基线：`505d18ca2e06c039163eada8f2f09f95cee97f30`；
 - 文档任务分支：`codex/1.4.0-2d2b1b0-event-contract-freeze`；
-- 首个契约提交：`c97d6a2c954f536eedd42796b1112aeaab421417`。
+- 首个契约提交：`c97d6a2c954f536eedd42796b1112aeaab421417`；
+- 复审修复提交：`28c312dcbe26103c5f2b45c043ec6a8f81a08ae0`。
 
 本文冻结阶段 2D-2B-1B 后续实现必须遵守的边界、业务语义、逻辑身份、物化基数、审计链、Manifest V2、并发事务和验收门槛。本文是设计契约，不是实现完成声明。
 
@@ -666,7 +667,7 @@ V7 已建立通用 ingestion run、security/calendar raw、terminal attempt、ru
 
 ### 18.2 2D-2B-1B-0：security event contract freeze（已完成）
 
-契约已冻结并通过独立 GitHub 审查；首个契约提交为 `c97d6a2c954f536eedd42796b1112aeaab421417`。本阶段未创建迁移或生产实现，不能宣称 event 物化已实现。
+契约已冻结并通过独立 GitHub 审查；首个契约提交为 `c97d6a2c954f536eedd42796b1112aeaab421417`，复审修复提交为 `28c312dcbe26103c5f2b45c043ec6a8f81a08ae0`。本阶段未创建迁移或生产实现，不能宣称 event 物化已实现。
 
 ### 18.3 2D-2B-1B-1：TEST/DEMO event materialization foundation（未开始）
 
