@@ -136,7 +136,8 @@ class MarketDataIngestionServiceTest {
         ProcessingAttempt persisted = new ProcessingAttempt(
                 3, DatasetType.SECURITY_STATUS, run.id(), raw.id(), 1, logicalKey,
                 AttemptStatus.COMPLETED, "processor-v1", "contract-v1",
-                PublicationTimeVerification.VERIFIED, raw.sourcePublishedAt(),
+                PublicationTimeVerification.VERIFIED, AssuranceLevel.PIT_VERIFIED,
+                raw.sourcePublishedAt(),
                 KnowledgeTimePolicyV1.VERSION, AssuranceLevel.RECONSTRUCTED_VERIFIED,
                 null, result, resultHash, OBSERVED, NOW);
         when(repository.lockRun(run.id())).thenReturn(Optional.of(run));
@@ -148,7 +149,8 @@ class MarketDataIngestionServiceTest {
         when(repository.insertAttempt(
                 eq(DatasetType.SECURITY_STATUS), eq(run.id()), eq(raw.id()), eq(1), eq(logicalKey),
                 eq(AttemptStatus.COMPLETED), eq("processor-v1"), eq("contract-v1"),
-                eq(PublicationTimeVerification.VERIFIED), eq(raw.sourcePublishedAt()),
+                eq(PublicationTimeVerification.VERIFIED), eq(AssuranceLevel.PIT_VERIFIED),
+                eq(raw.sourcePublishedAt()),
                 eq(AssuranceLevel.RECONSTRUCTED_VERIFIED), eq(null), eq(result),
                 eq(resultHash))).thenReturn(Optional.of(persisted));
 
@@ -173,7 +175,8 @@ class MarketDataIngestionServiceTest {
         ProcessingAttempt persisted = new ProcessingAttempt(
                 3, DatasetType.SECURITY_STATUS, run.id(), raw.id(), 1, logicalKey,
                 AttemptStatus.COMPLETED, "processor-v1", "contract-v1",
-                PublicationTimeVerification.VERIFIED, raw.sourcePublishedAt(),
+                PublicationTimeVerification.VERIFIED, AssuranceLevel.PIT_VERIFIED,
+                raw.sourcePublishedAt(),
                 KnowledgeTimePolicyV1.VERSION, AssuranceLevel.INFERRED_RESEARCH,
                 null, result, resultHash, OBSERVED, NOW);
         when(repository.lockRun(run.id())).thenReturn(Optional.of(run));
@@ -185,7 +188,8 @@ class MarketDataIngestionServiceTest {
         when(repository.insertAttempt(
                 eq(DatasetType.SECURITY_STATUS), eq(run.id()), eq(raw.id()), eq(1), eq(logicalKey),
                 eq(AttemptStatus.COMPLETED), eq("processor-v1"), eq("contract-v1"),
-                eq(PublicationTimeVerification.VERIFIED), eq(raw.sourcePublishedAt()),
+                eq(PublicationTimeVerification.VERIFIED), eq(AssuranceLevel.PIT_VERIFIED),
+                eq(raw.sourcePublishedAt()),
                 eq(AssuranceLevel.INFERRED_RESEARCH), eq(null), eq(result), eq(resultHash)))
                 .thenReturn(Optional.of(persisted));
 
@@ -195,6 +199,42 @@ class MarketDataIngestionServiceTest {
                 null, result));
 
         assertEquals(AssuranceLevel.INFERRED_RESEARCH, value.assuranceLevel());
+    }
+
+    @Test
+    void idempotentAttemptRejectsDifferentRequestedAssurance() {
+        IngestionRun run = run();
+        RawRecord raw = raw();
+        var result = mapper.createObjectNode();
+        String resultHash = hasher.jsonHash(result);
+        String logicalKey = hasher.attemptLogicalKey(
+                run.logicalKey(), raw.logicalKey(), 1, "processor-v1", "contract-v1");
+        ProcessingAttempt persisted = new ProcessingAttempt(
+                3, DatasetType.SECURITY_STATUS, run.id(), raw.id(), 1, logicalKey,
+                AttemptStatus.COMPLETED, "processor-v1", "contract-v1",
+                PublicationTimeVerification.VERIFIED, AssuranceLevel.PIT_VERIFIED,
+                raw.sourcePublishedAt(), KnowledgeTimePolicyV1.VERSION,
+                AssuranceLevel.RECONSTRUCTED_VERIFIED, null, result, resultHash, OBSERVED, NOW);
+        when(repository.lockRun(run.id())).thenReturn(Optional.of(run));
+        when(repository.findRawRecord(DatasetType.SECURITY_STATUS, raw.id()))
+                .thenReturn(Optional.of(raw));
+        when(repository.isRawRecordAttachedToRun(DatasetType.SECURITY_STATUS, run.id(), raw.id()))
+                .thenReturn(true);
+        when(datasets.findById(run.datasetVersionId())).thenReturn(Optional.of(dataset()));
+        when(repository.insertAttempt(
+                eq(DatasetType.SECURITY_STATUS), eq(run.id()), eq(raw.id()), eq(1), eq(logicalKey),
+                eq(AttemptStatus.COMPLETED), eq("processor-v1"), eq("contract-v1"),
+                eq(PublicationTimeVerification.VERIFIED), eq(AssuranceLevel.INFERRED_RESEARCH),
+                eq(raw.sourcePublishedAt()), eq(AssuranceLevel.INFERRED_RESEARCH), eq(null),
+                eq(result), eq(resultHash))).thenReturn(Optional.empty());
+        when(repository.findAttempt(DatasetType.SECURITY_STATUS, run.id(), raw.id(), 1))
+                .thenReturn(Optional.of(persisted));
+
+        assertThrows(IngestionDataConflictException.class, () ->
+                service.recordSecurityStatusAttempt(new RecordAttemptCommand(
+                        run.id(), raw.id(), 1, AttemptStatus.COMPLETED,
+                        "processor-v1", "contract-v1", PublicationTimeVerification.VERIFIED,
+                        AssuranceLevel.INFERRED_RESEARCH, null, result)));
     }
 
     @Test

@@ -201,29 +201,54 @@ class AgentStage2D2B1AIngestionFoundationPostgresIntegrationTest {
                 securityRun.id(), securityRaw.id(), 1,
                 attemptKey(securityRun, securityRaw, 1),
                 "COMPLETED", "processor-v1", "SOURCE_NEUTRAL_RECORD_V1", "VERIFIED",
-                PUBLISHED_AT.plusSeconds(1), "KNOWLEDGE_TIME_POLICY_V1",
+                "PIT_VERIFIED", PUBLISHED_AT.plusSeconds(1), "KNOWLEDGE_TIME_POLICY_V1",
                 "RECONSTRUCTED_VERIFIED", null, "{}", hasher.jsonHash(
                         objectMapper.createObjectNode()));
-        expectDatabaseFailure("55000", "PIT_VERIFIED is unavailable", directAttemptSql(
+        expectDatabaseFailure("23514", "assurance must equal requested/source/publication/stage",
+                directAttemptSql(
                         "security_status_processing_attempts"),
                 securityRun.id(), securityRaw.id(), 1,
                 attemptKey(securityRun, securityRaw, 1),
                 "COMPLETED", "processor-v1", "SOURCE_NEUTRAL_RECORD_V1", "VERIFIED",
-                PUBLISHED_AT, "KNOWLEDGE_TIME_POLICY_V1", "PIT_VERIFIED", null,
+                "PIT_VERIFIED", PUBLISHED_AT, "KNOWLEDGE_TIME_POLICY_V1", "PIT_VERIFIED", null,
                 "{}", hasher.jsonHash(objectMapper.createObjectNode()));
+        expectDatabaseFailure("23514", "assurance must equal requested/source/publication/stage",
+                directAttemptSql("security_status_processing_attempts"),
+                securityRun.id(), securityRaw.id(), 1,
+                attemptKey(securityRun, securityRaw, 1),
+                "COMPLETED", "processor-v1", "SOURCE_NEUTRAL_RECORD_V1", "VERIFIED",
+                "INFERRED_RESEARCH", PUBLISHED_AT, "KNOWLEDGE_TIME_POLICY_V1",
+                "RECONSTRUCTED_VERIFIED", null, "{}",
+                hasher.jsonHash(objectMapper.createObjectNode()));
+        expectDatabaseFailure("23514", "assurance must equal requested/source/publication/stage",
+                directAttemptSql("security_status_processing_attempts"),
+                securityRun.id(), securityRaw.id(), 1,
+                attemptKey(securityRun, securityRaw, 1),
+                "COMPLETED", "processor-v1", "SOURCE_NEUTRAL_RECORD_V1", "VERIFIED",
+                "RECONSTRUCTED_VERIFIED", PUBLISHED_AT, "KNOWLEDGE_TIME_POLICY_V1",
+                "PIT_VERIFIED", null, "{}",
+                hasher.jsonHash(objectMapper.createObjectNode()));
         JsonNode forbiddenMetadata = objectMapper.createObjectNode().put("projectedEventId", 99);
         expectDatabaseFailure("23514", "result_metadata must be empty", directAttemptSql(
                         "security_status_processing_attempts"),
                 securityRun.id(), securityRaw.id(), 1,
                 attemptKey(securityRun, securityRaw, 1),
                 "COMPLETED", "processor-v1", "SOURCE_NEUTRAL_RECORD_V1", "VERIFIED",
-                PUBLISHED_AT, "KNOWLEDGE_TIME_POLICY_V1", "RECONSTRUCTED_VERIFIED", null,
+                "PIT_VERIFIED", PUBLISHED_AT, "KNOWLEDGE_TIME_POLICY_V1",
+                "RECONSTRUCTED_VERIFIED", null,
                 forbiddenMetadata.toString(), hasher.jsonHash(forbiddenMetadata));
 
         ProcessingAttempt securityAttempt = ingestion.recordSecurityStatusAttempt(
                 completedAttempt(securityRun.id(), securityRaw.id(),
                         1, PublicationTimeVerification.VERIFIED));
         assertEquals(AssuranceLevel.RECONSTRUCTED_VERIFIED, securityAttempt.assuranceLevel());
+        assertEquals(AssuranceLevel.PIT_VERIFIED,
+                securityAttempt.requestedAssuranceLevel());
+        assertEquals("PIT_VERIFIED", jdbc.queryForObject("""
+                SELECT requested_assurance_level
+                FROM security_status_processing_attempts
+                WHERE id=?
+                """, String.class, securityAttempt.id()));
         assertEquals(PUBLISHED_AT, securityAttempt.derivedKnownFrom());
         assertFalse(securityAttempt.completedAt().isBefore(securityRaw.systemFirstObservedAt()));
         ProcessingAttempt repeatedSecurityAttempt = ingestion.recordSecurityStatusAttempt(
@@ -231,6 +256,13 @@ class AgentStage2D2B1AIngestionFoundationPostgresIntegrationTest {
                         1, PublicationTimeVerification.VERIFIED));
         assertEquals(securityAttempt.id(), repeatedSecurityAttempt.id());
         assertEquals(securityAttempt.completedAt(), repeatedSecurityAttempt.completedAt());
+        assertThrows(IngestionDataConflictException.class, () ->
+                ingestion.recordSecurityStatusAttempt(new RecordAttemptCommand(
+                        securityRun.id(), securityRaw.id(), 1, AttemptStatus.COMPLETED,
+                        "processor-v1", "SOURCE_NEUTRAL_RECORD_V1",
+                        PublicationTimeVerification.VERIFIED,
+                        AssuranceLevel.INFERRED_RESEARCH, null,
+                        objectMapper.createObjectNode())));
 
         IngestionRun sealedSecurity = ingestion.sealRun(
                 new SealRunCommand(securityRun.id(), RunStatus.COMPLETED, 1));
@@ -398,11 +430,12 @@ class AgentStage2D2B1AIngestionFoundationPostgresIntegrationTest {
                 inferredRun.id(), SECURITY_SOURCE + "_INFERRED", "inferred-security",
                 objectMapper.createObjectNode().put("sourceRecord", "inferred-security"),
                 TemporalTrustLevel.OBSERVED, PUBLISHED_AT));
-        expectDatabaseFailure("23514", "inferred raw or dataset trust cannot be promoted",
+        expectDatabaseFailure("23514", "assurance must equal requested/source/publication/stage",
                 directAttemptSql("security_status_processing_attempts"),
                 inferredRun.id(), inferredRaw.id(), 1, attemptKey(inferredRun, inferredRaw, 1),
                 "COMPLETED", "processor-v1", "SOURCE_NEUTRAL_RECORD_V1", "VERIFIED",
-                PUBLISHED_AT, "KNOWLEDGE_TIME_POLICY_V1", "RECONSTRUCTED_VERIFIED", null,
+                "PIT_VERIFIED", PUBLISHED_AT, "KNOWLEDGE_TIME_POLICY_V1",
+                "RECONSTRUCTED_VERIFIED", null,
                 "{}", hasher.jsonHash(objectMapper.createObjectNode()));
         ProcessingAttempt inferredAttempt = ingestion.recordSecurityStatusAttempt(
                 completedAttempt(inferredRun.id(), inferredRaw.id(), 1,
@@ -422,12 +455,12 @@ class AgentStage2D2B1AIngestionFoundationPostgresIntegrationTest {
                 "verified-backfill-security",
                 objectMapper.createObjectNode().put("sourceRecord", "verified-backfill-security"),
                 TemporalTrustLevel.OBSERVED, PUBLISHED_AT));
-        expectDatabaseFailure("23514", "backfilled verified trust cannot be promoted",
+        expectDatabaseFailure("23514", "assurance must equal requested/source/publication/stage",
                 directAttemptSql("security_status_processing_attempts"),
                 verifiedBackfillRun.id(), verifiedBackfillRaw.id(), 1,
                 attemptKey(verifiedBackfillRun, verifiedBackfillRaw, 1),
                 "COMPLETED", "processor-v1", "SOURCE_NEUTRAL_RECORD_V1", "VERIFIED",
-                PUBLISHED_AT, "KNOWLEDGE_TIME_POLICY_V1", "PIT_VERIFIED", null,
+                "PIT_VERIFIED", PUBLISHED_AT, "KNOWLEDGE_TIME_POLICY_V1", "PIT_VERIFIED", null,
                 "{}", hasher.jsonHash(objectMapper.createObjectNode()));
         ProcessingAttempt verifiedBackfillAttempt = ingestion.recordSecurityStatusAttempt(
                 completedAttempt(verifiedBackfillRun.id(), verifiedBackfillRaw.id(), 1,
@@ -453,14 +486,16 @@ class AgentStage2D2B1AIngestionFoundationPostgresIntegrationTest {
                 multiAttemptRun.id(), multiAttemptRaw.id(), 3,
                 attemptKey(multiAttemptRun, multiAttemptRaw, 3),
                 "COMPLETED", "processor-v1", "SOURCE_NEUTRAL_RECORD_V1", "VERIFIED",
-                PUBLISHED_AT, "KNOWLEDGE_TIME_POLICY_V1", "RECONSTRUCTED_VERIFIED", null,
+                "PIT_VERIFIED", PUBLISHED_AT, "KNOWLEDGE_TIME_POLICY_V1",
+                "RECONSTRUCTED_VERIFIED", null,
                 "{}", hasher.jsonHash(objectMapper.createObjectNode()));
         expectDatabaseFailure("23514", "result hash does not match canonical metadata",
                 directAttemptSql("security_status_processing_attempts"),
                 multiAttemptRun.id(), multiAttemptRaw.id(), 2,
                 attemptKey(multiAttemptRun, multiAttemptRaw, 2),
                 "COMPLETED", "processor-v1", "SOURCE_NEUTRAL_RECORD_V1", "VERIFIED",
-                PUBLISHED_AT, "KNOWLEDGE_TIME_POLICY_V1", "RECONSTRUCTED_VERIFIED", null,
+                "PIT_VERIFIED", PUBLISHED_AT, "KNOWLEDGE_TIME_POLICY_V1",
+                "RECONSTRUCTED_VERIFIED", null,
                 "{}", "f".repeat(64));
         ProcessingAttempt acceptedAttempt = ingestion.recordSecurityStatusAttempt(
                 completedAttempt(multiAttemptRun.id(), multiAttemptRaw.id(), 2,
@@ -472,7 +507,8 @@ class AgentStage2D2B1AIngestionFoundationPostgresIntegrationTest {
                 multiAttemptRun.id(), multiAttemptRaw.id(), 3,
                 attemptKey(multiAttemptRun, multiAttemptRaw, 3),
                 "REJECTED", "processor-v1", "SOURCE_NEUTRAL_RECORD_V1", "VERIFIED",
-                PUBLISHED_AT, "KNOWLEDGE_TIME_POLICY_V1", "RECONSTRUCTED_VERIFIED",
+                "PIT_VERIFIED", PUBLISHED_AT, "KNOWLEDGE_TIME_POLICY_V1",
+                "RECONSTRUCTED_VERIFIED",
                 "LATE_RETRY", "{}", hasher.jsonHash(objectMapper.createObjectNode()));
         expectDatabaseFailure("23514", "manifest hash does not match",
                 """
@@ -524,7 +560,8 @@ class AgentStage2D2B1AIngestionFoundationPostgresIntegrationTest {
                 unattachedRun.id(), securityRaw.id(), 1,
                 attemptKey(unattachedRun, securityRaw, 1),
                 "COMPLETED", "processor-v1", "SOURCE_NEUTRAL_RECORD_V1", "VERIFIED",
-                PUBLISHED_AT, "KNOWLEDGE_TIME_POLICY_V1", "RECONSTRUCTED_VERIFIED", null,
+                "PIT_VERIFIED", PUBLISHED_AT, "KNOWLEDGE_TIME_POLICY_V1",
+                "RECONSTRUCTED_VERIFIED", null,
                 "{}", hasher.jsonHash(objectMapper.createObjectNode()));
         ingestion.sealRun(new SealRunCommand(unattachedRun.id(), RunStatus.FAILED, 0));
 
@@ -902,11 +939,16 @@ class AgentStage2D2B1AIngestionFoundationPostgresIntegrationTest {
                 "SELECT compute_ingestion_attempt_logical_key(?, ?, ?, ?, ?)", String.class,
                 run.logicalKey(), raw.logicalKey(), attempt.attemptNo(),
                 attempt.processorVersion(), attempt.contractVersion()));
-        assertEquals(sealed.manifestHash(), jdbc.queryForObject(
+        String databaseManifestHash = jdbc.queryForObject(
                 "SELECT compute_ingestion_manifest_hash(?, ?, ?, ?, ?, ?, ?)", String.class,
                 sealed.id(), sealed.status().name(), sealed.finalExpectedCount(),
                 sealed.finalReceivedCount(), sealed.finalAcceptedCount(),
-                sealed.finalRejectedCount(), sealed.assuranceLevel().name()));
+                sealed.finalRejectedCount(), sealed.assuranceLevel().name());
+        assertEquals(sealed.manifestHash(), databaseManifestHash);
+        if ("security-lifecycle".equals(run.requestKey())) {
+            assertEquals("7622682aba4f70912444cebb5f169187158dd9f0c7a2c1fa7d1ce42c037cbdc8",
+                    databaseManifestHash);
+        }
     }
 
     private void assertFactImmutability(
@@ -925,7 +967,7 @@ class AgentStage2D2B1AIngestionFoundationPostgresIntegrationTest {
                 new MutationProbe("security_status_ingestion_run_records", "raw_record_id", raw.id(),
                         "received_at=received_at", "append-only"),
                 new MutationProbe("security_status_processing_attempts", "id", attempt.id(),
-                        "result_hash=result_hash", "append-only"),
+                        "requested_assurance_level='INFERRED_RESEARCH'", "append-only"),
                 new MutationProbe("market_data_ingestion_runs", "id", calendarRun.id(),
                         "request_key=request_key", "immutable"),
                 new MutationProbe("trading_calendar_raw_records", "id", calendarRaw.id(),
@@ -933,7 +975,8 @@ class AgentStage2D2B1AIngestionFoundationPostgresIntegrationTest {
                 new MutationProbe("trading_calendar_ingestion_run_records", "raw_record_id",
                         calendarRaw.id(), "received_at=received_at", "append-only"),
                 new MutationProbe("trading_calendar_processing_attempts", "id",
-                        calendarAttempt.id(), "result_hash=result_hash", "append-only"));
+                        calendarAttempt.id(),
+                        "requested_assurance_level='INFERRED_RESEARCH'", "append-only"));
         for (MutationProbe probe : probes) {
             expectDatabaseFailure("55000", probe.message(),
                     "UPDATE " + probe.table() + " SET " + probe.assignment()
@@ -951,7 +994,8 @@ class AgentStage2D2B1AIngestionFoundationPostgresIntegrationTest {
                 directAttemptSql("security_status_processing_attempts"),
                 run.id(), raw.id(), 2, attemptKey(run, raw, 2),
                 "REJECTED", "processor-v1", "SOURCE_NEUTRAL_RECORD_V1", "VERIFIED",
-                PUBLISHED_AT, "KNOWLEDGE_TIME_POLICY_V1", "RECONSTRUCTED_VERIFIED",
+                "PIT_VERIFIED", PUBLISHED_AT, "KNOWLEDGE_TIME_POLICY_V1",
+                "RECONSTRUCTED_VERIFIED",
                 "SEALED_RETRY", "{}", hasher.jsonHash(objectMapper.createObjectNode()));
         for (String table : INGESTION_TABLES) {
             expectDatabaseFailure("55000", "TRUNCATE",
@@ -975,6 +1019,15 @@ class AgentStage2D2B1AIngestionFoundationPostgresIntegrationTest {
                 SELECT count(*) FROM information_schema.columns
                 WHERE table_schema=? AND table_name='trading_calendar_raw_records'
                   AND column_name IN ('exchange', 'trade_date')
+                """, Integer.class, TEST_SCHEMA));
+        assertEquals(2, jdbc.queryForObject("""
+                SELECT count(*) FROM information_schema.columns
+                WHERE table_schema=?
+                  AND table_name IN (
+                    'security_status_processing_attempts',
+                    'trading_calendar_processing_attempts')
+                  AND column_name='requested_assurance_level'
+                  AND is_nullable='NO'
                 """, Integer.class, TEST_SCHEMA));
     }
 
@@ -1272,9 +1325,10 @@ class AgentStage2D2B1AIngestionFoundationPostgresIntegrationTest {
                 INSERT INTO %s(
                     ingestion_run_id, raw_record_id, attempt_no, attempt_logical_key, status,
                     processor_version, contract_version, published_at_verification,
-                    derived_known_from, knowledge_time_policy_version, assurance_level,
+                    requested_assurance_level, derived_known_from,
+                    knowledge_time_policy_version, assurance_level,
                     error_code, result_metadata, result_hash
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?)
                 """.formatted(table);
     }
 

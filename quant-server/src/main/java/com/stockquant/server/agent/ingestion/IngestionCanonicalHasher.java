@@ -200,6 +200,7 @@ public class IngestionCanonicalHasher {
             field(digest, entry.processorVersion());
             field(digest, entry.contractVersion());
             field(digest, entry.publicationTimeVerification().name());
+            field(digest, entry.requestedAssuranceLevel().name());
             field(digest, entry.knowledgeTimePolicyVersion());
             field(digest, entry.assuranceLevel().name());
             field(digest, instant(entry.derivedKnownFrom()));

@@ -320,6 +320,7 @@ CREATE TABLE security_status_processing_attempts (
     processor_version VARCHAR(120) NOT NULL,
     contract_version VARCHAR(120) NOT NULL,
     published_at_verification VARCHAR(24) NOT NULL,
+    requested_assurance_level VARCHAR(32) NOT NULL,
     derived_known_from TIMESTAMPTZ NOT NULL,
     knowledge_time_policy_version VARCHAR(80) NOT NULL,
     assurance_level VARCHAR(32) NOT NULL,
@@ -352,7 +353,12 @@ CREATE TABLE security_status_processing_attempts (
         knowledge_time_policy_version = 'KNOWLEDGE_TIME_POLICY_V1'
     ),
     CONSTRAINT ck_security_status_processing_attempts_assurance CHECK (
-        assurance_level IN ('PIT_VERIFIED', 'RECONSTRUCTED_VERIFIED', 'INFERRED_RESEARCH')
+        requested_assurance_level IN (
+            'PIT_VERIFIED', 'RECONSTRUCTED_VERIFIED', 'INFERRED_RESEARCH'
+        )
+        AND assurance_level IN (
+            'PIT_VERIFIED', 'RECONSTRUCTED_VERIFIED', 'INFERRED_RESEARCH'
+        )
     ),
     CONSTRAINT ck_security_status_processing_attempts_result CHECK (
         result_metadata = '{}'::JSONB
@@ -389,6 +395,7 @@ CREATE TABLE trading_calendar_processing_attempts (
     processor_version VARCHAR(120) NOT NULL,
     contract_version VARCHAR(120) NOT NULL,
     published_at_verification VARCHAR(24) NOT NULL,
+    requested_assurance_level VARCHAR(32) NOT NULL,
     derived_known_from TIMESTAMPTZ NOT NULL,
     knowledge_time_policy_version VARCHAR(80) NOT NULL,
     assurance_level VARCHAR(32) NOT NULL,
@@ -421,7 +428,12 @@ CREATE TABLE trading_calendar_processing_attempts (
         knowledge_time_policy_version = 'KNOWLEDGE_TIME_POLICY_V1'
     ),
     CONSTRAINT ck_trading_calendar_processing_attempts_assurance CHECK (
-        assurance_level IN ('PIT_VERIFIED', 'RECONSTRUCTED_VERIFIED', 'INFERRED_RESEARCH')
+        requested_assurance_level IN (
+            'PIT_VERIFIED', 'RECONSTRUCTED_VERIFIED', 'INFERRED_RESEARCH'
+        )
+        AND assurance_level IN (
+            'PIT_VERIFIED', 'RECONSTRUCTED_VERIFIED', 'INFERRED_RESEARCH'
+        )
     ),
     CONSTRAINT ck_trading_calendar_processing_attempts_result CHECK (
         result_metadata = '{}'::JSONB
@@ -775,7 +787,8 @@ BEGIN
              ELSE 'NULL::VARCHAR AS source_instrument_id, raw.exchange, raw.trade_date, ' END
         || 'attempt.attempt_no, attempt.attempt_logical_key, '
         || 'attempt.status, attempt.processor_version, attempt.contract_version, '
-        || 'attempt.published_at_verification, attempt.knowledge_time_policy_version, '
+        || 'attempt.published_at_verification, attempt.requested_assurance_level, '
+        || 'attempt.knowledge_time_policy_version, '
         || 'attempt.assurance_level, attempt.derived_known_from, attempt.error_code, '
         || 'attempt.result_hash '
         || 'FROM %s receipt '
@@ -801,6 +814,7 @@ BEGIN
         material := ingestion_canonical_append(material, entry_row.processor_version);
         material := ingestion_canonical_append(material, entry_row.contract_version);
         material := ingestion_canonical_append(material, entry_row.published_at_verification);
+        material := ingestion_canonical_append(material, entry_row.requested_assurance_level);
         material := ingestion_canonical_append(material, entry_row.knowledge_time_policy_version);
         material := ingestion_canonical_append(material, entry_row.assurance_level);
         material := ingestion_canonical_append(
@@ -977,6 +991,8 @@ DECLARE
     existing_attempt BOOLEAN;
     latest_attempt_no INTEGER;
     completed_exists BOOLEAN;
+    effective_assurance_rank INTEGER;
+    expected_assurance_level VARCHAR(32);
 BEGIN
     SELECT * INTO STRICT run_row
     FROM market_data_ingestion_runs
@@ -1076,28 +1092,37 @@ BEGIN
     SELECT trust_level INTO STRICT dataset_trust_level
     FROM market_data_dataset_versions
     WHERE id = run_row.dataset_version_id;
-    IF raw_trust_level = 'BACKFILLED_INFERRED'
-       OR dataset_trust_level = 'BACKFILLED_INFERRED' THEN
-        IF NEW.assurance_level <> 'INFERRED_RESEARCH' THEN
-            RAISE EXCEPTION 'inferred raw or dataset trust cannot be promoted'
-                USING ERRCODE = '23514';
-        END IF;
-    ELSIF (raw_trust_level = 'BACKFILLED_VERIFIED'
-            OR dataset_trust_level = 'BACKFILLED_VERIFIED')
-          AND NEW.assurance_level = 'PIT_VERIFIED' THEN
-        RAISE EXCEPTION 'backfilled verified trust cannot be promoted to PIT_VERIFIED'
+    -- The effective value is an equality, not merely an upper-bound check. The final
+    -- rank is the conservative minimum of caller request, dataset trust, raw trust,
+    -- publication verification and the source-neutral 2D-2B-1A ceiling.
+    effective_assurance_rank := least(
+        CASE NEW.requested_assurance_level
+            WHEN 'PIT_VERIFIED' THEN 2
+            WHEN 'RECONSTRUCTED_VERIFIED' THEN 1
+            ELSE 0
+        END,
+        CASE dataset_trust_level
+            WHEN 'OBSERVED' THEN 2
+            WHEN 'BACKFILLED_VERIFIED' THEN 1
+            ELSE 0
+        END,
+        CASE raw_trust_level
+            WHEN 'OBSERVED' THEN 2
+            WHEN 'BACKFILLED_VERIFIED' THEN 1
+            ELSE 0
+        END,
+        CASE NEW.published_at_verification WHEN 'VERIFIED' THEN 2 ELSE 1 END,
+        1 -- Stage 2D-2B-1A ceiling: RECONSTRUCTED_VERIFIED.
+    );
+    expected_assurance_level := CASE effective_assurance_rank
+        WHEN 2 THEN 'PIT_VERIFIED'
+        WHEN 1 THEN 'RECONSTRUCTED_VERIFIED'
+        ELSE 'INFERRED_RESEARCH'
+    END;
+    IF NEW.assurance_level <> expected_assurance_level THEN
+        RAISE EXCEPTION
+            'processing attempt assurance must equal requested/source/publication/stage policy minimum'
             USING ERRCODE = '23514';
-    END IF;
-    IF NEW.published_at_verification <> 'VERIFIED'
-       AND NEW.assurance_level = 'PIT_VERIFIED' THEN
-        RAISE EXCEPTION 'unverified publication time cannot be promoted to PIT_VERIFIED'
-            USING ERRCODE = '23514';
-    END IF;
-    -- Stage 2D-2B-1A has no approved source adapter. A later source-specific
-    -- migration must explicitly replace this gate before FORMAL/PIT use exists.
-    IF NEW.assurance_level = 'PIT_VERIFIED' THEN
-        RAISE EXCEPTION 'PIT_VERIFIED is unavailable before an approved source adapter exists'
-            USING ERRCODE = '55000';
     END IF;
     IF NEW.result_metadata <> '{}'::JSONB THEN
         RAISE EXCEPTION 'source-neutral processing result_metadata must be empty'

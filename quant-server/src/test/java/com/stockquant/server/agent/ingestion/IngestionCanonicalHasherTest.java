@@ -152,6 +152,25 @@ class IngestionCanonicalHasherTest {
     }
 
     @Test
+    void requestedAssuranceIsManifestAuditMaterial() {
+        IngestionRun run = run();
+        DatasetVersion dataset = dataset(
+                1, Instant.parse("2025-01-01T00:00:00Z"),
+                Instant.parse("2025-01-01T00:00:00Z"), TemporalTrustLevel.OBSERVED,
+                mapper.createObjectNode());
+
+        assertNotEquals(
+                hasher.manifestHash(run, dataset, RunStatus.COMPLETED, 1, 1, 1, 0,
+                        AssuranceLevel.RECONSTRUCTED_VERIFIED,
+                        List.of(entry("raw-a", "attempt-a", "a",
+                                AssuranceLevel.PIT_VERIFIED))),
+                hasher.manifestHash(run, dataset, RunStatus.COMPLETED, 1, 1, 1, 0,
+                        AssuranceLevel.RECONSTRUCTED_VERIFIED,
+                        List.of(entry("raw-a", "attempt-a", "a",
+                                AssuranceLevel.RECONSTRUCTED_VERIFIED))));
+    }
+
+    @Test
     void canonicalV1GoldenVectorsAreFrozen() throws Exception {
         DatasetVersion dataset = dataset(
                 1, Instant.parse("2025-01-01T01:02:03.123456789Z"),
@@ -182,7 +201,7 @@ class IngestionCanonicalHasherTest {
                 hasher.attemptLogicalKey(runKey, rawKey, 1, "processor", "contract"));
         assertEquals("3e0be30d9c55a4c203bff3bcdce0842e1cd7054bf46f9c24f476e51adf2cf34b",
                 hasher.jsonHash(mapper.createObjectNode()));
-        assertEquals("88056dfd66a92248cec08dc9e4bd84917809f3b2fbcb94183f9049f15180ebff",
+        assertEquals("c2c460d1cd03fd3f9ea88706a02cbfadbd929c252ddc48b6c3ddf0cbd9793dda",
                 hasher.manifestHash(
                         run(), dataset, RunStatus.COMPLETED, 1, 1, 1, 0,
                         AssuranceLevel.RECONSTRUCTED_VERIFIED,
@@ -214,11 +233,21 @@ class IngestionCanonicalHasherTest {
     }
 
     private ManifestEntry entry(String raw, String attempt, String suffix) {
+        return entry(raw, attempt, suffix, AssuranceLevel.PIT_VERIFIED);
+    }
+
+    private ManifestEntry entry(
+            String raw,
+            String attempt,
+            String suffix,
+            AssuranceLevel requestedAssurance
+    ) {
         return new ManifestEntry(
                 raw, suffix.repeat(64), TemporalTrustLevel.OBSERVED,
                 "instrument-" + suffix, null, null, 1,
                 attempt, AttemptStatus.COMPLETED, "processor-v1", "contract-v1",
                 IngestionModels.PublicationTimeVerification.VERIFIED,
+                requestedAssurance,
                 KnowledgeTimePolicyV1.VERSION,
                 AssuranceLevel.RECONSTRUCTED_VERIFIED,
                 Instant.parse("2025-01-01T00:00:00.123456789Z"), null,
@@ -241,6 +270,7 @@ class IngestionCanonicalHasherTest {
                 1, DatasetType.SECURITY_STATUS, 1, 1, 1, "attempt-a",
                 AttemptStatus.COMPLETED, "processor-v1", "contract-v1",
                 PublicationTimeVerification.VERIFIED,
+                AssuranceLevel.PIT_VERIFIED,
                 Instant.parse("2025-01-01T00:00:00Z"), KnowledgeTimePolicyV1.VERSION,
                 AssuranceLevel.RECONSTRUCTED_VERIFIED, null, mapper.createObjectNode(),
                 "3e0be30d9c55a4c203bff3bcdce0842e1cd7054bf46f9c24f476e51adf2cf34b",

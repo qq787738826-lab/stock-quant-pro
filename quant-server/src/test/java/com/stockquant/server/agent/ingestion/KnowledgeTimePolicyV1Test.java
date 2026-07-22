@@ -80,6 +80,20 @@ class KnowledgeTimePolicyV1Test {
     }
 
     @Test
+    void requestedAssuranceIsAnIndependentConservativeCeiling() {
+        assertEquals(AssuranceLevel.INFERRED_RESEARCH, policy.assess(
+                raw(TemporalTrustLevel.OBSERVED, PUBLISHED),
+                TemporalTrustLevel.OBSERVED,
+                PublicationTimeVerification.VERIFIED,
+                AssuranceLevel.INFERRED_RESEARCH).assuranceLevel());
+        assertEquals(AssuranceLevel.RECONSTRUCTED_VERIFIED, policy.assess(
+                raw(TemporalTrustLevel.OBSERVED, PUBLISHED),
+                TemporalTrustLevel.OBSERVED,
+                PublicationTimeVerification.VERIFIED,
+                AssuranceLevel.RECONSTRUCTED_VERIFIED).assuranceLevel());
+    }
+
+    @Test
     void publicationVerificationCannotInventOrHideSourceTime() {
         assertThrows(IllegalArgumentException.class, () -> policy.assess(
                 raw(TemporalTrustLevel.OBSERVED, null),

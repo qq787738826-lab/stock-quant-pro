@@ -54,7 +54,8 @@ public class MarketDataIngestionRepository {
     private static final String ATTEMPT_COLUMNS = """
             id, ingestion_run_id, raw_record_id, attempt_no, attempt_logical_key, status,
             processor_version, contract_version, published_at_verification,
-            derived_known_from, knowledge_time_policy_version, assurance_level,
+            requested_assurance_level, derived_known_from,
+            knowledge_time_policy_version, assurance_level,
             error_code, result_metadata::text AS result_metadata, result_hash,
             completed_at, system_recorded_at
             """;
@@ -261,6 +262,7 @@ public class MarketDataIngestionRepository {
             String processorVersion,
             String contractVersion,
             PublicationTimeVerification publicationVerification,
+            AssuranceLevel requestedAssurance,
             Instant derivedKnownFrom,
             AssuranceLevel assurance,
             String errorCode,
@@ -271,9 +273,10 @@ public class MarketDataIngestionRepository {
                 INSERT INTO %s(
                     ingestion_run_id, raw_record_id, attempt_no, attempt_logical_key, status,
                     processor_version, contract_version, published_at_verification,
-                    derived_known_from, knowledge_time_policy_version, assurance_level,
+                    requested_assurance_level, derived_known_from,
+                    knowledge_time_policy_version, assurance_level,
                     error_code, result_metadata, result_hash
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?)
                 ON CONFLICT (ingestion_run_id, raw_record_id, attempt_no)
                 DO NOTHING
                 RETURNING
@@ -282,7 +285,8 @@ public class MarketDataIngestionRepository {
                 (rs, row) -> mapAttempt(type, rs),
                 runId, rawRecordId, attemptNo, logicalKey, status.name(),
                 processorVersion, contractVersion,
-                publicationVerification.name(), timestamp(derivedKnownFrom),
+                publicationVerification.name(), requestedAssurance.name(),
+                timestamp(derivedKnownFrom),
                 KnowledgeTimePolicyV1.VERSION, assurance.name(), errorCode,
                 writeJson(resultMetadata), resultHash)
                 .stream().findFirst();
@@ -313,6 +317,7 @@ public class MarketDataIngestionRepository {
                        attempt.attempt_logical_key, attempt.status,
                        attempt.processor_version, attempt.contract_version,
                        attempt.published_at_verification,
+                       attempt.requested_assurance_level,
                        attempt.knowledge_time_policy_version, attempt.assurance_level,
                        attempt.derived_known_from, attempt.error_code,
                        attempt.result_hash
@@ -338,6 +343,7 @@ public class MarketDataIngestionRepository {
                 rs.getString("contract_version"),
                 PublicationTimeVerification.valueOf(
                         rs.getString("published_at_verification")),
+                AssuranceLevel.valueOf(rs.getString("requested_assurance_level")),
                 rs.getString("knowledge_time_policy_version"),
                 AssuranceLevel.valueOf(rs.getString("assurance_level")),
                 instant(rs.getObject("derived_known_from")),
@@ -415,6 +421,7 @@ public class MarketDataIngestionRepository {
                 AttemptStatus.valueOf(rs.getString("status")), rs.getString("processor_version"),
                 rs.getString("contract_version"), PublicationTimeVerification.valueOf(
                         rs.getString("published_at_verification")),
+                AssuranceLevel.valueOf(rs.getString("requested_assurance_level")),
                 instant(rs.getObject("derived_known_from")),
                 rs.getString("knowledge_time_policy_version"),
                 AssuranceLevel.valueOf(rs.getString("assurance_level")),

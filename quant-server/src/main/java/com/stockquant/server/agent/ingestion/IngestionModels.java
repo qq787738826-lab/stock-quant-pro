@@ -381,6 +381,7 @@ public final class IngestionModels {
             String processorVersion,
             String contractVersion,
             PublicationTimeVerification publicationTimeVerification,
+            AssuranceLevel requestedAssuranceLevel,
             Instant derivedKnownFrom,
             String knowledgeTimePolicyVersion,
             AssuranceLevel assuranceLevel,
@@ -404,6 +405,8 @@ public final class IngestionModels {
             contractVersion = IngestionValidation.text(contractVersion, "contractVersion", 120);
             publicationTimeVerification = IngestionValidation.required(
                     publicationTimeVerification, "publicationTimeVerification");
+            requestedAssuranceLevel = IngestionValidation.required(
+                    requestedAssuranceLevel, "requestedAssuranceLevel");
             derivedKnownFrom = IngestionValidation.instant(derivedKnownFrom, "derivedKnownFrom");
             knowledgeTimePolicyVersion = IngestionValidation.text(
                     knowledgeTimePolicyVersion, "knowledgeTimePolicyVersion", 80);
@@ -450,6 +453,7 @@ public final class IngestionModels {
             String processorVersion,
             String contractVersion,
             PublicationTimeVerification publicationTimeVerification,
+            AssuranceLevel requestedAssuranceLevel,
             String knowledgeTimePolicyVersion,
             AssuranceLevel assuranceLevel,
             Instant derivedKnownFrom,
@@ -477,6 +481,8 @@ public final class IngestionModels {
                     contractVersion, "contractVersion", 120);
             publicationTimeVerification = IngestionValidation.required(
                     publicationTimeVerification, "publicationTimeVerification");
+            requestedAssuranceLevel = IngestionValidation.required(
+                    requestedAssuranceLevel, "requestedAssuranceLevel");
             knowledgeTimePolicyVersion = IngestionValidation.text(
                     knowledgeTimePolicyVersion, "knowledgeTimePolicyVersion", 80);
             assuranceLevel = IngestionValidation.required(assuranceLevel, "assuranceLevel");
@@ -493,7 +499,8 @@ public final class IngestionModels {
                     raw.sourceInstrumentId(), raw.exchange(), raw.tradeDate(),
                     attempt.attemptNo(), attempt.logicalKey(), attempt.status(),
                     attempt.processorVersion(), attempt.contractVersion(),
-                    attempt.publicationTimeVerification(), attempt.knowledgeTimePolicyVersion(),
+                    attempt.publicationTimeVerification(), attempt.requestedAssuranceLevel(),
+                    attempt.knowledgeTimePolicyVersion(),
                     attempt.assuranceLevel(), attempt.derivedKnownFrom(), attempt.errorCode(),
                     attempt.resultHash());
         }

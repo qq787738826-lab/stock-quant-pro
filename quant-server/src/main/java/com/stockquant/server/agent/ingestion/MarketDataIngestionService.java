@@ -218,7 +218,8 @@ public class MarketDataIngestionService {
         ProcessingAttempt value = repository.insertAttempt(
                 type, run.id(), raw.id(), command.attemptNo(), attemptLogicalKey, command.status(),
                 command.processorVersion(), command.contractVersion(),
-                command.publicationTimeVerification(), assessment.derivedKnownFrom(),
+                command.publicationTimeVerification(), command.requestedAssuranceLevel(),
+                assessment.derivedKnownFrom(),
                 assessment.assuranceLevel(), command.errorCode(), command.resultMetadata(),
                 resultHash).orElseGet(
                         () -> repository.findAttempt(
@@ -370,6 +371,7 @@ public class MarketDataIngestionService {
                 || !value.processorVersion().equals(command.processorVersion())
                 || !value.contractVersion().equals(command.contractVersion())
                 || value.publicationTimeVerification() != command.publicationTimeVerification()
+                || value.requestedAssuranceLevel() != command.requestedAssuranceLevel()
                 || !value.derivedKnownFrom().equals(assessment.derivedKnownFrom())
                 || !value.knowledgeTimePolicyVersion().equals(KnowledgeTimePolicyV1.VERSION)
                 || value.assuranceLevel() != assessment.assuranceLevel()

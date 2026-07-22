@@ -29,7 +29,10 @@ class IngestionFoundationMigrationTest {
             assertTrue(sql.contains("create table " + table));
         }
         assertTrue(sql.contains("formal ingestion is unavailable before an approved source adapter"));
-        assertTrue(sql.contains("pit_verified is unavailable before an approved source adapter"));
+        assertTrue(sql.contains("requested_assurance_level varchar(32) not null"));
+        assertTrue(sql.contains(
+                "processing attempt assurance must equal requested/source/publication/stage policy minimum"));
+        assertTrue(sql.contains("stage 2d-2b-1a ceiling: reconstructed_verified"));
         assertTrue(sql.contains("before truncate"));
         assertTrue(sql.contains("knowledge_time_policy_v1"));
         assertTrue(sql.contains("processing attempt requires an attached run raw record"));
@@ -52,6 +55,7 @@ class IngestionFoundationMigrationTest {
                 sql.indexOf("create or replace function compute_ingestion_manifest_hash"),
                 sql.indexOf("create or replace function reject_ingestion_fact_mutation"));
         assertFalse(manifestFunction.contains("completed_at"));
+        assertTrue(manifestFunction.contains("attempt.requested_assurance_level"));
         assertTrue(sql.contains("set search_path to pg_catalog"));
         assertFalse(sql.contains("create extension pgcrypto"));
         assertFalse(sql.contains("market_universe_snapshot"));
