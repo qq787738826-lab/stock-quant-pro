@@ -143,6 +143,31 @@ public class SecurityStatusEventMaterializationRepository {
         return values.stream().findFirst();
     }
 
+    public boolean sameDateNoStateChangeExists(
+            RunNamespace namespace,
+            String securityLogicalKey,
+            String predecessorEventLogicalKey,
+            LocalDate effectiveDate
+    ) {
+        Boolean value = jdbc.queryForObject("""
+                SELECT EXISTS(
+                    SELECT 1
+                    FROM security_status_normalization_results result
+                    JOIN security_status_processing_attempts attempt
+                      ON attempt.id=result.processing_attempt_id
+                    JOIN security_status_raw_records raw
+                      ON raw.id=attempt.raw_record_id
+                    WHERE result.outcome='NO_STATE_CHANGE'
+                      AND result.security_logical_key=?
+                      AND result.predecessor_event_logical_key=?
+                      AND raw.record_namespace=?
+                      AND raw.source_effective_date=?
+                )
+                """, Boolean.class, securityLogicalKey, predecessorEventLogicalKey,
+                namespace.name(), effectiveDate);
+        return Boolean.TRUE.equals(value);
+    }
+
     Optional<MaterializedSecurityEvent> insertEvent(
             long datasetVersionId,
             String symbol,

@@ -21,6 +21,8 @@ class SecurityEventMaterializationMigrationTest {
     private static final Path MIGRATIONS = Path.of("src/main/resources/db/migration");
     private static final Path V8 = MIGRATIONS.resolve(
             "V8__security_event_materialization_foundation.sql");
+    private static final Path LEGACY_EVENT_REPOSITORY = Path.of(
+            "src/main/java/com/stockquant/server/agent/temporal/SecurityStatusEventRepository.java");
 
     @Test
     void v8ContainsOnlyFrozenTestDemoEventMaterializationFoundation() throws IOException {
@@ -43,7 +45,11 @@ class SecurityEventMaterializationMigrationTest {
         assertTrue(sql.contains("on delete restrict"));
         assertTrue(sql.contains("before truncate"));
         assertFalse(sql.contains("create extension"));
-        assertFalse(sql.contains("security_status_history("));
+        assertTrue(sql.contains("before insert on security_status_history"));
+        assertTrue(sql.contains("v8 resolved event must wait for stage 2d-2b-2 history projector"));
+        assertTrue(sql.contains("and event_logical_key is null"));
+        assertTrue(sql.contains("current chain-head state"));
+        assertTrue(sql.contains("lineage_row.raw_record_id <> raw_row.id"));
         assertFalse(sql.contains("trading_calendar_revisions("));
         assertFalse(sql.contains("market_universe_snapshot"));
     }
@@ -62,6 +68,13 @@ class SecurityEventMaterializationMigrationTest {
             assertEquals(entry.getValue(), sha256(Files.readAllBytes(MIGRATIONS.resolve(entry.getKey()))),
                     entry.getKey());
         }
+    }
+
+    @Test
+    void legacyEventIdempotencyLookupCannotReturnResolvedV8Event() throws IOException {
+        String source = Files.readString(LEGACY_EVENT_REPOSITORY)
+                .toLowerCase(Locale.ROOT).replaceAll("\\s+", " ");
+        assertTrue(source.contains("and event_logical_key is null"));
     }
 
     private static String sha256(byte[] value) throws NoSuchAlgorithmException {

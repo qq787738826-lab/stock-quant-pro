@@ -30,8 +30,13 @@ import com.stockquant.server.agent.ingestion.SecurityEventMaterializationModels.
 import com.stockquant.server.agent.ingestion.SecurityIdentityService;
 import com.stockquant.server.agent.ingestion.SecurityStatusEventMaterializationService;
 import com.stockquant.server.agent.temporal.SecurityStatusEventPayloadContract;
+import com.stockquant.server.agent.temporal.MarketExchange;
+import com.stockquant.server.agent.temporal.SecurityStatusEventType;
 import com.stockquant.server.agent.temporal.TemporalMarketFoundationService;
+import com.stockquant.server.agent.temporal.TemporalModels.AppendSecurityStatusEventCommand;
 import com.stockquant.server.agent.temporal.TemporalModels.DatasetVersion;
+import com.stockquant.server.agent.temporal.TemporalModels.PublishSecurityStatusVersionCommand;
+import com.stockquant.server.agent.temporal.TemporalModels.SecurityStatusEvent;
 import com.stockquant.server.agent.temporal.TemporalModels.RegisterDatasetVersionCommand;
 import com.stockquant.server.agent.temporal.TemporalTrustLevel;
 import org.flywaydb.core.Flyway;
@@ -425,6 +430,357 @@ class AgentStage2D2B1B1EventMaterializationPostgresIntegrationTest {
         assertEquals(publicBaseline, currentPublicBaseline());
     }
 
+    @Test
+    @Order(4)
+    void blocksResolvedHistoryCrossRawReuseAndStaleNoStateChange() throws Exception {
+        DatasetVersion dataset = registerDataset("review-gates", TemporalTrustLevel.OBSERVED);
+        SecurityIdentity identity = identities.registerIdentity(new RegisterSecurityIdentityCommand(
+                RunNamespace.TEST, "TEST_AUTHORITY", "stable-review-gates",
+                SecurityEventMaterializationModels.IDENTITY_CONTRACT_VERSION,
+                AssuranceLevel.RECONSTRUCTED_VERIFIED));
+        identities.registerMapping(new RegisterSourceSecurityIdentityMappingCommand(
+                RunNamespace.TEST, SOURCE, SOURCE_VERSION, "instrument-review-gates",
+                identity.securityLogicalKey(),
+                SecurityEventMaterializationModels.MAPPING_CONTRACT_VERSION,
+                AssuranceLevel.RECONSTRUCTED_VERIFIED));
+
+        IngestionRun chainRun = ingestion.startSecurityEventMaterializationRun(
+                startCommand(dataset, "review-chain"));
+        RawRecord rootRaw = appendRaw(chainRun, "review-root", "1", "instrument-review-gates",
+                LocalDate.of(2025, 10, 1),
+                rawPayload("600321", "SSE", "MAIN", true, true, false));
+        RawRecord successorRaw = appendRaw(
+                chainRun, "review-successor", "1", "instrument-review-gates",
+                LocalDate.of(2025, 10, 2),
+                rawPayload("600321", "SSE", "MAIN", true, true, true));
+        MaterializationResult root = materialization.materialize(command(chainRun, rootRaw, 1));
+        MaterializationResult successor = materialization.materialize(
+                command(chainRun, successorRaw, 1));
+
+        assertResolvedEventHistoryIsolation(dataset, root);
+
+        IngestionRun crossRawRun = ingestion.startSecurityEventMaterializationRun(
+                startCommand(dataset, "review-cross-raw"));
+        RawRecord crossRaw = appendRaw(
+                crossRawRun, "review-cross-raw", "1", "instrument-review-gates",
+                LocalDate.of(2025, 10, 3),
+                rawPayload("600321", "SSE", "MAIN", true, true, false));
+        assertCrossRawEventReuseRejected(crossRawRun, crossRaw, root, identity);
+
+        IngestionRun staleRun = ingestion.startSecurityEventMaterializationRun(
+                startCommand(dataset, "review-stale-no-change"));
+        RawRecord staleRaw = appendRaw(
+                staleRun, "review-stale-no-change", "1", "instrument-review-gates",
+                LocalDate.of(2025, 10, 4),
+                rawPayload("600321", "SSE", "MAIN", true, true, false));
+        assertStaleNoStateChangeRejected(staleRun, staleRaw, root, identity);
+
+        IngestionRun currentHeadRun = ingestion.startSecurityEventMaterializationRun(
+                startCommand(dataset, "review-current-head-no-change"));
+        RawRecord currentHeadRaw = appendRaw(
+                currentHeadRun, "review-current-head-no-change", "1",
+                "instrument-review-gates", LocalDate.of(2025, 10, 5),
+                rawPayload("600321", "SSE", "MAIN", true, true, true));
+        MaterializationResult currentHead = materialization.materialize(
+                command(currentHeadRun, currentHeadRaw, 1));
+        assertEquals(NormalizationOutcome.NO_STATE_CHANGE,
+                currentHead.normalizationResult().outcome());
+        assertEquals(successor.event().eventLogicalKey(),
+                currentHead.normalizationResult().predecessorEventLogicalKey());
+        materialization.sealRun(new SealRunCommand(
+                currentHeadRun.id(), RunStatus.COMPLETED, 1));
+        assertEquals(publicBaseline, currentPublicBaseline());
+    }
+
+    @Test
+    @Order(5)
+    void serializesConcurrentNoStateChangeAgainstSameDateSuccessor() throws Exception {
+        DatasetVersion dataset = registerDataset("concurrent-head", TemporalTrustLevel.OBSERVED);
+        SecurityIdentity identity = identities.registerIdentity(new RegisterSecurityIdentityCommand(
+                RunNamespace.TEST, "TEST_AUTHORITY", "stable-concurrent-head",
+                SecurityEventMaterializationModels.IDENTITY_CONTRACT_VERSION,
+                AssuranceLevel.RECONSTRUCTED_VERIFIED));
+        identities.registerMapping(new RegisterSourceSecurityIdentityMappingCommand(
+                RunNamespace.TEST, SOURCE, SOURCE_VERSION, "instrument-concurrent-head",
+                identity.securityLogicalKey(),
+                SecurityEventMaterializationModels.MAPPING_CONTRACT_VERSION,
+                AssuranceLevel.RECONSTRUCTED_VERIFIED));
+        IngestionRun rootRun = ingestion.startSecurityEventMaterializationRun(
+                startCommand(dataset, "concurrent-head-root"));
+        RawRecord rootRaw = appendRaw(rootRun, "concurrent-head-root", "1",
+                "instrument-concurrent-head", LocalDate.of(2025, 11, 1),
+                rawPayload("600654", "SSE", "MAIN", true, true, false));
+        materialization.materialize(command(rootRun, rootRaw, 1));
+        materialization.sealRun(new SealRunCommand(rootRun.id(), RunStatus.COMPLETED, 1));
+
+        IngestionRun noChangeRun = ingestion.startSecurityEventMaterializationRun(
+                startCommand(dataset, "concurrent-head-no-change"));
+        IngestionRun successorRun = ingestion.startSecurityEventMaterializationRun(
+                startCommand(dataset, "concurrent-head-successor"));
+        LocalDate competingDate = LocalDate.of(2025, 11, 2);
+        RawRecord noChangeRaw = appendRaw(noChangeRun, "concurrent-head-no-change", "1",
+                "instrument-concurrent-head", competingDate,
+                rawPayload("600654", "SSE", "MAIN", true, true, false));
+        RawRecord changedRaw = appendRaw(successorRun, "concurrent-head-successor", "1",
+                "instrument-concurrent-head", competingDate,
+                rawPayload("600654", "SSE", "MAIN", true, true, true));
+
+        List<ConcurrentResult<MaterializationResult>> results = runConcurrent(List.of(
+                () -> materialization.materialize(command(noChangeRun, noChangeRaw, 1)),
+                () -> materialization.materialize(command(successorRun, changedRaw, 1))));
+        assertNotEquals(results.get(0).backendPid(), results.get(1).backendPid());
+        long semanticWinners = results.stream().filter(value -> {
+            NormalizationOutcome outcome = value.value().normalizationResult().outcome();
+            return outcome == NormalizationOutcome.NO_STATE_CHANGE
+                    || outcome == NormalizationOutcome.EVENT_MATERIALIZED;
+        }).count();
+        assertEquals(1, semanticWinners);
+        assertEquals(1, results.stream().filter(value -> value.value().normalizationResult().outcome()
+                == NormalizationOutcome.UNSUPPORTED_CONTRACT).count());
+        assertFalse(jdbc.queryForObject("""
+                SELECT EXISTS(
+                    SELECT 1
+                    FROM security_status_normalization_results no_change
+                    JOIN security_status_processing_attempts attempt
+                      ON attempt.id=no_change.processing_attempt_id
+                    JOIN security_status_raw_records raw ON raw.id=attempt.raw_record_id
+                    JOIN security_status_events successor
+                      ON successor.security_logical_key=no_change.security_logical_key
+                     AND successor.effective_from=raw.source_effective_date
+                    WHERE no_change.outcome='NO_STATE_CHANGE'
+                      AND no_change.security_logical_key=?
+                )
+                """, Boolean.class, identity.securityLogicalKey()));
+        for (ConcurrentResult<MaterializationResult> result : results) {
+            boolean accepted = result.value().normalizationResult().outcome()
+                    != NormalizationOutcome.UNSUPPORTED_CONTRACT;
+            materialization.sealRun(new SealRunCommand(
+                    result.value().attempt().ingestionRunId(),
+                    accepted ? RunStatus.COMPLETED : RunStatus.FAILED, 1));
+        }
+        assertEquals(publicBaseline, currentPublicBaseline());
+    }
+
+    @Test
+    @Order(6)
+    void recordsProjectionFailureWithConservativeResolvedLineage() throws Exception {
+        DatasetVersion dataset = registerDataset("projection-failure", TemporalTrustLevel.OBSERVED);
+        SecurityIdentity identity = identities.registerIdentity(new RegisterSecurityIdentityCommand(
+                RunNamespace.TEST, "TEST_AUTHORITY", "stable-projection-failure",
+                SecurityEventMaterializationModels.IDENTITY_CONTRACT_VERSION,
+                AssuranceLevel.RECONSTRUCTED_VERIFIED));
+        identities.registerMapping(new RegisterSourceSecurityIdentityMappingCommand(
+                RunNamespace.TEST, SOURCE, SOURCE_VERSION, "instrument-projection-failure",
+                identity.securityLogicalKey(),
+                SecurityEventMaterializationModels.MAPPING_CONTRACT_VERSION,
+                AssuranceLevel.INFERRED_RESEARCH));
+        IngestionRun run = ingestion.startSecurityEventMaterializationRun(
+                startCommand(dataset, "projection-failure"));
+        RawRecord raw = appendRaw(run, "projection-failure", "1",
+                "instrument-projection-failure", LocalDate.of(2025, 12, 1),
+                rawPayload("600777", "SSE", "MAIN", true, true, false));
+        installFixtureLineageFailure(raw.id());
+
+        assertThrows(RuntimeException.class,
+                () -> materialization.materialize(command(run, raw, 1)));
+        MaterializationResult replay = materialization.materialize(command(run, raw, 1));
+        assertEquals(NormalizationOutcome.PROJECTION_FAILED,
+                replay.normalizationResult().outcome());
+        assertEquals(AssuranceLevel.RECONSTRUCTED_VERIFIED,
+                replay.attempt().assuranceLevel());
+        assertEquals(AssuranceLevel.INFERRED_RESEARCH,
+                replay.normalizationResult().assuranceLevel());
+        assertEquals(identity.securityLogicalKey(),
+                replay.normalizationResult().securityLogicalKey());
+        assertNull(replay.normalizationResult().predecessorEventLogicalKey());
+        assertEquals(0, jdbc.queryForObject("""
+                SELECT count(*) FROM security_status_events
+                WHERE source_record_id='projection-failure'
+                """, Integer.class));
+        assertEquals(0, jdbc.queryForObject("""
+                SELECT count(*) FROM security_status_event_lineage lineage
+                JOIN security_status_raw_records raw ON raw.id=lineage.raw_record_id
+                WHERE raw.source_record_id='projection-failure'
+                """, Integer.class));
+        IngestionRun sealed = materialization.sealRun(
+                new SealRunCommand(run.id(), RunStatus.FAILED, 1));
+        assertEquals(AssuranceLevel.INFERRED_RESEARCH, sealed.assuranceLevel());
+        assertEquals(sealed.manifestHash(), jdbc.queryForObject("""
+                SELECT compute_security_event_manifest_v2_hash(
+                    ?, status, final_expected_count, final_received_count,
+                    final_accepted_count, final_rejected_count, assurance_level)
+                FROM market_data_ingestion_runs WHERE id=?
+                """, String.class, run.id(), run.id()));
+        assertEquals(publicBaseline, currentPublicBaseline());
+    }
+
+    private void assertResolvedEventHistoryIsolation(
+            DatasetVersion dataset,
+            MaterializationResult resolved
+    ) throws Exception {
+        var event = resolved.event();
+        int before = count("security_status_history");
+        PublishSecurityStatusVersionCommand resolvedHistory =
+                new PublishSecurityStatusVersionCommand(
+                        event.symbol(), MarketExchange.SSE, "MAIN", true, true, false,
+                        event.effectiveFrom(), null, event.knownAt(), null, event.id(),
+                        dataset.id(), event.source(), event.sourceVersion(), event.trustLevel());
+        assertThrows(RuntimeException.class,
+                () -> temporal.publishSecurityStatusVersion(resolvedHistory));
+        assertEquals(before, count("security_status_history"));
+        expectFailure("55000", "must wait for stage 2D-2B-2 history projector", """
+                INSERT INTO security_status_history(
+                    symbol,exchange,board,listed,active,is_st,valid_from,valid_to,
+                    known_from,known_to,source_event_id,dataset_version_id,source,
+                    source_version,trust_level,status_hash,recorded_at)
+                VALUES ('600321','SSE','MAIN',TRUE,TRUE,FALSE,?,NULL,?,NULL,?,?,?,?,'OBSERVED',?,?)
+                """, event.effectiveFrom(), event.knownAt(), event.id(), dataset.id(),
+                event.source(), event.sourceVersion(), "a".repeat(64), event.knownAt());
+        assertEquals(before, count("security_status_history"));
+
+        JsonNode legacyPayload = SecurityStatusEventPayloadContract.payload(
+                new SecurityStatusEventPayloadContract.SecurityStatusState(
+                        MarketExchange.SSE, "MAIN", true, true, false));
+        SecurityStatusEvent legacy = temporal.appendSecurityStatusEvent(
+                new AppendSecurityStatusEventCommand(
+                        dataset.id(), "600322", SecurityStatusEventType.FULL_STATUS_SNAPSHOT,
+                        LocalDate.of(2025, 10, 1), null, PUBLISHED_AT, PUBLISHED_AT,
+                        SOURCE, SOURCE_VERSION, "legacy-history-compatible", "1",
+                        TemporalTrustLevel.OBSERVED, legacyPayload,
+                        SecurityStatusEventPayloadContract.hash(legacyPayload), null));
+        temporal.publishSecurityStatusVersion(new PublishSecurityStatusVersionCommand(
+                "600322", MarketExchange.SSE, "MAIN", true, true, false,
+                LocalDate.of(2025, 10, 1), null, PUBLISHED_AT, null, legacy.id(),
+                dataset.id(), SOURCE, SOURCE_VERSION, TemporalTrustLevel.OBSERVED));
+        assertEquals(before + 1, count("security_status_history"));
+    }
+
+    private void assertCrossRawEventReuseRejected(
+            IngestionRun run,
+            RawRecord raw,
+            MaterializationResult existing,
+            SecurityIdentity identity
+    ) throws Exception {
+        int attemptsBefore = count("security_status_processing_attempts");
+        int resultsBefore = count("security_status_normalization_results");
+        int eventsBefore = count("security_status_events");
+        int lineageBefore = count("security_status_event_lineage");
+        try (Connection connection = isolatedConnection()) {
+            connection.setAutoCommit(false);
+            DirectAttempt attempt = insertDirectCompletedAttempt(connection, run, raw);
+            String resultHash = eventHasher.normalizationResultHash(
+                    attempt.logicalKey(), NormalizationOutcome.EVENT_REUSED,
+                    existing.event().eventLogicalKey(), identity.securityLogicalKey(),
+                    existing.lineage().predecessorEventLogicalKey(),
+                    SecurityEventMaterializationModels.NORMALIZER_VERSION,
+                    SecurityEventMaterializationModels.TRANSITION_RULE_VERSION,
+                    AssuranceLevel.RECONSTRUCTED_VERIFIED, null);
+            try (PreparedStatement statement = connection.prepareStatement("""
+                    INSERT INTO security_status_normalization_results(
+                        processing_attempt_id,attempt_logical_key,outcome,event_id,event_logical_key,
+                        security_logical_key,predecessor_event_logical_key,normalizer_version,
+                        transition_rule_version,assurance_level,result_hash,error_code)
+                    VALUES (?,?,'EVENT_REUSED',?,?,?,?,?,?,'RECONSTRUCTED_VERIFIED',?,NULL)
+                    """)) {
+                bind(statement, attempt.id(), attempt.logicalKey(), existing.event().id(),
+                        existing.event().eventLogicalKey(), identity.securityLogicalKey(),
+                        existing.lineage().predecessorEventLogicalKey(),
+                        SecurityEventMaterializationModels.NORMALIZER_VERSION,
+                        SecurityEventMaterializationModels.TRANSITION_RULE_VERSION, resultHash);
+                SQLException error = assertThrows(SQLException.class, statement::executeUpdate);
+                assertDatabaseError(error, "23514", "raw/dataset lineage chain");
+            }
+        }
+        assertEquals(attemptsBefore, count("security_status_processing_attempts"));
+        assertEquals(resultsBefore, count("security_status_normalization_results"));
+        assertEquals(eventsBefore, count("security_status_events"));
+        assertEquals(lineageBefore, count("security_status_event_lineage"));
+    }
+
+    private void assertStaleNoStateChangeRejected(
+            IngestionRun run,
+            RawRecord raw,
+            MaterializationResult stalePredecessor,
+            SecurityIdentity identity
+    ) throws Exception {
+        int attemptsBefore = count("security_status_processing_attempts");
+        int resultsBefore = count("security_status_normalization_results");
+        try (Connection connection = isolatedConnection()) {
+            connection.setAutoCommit(false);
+            DirectAttempt attempt = insertDirectCompletedAttempt(connection, run, raw);
+            String resultHash = eventHasher.normalizationResultHash(
+                    attempt.logicalKey(), NormalizationOutcome.NO_STATE_CHANGE, null,
+                    identity.securityLogicalKey(), stalePredecessor.event().eventLogicalKey(),
+                    SecurityEventMaterializationModels.NORMALIZER_VERSION,
+                    SecurityEventMaterializationModels.TRANSITION_RULE_VERSION,
+                    AssuranceLevel.RECONSTRUCTED_VERIFIED, null);
+            try (PreparedStatement statement = connection.prepareStatement("""
+                    INSERT INTO security_status_normalization_results(
+                        processing_attempt_id,attempt_logical_key,outcome,event_id,event_logical_key,
+                        security_logical_key,predecessor_event_logical_key,normalizer_version,
+                        transition_rule_version,assurance_level,result_hash,error_code)
+                    VALUES (?,?,'NO_STATE_CHANGE',NULL,NULL,?,?,?,?,'RECONSTRUCTED_VERIFIED',?,NULL)
+                    """)) {
+                bind(statement, attempt.id(), attempt.logicalKey(), identity.securityLogicalKey(),
+                        stalePredecessor.event().eventLogicalKey(),
+                        SecurityEventMaterializationModels.NORMALIZER_VERSION,
+                        SecurityEventMaterializationModels.TRANSITION_RULE_VERSION, resultHash);
+                SQLException error = assertThrows(SQLException.class, statement::executeUpdate);
+                assertDatabaseError(error, "23514", "current chain-head state");
+            }
+        }
+        assertEquals(attemptsBefore, count("security_status_processing_attempts"));
+        assertEquals(resultsBefore, count("security_status_normalization_results"));
+    }
+
+    private DirectAttempt insertDirectCompletedAttempt(
+            Connection connection,
+            IngestionRun run,
+            RawRecord raw
+    ) throws Exception {
+        String attemptKey = ingestionHasher.attemptLogicalKey(
+                run.logicalKey(), raw.logicalKey(), 1, "processor-v1",
+                SecurityEventMaterializationModels.RAW_CONTRACT_VERSION);
+        try (PreparedStatement statement = connection.prepareStatement("""
+                INSERT INTO security_status_processing_attempts(
+                    ingestion_run_id,raw_record_id,attempt_no,attempt_logical_key,status,
+                    processor_version,contract_version,published_at_verification,
+                    requested_assurance_level,derived_known_from,knowledge_time_policy_version,
+                    assurance_level,error_code,result_metadata,result_hash)
+                VALUES (?,?,1,?,'COMPLETED','processor-v1','SECURITY_STATUS_RAW_TEST_V1',
+                        'VERIFIED','RECONSTRUCTED_VERIFIED',?,'KNOWLEDGE_TIME_POLICY_V1',
+                        'RECONSTRUCTED_VERIFIED',NULL,'{}'::jsonb,?)
+                RETURNING id
+                """)) {
+            bind(statement, run.id(), raw.id(), attemptKey, raw.sourcePublishedAt(),
+                    ingestionHasher.jsonHash(objectMapper.createObjectNode()));
+            try (ResultSet row = statement.executeQuery()) {
+                assertTrue(row.next());
+                return new DirectAttempt(row.getLong(1), attemptKey);
+            }
+        }
+    }
+
+    private void installFixtureLineageFailure(long rawRecordId) {
+        jdbc.execute("""
+                CREATE OR REPLACE FUNCTION force_fixture_lineage_failure()
+                RETURNS TRIGGER LANGUAGE plpgsql AS $fixture$
+                BEGIN
+                    IF NEW.raw_record_id=%d THEN
+                        RAISE EXCEPTION 'fixture event lineage projection failure'
+                            USING ERRCODE='23514';
+                    END IF;
+                    RETURN NEW;
+                END;
+                $fixture$
+                """.formatted(rawRecordId));
+        jdbc.execute("""
+                CREATE TRIGGER trg_fixture_force_lineage_failure
+                BEFORE INSERT ON security_status_event_lineage
+                FOR EACH ROW EXECUTE FUNCTION force_fixture_lineage_failure()
+                """);
+    }
+
     private void assertDedicatedDatabaseAndMigration() {
         assertEquals("stock_quant_test", jdbc.queryForObject("SELECT current_database()", String.class));
         assertEquals("stock_quant_test", jdbc.queryForObject("SELECT current_user", String.class));
@@ -458,9 +814,10 @@ class AgentStage2D2B1B1EventMaterializationPostgresIntegrationTest {
                 "trg_security_identity_registry_immutable",
                 "trg_source_security_identity_mappings_immutable",
                 "trg_security_status_event_lineage_immutable",
-                "trg_security_status_normalization_results_immutable",
-                "trg_security_status_processing_attempts_v2_result",
-                "trg_security_status_events_v8_lineage")) {
+                 "trg_security_status_normalization_results_immutable",
+                 "trg_security_status_processing_attempts_v2_result",
+                 "trg_security_status_events_v8_lineage",
+                 "trg_security_status_history_reject_v8_resolved_event")) {
             assertEquals(1, jdbc.queryForObject("""
                     SELECT count(*) FROM pg_trigger t
                     JOIN pg_class c ON c.oid=t.tgrelid
@@ -1164,6 +1521,8 @@ class AgentStage2D2B1B1EventMaterializationPostgresIntegrationTest {
     }
 
     private record ConcurrentResult<T>(int backendPid, T value) {}
+
+    private record DirectAttempt(long id, String logicalKey) {}
 
     private record PublicBaseline(
             Map<String, Long> tableRows,

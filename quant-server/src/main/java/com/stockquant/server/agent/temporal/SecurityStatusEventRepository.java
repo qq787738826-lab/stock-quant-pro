@@ -48,7 +48,8 @@ public class SecurityStatusEventRepository {
         return jdbcTemplate.query(
                 "SELECT " + COLUMNS + " FROM security_status_events "
                         + "WHERE record_namespace='DEMO' AND source=? AND source_version=? "
-                        + "AND source_record_id=? AND source_revision=?",
+                        + "AND source_record_id=? AND source_revision=? "
+                        + "AND event_logical_key IS NULL",
                 this::map,
                 key.source(), key.sourceVersion(), key.sourceRecordId(), key.sourceRevision()
         ).stream().findFirst();

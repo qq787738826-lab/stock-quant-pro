@@ -211,6 +211,16 @@ public class SecurityStatusEventMaterializationService {
 
         SecurityStatusEventClassifier.Classification classification =
                 classifier.classify(parsed, predecessor);
+        if (!classification.noStateChange() && !classification.unsupported()
+                && predecessor != null
+                && events.sameDateNoStateChangeExists(
+                        context.run().runNamespace(), identity.securityLogicalKey(),
+                        predecessor.eventLogicalKey(), context.raw().sourceEffectiveDate())) {
+            return persistNoEvent(command, context, AttemptStatus.UNSUPPORTED_CONTRACT,
+                    NormalizationOutcome.UNSUPPORTED_CONTRACT,
+                    "V1_SAME_DATE_NO_STATE_CHANGE_CONFLICT", identity.securityLogicalKey(),
+                    predecessor.eventLogicalKey(), effectiveAssurance);
+        }
         if (classification.noStateChange()) {
             return persistNoEvent(command, context, AttemptStatus.COMPLETED,
                     NormalizationOutcome.NO_STATE_CHANGE, null, identity.securityLogicalKey(),
@@ -263,10 +273,13 @@ public class SecurityStatusEventMaterializationService {
                     .orElse(null);
             if (winner == null) throw duplicateOrConflict;
             verifyEvent(context, parsed, identity, predecessor, eventType, assurance, winner);
+            SecurityStatusEventLineage winnerLineage = events.findLineageByEvent(winner.id())
+                    .orElseThrow(() -> conflict("reused event has no lineage"));
+            verifyPersistedLineage(command, context, identity, mapping, predecessor, winner,
+                    assurance, winnerLineage);
             return persistEventResult(
                     command, context, attempt, NormalizationOutcome.EVENT_REUSED,
-                    winner, events.findLineageByEvent(winner.id()).orElseThrow(
-                            () -> conflict("reused event has no lineage")), assurance);
+                    winner, winnerLineage, assurance);
         }
         verifyEvent(context, parsed, identity, predecessor, eventType, assurance, event);
         String lineageHash = eventHasher.lineageHash(
@@ -323,6 +336,8 @@ public class SecurityStatusEventMaterializationService {
                     identity.securityLogicalKey(),
                     predecessor == null ? null : predecessor.eventLogicalKey(), assurance);
         }
+        verifyPersistedLineage(command, context, identity, mapping, predecessor, event,
+                assurance, lineage);
         ProcessingAttempt attempt = insertAttempt(command, context, AttemptStatus.COMPLETED, null);
         return persistEventResult(command, context, attempt,
                 NormalizationOutcome.EVENT_REUSED, event, lineage, assurance);
@@ -456,23 +471,84 @@ public class SecurityStatusEventMaterializationService {
     ) {
         SecurityStatusNormalizationResult result = events.findNormalizationResult(attempt.id())
                 .orElseThrow(() -> conflict("existing V2 attempt has no normalization result"));
-        MaterializedSecurityEvent event = result.eventId() == null ? null
-                : events.findEventByLogicalKey(result.eventLogicalKey()).orElseThrow(
-                        () -> conflict("existing normalization event is missing"));
-        SecurityStatusEventLineage lineage = event == null ? null
-                : events.findLineageByEvent(event.id()).orElseThrow(
-                        () -> conflict("existing normalization lineage is missing"));
-        if (attempt.ingestionRunId() != context.run().id()
-                || attempt.rawRecordId() != context.raw().id()
-                || attempt.attemptNo() != command.attemptNo()
-                || !attempt.processorVersion().equals(command.processorVersion())
-                || !attempt.contractVersion().equals(command.rawContractVersion())
-                || attempt.publicationTimeVerification() != command.publicationTimeVerification()
-                || attempt.requestedAssuranceLevel() != command.requestedAssuranceLevel()
-                || !result.normalizerVersion().equals(command.normalizerVersion())
-                || !result.transitionRuleVersion().equals(command.transitionRuleVersion())) {
-            throw conflict("materialization idempotency key resolved to different content");
+        verifyExistingAttempt(command, context, attempt, result);
+
+        ParsedSecurityStatusRaw parsed = null;
+        SourceSecurityIdentityMapping mapping = null;
+        SecurityIdentity identity = null;
+        MaterializedSecurityEvent predecessor = null;
+        AssuranceLevel assurance = result.outcome() == NormalizationOutcome.PROJECTION_FAILED
+                && result.securityLogicalKey() == null
+                ? AssuranceLevel.INFERRED_RESEARCH
+                : context.assessment().assuranceLevel();
+        if (result.securityLogicalKey() != null) {
+            parsed = parser.parse(context.raw().rawPayload());
+            mapping = identities.findMapping(
+                    context.run().runNamespace(), context.raw().source(),
+                    context.raw().sourceVersion(), context.raw().sourceInstrumentId())
+                    .orElseThrow(() -> conflict("existing result identity mapping is missing"));
+            identity = identities.findIdentity(mapping.securityLogicalKey())
+                    .orElseThrow(() -> conflict("existing result identity is missing"));
+            verifyMapping(context, mapping, identity);
+            if (!identity.securityLogicalKey().equals(result.securityLogicalKey())) {
+                throw conflict("existing result stable identity differs from its raw mapping");
+            }
+            events.lockSecurityIdentity(identity.securityLogicalKey());
+            if (result.predecessorEventLogicalKey() != null) {
+                predecessor = events.findEventByLogicalKey(result.predecessorEventLogicalKey())
+                        .orElseThrow(() -> conflict("existing result predecessor is missing"));
+                verifyPredecessor(context, identity, predecessor);
+            }
+            assurance = effectiveAssurance(
+                    context.assessment().assuranceLevel(), identity, mapping, predecessor);
         }
+
+        MaterializedSecurityEvent event = null;
+        SecurityStatusEventLineage lineage = null;
+        if (result.outcome().referencesEvent()) {
+            if (parsed == null || identity == null || mapping == null) {
+                throw conflict("existing event result has no resolved raw identity chain");
+            }
+            event = events.findEventByLogicalKey(result.eventLogicalKey()).orElseThrow(
+                    () -> conflict("existing normalization event is missing"));
+            lineage = events.findLineageByEvent(event.id()).orElseThrow(
+                    () -> conflict("existing normalization lineage is missing"));
+            var classification = classifier.classify(parsed, predecessor);
+            if (classification.unsupported() || classification.noStateChange()
+                    || classification.eventType() != event.eventType()) {
+                throw conflict("existing event no longer matches the frozen V1 classification");
+            }
+            verifyEvent(context, parsed, identity, predecessor,
+                    classification.eventType(), assurance, event);
+            verifyPersistedLineage(command, context, identity, mapping, predecessor,
+                    event, assurance, lineage);
+            if (result.outcome() == NormalizationOutcome.EVENT_MATERIALIZED
+                    && lineage.processingAttemptId() != attempt.id()) {
+                throw conflict("EVENT_MATERIALIZED does not own its lineage attempt");
+            }
+            if (result.outcome() == NormalizationOutcome.EVENT_REUSED
+                    && lineage.processingAttemptId() == attempt.id()) {
+                throw conflict("EVENT_REUSED unexpectedly owns the event lineage");
+            }
+        } else if (result.outcome() == NormalizationOutcome.NO_STATE_CHANGE) {
+            if (parsed == null || predecessor == null
+                    || !parsed.symbol().equals(predecessor.symbol())
+                    || !SecurityStatusEventPayloadContract.parse(predecessor.payload())
+                            .equals(parsed.state())
+                    || !context.raw().sourceEffectiveDate().isAfter(
+                            predecessor.effectiveFrom())) {
+                throw conflict("existing NO_STATE_CHANGE does not match its predecessor state");
+            }
+        }
+
+        String expectedResultHash = eventHasher.normalizationResultHash(
+                attempt.logicalKey(), result.outcome(),
+                event == null ? null : event.eventLogicalKey(), result.securityLogicalKey(),
+                result.predecessorEventLogicalKey(), command.normalizerVersion(),
+                command.transitionRuleVersion(), assurance, result.errorCode());
+        verifyResult(command, attempt, result.outcome(), event, result.securityLogicalKey(),
+                result.predecessorEventLogicalKey(), assurance, expectedResultHash,
+                result.errorCode(), result);
         return new MaterializationResult(attempt, result, event, lineage);
     }
 
@@ -480,9 +556,48 @@ public class SecurityStatusEventMaterializationService {
         Context context = context(command);
         if (ingestion.findAttempt(DatasetType.SECURITY_STATUS, context.run().id(),
                 context.raw().id(), command.attemptNo()).isPresent()) return;
+        FailureChain failureChain = resolveFailureChain(command, context);
         persistNoEvent(command, context, AttemptStatus.PROJECTION_FAILED,
                 NormalizationOutcome.PROJECTION_FAILED, INTERNAL_FAILURE,
-                null, null, context.assessment().assuranceLevel());
+                failureChain.securityLogicalKey(), failureChain.predecessorEventLogicalKey(),
+                failureChain.assuranceLevel());
+    }
+
+    private FailureChain resolveFailureChain(
+            MaterializeSecurityStatusCommand command,
+            Context context
+    ) {
+        try {
+            if (!SecurityEventMaterializationModels.RAW_CONTRACT_VERSION.equals(
+                    command.rawContractVersion())
+                    || !SecurityEventMaterializationModels.NORMALIZER_VERSION.equals(
+                            command.normalizerVersion())
+                    || !SecurityEventMaterializationModels.TRANSITION_RULE_VERSION.equals(
+                            command.transitionRuleVersion())
+                    || context.raw().sourceInstrumentId() == null
+                    || context.raw().sourceEffectiveDate() == null) {
+                return FailureChain.unresolved();
+            }
+            parser.parse(context.raw().rawPayload());
+            SourceSecurityIdentityMapping mapping = identities.findMapping(
+                    context.run().runNamespace(), context.raw().source(),
+                    context.raw().sourceVersion(), context.raw().sourceInstrumentId()).orElse(null);
+            if (mapping == null) return FailureChain.unresolved();
+            SecurityIdentity identity = identities.findIdentity(mapping.securityLogicalKey())
+                    .orElse(null);
+            if (identity == null) return FailureChain.unresolved();
+            verifyMapping(context, mapping, identity);
+            events.lockSecurityIdentity(identity.securityLogicalKey());
+            MaterializedSecurityEvent predecessor = events.findChainHead(
+                    context.run().runNamespace(), identity.securityLogicalKey(),
+                    SecurityStatusEventPayloadContract.VERSION).orElse(null);
+            AssuranceLevel assurance = effectiveAssurance(
+                    context.assessment().assuranceLevel(), identity, mapping, predecessor);
+            return new FailureChain(identity.securityLogicalKey(),
+                    predecessor == null ? null : predecessor.eventLogicalKey(), assurance);
+        } catch (RuntimeException unresolved) {
+            return FailureChain.unresolved();
+        }
     }
 
     private IngestionRun sealAtomically(SealRunCommand command) {
@@ -538,6 +653,51 @@ public class SecurityStatusEventMaterializationService {
                 || !mapping.sourceInstrumentId().equals(context.raw().sourceInstrumentId())
                 || !mapping.securityLogicalKey().equals(identity.securityLogicalKey())) {
             throw conflict("security identity mapping is outside the raw ingestion chain");
+        }
+    }
+
+    private void verifyExistingAttempt(
+            MaterializeSecurityStatusCommand command,
+            Context context,
+            ProcessingAttempt attempt,
+            SecurityStatusNormalizationResult result
+    ) {
+        String logicalKey = ingestionHasher.attemptLogicalKey(
+                context.run().logicalKey(), context.raw().logicalKey(), command.attemptNo(),
+                command.processorVersion(), command.rawContractVersion());
+        String emptyHash = ingestionHasher.jsonHash(objectMapper.createObjectNode());
+        if (attempt.ingestionRunId() != context.run().id()
+                || attempt.rawRecordId() != context.raw().id()
+                || attempt.attemptNo() != command.attemptNo()
+                || !attempt.logicalKey().equals(logicalKey)
+                || attempt.status() != result.outcome().requiredAttemptStatus()
+                || !attempt.processorVersion().equals(command.processorVersion())
+                || !attempt.contractVersion().equals(command.rawContractVersion())
+                || attempt.publicationTimeVerification() != command.publicationTimeVerification()
+                || attempt.requestedAssuranceLevel() != command.requestedAssuranceLevel()
+                || !attempt.derivedKnownFrom().equals(context.assessment().derivedKnownFrom())
+                || !attempt.knowledgeTimePolicyVersion().equals(KnowledgeTimePolicyV1.VERSION)
+                || attempt.assuranceLevel() != context.assessment().assuranceLevel()
+                || !Objects.equals(attempt.errorCode(), result.errorCode())
+                || !attempt.resultMetadata().equals(objectMapper.createObjectNode())
+                || !attempt.resultHash().equals(emptyHash)
+                || !result.normalizerVersion().equals(command.normalizerVersion())
+                || !result.transitionRuleVersion().equals(command.transitionRuleVersion())) {
+            throw conflict("materialization idempotency key resolved to different content");
+        }
+    }
+
+    private static void verifyPredecessor(
+            Context context,
+            SecurityIdentity identity,
+            MaterializedSecurityEvent predecessor
+    ) {
+        if (predecessor.recordNamespace() != context.run().runNamespace()
+                || !predecessor.securityLogicalKey().equals(identity.securityLogicalKey())
+                || !predecessor.eventContractVersion().equals(
+                        SecurityStatusEventPayloadContract.VERSION)
+                || predecessor.eventLogicalKey() == null) {
+            throw conflict("existing predecessor is outside the resolved identity chain");
         }
     }
 
@@ -601,7 +761,7 @@ public class SecurityStatusEventMaterializationService {
         }
     }
 
-    private static void verifyLineage(
+    private void verifyLineage(
             MaterializeSecurityStatusCommand command,
             Context context,
             ProcessingAttempt attempt,
@@ -613,16 +773,62 @@ public class SecurityStatusEventMaterializationService {
             String lineageHash,
             SecurityStatusEventLineage lineage
     ) {
+        verifyPersistedLineage(command, context, identity, mapping, predecessor, event,
+                assurance, lineage);
+        if (lineage.ingestionRunId() != context.run().id()
+                || !lineage.ingestionRunLogicalKey().equals(context.run().logicalKey())
+                || lineage.processingAttemptId() != attempt.id()
+                || !lineage.attemptLogicalKey().equals(attempt.logicalKey())
+                || !lineage.lineageHash().equals(lineageHash)) {
+            throw conflict("event lineage idempotency resolved to different immutable content");
+        }
+    }
+
+    private void verifyPersistedLineage(
+            MaterializeSecurityStatusCommand command,
+            Context context,
+            SecurityIdentity identity,
+            SourceSecurityIdentityMapping mapping,
+            MaterializedSecurityEvent predecessor,
+            MaterializedSecurityEvent event,
+            AssuranceLevel assurance,
+            SecurityStatusEventLineage lineage
+    ) {
+        IngestionRun lineageRun = ingestion.findRun(lineage.ingestionRunId())
+                .orElseThrow(() -> conflict("lineage origin run is missing"));
+        RawRecord lineageRaw = ingestion.findRawRecord(
+                DatasetType.SECURITY_STATUS, lineage.rawRecordId())
+                .orElseThrow(() -> conflict("lineage origin raw is missing"));
+        ProcessingAttempt lineageAttempt = ingestion.findAttemptById(
+                DatasetType.SECURITY_STATUS, lineage.processingAttemptId())
+                .orElseThrow(() -> conflict("lineage origin attempt is missing"));
+        String expectedHash = eventHasher.lineageHash(
+                event.eventLogicalKey(), context.run().datasetLogicalKey(),
+                context.raw().logicalKey(), lineage.ingestionRunLogicalKey(),
+                lineage.attemptLogicalKey(), mapping.mappingLogicalKey(),
+                identity.securityLogicalKey(),
+                predecessor == null ? null : predecessor.eventLogicalKey(),
+                context.run().runNamespace(), SecurityStatusEventPayloadContract.VERSION,
+                command.normalizerVersion(), command.transitionRuleVersion(), event.payloadHash(),
+                assurance);
         if (lineage.eventId() != event.id()
                 || !lineage.eventLogicalKey().equals(event.eventLogicalKey())
                 || lineage.datasetVersionId() != context.dataset().id()
                 || !lineage.datasetLogicalKey().equals(context.run().datasetLogicalKey())
                 || lineage.rawRecordId() != context.raw().id()
                 || !lineage.rawRecordLogicalKey().equals(context.raw().logicalKey())
-                || lineage.ingestionRunId() != context.run().id()
-                || !lineage.ingestionRunLogicalKey().equals(context.run().logicalKey())
-                || lineage.processingAttemptId() != attempt.id()
-                || !lineage.attemptLogicalKey().equals(attempt.logicalKey())
+                || lineageRun.datasetVersionId() != context.dataset().id()
+                || lineageRun.datasetType() != DatasetType.SECURITY_STATUS
+                || lineageRun.runNamespace() != context.run().runNamespace()
+                || lineageRun.manifestContractVersion()
+                        != ManifestContractVersion.INGESTION_MANIFEST_V2_SECURITY_EVENT
+                || !lineageRun.logicalKey().equals(lineage.ingestionRunLogicalKey())
+                || lineageRaw.id() != context.raw().id()
+                || !lineageRaw.logicalKey().equals(lineage.rawRecordLogicalKey())
+                || lineageAttempt.ingestionRunId() != lineageRun.id()
+                || lineageAttempt.rawRecordId() != lineageRaw.id()
+                || !lineageAttempt.logicalKey().equals(lineage.attemptLogicalKey())
+                || lineageAttempt.status() != AttemptStatus.COMPLETED
                 || lineage.securityIdentityId() != identity.id()
                 || !lineage.securityLogicalKey().equals(identity.securityLogicalKey())
                 || lineage.mappingId() != mapping.id()
@@ -631,11 +837,14 @@ public class SecurityStatusEventMaterializationService {
                         predecessor == null ? null : predecessor.id())
                 || !Objects.equals(lineage.predecessorEventLogicalKey(),
                         predecessor == null ? null : predecessor.eventLogicalKey())
+                || lineage.recordNamespace() != context.run().runNamespace()
+                || !lineage.eventContractVersion().equals(
+                        SecurityStatusEventPayloadContract.VERSION)
                 || !lineage.normalizerVersion().equals(command.normalizerVersion())
                 || !lineage.transitionRuleVersion().equals(command.transitionRuleVersion())
                 || lineage.assuranceLevel() != assurance
-                || !lineage.lineageHash().equals(lineageHash)) {
-            throw conflict("event lineage idempotency resolved to different immutable content");
+                || !lineage.lineageHash().equals(expectedHash)) {
+            throw conflict("event lineage does not match its immutable raw provenance chain");
         }
     }
 
@@ -719,4 +928,14 @@ public class SecurityStatusEventMaterializationService {
             DatasetVersion dataset,
             KnowledgeAssessment assessment
     ) {}
+
+    private record FailureChain(
+            String securityLogicalKey,
+            String predecessorEventLogicalKey,
+            AssuranceLevel assuranceLevel
+    ) {
+        private static FailureChain unresolved() {
+            return new FailureChain(null, null, AssuranceLevel.INFERRED_RESEARCH);
+        }
+    }
 }

@@ -255,6 +255,12 @@ public class MarketDataIngestionRepository {
                 .stream().findFirst();
     }
 
+    public Optional<ProcessingAttempt> findAttemptById(DatasetType type, long attemptId) {
+        return jdbc.query(
+                "SELECT " + ATTEMPT_COLUMNS + " FROM " + attemptTable(type) + " WHERE id=?",
+                (rs, row) -> mapAttempt(type, rs), attemptId).stream().findFirst();
+    }
+
     Optional<ProcessingAttempt> insertAttempt(
             DatasetType type,
             long runId,

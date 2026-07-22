@@ -799,6 +799,11 @@ BEGIN
             USING ERRCODE = '23514';
     END IF;
 
+    -- Serialize every resolved chain decision by schema and stable identity.  The
+    -- schema component keeps independently migrated integration-test schemas isolated.
+    PERFORM pg_advisory_xact_lock(hashtextextended(
+        current_schema() || chr(31) || NEW.security_logical_key, 0));
+
     SELECT * INTO STRICT raw_row
     FROM security_status_raw_records
     WHERE record_namespace=NEW.record_namespace
@@ -866,6 +871,21 @@ BEGIN
             RAISE EXCEPTION 'incremental V1 event predecessor chain is invalid'
                 USING ERRCODE = '23514';
         END IF;
+        IF EXISTS (
+            SELECT 1
+            FROM security_status_normalization_results result
+            JOIN security_status_processing_attempts attempt
+              ON attempt.id=result.processing_attempt_id
+            JOIN security_status_raw_records no_change_raw
+              ON no_change_raw.id=attempt.raw_record_id
+            WHERE result.outcome='NO_STATE_CHANGE'
+              AND result.security_logical_key=NEW.security_logical_key
+              AND result.predecessor_event_logical_key=predecessor_row.event_logical_key
+              AND no_change_raw.record_namespace=NEW.record_namespace
+              AND no_change_raw.source_effective_date=NEW.effective_from) THEN
+            RAISE EXCEPTION 'resolved event conflicts with a same-date NO_STATE_CHANGE fact'
+                USING ERRCODE = '23514';
+        END IF;
     END IF;
 
     IF NOT security_status_event_v1_transition_valid(
@@ -884,6 +904,26 @@ BEGIN
     IF NEW.trust_level <> expected_trust THEN
         RAISE EXCEPTION 'resolved event trust must be the conservative provenance minimum'
             USING ERRCODE = '23514';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION reject_resolved_event_history_insert()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    source_event_logical_key VARCHAR(256);
+BEGIN
+    SELECT event_logical_key INTO STRICT source_event_logical_key
+    FROM security_status_events
+    WHERE id=NEW.source_event_id
+    FOR SHARE;
+    IF source_event_logical_key IS NOT NULL THEN
+        RAISE EXCEPTION
+            'V8 resolved event must wait for stage 2D-2B-2 history projector'
+            USING ERRCODE = '55000';
     END IF;
     RETURN NEW;
 END;
@@ -909,6 +949,8 @@ DECLARE
 BEGIN
     SELECT * INTO STRICT event_row FROM security_status_events
     WHERE id=NEW.event_id FOR SHARE;
+    PERFORM pg_advisory_xact_lock(hashtextextended(
+        current_schema() || chr(31) || event_row.security_logical_key, 0));
     SELECT * INTO STRICT dataset_row FROM market_data_dataset_versions
     WHERE id=NEW.dataset_version_id;
     SELECT * INTO STRICT raw_row FROM security_status_raw_records
@@ -1052,6 +1094,7 @@ DECLARE
     lineage_row security_status_event_lineage%ROWTYPE;
     expected_outcome_status VARCHAR(32);
     expected_assurance VARCHAR(32);
+    current_head_event_logical_key VARCHAR(256);
     mapping_found BOOLEAN := FALSE;
     predecessor_found BOOLEAN := FALSE;
 BEGIN
@@ -1123,8 +1166,14 @@ BEGIN
         END IF;
     END IF;
 
-    expected_assurance := attempt_row.assurance_level;
+    expected_assurance := CASE
+        WHEN NEW.outcome='PROJECTION_FAILED' AND NEW.security_logical_key IS NULL
+            THEN 'INFERRED_RESEARCH'
+        ELSE attempt_row.assurance_level
+    END;
     IF NEW.security_logical_key IS NOT NULL THEN
+        PERFORM pg_advisory_xact_lock(hashtextextended(
+            current_schema() || chr(31) || NEW.security_logical_key, 0));
         SELECT mapping.* INTO STRICT mapping_row
         FROM source_security_identity_mappings mapping
         WHERE mapping.record_namespace=run_row.run_namespace
@@ -1160,19 +1209,62 @@ BEGIN
             security_event_assurance_rank(predecessor_row.assurance_level), 1));
     END IF;
 
+    IF NEW.outcome='PROJECTION_FAILED' AND mapping_found THEN
+        SELECT candidate.event_logical_key INTO current_head_event_logical_key
+        FROM security_status_events candidate
+        WHERE candidate.record_namespace=run_row.run_namespace
+          AND candidate.security_logical_key=NEW.security_logical_key
+          AND candidate.event_contract_version='SECURITY_STATUS_EVENT_V1'
+          AND NOT EXISTS (
+              SELECT 1 FROM security_status_events successor
+              WHERE successor.supersedes_event_id=candidate.id
+                AND successor.event_logical_key IS NOT NULL);
+        IF current_head_event_logical_key IS DISTINCT FROM
+                NEW.predecessor_event_logical_key THEN
+            RAISE EXCEPTION 'PROJECTION_FAILED predecessor must be the current resolved chain head'
+                USING ERRCODE = '23514';
+        END IF;
+    END IF;
+
     IF NEW.outcome IN ('EVENT_MATERIALIZED', 'EVENT_REUSED') THEN
         SELECT * INTO STRICT event_row FROM security_status_events WHERE id=NEW.event_id;
         SELECT * INTO STRICT lineage_row FROM security_status_event_lineage
         WHERE event_id=event_row.id;
-        IF NEW.event_logical_key <> event_row.event_logical_key
+        IF NOT mapping_found
+           OR NEW.event_logical_key <> event_row.event_logical_key
            OR NEW.security_logical_key <> event_row.security_logical_key
+           OR event_row.record_namespace <> run_row.run_namespace
+           OR event_row.dataset_version_id <> run_row.dataset_version_id
+           OR raw_row.dataset_version_id <> run_row.dataset_version_id
+           OR event_row.source <> raw_row.source
+           OR event_row.source_version <> raw_row.source_version
+           OR event_row.source_record_id <> raw_row.source_record_id
+           OR event_row.source_revision <> raw_row.source_revision
+           OR event_row.event_logical_key <> compute_security_event_logical_key(
+                raw_row.raw_record_logical_key,
+                event_row.event_contract_version,
+                event_row.event_type)
+           OR event_row.security_logical_key <> mapping_row.security_logical_key
+           OR lineage_row.event_id <> event_row.id
+           OR lineage_row.event_logical_key <> event_row.event_logical_key
+           OR lineage_row.raw_record_id <> raw_row.id
+           OR lineage_row.raw_record_logical_key <> raw_row.raw_record_logical_key
+           OR lineage_row.dataset_version_id <> run_row.dataset_version_id
+           OR lineage_row.dataset_logical_key <> run_row.dataset_logical_key
+           OR lineage_row.security_identity_id <> identity_row.id
+           OR lineage_row.security_logical_key <> mapping_row.security_logical_key
+           OR lineage_row.mapping_id <> mapping_row.id
+           OR lineage_row.mapping_logical_key <> mapping_row.mapping_logical_key
+           OR lineage_row.record_namespace <> run_row.run_namespace
+           OR lineage_row.event_contract_version <> event_row.event_contract_version
            OR NEW.predecessor_event_logical_key IS DISTINCT FROM
                 lineage_row.predecessor_event_logical_key
            OR NEW.normalizer_version <> lineage_row.normalizer_version
            OR NEW.transition_rule_version <> lineage_row.transition_rule_version
            OR event_row.assurance_level <> expected_assurance
            OR lineage_row.assurance_level <> expected_assurance THEN
-            RAISE EXCEPTION 'normalization event reference/assurance is inconsistent'
+            RAISE EXCEPTION
+                'normalization event/raw/dataset lineage chain or assurance is inconsistent'
                 USING ERRCODE = '23514';
         END IF;
         IF NEW.outcome = 'EVENT_MATERIALIZED'
@@ -1188,8 +1280,13 @@ BEGIN
         IF NOT mapping_found OR NOT predecessor_found
            OR raw_row.raw_payload->>'symbol' <> predecessor_row.symbol
            OR raw_row.raw_payload->'state' <> predecessor_row.payload->'resultingState'
-           OR raw_row.source_effective_date <= predecessor_row.effective_from THEN
-            RAISE EXCEPTION 'NO_STATE_CHANGE requires the same later-dated predecessor state'
+           OR raw_row.source_effective_date <= predecessor_row.effective_from
+           OR EXISTS (
+                SELECT 1 FROM security_status_events successor
+                WHERE successor.supersedes_event_id=predecessor_row.id
+                  AND successor.event_logical_key IS NOT NULL) THEN
+            RAISE EXCEPTION
+                'NO_STATE_CHANGE requires the same later-dated current chain-head state'
             USING ERRCODE = '23514';
         END IF;
     END IF;
@@ -1572,6 +1669,10 @@ AFTER INSERT ON security_status_events
 DEFERRABLE INITIALLY DEFERRED
 FOR EACH ROW EXECUTE FUNCTION ensure_resolved_event_has_lineage();
 
+CREATE TRIGGER trg_security_status_history_reject_v8_resolved_event
+BEFORE INSERT ON security_status_history
+FOR EACH ROW EXECUTE FUNCTION reject_resolved_event_history_insert();
+
 CREATE TRIGGER trg_security_status_event_lineage_validate
 BEFORE INSERT ON security_status_event_lineage
 FOR EACH ROW EXECUTE FUNCTION validate_security_event_lineage_insert();
@@ -1625,6 +1726,7 @@ BEGIN
             'validate_ingestion_manifest_contract_insert',
             'validate_v2_security_attempt_insert',
             'validate_security_status_event_insert_v8',
+            'reject_resolved_event_history_insert',
             'validate_security_event_lineage_insert',
             'validate_security_normalization_result_insert',
             'ensure_v2_attempt_has_result',
