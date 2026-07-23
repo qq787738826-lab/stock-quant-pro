@@ -35,7 +35,9 @@
 - 阶段 2E-1 任务分支：`codex/1.4.0-2e-technical-analysis-v1`
 - 阶段 2E-1 冻结集成基线：`70b4bacb06dbaf799ec3b01599f07d38e8b96589`
 - 阶段 2E-1 规则版本：`1.4.0-stage-2e-technical-analysis-v1`
-- 阶段 2E-1 已在任务分支完成实现和 Codex 本地验证，尚待独立 GitHub 复审与合入；不得提前描述为集成分支已具备该能力。
+- 阶段 2E-1 实现提交：`93ccf7c6da380be91ca342f6c5e8815f8e7dfe07`
+- 阶段 2E-1 集成合并提交：`adb781c3ffb41ff13a14538067e838a60a65bea9`
+- 阶段 2E-1 已完成确定性 TECHNICAL_ANALYSIS V1，实现通过 Codex 本地验证和独立 GitHub 最终复审 PASS（HIGH 0 / MEDIUM 0 / LOW 0），并已合入集成分支。
 - `master`：`27d9099 chore: checkpoint Stock Quant Pro 1.3.1 and remove tracked cache`
 - 版本号仍保持 `1.3.1`；尚未发布 `1.4.0`。
 
@@ -54,18 +56,15 @@
 - 阶段 2D-2B-1A：来源无关摄取基础已完成并合入；V7 建立通用 ingestion run、security/calendar immutable raw、run-record 关联、terminal processing attempt、retry、namespace、assurance、封存和 `INGESTION_MANIFEST_V1`。
 - 阶段 2D-2B-1B-0：已冻结 TEST/DEMO security raw 到 V1 event 的稳定身份、active 语义、attempt/result/event 基数、normalization outcome、event root/lineage、Manifest V2、并发与原子失败契约；本阶段只有文档，没有生产实现。
 - 阶段 2D-2B-1B-1：TEST/DEMO security event materialization foundation 已完成、通过独立 GitHub 复审并合入；V8 实现 `manifestContractVersion`、TEST/DEMO 稳定证券身份、显式 source identity mapping、`SECURITY_STATUS_RAW_TEST_V1`、V1 event 物化与复用、normalization result、唯一 event lineage、`INGESTION_MANIFEST_V2_SECURITY_EVENT`、Java/PostgreSQL 双重门禁，以及幂等、并发和原子失败保护。resolved event 在 2D-2B-2 前仍被禁止进入 history。
+- 阶段 2E-1：确定性 TECHNICAL_ANALYSIS V1 已完成、通过独立 GitHub 最终复审并合入；只解释冻结的 `technicalMetrics` 与 `marketData`，形成五类固定 finding，通过 Java/Python 双重校验并受 DATA_QUALITY 门禁约束，不产生正式 veto，总控仍保持安全不足状态。
 
 阶段 2D-1、2D-2A、2D-2B-1A、文档阶段 2D-2B-1B-0 和 TEST/DEMO 实现阶段 2D-2B-1B-1 完成不等于完整阶段 2D、完整阶段 2D-2 或完整阶段 2D-2B 完成；这些上位阶段仍处于进行中。已完成内容是基础设施、只读事实上下文、数据质量门禁、受限的当前证券池宽度状态规则、时态事实基础、来源无关摄取基础、事件物化契约及 TEST/DEMO event 物化基础。当前 event 物化能力不包含正式来源、FORMAL/PIT、history/calendar projection、Universe、完整六智能体分析、完整市场环境模型、历史无前视市场宽度、真实股票分析或投资建议能力。
-
-## 当前任务分支候选状态
-
-阶段 2E-1 已在任务分支实现只解释 Java 冻结 `technicalMetrics` 与 `marketData` 的确定性 TECHNICAL_ANALYSIS V1，并完成单元、真实 Java/Python、隔离 Schema 的真实 PostgreSQL 和完整回归验证。该候选实现没有修改外层 `contextSnapshot` Schema、Flyway、V1 至 V8 或 public Schema，也没有改变 POSITION_RISK 的唯一正式否决权。它尚未通过独立 GitHub 复审、尚未合入集成分支，且没有开始任何后续阶段。
 
 ## 权威边界与真实可用能力
 
 Java 是 `taskId`、六个 `runId`、状态、幂等与缓存、持久化和跨语言响应校验的唯一权威。Python 无状态，只处理 Java 传入的只读 `contextSnapshot`，不访问任务数据库。PostgreSQL 已包含 task、run、evidence、veto、decision 五类持久化结构。Vue 可创建、轮询、恢复并展示任务。本地脚本可安全启动、复用和精确停止 Python、Java、Vue。
 
-在阶段 2E-1 任务分支中，当前真实可用的是 Java 权威任务和持久化、阶段 2A 第一批四类上下文、确定性技术指标、确定性 DATA_QUALITY 门禁、`marketBreadth` 只读事实、`scanResult` 历史扫描事实、阶段 2D-1 受限的当前证券池宽度状态规则、阶段 2E-1 确定性 TECHNICAL_ANALYSIS V1、V6 时态事实基础、V7 来源无关摄取基础、V8 TEST/DEMO security event 物化基础、Hash 与 JSONB 稳定往返、缺数安全降级、失败原子性和 Vue 工作台观察能力。V8 已实现 run 创建时冻结的 `manifestContractVersion`、TEST/DEMO 稳定证券身份与显式 source identity mapping、`SECURITY_STATUS_RAW_TEST_V1`、`SECURITY_STATUS_EVENT_V1` 物化与严格复用、每 terminal attempt 唯一 normalization result、每逻辑 event 唯一 lineage、`INGESTION_MANIFEST_V2_SECURITY_EVENT`、Java/PostgreSQL 双重门禁，以及幂等、两个 backend 并发和原子失败保护。FORMAL/PIT 继续由数据库门禁拒绝，resolved event 在 2D-2B-2 前不得进入 `security_status_history`；当前尚未形成正式 history/calendar projection 或 Universe。除 DATA_QUALITY、该受限宽度状态规则和 TECHNICAL_ANALYSIS V1 外，其余三个专业智能体规则仍未实现；当前仍不具备完整六智能体分析、完整 MARKET_REGIME、STRATEGY_BACKTEST 解释、公告风险、持仓风险、投资建议或自动交易能力。
+当前集成分支真实可用的是 Java 权威任务和持久化、阶段 2A 第一批四类上下文、确定性技术指标、确定性 DATA_QUALITY 门禁、`marketBreadth` 只读事实、`scanResult` 历史扫描事实、阶段 2D-1 受限的当前证券池宽度状态规则、阶段 2E-1 确定性 TECHNICAL_ANALYSIS V1、V6 时态事实基础、V7 来源无关摄取基础、V8 TEST/DEMO security event 物化基础、Hash 与 JSONB 稳定往返、缺数安全降级、失败原子性和 Vue 工作台观察能力。V8 已实现 run 创建时冻结的 `manifestContractVersion`、TEST/DEMO 稳定证券身份与显式 source identity mapping、`SECURITY_STATUS_RAW_TEST_V1`、`SECURITY_STATUS_EVENT_V1` 物化与严格复用、每 terminal attempt 唯一 normalization result、每逻辑 event 唯一 lineage、`INGESTION_MANIFEST_V2_SECURITY_EVENT`、Java/PostgreSQL 双重门禁，以及幂等、两个 backend 并发和原子失败保护。FORMAL/PIT 继续由数据库门禁拒绝，resolved event 在 2D-2B-2 前不得进入 `security_status_history`；当前尚未形成正式 history/calendar projection 或 Universe。除 DATA_QUALITY、该受限宽度状态规则和 TECHNICAL_ANALYSIS V1 外，其余三个专业智能体规则仍未实现；当前仍不具备完整六智能体分析、完整 MARKET_REGIME、STRATEGY_BACKTEST 解释、公告风险、持仓风险、投资建议或自动交易能力。
 
 ## 九类 contextSnapshot 实际状态
 
@@ -149,6 +148,6 @@ DATA_QUALITY 为 PASS 或 WARN 且相应输入可执行时，MARKET_REGIME 与 T
 
 来源询价、许可审查、样例验收与批准记录框架见 [stage-2d2b1b2-source-decision-package.md](stage-2d2b1b2-source-decision-package.md)。该决策包只准备证据清单和准入门槛，不代表任何来源已批准、FORMAL/PIT 已开放或 adapter 已开始。
 
-完整阶段 2D、完整阶段 2D-2 和完整阶段 2D-2B 仍处于进行中。阶段 2D-2A、2D-2B-1A、文档阶段 2D-2B-1B-0 与 TEST/DEMO 实现阶段 2D-2B-1B-1 已完成；该工作线的唯一入口只是解决 2D-2B-1B-2 的外部前置决策，不是立即开始 adapter、2D-2B-2 或 Universe 实现。阶段 2E-1 任务分支实现和本地验证已经完成，但尚待独立复审与合入；没有自动批准或开始任何 2E 后续任务。
+完整阶段 2D、完整阶段 2D-2 和完整阶段 2D-2B 仍处于进行中。阶段 2D-2A、2D-2B-1A、文档阶段 2D-2B-1B-0 与 TEST/DEMO 实现阶段 2D-2B-1B-1 已完成；该工作线的唯一入口只是解决 2D-2B-1B-2 的外部前置决策，不是立即开始 adapter、2D-2B-2 或 Universe 实现。阶段 2E-1 已完成独立复审并合入，但没有自动批准或开始任何 2E 后续任务。
 
-阻断项包括正式证券状态来源、数据许可、本地持久化权利、历史回放权利、稳定 source instrument ID、revision 语义以及 published/effective 时间语义。当前免费聚合源和 `securities` 当前态投影均不得被视为正式来源。当前仍未实现正式 source adapter、FORMAL 摄取、PIT_VERIFIED、`SECURITY_STATUS_EVENT_V2`、`security_status_history` 正式投影、trading calendar projection、Universe snapshot、PIT 行情和公司行动、`MARKET_BREADTH_V2`、完整 MARKET_REGIME 或生产扫描切换；无前视历史回放和评测集也尚未建立。阶段 2E-1 之外的 TECHNICAL_ANALYSIS 扩展及后续阶段均未开始。阶段 2D-2B 禁止外部行情补数、LLM 权威决策、投资建议和交易写操作。
+阻断项包括正式证券状态来源、数据许可、本地持久化权利、历史回放权利、稳定 source instrument ID、revision 语义以及 published/effective 时间语义。当前免费聚合源和 `securities` 当前态投影均不得被视为正式来源。当前仍未实现正式 source adapter、FORMAL 摄取、PIT_VERIFIED、`SECURITY_STATUS_EVENT_V2`、`security_status_history` 正式投影、trading calendar projection、Universe snapshot、PIT 行情和公司行动、`MARKET_BREADTH_V2`、完整 MARKET_REGIME 或生产扫描切换；无前视历史回放和评测集也尚未建立。阶段 2E-1 之外的 TECHNICAL_ANALYSIS 扩展及后续阶段均未开始；阶段 2F、2G、2H、2I 均未开始。阶段 2D-2B 禁止外部行情补数、LLM 权威决策、投资建议和交易写操作。

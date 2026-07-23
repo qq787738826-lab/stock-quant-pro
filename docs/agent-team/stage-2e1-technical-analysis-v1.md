@@ -2,9 +2,13 @@
 
 ## 1. 状态与范围
 
-状态：**任务分支实现完成，CODEX LOCAL VERIFICATION PASS；等待独立 GitHub 复审与合入**。
+状态：**已实现；Codex 本地验证通过；独立 GitHub 最终复审 PASS；已合入集成分支**。
 
 团队规则版本：`1.4.0-stage-2e-technical-analysis-v1`。
+
+实现提交：`93ccf7c6da380be91ca342f6c5e8815f8e7dfe07`。
+
+集成合并提交：`adb781c3ffb41ff13a14538067e838a60a65bea9`。
 
 本阶段只为 `TECHNICAL_ANALYSIS` 专业智能体解释 Java 已冻结到 `contextSnapshot` 的 `technicalMetrics` 与 `marketData`。它不拉取行情、不访问业务数据库、不在 Python 重算 SMA/RSI/ATR 或其他指标、不使用 LLM，也不输出买入、卖出、加仓、减仓、目标价、收益预测或收益承诺。
 

@@ -142,11 +142,12 @@
 
 ## 2E：TECHNICAL_ANALYSIS 真实规则
 
-### 2E-1：确定性规则 V1（任务分支实现及本地验证完成，待独立复审与合入）
+### 2E-1：确定性规则 V1（已完成并合入）
 
 - 目标：只解释 Java 已冻结的 `technicalMetrics` 与 `marketData`，不在 Python 拉取行情、访问业务数据库或隐式重算技术指标。
 - 设计与规则：[stage-2e1-technical-analysis-v1.md](stage-2e1-technical-analysis-v1.md)。
 - 规则版本：`1.4.0-stage-2e-technical-analysis-v1`。
+- 实现与合入：实现提交 `93ccf7c6da380be91ca342f6c5e8815f8e7dfe07`；独立 GitHub 最终复审 PASS（HIGH 0 / MEDIUM 0 / LOW 0）；集成合并提交 `adb781c3ffb41ff13a14538067e838a60a65bea9`。
 - 输出：趋势、RSI 动量/超买超卖风险、相对 MA20 偏离、相对波动和指标确认/冲突五类确定性 findings，两条直接投影 evidence，以及截断到 `[0,100]` 的确定性 score。
 - 依赖：已完成的 2A 冻结输入和 2B DATA_QUALITY 门禁；阶段 2D-1 MARKET_REGIME 在新团队版本中保持原契约。
 - 门禁：DATA_QUALITY BLOCKED 时不形成技术 evidence、finding 或正常评分；PASS/WARN 分别形成 `PASS/100` 与 `WARN/50` 的技术门禁和 confidence。非法技术输入以 `TECHNICAL_ANALYSIS_INPUT_INVALID` 安全降级，不伪造中性结论。
@@ -154,7 +155,7 @@
 - 本地验收：Python `compileall` 与 unittest `77/0/0`；真实 Java/Python 跨语言 `4/0/0/0`、`Skipped=0`；随机临时 Schema 的真实 PostgreSQL `2/0/0/0`、`Skipped=0`；`quant-server` 全量 `261/0/0/27`；`quant-core` 全量 `1/0/0/0`。这些均为 Codex 本地执行证据，不是 GitHub Actions CI；27 项为无外部集成环境变量时的门禁跳过，不能冒充真实闭环。
 - 数据库验收：真实 PostgreSQL 覆盖六个 run、证据顺序、空正式 veto、非法响应原子失败与精确清理；测试临时 Schema 删除，public 数据和结构指纹前后不变。没有修改 Flyway、V1 至 V8、public Schema 或外层 `contextSnapshot` Schema。
 - 禁止范围：前视数据、外部数据源、source adapter、FORMAL/PIT、隐式指标重算、MARKET_REGIME 升级、`MARKET_BREADTH_V1` 修改、`backtestContext` 接入、LLM 事实/评分/结论、投资建议和交易写操作。
-- 阶段边界：任务分支完成不等于独立 GitHub 复审或集成分支合入，不自动批准任何后续 2E 扩展、2F 或其他阶段。
+- 阶段边界：阶段 2E-1 完成并合入不自动批准或开始任何后续 2E 扩展、2F 或其他阶段；2F、2G、2H、2I 均保持未开始。
 
 ## 2F：STRATEGY_BACKTEST 解释与稳定性评估（未开始）
 
