@@ -211,18 +211,21 @@ FORMAL 批准还必须明确允许用途、禁止用途、地域/主体限制、
 
 | # | 样例场景 | 必须证明 |
 |---:|---|---|
-| 1 | 首次上市 `FULL_STATUS_SNAPSHOT` root | 初始完整状态、稳定身份、无 predecessor、published/effective 语义明确 |
-| 2 | `ST_CHANGE` | 只改变 ST 状态，其他状态字段可核对 |
-| 3 | 摘帽 `ST_CHANGE` | 从 ST 到非 ST 的独立变化及生效/发布时间 |
-| 4 | `ACTIVE_CHANGE` | active 业务定义明确，不把普通停牌或无成交误映射为 inactive |
-| 5 | `DELISTING` | `listed=false, active=false` 及其 effective/published/revision 证据 |
-| 6 | 同一记录 revision 更正 | 原始版和更正版同时保留，revision 身份、顺序和更正原因可辨识 |
-| 7 | 延迟发布 | effective time 早于真实发布/可获得时间，且 published/observed 不由系统猜测 |
-| 8 | 同一证券多次状态变化 | 稳定身份、连续 revision/event 顺序和不覆盖历史版本 |
-| 9 | symbol 或简称变化 | `sourceInstrumentId` 保持稳定，不因代码/简称匹配自动新建或合并身份 |
-| 10 | `sourceInstrumentId` 稳定性 | 跨全部上述样例保持同一逻辑证券身份，代码复用场景能区分不同证券 |
-| 11 | `BOARD_CHANGE` | 板块定义和变化语义明确，只改变允许的 board 状态 |
-| 12 | `EXCHANGE_CHANGE` | 交易所变化前后稳定身份与时间语义明确，不按 symbol 自动合并 |
+| 1 | 初始完整状态 `FULL_STATUS_SNAPSHOT` root | 无 predecessor；为稳定证券身份建立初始完整五字段状态；published/effective/observed 及 revision 顺序明确 |
+| 2 | 独立 `LISTING` | 必须已有同一稳定 `securityLogicalKey` 的 predecessor，且 predecessor 为 `listed=false, active=false`；新状态为 `listed=true, active=true`；除这两个允许变化外其他字段保持一致；`sourceInstrumentId` 保持稳定；published/effective/observed 及 revision 顺序明确 |
+| 3 | `ST_CHANGE` | 只改变 ST 状态，其他状态字段可核对 |
+| 4 | 摘帽 `ST_CHANGE` | 从 ST 到非 ST 的独立变化及生效/发布时间 |
+| 5 | `ACTIVE_CHANGE` | active 业务定义明确，不把普通停牌或无成交误映射为 inactive |
+| 6 | `DELISTING` | `listed=false, active=false` 及其 effective/published/revision 证据 |
+| 7 | 同一记录 revision 更正 | 原始版和更正版同时保留，revision 身份、顺序和更正原因可辨识 |
+| 8 | 延迟发布 | effective time 早于真实发布/可获得时间，且 published/observed 不由系统猜测 |
+| 9 | 同一证券多次状态变化 | 稳定身份、连续 revision/event 顺序和不覆盖历史版本 |
+| 10 | symbol 或简称变化 | `sourceInstrumentId` 保持稳定，不因代码/简称匹配自动新建或合并身份 |
+| 11 | `sourceInstrumentId` 稳定性 | 跨全部上述样例保持同一逻辑证券身份，代码复用场景能区分不同证券 |
+| 12 | `BOARD_CHANGE` | 板块定义和变化语义明确，只改变允许的 board 状态 |
+| 13 | `EXCHANGE_CHANGE` | 交易所变化前后稳定身份与时间语义明确，不按 symbol 自动合并 |
+
+上述 13 个场景必须分别留证，并覆盖 `SECURITY_STATUS_EVENT_V1` 的全部七类事件：`FULL_STATUS_SNAPSHOT`、`LISTING`、`DELISTING`、`ST_CHANGE`、`BOARD_CHANGE`、`ACTIVE_CHANGE` 和 `EXCHANGE_CHANGE`。`FULL_STATUS_SNAPSHOT` 是无 predecessor 的初始完整状态根；`LISTING` 是已有同一稳定证券身份 predecessor 的增量变化，两者不得合并为一个样例或互相替代。
 
 ### 7.3 样例验收记录
 
@@ -232,6 +235,11 @@ FORMAL 批准还必须明确允许用途、禁止用途、地域/主体限制、
 
 **只有书面许可审查先通过，才允许创建独立 PoC 任务。** 本决策包不执行 PoC，也不实现 adapter。
 
+PoC 必须区分以下两个事实与事务边界：
+
+1. **raw 摄取边界**：raw 摄取是独立的 append-only 事实边界。raw 插入本身失败时不得留下不完整 raw；已经成功保存的合法 raw 不得因后续身份解析、event 分类、event 物化或 lineage 失败而被删除或回滚，必须继续用于失败审计、retry、revision 冲突分析和 Manifest。
+2. **event 物化边界**：从已提交合法 raw 开始，event 物化事务内的 terminal processing attempt、event、normalization result 和 event lineage 必须保持原子；其中任一步失败都必须回滚该物化事务，不得留下孤立或部分副作用。预期外失败必须在物化事务回滚后，按既有契约以独立审计事务原子保存 terminal `PROJECTION_FAILED` processing attempt 与匹配的 normalization result，使用脱敏、稳定的 `errorCode`，不创建 event 或 event lineage，也不删除合法 raw；不得在 rollback-only 事务中继续写审计事实。
+
 PoC 必须在隔离 TEST/DEMO 或合同明确允许的试用边界内验证：
 
 | # | PoC 硬门槛 | 当前状态 |
@@ -239,16 +247,19 @@ PoC 必须在隔离 TEST/DEMO 或合同明确允许的试用边界内验证：
 | 1 | 无人工猜测证券身份 | `NOT_STARTED` |
 | 2 | 无 symbol、简称、代码前缀自动合并 | `NOT_STARTED` |
 | 3 | raw 记录和原始时间/revision 字段可完整保存 | `NOT_STARTED` |
-| 4 | 同一 revision 可重复拉取并逐字段一致 | `NOT_STARTED` |
-| 5 | 增量摄取幂等，冲突显式失败 | `NOT_STARTED` |
-| 6 | published/effective/observed 时间不混用、不倒填 | `NOT_STARTED` |
-| 7 | Java 与 PostgreSQL canonical Hash 稳定一致 | `NOT_STARTED` |
-| 8 | 两个真实 backend 并发幂等且只有一个逻辑胜者 | `NOT_STARTED` |
-| 9 | 任一步失败均无部分 raw/event/result/lineage 写入 | `NOT_STARTED` |
-| 10 | 使用随机临时 Schema，不触碰 public Schema | `NOT_STARTED` |
-| 11 | 测试数据、连接和临时 Schema 可精确清理 | `NOT_STARTED` |
+| 4 | raw 插入原子失败，不留下不完整 raw | `NOT_STARTED` |
+| 5 | 已提交合法 raw 保持 append-only；后续身份解析、分类、物化或 lineage 失败不删除或回滚 raw，且 raw 继续进入失败审计、retry、revision 冲突分析和 Manifest | `NOT_STARTED` |
+| 6 | 同一 revision 可重复拉取并逐字段一致 | `NOT_STARTED` |
+| 7 | 增量摄取幂等，冲突显式失败 | `NOT_STARTED` |
+| 8 | published/effective/observed 时间不混用、不倒填 | `NOT_STARTED` |
+| 9 | Java 与 PostgreSQL canonical Hash 稳定一致 | `NOT_STARTED` |
+| 10 | 两个真实 backend 并发幂等且只有一个逻辑胜者 | `NOT_STARTED` |
+| 11 | event 物化事务中的 processing attempt、event、normalization result 和 event lineage 原子提交；任一步失败均不留下部分副作用 | `NOT_STARTED` |
+| 12 | 预期外失败在独立审计事务中原子形成 `PROJECTION_FAILED` attempt/result，具有脱敏、稳定 `errorCode`，不产生 event/lineage 且保留合法 raw | `NOT_STARTED` |
+| 13 | 使用随机临时 Schema，不触碰 public Schema | `NOT_STARTED` |
+| 14 | 测试数据、连接和临时 Schema 可精确清理 | `NOT_STARTED` |
 
-PoC 还必须证明 FORMAL/TEST/DEMO namespace、assurance 上限、封存、重试和 V8 门禁不能被 direct SQL 绕过。PoC 通过也不自动等于 FORMAL/PIT 批准；法律许可和技术批准必须分别留证。
+PoC 还必须证明 FORMAL/TEST/DEMO namespace、assurance 上限、封存、重试和 V8 门禁不能被 direct SQL 绕过。清理只能在 PoC 验收结束后精确针对授权测试数据执行，不得把删除已提交合法 raw 当作物化失败恢复策略，也不得用清理掩盖失败审计事实。PoC 通过也不自动等于 FORMAL/PIT 批准；法律许可和技术批准必须分别留证。
 
 ## 9. 决策状态模型
 
