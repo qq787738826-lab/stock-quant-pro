@@ -109,6 +109,7 @@
 ##### 2D-2B-1B-2：approved source adapter（外部决策阻断）
 
 - 目标：仅为经批准的证券状态来源实现 adapter，并冻结来源 instrument ID、revision、published/effective 时间、许可与持久化边界。
+- 决策准备：[stage-2d2b1b2-source-decision-package.md](stage-2d2b1b2-source-decision-package.md) 只提供候选来源、书面询问、许可/PIT 门槛和样例验收框架；不批准任何来源，也不表示 adapter 已开始。
 - 输入依赖：1B-1 已完成；仍须取得正式证券状态来源、数据许可、本地持久化权利、历史回放权利、稳定 source instrument ID、revision 语义和 published/effective 时间语义的明确批准。
 - 阶段位置：上述外部前置决策仍被阻断，正式 adapter 实现尚不能开始；当前唯一入口是解决前置来源与许可决策，而不是编码 adapter。
 - 阻断条件：来源、数据许可、本地持久化权利、历史回放权利、稳定 source instrument ID、revision 语义或 published/effective 时间语义任一未验证即不得开始。
