@@ -5,6 +5,7 @@ from datetime import datetime
 
 from .data_quality import DataQualityRuleEngine
 from .market_regime import MarketRegimeRuleEngine
+from .technical_analysis import TechnicalAnalysisRuleEngine
 from .models import (
     AgentCode,
     AgentDecision,
@@ -15,12 +16,18 @@ from .models import (
     RunStatus,
     STAGE_2B_DATA_QUALITY_RULE_VERSION,
     STAGE_2D_MARKET_REGIME_RULE_VERSION,
+    STAGE_2E_TECHNICAL_ANALYSIS_RULE_VERSION,
 )
 
 
 _DATA_QUALITY_RULE_VERSIONS = frozenset({
     STAGE_2B_DATA_QUALITY_RULE_VERSION,
     STAGE_2D_MARKET_REGIME_RULE_VERSION,
+    STAGE_2E_TECHNICAL_ANALYSIS_RULE_VERSION,
+})
+_MARKET_REGIME_RULE_VERSIONS = frozenset({
+    STAGE_2D_MARKET_REGIME_RULE_VERSION,
+    STAGE_2E_TECHNICAL_ANALYSIS_RULE_VERSION,
 })
 
 
@@ -126,7 +133,7 @@ class MarketRegimeAgent(InsufficientDataAgent):
         generated_at: datetime,
         data_quality_gate: GateStatus | None = None,
     ) -> AgentOutput:
-        if request.ruleVersion != STAGE_2D_MARKET_REGIME_RULE_VERSION:
+        if request.ruleVersion not in _MARKET_REGIME_RULE_VERSIONS:
             return super().analyze(request, generated_at, data_quality_gate)
         evaluation = self._engine.evaluate(
             request,
@@ -158,6 +165,41 @@ class TechnicalAnalysisAgent(InsufficientDataAgent):
     run_id_field = "technicalAnalysis"
     summary = "因数据质量门禁阻断，未执行技术分析。"
     pending_summary = "技术分析规则尚未实现，未执行技术分析。"
+
+    def __init__(self) -> None:
+        self._engine = TechnicalAnalysisRuleEngine()
+
+    def analyze(
+        self,
+        request: AgentTeamRequest,
+        generated_at: datetime,
+        data_quality_gate: GateStatus | None = None,
+    ) -> AgentOutput:
+        if request.ruleVersion != STAGE_2E_TECHNICAL_ANALYSIS_RULE_VERSION:
+            return super().analyze(request, generated_at, data_quality_gate)
+        evaluation = self._engine.evaluate(
+            request,
+            data_quality_gate if data_quality_gate is not None else GateStatus.BLOCKED,
+        )
+        return AgentOutput(
+            taskId=request.taskId,
+            runId=request.runIds.technicalAnalysis,
+            agentCode=AgentCode.TECHNICAL_ANALYSIS,
+            status=evaluation.status,
+            gateStatus=evaluation.gate_status,
+            decision=evaluation.decision,
+            veto=False,
+            score=evaluation.score,
+            confidence=evaluation.confidence,
+            summary=evaluation.summary,
+            findings=list(evaluation.findings),
+            evidence=list(evaluation.evidence),
+            errors=list(evaluation.errors),
+            contextHash=request.contextHash,
+            ruleVersion=request.ruleVersion,
+            executionMode=request.executionMode,
+            generatedAt=generated_at,
+        )
 
 
 class StrategyBacktestAgent(InsufficientDataAgent):
