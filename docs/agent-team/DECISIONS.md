@@ -21,7 +21,7 @@
 9. **先本地 PostgreSQL，后外部数据源**：优先复用已有数据表建立只读上下文，再评估外部数据源。
 10. **先规则能力，后 LLM**：先完成可复现、可测试的本地规则能力，再单独评估模型解释层。
 11. **不自动交易**：智能体输出仅用于研究和模拟，不直接修改现金、持仓、成交或控制券商客户端。
-12. **阶段隔离**：每个阶段使用独立任务分支、独立测试和独立人工验收，不跨阶段偷渡功能。
+12. **大阶段隔离**：每个大阶段使用独立任务分支、完整测试、ChatGPT 实际提交验收和用户 merge 批准，不跨大阶段偷渡功能；同一大阶段的内部工作包不分别提交或验收。
 13. **单一事实来源**：`docs/agent-team/CURRENT_STATE.md` 是进度、能力边界和下一阶段入口的唯一权威状态文件。
 
 ## 证券状态事件物化
@@ -34,4 +34,14 @@
 19. **Event lineage 与 Manifest V2 独立版本化**：每个首次物化的逻辑 event 恰好一条 append-only raw→event lineage；复用 event 只新增本次 normalization result。`INGESTION_MANIFEST_V2_SECURITY_EVENT` 在 run 创建时冻结，覆盖该 run 全部 attempt/result；accepted/rejected 只取每条 raw 的最大连续 attemptNo，历史失败仍进入 manifest 但不重复计数。不能修改 `INGESTION_MANIFEST_V1` 既有编码或在封存时切换版本。
 20. **事件时间与原子性**：event `knownAt` 必须等于 terminal attempt 的 `derivedKnownFrom`，effective、published、observed、recorded 与 known 时间不得混用，`completedAt` 不进入业务 manifest。event、首次 lineage、attempt 与 normalization result 必须在数据库事务中原子提交，并由唯一约束、不可变 trigger 和锁共同保护。
 
-上述决策的完整字段、outcome、并发与验收契约见 [stage-2d2b1b-security-event-materialization-design.md](stage-2d2b1b-security-event-materialization-design.md)。它们只批准 TEST/DEMO 设计边界，不解除 FORMAL/PIT 门禁，也不代表 2D-2B-1B-1 已开始实现。
+上述决策的完整字段、outcome、并发与验收契约见 [stage-2d2b1b-security-event-materialization-design.md](stage-2d2b1b-security-event-materialization-design.md)。它们只批准 TEST/DEMO 边界，不解除 FORMAL/PIT 门禁；2D-2B-1B-1 的实际完成状态继续以 [CURRENT_STATE.md](CURRENT_STATE.md) 为准。
+
+## 阶段开发治理
+
+21. **权威文档职责固定**：根目录 [AGENTS.md](../../AGENTS.md) 约束开发执行和安全；`CURRENT_STATE.md` 是当前进度、能力、阻断和入口的唯一事实来源；本文件冻结跨阶段决策；`ROADMAP.md` 只定义方向、顺序、依赖和验收门槛。`PROGRESS_LOG.md` 只能索引已经完成、已经验收或已经合入的历史里程碑及其提交、测试、ChatGPT 验收与用户 merge 批准证据，不得记录活动状态、当前阻断、当前入口、下一阶段或当前工作任务。`tasks/` 只保存大阶段或其内部工作包的任务边界。二者都不得成为平行状态权威。
+22. **双窗口开发模式**：ChatGPT 窗口规划较大的完整开发阶段，定义架构、范围、边界和验收标准，并在 Codex 推送后基于实际 Git commit、完整 diff 和测试证据验收；Codex 开发窗口在一个任务分支连续完成该大阶段全部内部工作包，自主实现、测试、修复、commit 和普通 push，但不得 merge 或自行进入下一大阶段。用户只需对高风险业务选择和重大方案分歧作出最终选择，并最终批准 merge，不需要逐文件批准或批准普通 commit/push。详细执行规则以 [AGENTS.md](../../AGENTS.md) 为准。
+23. **实际提交验收**：Codex 的聊天汇报、未提交工作区和自审不能代替最终验收。ChatGPT 必须检查已推送任务分支的实际 commit SHA、完整提交差异、测试证据、阶段边界和权威文档一致性，并向用户报告通过或不通过；不通过时由同一 Codex 开发窗口继续修复并提交推送。项目不固定设置第三个独立 Codex Review 窗口。
+24. **大阶段连续交付**：路线图不构成自动开发授权。每次授权一个较大的完整开发阶段，大阶段可包含多个内部工作包；内部工作包不分别开发、Review、提交或验收，Codex 应连续完成，最终形成大阶段任务分支提交。ChatGPT 验收通过后由用户批准 merge；合并后 Codex 停止，ChatGPT 才规划下一大阶段。
+25. **自主修复与高风险暂停**：普通编译错误、测试失败、局部重构、文件数量、常规实现选择和文档一致性问题由 Codex 在已授权大阶段内自主解决。仅当核心架构存在重大方案分歧、数据库核心模型或不可逆迁移、Java/Python 公共契约的重大选择、无法证明可消除的前视偏差、真实交易/下单/资金风险，或必须由用户选择的高风险业务规则时暂停。暂停报告必须说明原因、影响、方案、兼容性和迁移风险及所需选择；没有相应选择或新授权不得继续高风险实施。
+26. **Canonical Hash 契约先于依赖实现**：任何大阶段新增会被持久化、进入公共契约或承担数据版本含义的领域 Hash 前，必须先在该大阶段架构中冻结版本化 canonical 契约。未冻结的算法、编码、Unicode、字段白名单、排序、空值、时间、精度、数据版本、跨语言和兼容策略不得由 Codex 猜测；如果形成重大公共契约、数据库模型或不可逆迁移选择，按第 25 条暂停。契约未冻结前不得实现依赖它的生产 Hash、迁移或公共契约。2F 内部工作包的具体门禁见 [tasks/2f0-backtest-context-foundation.md](tasks/2f0-backtest-context-foundation.md)。
+27. **Knowledge-time 证据独立于业务日期与内容 Hash**：`trade_date<=requestTradeDate` 只证明业务日期上界，不证明该值在历史决策时点已经可知；内容 Hash 只证明给定内容稳定，也不证明历史可得性。可靠回测输入必须把决策时间、`knowledgeCutoff`、首次观察、来源/修订、快照或数据集版本、迟到与覆盖、公司行动和复权变化纳入可审计契约；无法证明 knowledge-time 合法性时 `backtestContext` 必须保持 `available=false`。若实现需要不可变行情快照、PIT 模型、`known_at` 或数据库迁移，必须作为下一大阶段 2F 的架构事项处理，不得由本次治理文档任务实现。

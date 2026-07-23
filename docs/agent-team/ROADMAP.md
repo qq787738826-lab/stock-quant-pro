@@ -2,7 +2,11 @@
 
 具体当前状态以 [CURRENT_STATE.md](CURRENT_STATE.md) 为准；本文件只定义阶段顺序、依赖和验收门槛。
 
-每个阶段都遵守 Java 权威、Python 无状态、真实证据、无自动交易的冻结边界。未达到验收条件不得宣称完成。
+每个大阶段都遵守 Java 权威、Python 无状态、真实证据、无自动交易的冻结边界。未达到验收条件不得宣称完成。
+
+路线图只控制方向，不授权自动实施。ChatGPT 每次规划一个较大的完整开发阶段；Codex 在一个任务分支连续完成其中全部内部工作包，自主测试、修复、commit 和普通 push；ChatGPT 基于实际 Git commit 验收，用户最终批准 merge。内部工作包不分别开发、Review、提交或验收，Codex 也不得自行进入下一大阶段。详细流程见仓库根目录 [AGENTS.md](../../AGENTS.md)。
+
+既有细分编号继续作为历史、依赖和能力边界索引，不要求未来逐项建立任务分支或验收停顿；未完成工作恢复前，应由 ChatGPT 按完整能力重新组合为大阶段。
 
 ## 1D-4：工作台与本地运行闭环验收（已完成）
 
@@ -66,7 +70,7 @@
 - 目标：形成历史无前视的市场宽度上下文。
 - 目标：建立可重复的历史样例。
 - 目标：建立评测集和规则阈值治理。
-- 完成门槛：完成阶段 2D-2 实现和独立验收前，完整阶段 2D 不得标记完成。
+- 完成门槛：阶段 2D-2 的全部依赖能力完成并形成实际 Git 提交、通过 ChatGPT 验收且由用户批准合入前，完整阶段 2D 不得标记完成。
 
 #### 2D-2A：历史事实版本与交易日历基础模型（已完成）
 
@@ -80,7 +84,7 @@
 - 阶段位置：2D-2B-1A 与 2D-2B-1B-1 已完成；完整 2D-2B 仍进行中。
 - 目标：在来源、身份、时间、assurance 和 lineage 可审计的前提下，逐步形成可追溯、版本化、可重复查询的每日 universe 快照。
 - 禁止范围：PIT 行情与公司行动实现、`MARKET_BREADTH_V2`、MARKET_REGIME 规则升级、投资建议和交易写操作。
-- 完成门槛：1B 事件摄取、2D-2B-2 双时间投影和 2D-2B-3 Universe 均完成独立验收前，不得标记完整 2D-2B 完成。
+- 完成门槛：1B 事件摄取、双时间投影和 Universe 能力全部完成并作为完整大阶段提交通过 ChatGPT 验收、由用户批准合入前，不得标记完整 2D-2B 完成。
 
 ##### 2D-2B-1A：source-neutral ingestion foundation（已完成）
 
@@ -157,21 +161,33 @@
 - 禁止范围：前视数据、外部数据源、source adapter、FORMAL/PIT、隐式指标重算、MARKET_REGIME 升级、`MARKET_BREADTH_V1` 修改、`backtestContext` 接入、LLM 事实/评分/结论、投资建议和交易写操作。
 - 阶段边界：阶段 2E-1 完成并合入不自动批准或开始任何后续 2E 扩展、2F 或其他阶段；2F、2G、2H、2I 均保持未开始。
 
-## 2F：STRATEGY_BACKTEST 解释与稳定性评估（未开始）
+## 2F：可靠回测基础与 STRATEGY_BACKTEST 确定性规则 V1（下一候选大阶段，未开始）
 
-- 目标：解释现有回测结果及其稳定性，不创建交易策略捷径。
-- 输入：现有 Java 回测上下文及证据。
-- 输出：适用性、样本、风险和稳定性 findings。
-- 依赖：先独立完成可靠的 `backtestContext` 接入；阶段 2C 未满足该条件。
-- 禁止范围：实盘承诺、自动参数寻优后直接交易、虚构回测。
-- 验收条件：无前视、版本可追溯、空样本安全降级。
+- 当前状态：`NOT_STARTED`。本节和任务书只规划候选能力，不表示任何业务实现已经开始。
+- 背景：阶段 2C 已证明旧回测记录缺少可验证的输入截止日期、knowledge-time、来源/修订版本、策略版本、完整参数和 lineage；当前 `backtestContext` 继续以 `BACKTEST_INPUT_CUTOFF_UNVERIFIABLE` 安全不可用。
+- 大阶段目标：在一个任务分支内连续建立可靠、可回放、无前视的 `backtestContext`，并基于该事实完成确定性 `STRATEGY_BACKTEST` 规则 V1、自动化测试和真实 PostgreSQL 验收。
+- 内部工作包：
+  1. [2F-0 可靠 backtestContext 审计与接入基础](tasks/2f0-backtest-context-foundation.md)；
+  2. knowledge-time/PIT 输入控制；
+  3. 完整参数、算法/策略/数据版本与 canonical Hash；
+  4. 可回放事实和必要持久化；
+  5. `STRATEGY_BACKTEST` 确定性规则 V1；
+  6. Java/Python 契约、自动化测试、真实 PostgreSQL 和 public 基线验收。
+- 连续交付边界：以上是同一大阶段的内部工作包，不分别开发、Review、commit 或验收。Codex 完成某个工作包后，在没有触发高风险暂停门时应继续后续工作包，最后为整个 2F 大阶段 commit 并 push。
+- Knowledge-time/PIT 门禁：`trade_date<=requestTradeDate` 只限制业务日期，不能证明数据值在历史决策时点已经可知；当前历史行情可能被后续同步覆盖，QFQ 也可能因公司行动、复权因子或来源修订变化。无法证明输入在 `knowledgeCutoff` 前已经可知时，`backtestContext` 必须保持 `available=false`。
+- Canonical Hash 门禁：内容 Hash 只能证明给定内容稳定，不能证明历史可得性。任何生产 Hash、持久化、重大公共契约或迁移实施前，必须先按任务书冻结版本化 canonical 契约；未冻结口径不得由 Codex 猜测。
+- 架构门禁：若可靠输入需要不可变行情快照、PIT 模型、`known_at`、数据库核心模型或不可逆迁移，Codex 必须按 [AGENTS.md](../../AGENTS.md) 暂停并提交方案，由 ChatGPT 更新 2F 大阶段架构；需要高风险业务选择时由用户决定。本次治理文档任务不实现这些能力。
+- 规则目标：解释可靠回测事实的适用性、样本、风险和稳定性，不创建交易策略捷径，不产生正式 veto。
+- 验收条件：输入 knowledge-time 合法、无未来数据污染、版本与参数可追溯、固定黄金向量可独立验证、回放可重复、非法或空样本安全降级、Java/Python 契约闭环、真实 PostgreSQL `Skipped=0`、public 基线不变。
+- 禁止范围：外部行情、旧结果权威化、自动参数寻优后直接交易、虚构回测、实盘承诺、投资建议、自动交易、正式 veto 或总控升级。
+- 阶段边界：整个 2F 大阶段通过 Codex 提交推送和 ChatGPT 实际提交验收后，仍须由用户批准 merge；Codex 不得自行开始 2G 或其他阶段。
 
 ## 2G：公告上下文和 ANNOUNCEMENT_RISK（未开始）
 
 - 目标：接入可验证公告上下文并建立公告风险规则。
 - 输入：经批准的公告数据源与 securityEvents。
 - 输出：事件证据、严重度和非正式风险提示。
-- 依赖：数据源合规与缓存设计单独验收。
+- 依赖：数据源合规与缓存设计必须在对应大阶段架构中先行冻结。
 - 禁止范围：新闻编造、非 POSITION_RISK 正式 veto、LLM 事实生成。
 - 验收条件：原文引用可追溯、时间准确、重复事件去重。
 
