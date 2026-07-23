@@ -13,6 +13,7 @@ Sha256 = Annotated[str, Field(pattern=r"^[a-f0-9]{64}$")]
 Symbol = Annotated[str, Field(pattern=r"^[0-9]{6}$")]
 STAGE_2B_DATA_QUALITY_RULE_VERSION = "1.4.0-stage-2b-dq-v1"
 STAGE_2D_MARKET_REGIME_RULE_VERSION = "1.4.0-stage-2d-market-regime-v1"
+STAGE_2E_TECHNICAL_ANALYSIS_RULE_VERSION = "1.4.0-stage-2e-technical-analysis-v1"
 
 
 class StrictModel(BaseModel):
@@ -375,6 +376,8 @@ class AgentTeamResponse(StrictModel):
             self._validate_stage_2b_data_quality(runs_by_code)
         elif self.ruleVersion == STAGE_2D_MARKET_REGIME_RULE_VERSION:
             self._validate_stage_2d_market_regime(runs_by_code)
+        elif self.ruleVersion == STAGE_2E_TECHNICAL_ANALYSIS_RULE_VERSION:
+            self._validate_stage_2e_technical_analysis(runs_by_code)
         return self
 
     def _validate_stage_2b_data_quality(
@@ -670,6 +673,309 @@ class AgentTeamResponse(StrictModel):
                 raise ValueError("阶段2D-1宽度资格不足不得产生方向或低分映射")
         else:
             raise ValueError("阶段2D-1 MARKET_REGIME status必须为COMPLETED或INSUFFICIENT_DATA")
+
+    def _validate_stage_2e_technical_analysis(
+        self,
+        runs_by_code: dict[AgentCode, AgentOutput],
+    ) -> None:
+        data_quality = runs_by_code[AgentCode.DATA_QUALITY]
+        market_regime = runs_by_code[AgentCode.MARKET_REGIME]
+        technical_analysis = runs_by_code[AgentCode.TECHNICAL_ANALYSIS]
+        final = self.finalDecision
+
+        if (self.vetoes or final.vetoed or final.vetoIds
+                or any(run.veto for run in runs_by_code.values())):
+            raise ValueError("阶段2E-1规则不得产生正式veto")
+
+        if data_quality.status is RunStatus.INSUFFICIENT_DATA:
+            expected_dq = (GateStatus.BLOCKED, AgentDecision.REJECT, 0, 0)
+            if data_quality.evidence or data_quality.findings or not data_quality.errors:
+                raise ValueError("阶段2E-1无效DATA_QUALITY上下文必须安全阻断")
+        elif data_quality.status is RunStatus.COMPLETED:
+            expected_by_gate = {
+                GateStatus.BLOCKED: (AgentDecision.REJECT, 0, 100),
+                GateStatus.WARN: (AgentDecision.WARN, 50, 100),
+                GateStatus.PASS: (AgentDecision.PASS, 100, 100),
+            }
+            if data_quality.gateStatus not in expected_by_gate:
+                raise ValueError("阶段2E-1必须完整复用阶段2B DATA_QUALITY门禁")
+            decision, score, confidence = expected_by_gate[data_quality.gateStatus]
+            expected_dq = (data_quality.gateStatus, decision, score, confidence)
+            if len(data_quality.evidence) != 1 or data_quality.errors:
+                raise ValueError("阶段2E-1有效DATA_QUALITY必须保留唯一质量证据")
+            evidence = data_quality.evidence[0]
+            if (evidence.category is not EvidenceCategory.DATA_QUALITY
+                    or evidence.sourceType is not EvidenceSourceType.JAVA_ENGINE
+                    or evidence.sourceName != "AgentContextSnapshotService"
+                    or evidence.sourceRef != "contextSnapshot"
+                    or evidence.evidenceId != f"dq-context-{self.contextHash}"
+                    or evidence.contentHash != self.contextHash
+                    or evidence.tradeDate != self.tradeDate
+                    or set(evidence.fields) != {
+                        "security", "marketData", "technicalMetrics", "dataQualityContext"
+                    }):
+                raise ValueError("阶段2E-1 DATA_QUALITY证据必须保持阶段2B直接投影契约")
+        else:
+            raise ValueError("阶段2E-1 DATA_QUALITY状态无效")
+
+        actual_dq = (
+            data_quality.gateStatus,
+            data_quality.decision,
+            data_quality.score,
+            data_quality.confidence,
+        )
+        if actual_dq != expected_dq:
+            raise ValueError("阶段2E-1 DATA_QUALITY状态映射不一致")
+
+        for code in (
+            AgentCode.STRATEGY_BACKTEST,
+            AgentCode.ANNOUNCEMENT_RISK,
+            AgentCode.POSITION_RISK,
+        ):
+            run = runs_by_code[code]
+            if (run.status is not RunStatus.INSUFFICIENT_DATA
+                    or run.gateStatus is not GateStatus.NOT_APPLICABLE
+                    or run.decision is not AgentDecision.NOT_APPLICABLE
+                    or run.veto or run.score != 0 or run.confidence != 0
+                    or run.findings or run.evidence or run.errors):
+                raise ValueError("阶段2E-1其余三个专业智能体必须保持未实现状态")
+
+        expected_source_run_ids = [runs_by_code[code].runId for code in AgentCode]
+        if final.sourceRunIds != expected_source_run_ids:
+            raise ValueError("阶段2E-1 sourceRunIds必须保持六智能体固定顺序")
+
+        if data_quality.gateStatus is GateStatus.BLOCKED:
+            for run in (market_regime, technical_analysis):
+                if (run.status is not RunStatus.INSUFFICIENT_DATA
+                        or run.gateStatus is not GateStatus.NOT_APPLICABLE
+                        or run.decision is not AgentDecision.NOT_APPLICABLE
+                        or run.score != 0 or run.confidence != 0
+                        or run.findings or run.evidence or run.errors):
+                    raise ValueError("DATA_QUALITY阻断时阶段2D-1和2E-1规则不得执行")
+            if self.evidence != data_quality.evidence:
+                raise ValueError("DATA_QUALITY阻断时顶层仅允许质量证据")
+            expected_final = (
+                FinalDecisionCode.BLOCKED_BY_DATA_QUALITY,
+                GateStatus.BLOCKED,
+                0,
+                data_quality.confidence,
+            )
+            if final.findings != data_quality.findings:
+                raise ValueError("DATA_QUALITY阻断时总控不得增加技术finding")
+        else:
+            self._validate_stage_2d_market_regime_run(market_regime)
+            self._validate_stage_2e_technical_analysis_run(
+                technical_analysis,
+                data_quality.gateStatus,
+            )
+            expected_evidence = [
+                *data_quality.evidence,
+                *market_regime.evidence,
+                *technical_analysis.evidence,
+            ]
+            if self.evidence != expected_evidence:
+                raise ValueError(
+                    "阶段2E-1顶层证据必须按DATA_QUALITY、MARKET_REGIME、"
+                    "TECHNICAL_ANALYSIS排序"
+                )
+            expected_final = (
+                FinalDecisionCode.INSUFFICIENT_DATA,
+                data_quality.gateStatus,
+                0,
+                0,
+            )
+            expected_findings = [
+                *data_quality.findings,
+                *market_regime.findings,
+                *technical_analysis.findings,
+            ]
+            if final.findings != expected_findings:
+                raise ValueError(
+                    "阶段2E-1总控finding必须按DATA_QUALITY、MARKET_REGIME、"
+                    "TECHNICAL_ANALYSIS拼接"
+                )
+
+        actual_final = (
+            final.decision,
+            final.gateStatus,
+            final.score,
+            final.confidence,
+        )
+        if actual_final != expected_final:
+            raise ValueError("阶段2E-1 finalDecision必须保持安全不足状态")
+
+    def _validate_stage_2e_technical_analysis_run(
+        self,
+        run: AgentOutput,
+        data_quality_gate: GateStatus,
+    ) -> None:
+        if run.gateStatus is not data_quality_gate \
+                or data_quality_gate not in (GateStatus.PASS, GateStatus.WARN):
+            raise ValueError("阶段2E-1 TECHNICAL_ANALYSIS必须继承DATA_QUALITY PASS或WARN")
+
+        input_error = (
+            run.status is RunStatus.INSUFFICIENT_DATA
+            and not run.findings
+            and not run.evidence
+            and len(run.errors) == 1
+            and run.errors[0].code == "TECHNICAL_ANALYSIS_INPUT_INVALID"
+        )
+        if input_error:
+            if (run.decision is not AgentDecision.NOT_APPLICABLE
+                    or run.score != 0 or run.confidence != 0):
+                raise ValueError("阶段2E-1非法输入必须安全降级且不得形成技术评分")
+            return
+
+        if (run.status is not RunStatus.COMPLETED
+                or run.decision is not AgentDecision.WARN
+                or len(run.evidence) != 2 or run.errors
+                or len(run.findings) != 5):
+            raise ValueError("阶段2E-1有效技术输入必须生成两份证据和五类finding")
+        expected_confidence = 100 if data_quality_gate is GateStatus.PASS else 50
+        if run.confidence != expected_confidence:
+            raise ValueError("阶段2E-1 TECHNICAL_ANALYSIS confidence未继承质量门禁语义")
+
+        metrics_evidence, market_evidence = run.evidence
+        metrics = metrics_evidence.fields.get("technicalMetrics")
+        latest_bar = market_evidence.fields.get("marketData")
+        if (metrics_evidence.evidenceId != f"ta-metrics-{self.contextHash}"
+                or metrics_evidence.category is not EvidenceCategory.TECHNICAL_INDICATOR
+                or metrics_evidence.sourceType is not EvidenceSourceType.JAVA_ENGINE
+                or metrics_evidence.sourceName != "AgentTechnicalMetricsService"
+                or metrics_evidence.sourceRef != "contextSnapshot.technicalMetrics"
+                or metrics_evidence.tradeDate != self.tradeDate
+                or metrics_evidence.contentHash != self.contextHash
+                or set(metrics_evidence.fields) != {"technicalMetrics"}
+                or not isinstance(metrics, dict)
+                or set(metrics) != {
+                    "available", "formulaVersion", "adjustType", "requestedTradeDate",
+                    "effectiveTradeDate", "requiredBars", "actualBars", "windows", "values",
+                }
+                or not isinstance(metrics.get("windows"), dict)
+                or set(metrics["windows"]) != {
+                    "ma5", "ma20", "ma60", "rsi14", "atr14",
+                    "averageVolume20", "highestClose20",
+                }
+                or not isinstance(metrics.get("values"), dict)
+                or set(metrics["values"]) != {
+                    "ma5", "ma20", "ma60", "rsi14", "atr14",
+                    "averageVolume20", "highestClose20",
+                }):
+            raise ValueError("阶段2E-1 technicalMetrics证据元数据或字段白名单不一致")
+
+        market_data = latest_bar
+        if (market_evidence.evidenceId != f"ta-market-{self.contextHash}"
+                or market_evidence.category is not EvidenceCategory.MARKET_DATA
+                or market_evidence.sourceType is not EvidenceSourceType.JAVA_ENGINE
+                or market_evidence.sourceName != "AgentContextSnapshotService"
+                or market_evidence.sourceRef != "contextSnapshot.marketData"
+                or market_evidence.tradeDate != self.tradeDate
+                or market_evidence.contentHash != self.contextHash
+                or set(market_evidence.fields) != {"marketData"}
+                or not isinstance(market_data, dict)
+                or set(market_data) != {
+                    "available", "adjustType", "requestedTradeDate", "effectiveTradeDate",
+                    "exactTradeDateMatch", "actualBars", "latestBar",
+                }
+                or not isinstance(market_data.get("latestBar"), dict)
+                or set(market_data["latestBar"]) != {
+                    "symbol", "tradeDate", "open", "high", "low", "close",
+                    "volume", "amount", "turnoverRate",
+                }):
+            raise ValueError("阶段2E-1 marketData证据元数据或字段白名单不一致")
+        if (metrics_evidence.observedAt != market_evidence.observedAt
+                or metrics_evidence.collectedAt != market_evidence.collectedAt):
+            raise ValueError("阶段2E-1两份技术证据时间语义必须一致")
+
+        titles = {
+            "TECH_TREND_BULLISH_ALIGNED": "均线多头排列",
+            "TECH_TREND_MIXED": "均线状态混合",
+            "TECH_TREND_BEARISH_ALIGNED": "均线空头排列",
+            "TECH_RSI_OVERBOUGHT_RISK": "RSI达到超买风险阈值",
+            "TECH_RSI_POSITIVE_MOMENTUM": "RSI处于正向动量区间",
+            "TECH_RSI_NEUTRAL": "RSI位于中点",
+            "TECH_RSI_NEGATIVE_MOMENTUM": "RSI处于负向动量区间",
+            "TECH_RSI_OVERSOLD_RISK": "RSI达到超卖风险阈值",
+            "TECH_PRICE_ABOVE_MA20_EXTENDED": "价格高于MA20偏离阈值",
+            "TECH_PRICE_NEAR_MA20": "价格位于MA20偏离阈值内",
+            "TECH_PRICE_BELOW_MA20_EXTENDED": "价格低于MA20偏离阈值",
+            "TECH_VOLATILITY_ELEVATED": "ATR相对波动达到升高阈值",
+            "TECH_VOLATILITY_NORMAL": "ATR相对波动低于升高阈值",
+            "TECH_INDICATORS_BULLISH_CONFIRMED": "趋势与动量正向确认",
+            "TECH_INDICATORS_BEARISH_CONFIRMED": "趋势与动量负向确认",
+            "TECH_INDICATORS_CONFLICT_OR_UNCONFIRMED": "技术指标冲突或未确认",
+        }
+        severities = {
+            "TECH_TREND_BULLISH_ALIGNED": Severity.INFO,
+            "TECH_TREND_MIXED": Severity.WARN,
+            "TECH_TREND_BEARISH_ALIGNED": Severity.WARN,
+            "TECH_RSI_OVERBOUGHT_RISK": Severity.WARN,
+            "TECH_RSI_POSITIVE_MOMENTUM": Severity.INFO,
+            "TECH_RSI_NEUTRAL": Severity.INFO,
+            "TECH_RSI_NEGATIVE_MOMENTUM": Severity.WARN,
+            "TECH_RSI_OVERSOLD_RISK": Severity.WARN,
+            "TECH_PRICE_ABOVE_MA20_EXTENDED": Severity.WARN,
+            "TECH_PRICE_NEAR_MA20": Severity.INFO,
+            "TECH_PRICE_BELOW_MA20_EXTENDED": Severity.WARN,
+            "TECH_VOLATILITY_ELEVATED": Severity.WARN,
+            "TECH_VOLATILITY_NORMAL": Severity.INFO,
+            "TECH_INDICATORS_BULLISH_CONFIRMED": Severity.INFO,
+            "TECH_INDICATORS_BEARISH_CONFIRMED": Severity.WARN,
+            "TECH_INDICATORS_CONFLICT_OR_UNCONFIRMED": Severity.WARN,
+        }
+        impacts = {
+            "TECH_TREND_BULLISH_ALIGNED": 20,
+            "TECH_TREND_MIXED": 0,
+            "TECH_TREND_BEARISH_ALIGNED": -20,
+            "TECH_RSI_OVERBOUGHT_RISK": -10,
+            "TECH_RSI_POSITIVE_MOMENTUM": 15,
+            "TECH_RSI_NEUTRAL": 0,
+            "TECH_RSI_NEGATIVE_MOMENTUM": -15,
+            "TECH_RSI_OVERSOLD_RISK": -10,
+            "TECH_PRICE_ABOVE_MA20_EXTENDED": -10,
+            "TECH_PRICE_NEAR_MA20": 0,
+            "TECH_PRICE_BELOW_MA20_EXTENDED": -10,
+            "TECH_VOLATILITY_ELEVATED": -10,
+            "TECH_VOLATILITY_NORMAL": 0,
+            "TECH_INDICATORS_BULLISH_CONFIRMED": 15,
+            "TECH_INDICATORS_BEARISH_CONFIRMED": -15,
+            "TECH_INDICATORS_CONFLICT_OR_UNCONFIRMED": 0,
+        }
+        order = tuple(titles)
+        groups = (
+            set(order[0:3]),
+            set(order[3:8]),
+            set(order[8:11]),
+            set(order[11:13]),
+            set(order[13:16]),
+        )
+        codes = [finding.code for finding in run.findings]
+        if any(code not in titles for code in codes) \
+                or any(code not in group for code, group in zip(codes, groups, strict=True)):
+            raise ValueError("阶段2E-1 TECHNICAL_ANALYSIS五类reasonCode无效")
+        for index, finding in enumerate(run.findings):
+            rank = order.index(finding.code) + 1
+            expected_id = (
+                f"ta-{rank:02d}-{finding.code.lower().replace('_', '-')}"
+                f"-{self.contextHash}"
+            )
+            expected_evidence_ids = (
+                [metrics_evidence.evidenceId]
+                if index < 2
+                else [metrics_evidence.evidenceId, market_evidence.evidenceId]
+            )
+            impact = impacts[finding.code]
+            score_impact = f"scoreImpact={impact:+d}" if impact else "scoreImpact=0"
+            if (finding.findingId != expected_id
+                    or finding.title != titles[finding.code]
+                    or finding.severity is not severities[finding.code]
+                    or finding.evidenceIds != expected_evidence_ids
+                    or score_impact not in finding.detail):
+                raise ValueError("阶段2E-1 TECHNICAL_ANALYSIS finding契约无效")
+
+        expected_score = min(100, max(0, 50 + sum(impacts[code] for code in codes)))
+        if run.score != expected_score:
+            raise ValueError("阶段2E-1 TECHNICAL_ANALYSIS score与reasonCode影响不一致")
 
 
 def _require_unique(values: list[Any], field_name: str) -> list[Any]:

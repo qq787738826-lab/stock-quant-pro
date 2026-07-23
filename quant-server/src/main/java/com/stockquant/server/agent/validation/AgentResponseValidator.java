@@ -43,6 +43,8 @@ public class AgentResponseValidator {
     private static final String STAGE_2B_DATA_QUALITY_RULE_VERSION = "1.4.0-stage-2b-dq-v1";
     private static final String STAGE_2D_MARKET_REGIME_RULE_VERSION =
             "1.4.0-stage-2d-market-regime-v1";
+    private static final String STAGE_2E_TECHNICAL_ANALYSIS_RULE_VERSION =
+            "1.4.0-stage-2e-technical-analysis-v1";
     private static final ZoneId STAGE_2D_MARKET_ZONE = ZoneId.of("Asia/Shanghai");
     private static final BigDecimal STAGE_2D_MIN_COVERAGE_RATIO = new BigDecimal("1.00000000");
     private static final int STAGE_2D_MIN_COMPARABLE_SYMBOL_COUNT = 2;
@@ -297,6 +299,8 @@ public class AgentResponseValidator {
             validateStage2BDataQuality(request, response, runs, dataQuality);
         } else if (STAGE_2D_MARKET_REGIME_RULE_VERSION.equals(request.ruleVersion())) {
             validateStage2DMarketBreadth(request, response, runs, dataQuality);
+        } else if (STAGE_2E_TECHNICAL_ANALYSIS_RULE_VERSION.equals(request.ruleVersion())) {
+            validateStage2ETechnicalAnalysis(request, response, runs, dataQuality);
         }
     }
 
@@ -424,7 +428,8 @@ public class AgentResponseValidator {
                 "security", "marketData", "technicalMetrics", "dataQualityContext");
         require(fields.size() == allowed.size()
                         && allowed.stream().allMatch(fields::has)
-                        && allowed.stream().allMatch(name -> Objects.equals(fields.get(name), snapshot.get(name))),
+                        && allowed.stream().allMatch(name ->
+                        jsonSemanticallyEquals(fields.get(name), snapshot.get(name))),
                 "阶段2B质量证据fields必须直接投影四类冻结上下文");
         require(!containsForbiddenEvidenceConclusion(fields),
                 "阶段2B质量证据不得包含gate、decision、score、finding或veto结论");
@@ -721,7 +726,7 @@ public class AgentResponseValidator {
                         && projection.size() == STAGE_2D_MARKET_BREADTH_FIELDS.size()
                         && STAGE_2D_MARKET_BREADTH_FIELDS.stream().allMatch(projection::has)
                         && STAGE_2D_MARKET_BREADTH_FIELDS.stream()
-                        .allMatch(name -> stage2DJsonEquals(projection.get(name), source.get(name))),
+                        .allMatch(name -> jsonSemanticallyEquals(projection.get(name), source.get(name))),
                 "阶段2D-1 marketBreadth证据fields必须严格匹配冻结白名单投影");
         require(!containsForbiddenEvidenceConclusion(fields),
                 "阶段2D-1 marketBreadth证据不得包含结论字段");
@@ -805,6 +810,133 @@ public class AgentResponseValidator {
         }
         require(!containsForbiddenStage2DSummary(decision.summary()),
                 "阶段2D-1总控摘要不得包含投资建议、交易指令或完整市场环境声明");
+    }
+
+    private static void validateStage2ETechnicalAnalysis(
+            AgentTeamRequest request,
+            AgentTeamResponse response,
+            List<AgentOutput> runs,
+            AgentOutput dataQuality
+    ) {
+        FinalDecision decision = response.finalDecision();
+        require(response.vetoes().isEmpty() && !decision.vetoed() && decision.vetoIds().isEmpty(),
+                "阶段2E-1不得产生正式veto");
+        require(runs.stream().noneMatch(AgentOutput::veto),
+                "阶段2E-1六个专业智能体均不得产生正式veto");
+        validateStage2BDataQualityOutput(request, dataQuality);
+
+        AgentOutput marketRegime = runs.stream()
+                .filter(run -> run.agentCode() == AgentCode.MARKET_REGIME)
+                .findFirst().orElseThrow();
+        AgentOutput technicalAnalysis = runs.stream()
+                .filter(run -> run.agentCode() == AgentCode.TECHNICAL_ANALYSIS)
+                .findFirst().orElseThrow();
+        validateUnimplementedRuns(
+                runs,
+                Set.of(
+                        AgentCode.DATA_QUALITY,
+                        AgentCode.MARKET_REGIME,
+                        AgentCode.TECHNICAL_ANALYSIS),
+                "阶段2E-1");
+
+        if (dataQuality.gateStatus() == GateStatus.BLOCKED) {
+            validateStage2DBlockedMarketRegime(marketRegime);
+            AgentStage2ETechnicalAnalysisValidator.validateBlocked(technicalAnalysis);
+        } else {
+            require(dataQuality.gateStatus() == GateStatus.PASS
+                            || dataQuality.gateStatus() == GateStatus.WARN,
+                    "阶段2E-1 DATA_QUALITY门禁必须为PASS、WARN或BLOCKED");
+            validateStage2DMarketRegimeOutput(request, marketRegime, dataQuality.gateStatus());
+            AgentStage2ETechnicalAnalysisValidator.validate(
+                    request,
+                    technicalAnalysis,
+                    dataQuality.gateStatus());
+        }
+
+        validateStage2ETopLevelEvidence(
+                response,
+                dataQuality,
+                marketRegime,
+                technicalAnalysis);
+        validateStage2EFinalDecision(
+                request,
+                decision,
+                dataQuality,
+                marketRegime,
+                technicalAnalysis);
+    }
+
+    private static void validateStage2ETopLevelEvidence(
+            AgentTeamResponse response,
+            AgentOutput dataQuality,
+            AgentOutput marketRegime,
+            AgentOutput technicalAnalysis
+    ) {
+        List<Evidence> expected = new ArrayList<>();
+        expected.addAll(dataQuality.evidence());
+        expected.addAll(marketRegime.evidence());
+        expected.addAll(technicalAnalysis.evidence());
+        require(response.evidence().size() == expected.size(),
+                "阶段2E-1顶层evidence数量不一致");
+        for (int index = 0; index < expected.size(); index++) {
+            require(sameEvidence(response.evidence().get(index), expected.get(index)),
+                    "阶段2E-1顶层evidence必须按DATA_QUALITY、MARKET_REGIME、"
+                            + "TECHNICAL_ANALYSIS顺序输出");
+        }
+    }
+
+    private static void validateStage2EFinalDecision(
+            AgentTeamRequest request,
+            FinalDecision decision,
+            AgentOutput dataQuality,
+            AgentOutput marketRegime,
+            AgentOutput technicalAnalysis
+    ) {
+        List<Finding> expectedFindings = new ArrayList<>(dataQuality.findings());
+        if (dataQuality.gateStatus() != GateStatus.BLOCKED) {
+            expectedFindings.addAll(marketRegime.findings());
+            expectedFindings.addAll(technicalAnalysis.findings());
+        }
+        require(Objects.equals(decision.findings(), expectedFindings),
+                "阶段2E-1总控finding必须按DATA_QUALITY、MARKET_REGIME、"
+                        + "TECHNICAL_ANALYSIS顺序精确拼接");
+        List<Long> expectedRunIds = AgentCode.PROFESSIONAL_AGENTS.stream()
+                .map(code -> request.runIds().byAgentCode().get(code))
+                .toList();
+        require(decision.sourceRunIds().equals(expectedRunIds),
+                "阶段2E-1 sourceRunIds必须按固定六智能体顺序输出");
+        require(!decision.vetoed() && decision.vetoIds().isEmpty()
+                        && decision.score() == 0,
+                "阶段2E-1总控不得产生veto或非零score");
+        if (dataQuality.gateStatus() == GateStatus.BLOCKED) {
+            require(decision.decision() == FinalDecisionCode.BLOCKED_BY_DATA_QUALITY
+                            && decision.gateStatus() == GateStatus.BLOCKED
+                            && Objects.equals(decision.confidence(), dataQuality.confidence()),
+                    "阶段2E-1 DATA_QUALITY阻断时总控状态不一致");
+        } else {
+            require(decision.decision() == FinalDecisionCode.INSUFFICIENT_DATA
+                            && decision.gateStatus() == dataQuality.gateStatus()
+                            && decision.confidence() == 0,
+                    "阶段2E-1不得因技术分析规则提前升级团队结论");
+            require(("DATA_QUALITY检查未阻断，阶段2D-1市场宽度规则与阶段2E-1"
+                            + "技术指标确定性规则已按冻结边界执行；其余三个专业规则尚未实现，"
+                            + "无法形成团队结论。")
+                            .equals(decision.summary()),
+                    "阶段2E-1未阻断总控摘要不符合冻结能力边界");
+        }
+        require(!containsForbiddenStage2ESummary(decision.summary()),
+                "阶段2E-1总控摘要不得包含投资建议、交易指令或收益承诺");
+    }
+
+    private static boolean containsForbiddenStage2ESummary(String summary) {
+        if (!notBlank(summary)) return true;
+        return summary.contains("投资建议")
+                || summary.contains("买入")
+                || summary.contains("卖出")
+                || summary.contains("加仓")
+                || summary.contains("减仓")
+                || summary.contains("目标价")
+                || summary.contains("收益承诺");
     }
 
     private static boolean containsForbiddenStage2DSummary(String summary) {
@@ -950,7 +1082,7 @@ public class AgentResponseValidator {
         return List.copyOf(result);
     }
 
-    private static boolean stage2DJsonEquals(JsonNode left, JsonNode right) {
+    private static boolean jsonSemanticallyEquals(JsonNode left, JsonNode right) {
         if (left == null || right == null) return left == right;
         if (left.isNumber() && right.isNumber()) {
             return left.decimalValue().compareTo(right.decimalValue()) == 0;
@@ -961,14 +1093,14 @@ public class AgentResponseValidator {
             while (fields.hasNext()) {
                 var field = fields.next();
                 if (!right.has(field.getKey())
-                        || !stage2DJsonEquals(field.getValue(), right.get(field.getKey()))) return false;
+                        || !jsonSemanticallyEquals(field.getValue(), right.get(field.getKey()))) return false;
             }
             return true;
         }
         if (left.isArray() && right.isArray()) {
             if (left.size() != right.size()) return false;
             for (int index = 0; index < left.size(); index++) {
-                if (!stage2DJsonEquals(left.get(index), right.get(index))) return false;
+                if (!jsonSemanticallyEquals(left.get(index), right.get(index))) return false;
             }
             return true;
         }

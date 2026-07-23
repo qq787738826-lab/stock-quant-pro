@@ -111,7 +111,7 @@
 - 目标：仅为经批准的证券状态来源实现 adapter，并冻结来源 instrument ID、revision、published/effective 时间、许可与持久化边界。
 - 决策准备：[stage-2d2b1b2-source-decision-package.md](stage-2d2b1b2-source-decision-package.md) 只提供候选来源、书面询问、许可/PIT 门槛和样例验收框架；不批准任何来源，也不表示 adapter 已开始。
 - 输入依赖：1B-1 已完成；仍须取得正式证券状态来源、数据许可、本地持久化权利、历史回放权利、稳定 source instrument ID、revision 语义和 published/effective 时间语义的明确批准。
-- 阶段位置：上述外部前置决策仍被阻断，正式 adapter 实现尚不能开始；当前唯一入口是解决前置来源与许可决策，而不是编码 adapter。
+- 阶段位置：上述外部前置决策仍被阻断，正式 adapter 实现尚不能开始；2D-2B 数据来源工作线的唯一入口是解决前置来源与许可决策，而不是编码 adapter。
 - 阻断条件：来源、数据许可、本地持久化权利、历史回放权利、稳定 source instrument ID、revision 语义或 published/effective 时间语义任一未验证即不得开始。
 - 禁止范围：不得以当前免费聚合源或 `securities` 当前态投影冒充正式 PIT 来源。
 - 能力边界：adapter 完成不等于真实来源闭环通过。
@@ -140,14 +140,21 @@
 - 验收条件：无前视成员资格、输入 lineage、并发唯一发布、修订不覆盖、真实 PostgreSQL 和影子差异均可审计。
 - 能力边界：完成后仍无 PIT 行情、公司行动、`MARKET_BREADTH_V2` 或完整 MARKET_REGIME。
 
-## 2E：TECHNICAL_ANALYSIS 真实规则（未开始）
+## 2E：TECHNICAL_ANALYSIS 真实规则
 
-- 目标：解释已有技术指标，不在 Python 内伪造行情。
-- 输入：technicalMetrics、marketData。
-- 输出：有证据的技术 findings 与规则评分。
-- 依赖：2A、2B。
-- 禁止范围：前视数据、隐式指标重算、LLM 评分。
-- 验收条件：指标来源可追溯、边界测试完整、结果确定性。
+### 2E-1：确定性规则 V1（任务分支实现及本地验证完成，待独立复审与合入）
+
+- 目标：只解释 Java 已冻结的 `technicalMetrics` 与 `marketData`，不在 Python 拉取行情、访问业务数据库或隐式重算技术指标。
+- 设计与规则：[stage-2e1-technical-analysis-v1.md](stage-2e1-technical-analysis-v1.md)。
+- 规则版本：`1.4.0-stage-2e-technical-analysis-v1`。
+- 输出：趋势、RSI 动量/超买超卖风险、相对 MA20 偏离、相对波动和指标确认/冲突五类确定性 findings，两条直接投影 evidence，以及截断到 `[0,100]` 的确定性 score。
+- 依赖：已完成的 2A 冻结输入和 2B DATA_QUALITY 门禁；阶段 2D-1 MARKET_REGIME 在新团队版本中保持原契约。
+- 门禁：DATA_QUALITY BLOCKED 时不形成技术 evidence、finding 或正常评分；PASS/WARN 分别形成 `PASS/100` 与 `WARN/50` 的技术门禁和 confidence。非法技术输入以 `TECHNICAL_ANALYSIS_INPUT_INVALID` 安全降级，不伪造中性结论。
+- 权限边界：TECHNICAL_ANALYSIS 永不产生正式 veto；POSITION_RISK 仍是唯一可能拥有正式否决权的专业智能体。总控继续保持安全的 `INSUFFICIENT_DATA` 或 `BLOCKED_BY_DATA_QUALITY`。
+- 本地验收：Python `compileall` 与 unittest `77/0/0`；真实 Java/Python 跨语言 `4/0/0/0`、`Skipped=0`；随机临时 Schema 的真实 PostgreSQL `2/0/0/0`、`Skipped=0`；`quant-server` 全量 `261/0/0/27`；`quant-core` 全量 `1/0/0/0`。这些均为 Codex 本地执行证据，不是 GitHub Actions CI；27 项为无外部集成环境变量时的门禁跳过，不能冒充真实闭环。
+- 数据库验收：真实 PostgreSQL 覆盖六个 run、证据顺序、空正式 veto、非法响应原子失败与精确清理；测试临时 Schema 删除，public 数据和结构指纹前后不变。没有修改 Flyway、V1 至 V8、public Schema 或外层 `contextSnapshot` Schema。
+- 禁止范围：前视数据、外部数据源、source adapter、FORMAL/PIT、隐式指标重算、MARKET_REGIME 升级、`MARKET_BREADTH_V1` 修改、`backtestContext` 接入、LLM 事实/评分/结论、投资建议和交易写操作。
+- 阶段边界：任务分支完成不等于独立 GitHub 复审或集成分支合入，不自动批准任何后续 2E 扩展、2F 或其他阶段。
 
 ## 2F：STRATEGY_BACKTEST 解释与稳定性评估（未开始）
 
