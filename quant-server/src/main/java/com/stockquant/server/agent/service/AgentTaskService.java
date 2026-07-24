@@ -53,7 +53,10 @@ public class AgentTaskService {
 
     public CreatedTask create(CreateAgentTaskRequest request, String requestedBy) {
         validate(request);
-        ContextSnapshot context = contextSnapshotService.create(request.symbol(), request.tradeDate());
+        ContextSnapshot context = contextSnapshotService.create(
+                request.symbol(),
+                request.tradeDate(),
+                request.ruleVersion());
         CacheKey key = new CacheKey(
                 request.symbol(),
                 request.tradeDate(),

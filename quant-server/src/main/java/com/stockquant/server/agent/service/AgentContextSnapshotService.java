@@ -4,11 +4,14 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.stockquant.server.agent.model.AgentModels.ContextSnapshot;
+import com.stockquant.server.agent.backtest.AgentBacktestContextService;
+import com.stockquant.server.agent.backtest.BacktestContracts;
 import com.stockquant.server.agent.repository.AgentContextReadRepository;
 import com.stockquant.server.agent.repository.AgentContextReadRepository.DailyBarRecord;
 import com.stockquant.server.agent.repository.AgentContextReadRepository.SecurityRecord;
 import com.stockquant.server.agent.service.AgentDataQualityContextService.DataQualityFacts;
 import com.stockquant.server.agent.service.AgentTechnicalMetricsService.TechnicalMetrics;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Isolation;
@@ -38,9 +41,9 @@ public class AgentContextSnapshotService {
     private final AgentDataQualityContextService dataQualityContextService;
     private final AgentMarketBreadthContextService marketBreadthContextService;
     private final AgentScanResultContextService scanResultContextService;
+    private final AgentBacktestContextService backtestContextService;
     private final Clock clock;
 
-    @Autowired
     public AgentContextSnapshotService(
             ObjectMapper objectMapper,
             AgentContextHashService hashService,
@@ -51,10 +54,38 @@ public class AgentContextSnapshotService {
             AgentScanResultContextService scanResultContextService
     ) {
         this(
-                objectMapper, hashService, readRepository, technicalMetricsService,
-                dataQualityContextService, marketBreadthContextService,
-                scanResultContextService, Clock.systemUTC()
-        );
+                objectMapper,
+                hashService,
+                readRepository,
+                technicalMetricsService,
+                dataQualityContextService,
+                marketBreadthContextService,
+                scanResultContextService,
+                null,
+                Clock.systemUTC());
+    }
+
+    @Autowired
+    public AgentContextSnapshotService(
+            ObjectMapper objectMapper,
+            AgentContextHashService hashService,
+            AgentContextReadRepository readRepository,
+            AgentTechnicalMetricsService technicalMetricsService,
+            AgentDataQualityContextService dataQualityContextService,
+            AgentMarketBreadthContextService marketBreadthContextService,
+            AgentScanResultContextService scanResultContextService,
+            AgentBacktestContextService backtestContextService,
+            @Qualifier("agentTemporalClock") Clock clock
+    ) {
+        this.objectMapper = objectMapper;
+        this.hashService = hashService;
+        this.readRepository = readRepository;
+        this.technicalMetricsService = technicalMetricsService;
+        this.dataQualityContextService = dataQualityContextService;
+        this.marketBreadthContextService = marketBreadthContextService;
+        this.scanResultContextService = scanResultContextService;
+        this.backtestContextService = backtestContextService;
+        this.clock = clock;
     }
 
     AgentContextSnapshotService(
@@ -67,18 +98,36 @@ public class AgentContextSnapshotService {
             AgentScanResultContextService scanResultContextService,
             Clock clock
     ) {
-        this.objectMapper = objectMapper;
-        this.hashService = hashService;
-        this.readRepository = readRepository;
-        this.technicalMetricsService = technicalMetricsService;
-        this.dataQualityContextService = dataQualityContextService;
-        this.marketBreadthContextService = marketBreadthContextService;
-        this.scanResultContextService = scanResultContextService;
-        this.clock = clock;
+        this(
+                objectMapper,
+                hashService,
+                readRepository,
+                technicalMetricsService,
+                dataQualityContextService,
+                marketBreadthContextService,
+                scanResultContextService,
+                null,
+                clock);
     }
 
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public ContextSnapshot create(String symbol, LocalDate tradeDate) {
+        return createInternal(symbol, tradeDate, false);
+    }
+
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public ContextSnapshot create(String symbol, LocalDate tradeDate, String ruleVersion) {
+        return createInternal(
+                symbol,
+                tradeDate,
+                BacktestContracts.RULE_VERSION.equals(ruleVersion));
+    }
+
+    private ContextSnapshot createInternal(
+            String symbol,
+            LocalDate tradeDate,
+            boolean stage2FProfile
+    ) {
         Instant queriedAt = clock.instant();
         Optional<SecurityRecord> security = readRepository.findSecurity(symbol);
         List<DailyBarRecord> dailyBars = readRepository.findQfqDailyBars(symbol, tradeDate).stream()
@@ -98,12 +147,23 @@ public class AgentContextSnapshotService {
         root.set("technicalMetrics", technicalMetricsContext(
                 technicalMetrics, dailyBars, symbol, tradeDate, queriedAt
         ));
-        root.set("backtestContext", backtestContext(symbol, tradeDate, queriedAt));
+        root.set(
+                "backtestContext",
+                stage2FProfile
+                        ? requiredBacktestContextService().create(symbol, tradeDate, queriedAt)
+                        : backtestContext(symbol, tradeDate, queriedAt));
         for (String section : UNAVAILABLE_SECTIONS) {
             root.set(section, unavailableContext(symbol, tradeDate, queriedAt));
         }
         root.set("dataQualityContext", dataQualityContext(dataQuality, symbol, tradeDate, queriedAt));
         return new ContextSnapshot(CONTEXT_SCHEMA_VERSION, root, queriedAt, hashService.hash(root));
+    }
+
+    private AgentBacktestContextService requiredBacktestContextService() {
+        if (backtestContextService == null) {
+            throw new IllegalStateException("阶段2F backtestContext服务不可用");
+        }
+        return backtestContextService;
     }
 
     private ObjectNode securityContext(

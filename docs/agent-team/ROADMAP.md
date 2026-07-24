@@ -159,28 +159,22 @@
 - 本地验收：Python `compileall` 与 unittest `77/0/0`；真实 Java/Python 跨语言 `4/0/0/0`、`Skipped=0`；随机临时 Schema 的真实 PostgreSQL `2/0/0/0`、`Skipped=0`；`quant-server` 全量 `261/0/0/27`；`quant-core` 全量 `1/0/0/0`。这些均为 Codex 本地执行证据，不是 GitHub Actions CI；27 项为无外部集成环境变量时的门禁跳过，不能冒充真实闭环。
 - 数据库验收：真实 PostgreSQL 覆盖六个 run、证据顺序、空正式 veto、非法响应原子失败与精确清理；测试临时 Schema 删除，public 数据和结构指纹前后不变。没有修改 Flyway、V1 至 V8、public Schema 或外层 `contextSnapshot` Schema。
 - 禁止范围：前视数据、外部数据源、source adapter、FORMAL/PIT、隐式指标重算、MARKET_REGIME 升级、`MARKET_BREADTH_V1` 修改、`backtestContext` 接入、LLM 事实/评分/结论、投资建议和交易写操作。
-- 阶段边界：阶段 2E-1 完成并合入不自动批准或开始任何后续 2E 扩展、2F 或其他阶段；2F、2G、2H、2I 均保持未开始。
+- 阶段边界：阶段 2E-1 完成并合入本身不自动批准或开始任何后续 2E 扩展、2F 或其他阶段；2F 的后续授权、实现和验收状态必须单独记录。
 
-## 2F：可靠回测基础与 STRATEGY_BACKTEST 确定性规则 V1（下一候选大阶段，未开始）
+## 2F：可靠回测基础与 STRATEGY_BACKTEST 确定性规则 V1（任务分支待验收）
 
-- 当前状态：`NOT_STARTED`。本节和任务书只规划候选能力，不表示任何业务实现已经开始。
-- 背景：阶段 2C 已证明旧回测记录缺少可验证的输入截止日期、knowledge-time、来源/修订版本、策略版本、完整参数和 lineage；当前 `backtestContext` 继续以 `BACKTEST_INPUT_CUTOFF_UNVERIFIABLE` 安全不可用。
-- 大阶段目标：在一个任务分支内连续建立可靠、可回放、无前视的 `backtestContext`，并基于该事实完成确定性 `STRATEGY_BACKTEST` 规则 V1、自动化测试和真实 PostgreSQL 验收。
-- 内部工作包：
-  1. [2F-0 可靠 backtestContext 审计与接入基础](tasks/2f0-backtest-context-foundation.md)；
-  2. knowledge-time/PIT 输入控制；
-  3. 完整参数、算法/策略/数据版本与 canonical Hash；
-  4. 可回放事实和必要持久化；
-  5. `STRATEGY_BACKTEST` 确定性规则 V1；
-  6. Java/Python 契约、自动化测试、真实 PostgreSQL 和 public 基线验收。
-- 连续交付边界：以上是同一大阶段的内部工作包，不分别开发、Review、commit 或验收。Codex 完成某个工作包后，在没有触发高风险暂停门时应继续后续工作包，最后为整个 2F 大阶段 commit 并 push。
-- Knowledge-time/PIT 门禁：`trade_date<=requestTradeDate` 只限制业务日期，不能证明数据值在历史决策时点已经可知；当前历史行情可能被后续同步覆盖，QFQ 也可能因公司行动、复权因子或来源修订变化。无法证明输入在 `knowledgeCutoff` 前已经可知时，`backtestContext` 必须保持 `available=false`。
-- Canonical Hash 门禁：内容 Hash 只能证明给定内容稳定，不能证明历史可得性。任何生产 Hash、持久化、重大公共契约或迁移实施前，必须先按任务书冻结版本化 canonical 契约；未冻结口径不得由 Codex 猜测。
-- 架构门禁：若可靠输入需要不可变行情快照、PIT 模型、`known_at`、数据库核心模型或不可逆迁移，Codex 必须按 [AGENTS.md](../../AGENTS.md) 暂停并提交方案，由 ChatGPT 更新 2F 大阶段架构；需要高风险业务选择时由用户决定。本次治理文档任务不实现这些能力。
-- 规则目标：解释可靠回测事实的适用性、样本、风险和稳定性，不创建交易策略捷径，不产生正式 veto。
-- 验收条件：输入 knowledge-time 合法、无未来数据污染、版本与参数可追溯、固定黄金向量可独立验证、回放可重复、非法或空样本安全降级、Java/Python 契约闭环、真实 PostgreSQL `Skipped=0`、public 基线不变。
-- 禁止范围：外部行情、旧结果权威化、自动参数寻优后直接交易、虚构回测、实盘承诺、投资建议、自动交易、正式 veto 或总控升级。
-- 阶段边界：整个 2F 大阶段通过 Codex 提交推送和 ChatGPT 实际提交验收后，仍须由用户批准 merge；Codex 不得自行开始 2G 或其他阶段。
+- 当前状态：任务分支 `codex/1.4.0-stage-2f-strategy-backtest-v1` 已完成实现与 Codex 本地验证；尚待 ChatGPT 基于实际 Git commit 验收，尚未合入集成分支。本状态不等于验收 PASS 或用户 merge 批准。
+- 交付文档：[完整 2F 任务书](tasks/2f-reliable-strategy-backtest-v1.md)、[2F-0 实现契约](tasks/2f0-backtest-context-foundation.md)和[阶段实现与本地验证记录](stage-2f-strategy-backtest-v1.md)。
+- 连续交付：2F-0、knowledge-time/PIT、参数/版本/Hash、可回放事实、`STRATEGY_BACKTEST` V1、Java/Python 契约、自动化测试与真实 PostgreSQL 已作为同一大阶段连续实现，不拆成独立提交或验收阶段。
+- PIT 模型：任务分支新增 V9 append-only `market_data_observation_batches` 与 `daily_bar_observations`；`daily_bars` 继续作为当前态兼容投影。本地行情成功持久化在同一事务内捕获观察版本，as-of 输入同时受 `tradeDate` 与 `knowledgeCutoff` 约束。V1 至 V8 不变，不回填或伪造历史 known time。
+- 兼容 profile：只有规则版本 `1.4.0-stage-2f-strategy-backtest-v1` 选择 `AGENT_CONTEXT_2F_V1/BACKTEST_CONTEXT_V1`；旧入口和 2B、2D-1、2E-1 的 contextSnapshot、contextHash、缓存键与结果保持兼容。
+- Canonical 契约：`BACKTEST_CANONICAL_V1` 冻结 SHA-256、编码、Unicode、对象/数组顺序、UTC 微秒时间、Decimal、null/缺失、字段白名单与独立 `dataVersion`；Java 生成 `inputDataHash`、`strategyDefinitionHash`、`backtestResultHash`，Java/Python 使用固定输入、canonical 文本和预期 Hash 的黄金向量交叉验证。
+- 策略事实：冻结 `SMA20_NEXT_OPEN_RISK_EXIT_V1/BACKTEST_ENGINE_V1/BACKTEST_PARAMS_V1` 和七项完整参数；Java 执行完整窗口及 EARLY/MIDDLE/LATE 三个稳定子区间，Python 不重跑回测。
+- 规则输出：有效输入固定产生样本充分性、总收益、最大回撤、胜率与盈亏比、跨时间子区间稳定性五类 finding，按冻结阈值计算 `[0,100]` score 与最高 80 confidence。DATA_QUALITY 阻断、上下文不可用、输入非法或交易样本不足均安全降级。
+- 当前安全限制：普通配置来源没有可验证 revision，因此真实普通捕获仍返回 `BACKTEST_SOURCE_REVISION_UNVERIFIABLE`，不会被误写为可靠历史输入。内容 Hash 不替代 knowledge-time 证据。
+- 本地验收：真实 2F V1 至 V9 PostgreSQL `5/0/0/0`、真实 Java/Python `4/0/0/0`、真实 PostgreSQL/Python/JSONB/原子失败 `2/0/0/0`，均 `Skipped=0`；其他回归与已知 public V6 checksum 环境问题详见阶段文档。这些是 Codex 本地证据，不是 GitHub Actions CI。
+- 禁止范围：外部行情、旧结果权威化、参数寻优、投资建议、收益承诺、自动交易、正式 veto 或总控升级。POSITION_RISK 仍是唯一正式否决权。
+- 阶段边界：Codex 完成单次 commit 和普通 push 后停止，由 ChatGPT 检查实际提交；验收通过后仍须用户批准 merge。不得自行开始 2G 或其他阶段。
 
 ## 2G：公告上下文和 ANNOUNCEMENT_RISK（未开始）
 

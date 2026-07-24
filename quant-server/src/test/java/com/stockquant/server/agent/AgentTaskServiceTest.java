@@ -66,7 +66,10 @@ class AgentTaskServiceTest {
                 "rules-1", false, TriggerType.MANUAL
         );
         context = new ContextSnapshot("1.0", AgentTestFixtures.context(), AgentTestFixtures.NOW, AgentTestFixtures.HASH);
-        lenient().when(contextService.create(request.symbol(), request.tradeDate())).thenReturn(context);
+        lenient().when(contextService.create(
+                request.symbol(),
+                request.tradeDate(),
+                request.ruleVersion())).thenReturn(context);
     }
 
     @Test
@@ -175,6 +178,7 @@ class AgentTaskServiceTest {
                 request.symbol(), request.tradeDate(), request.executionMode(), "  " + version + "  ",
                 false, request.triggerType());
         var task = AgentTestFixtures.task(13, TaskStatus.QUEUED);
+        when(contextService.create(valid.symbol(), valid.tradeDate(), valid.ruleVersion())).thenReturn(context);
         when(cacheService.active(any())).thenReturn(Optional.empty());
         when(cacheService.completed(any())).thenReturn(Optional.empty());
         when(creationTransaction.create(valid, context, "API")).thenReturn(new CreatedTask(task, true));

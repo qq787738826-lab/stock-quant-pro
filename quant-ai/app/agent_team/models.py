@@ -14,6 +14,7 @@ Symbol = Annotated[str, Field(pattern=r"^[0-9]{6}$")]
 STAGE_2B_DATA_QUALITY_RULE_VERSION = "1.4.0-stage-2b-dq-v1"
 STAGE_2D_MARKET_REGIME_RULE_VERSION = "1.4.0-stage-2d-market-regime-v1"
 STAGE_2E_TECHNICAL_ANALYSIS_RULE_VERSION = "1.4.0-stage-2e-technical-analysis-v1"
+STAGE_2F_STRATEGY_BACKTEST_RULE_VERSION = "1.4.0-stage-2f-strategy-backtest-v1"
 
 
 class StrictModel(BaseModel):
@@ -378,6 +379,8 @@ class AgentTeamResponse(StrictModel):
             self._validate_stage_2d_market_regime(runs_by_code)
         elif self.ruleVersion == STAGE_2E_TECHNICAL_ANALYSIS_RULE_VERSION:
             self._validate_stage_2e_technical_analysis(runs_by_code)
+        elif self.ruleVersion == STAGE_2F_STRATEGY_BACKTEST_RULE_VERSION:
+            self._validate_stage_2f_strategy_backtest(runs_by_code)
         return self
 
     def _validate_stage_2b_data_quality(
@@ -803,6 +806,186 @@ class AgentTeamResponse(StrictModel):
         )
         if actual_final != expected_final:
             raise ValueError("阶段2E-1 finalDecision必须保持安全不足状态")
+
+    def _validate_stage_2f_strategy_backtest(
+        self,
+        runs_by_code: dict[AgentCode, AgentOutput],
+    ) -> None:
+        data_quality = runs_by_code[AgentCode.DATA_QUALITY]
+        market_regime = runs_by_code[AgentCode.MARKET_REGIME]
+        technical_analysis = runs_by_code[AgentCode.TECHNICAL_ANALYSIS]
+        strategy_backtest = runs_by_code[AgentCode.STRATEGY_BACKTEST]
+        final = self.finalDecision
+        if (self.vetoes or final.vetoed or final.vetoIds
+                or any(run.veto for run in runs_by_code.values())):
+            raise ValueError("阶段2F不得产生正式veto")
+
+        if data_quality.status is RunStatus.INSUFFICIENT_DATA:
+            expected_dq = (GateStatus.BLOCKED, AgentDecision.REJECT, 0, 0)
+            if data_quality.evidence or data_quality.findings or not data_quality.errors:
+                raise ValueError("阶段2F无效DATA_QUALITY上下文必须安全阻断")
+        elif data_quality.status is RunStatus.COMPLETED:
+            expected_by_gate = {
+                GateStatus.BLOCKED: (AgentDecision.REJECT, 0, 100),
+                GateStatus.WARN: (AgentDecision.WARN, 50, 100),
+                GateStatus.PASS: (AgentDecision.PASS, 100, 100),
+            }
+            if data_quality.gateStatus not in expected_by_gate:
+                raise ValueError("阶段2F必须复用DATA_QUALITY门禁")
+            decision, score, confidence = expected_by_gate[data_quality.gateStatus]
+            expected_dq = (data_quality.gateStatus, decision, score, confidence)
+            if len(data_quality.evidence) != 1 or data_quality.errors:
+                raise ValueError("阶段2F有效DATA_QUALITY必须保留唯一质量证据")
+        else:
+            raise ValueError("阶段2F DATA_QUALITY状态无效")
+        if (
+            data_quality.gateStatus,
+            data_quality.decision,
+            data_quality.score,
+            data_quality.confidence,
+        ) != expected_dq:
+            raise ValueError("阶段2F DATA_QUALITY状态映射不一致")
+
+        for code in (AgentCode.ANNOUNCEMENT_RISK, AgentCode.POSITION_RISK):
+            run = runs_by_code[code]
+            if (run.status is not RunStatus.INSUFFICIENT_DATA
+                    or run.gateStatus is not GateStatus.NOT_APPLICABLE
+                    or run.decision is not AgentDecision.NOT_APPLICABLE
+                    or run.veto or run.score != 0 or run.confidence != 0
+                    or run.findings or run.evidence or run.errors):
+                raise ValueError("阶段2F其余两个专业智能体必须保持未实现状态")
+
+        expected_source_run_ids = [runs_by_code[code].runId for code in AgentCode]
+        if final.sourceRunIds != expected_source_run_ids:
+            raise ValueError("阶段2F sourceRunIds必须保持六智能体固定顺序")
+
+        if data_quality.gateStatus is GateStatus.BLOCKED:
+            for run in (market_regime, technical_analysis):
+                if (run.status is not RunStatus.INSUFFICIENT_DATA
+                        or run.gateStatus is not GateStatus.NOT_APPLICABLE
+                        or run.decision is not AgentDecision.NOT_APPLICABLE
+                        or run.score != 0 or run.confidence != 0
+                        or run.findings or run.evidence or run.errors):
+                    raise ValueError("DATA_QUALITY阻断时既有分析规则不得执行")
+            if (strategy_backtest.status is not RunStatus.INSUFFICIENT_DATA
+                    or strategy_backtest.gateStatus is not GateStatus.BLOCKED
+                    or strategy_backtest.decision is not AgentDecision.NOT_APPLICABLE
+                    or strategy_backtest.score != 0
+                    or strategy_backtest.confidence != 0
+                    or strategy_backtest.findings
+                    or strategy_backtest.evidence
+                    or strategy_backtest.errors):
+                raise ValueError("DATA_QUALITY阻断时STRATEGY_BACKTEST必须继承阻断")
+            expected_evidence = data_quality.evidence
+            expected_findings = data_quality.findings
+            expected_final = (
+                FinalDecisionCode.BLOCKED_BY_DATA_QUALITY,
+                GateStatus.BLOCKED,
+                0,
+                data_quality.confidence,
+            )
+        else:
+            self._validate_stage_2d_market_regime_run(market_regime)
+            self._validate_stage_2e_technical_analysis_run(
+                technical_analysis,
+                data_quality.gateStatus,
+            )
+            self._validate_stage_2f_strategy_backtest_run(
+                strategy_backtest,
+                data_quality.gateStatus,
+            )
+            expected_evidence = [
+                *data_quality.evidence,
+                *market_regime.evidence,
+                *technical_analysis.evidence,
+                *strategy_backtest.evidence,
+            ]
+            expected_findings = [
+                *data_quality.findings,
+                *market_regime.findings,
+                *technical_analysis.findings,
+                *strategy_backtest.findings,
+            ]
+            expected_final = (
+                FinalDecisionCode.INSUFFICIENT_DATA,
+                data_quality.gateStatus,
+                0,
+                0,
+            )
+        if self.evidence != expected_evidence or final.findings != expected_findings:
+            raise ValueError("阶段2F顶层evidence或final finding顺序不一致")
+        if (
+            final.decision,
+            final.gateStatus,
+            final.score,
+            final.confidence,
+        ) != expected_final:
+            raise ValueError("阶段2F总控必须保持安全不足状态")
+
+    def _validate_stage_2f_strategy_backtest_run(
+        self,
+        run: AgentOutput,
+        data_quality_gate: GateStatus,
+    ) -> None:
+        if run.gateStatus is not data_quality_gate:
+            raise ValueError("阶段2F STRATEGY_BACKTEST必须继承DATA_QUALITY门禁")
+        if run.status is RunStatus.COMPLETED:
+            expected_confidence = (
+                50 if data_quality_gate is GateStatus.WARN
+                else run.confidence
+            )
+            if (run.decision is not AgentDecision.WARN
+                    or len(run.findings) != 5
+                    or len(run.evidence) != 1
+                    or run.errors
+                    or run.confidence not in (40, 50, 60, 80)
+                    or data_quality_gate is GateStatus.WARN
+                    and run.confidence > expected_confidence):
+                raise ValueError("阶段2F有效STRATEGY_BACKTEST状态无效")
+            evidence = run.evidence[0]
+            if (evidence.category is not EvidenceCategory.BACKTEST_RESULT
+                    or evidence.sourceType is not EvidenceSourceType.JAVA_ENGINE
+                    or evidence.sourceName != "AgentBacktestContextService"
+                    or evidence.sourceRef != "contextSnapshot.backtestContext"
+                    or set(evidence.fields) != {"backtestContext"}):
+                raise ValueError("阶段2F回测证据契约无效")
+            if [finding.code for finding in run.findings] != [
+                "STRATEGY_BACKTEST_SAMPLE_SUFFICIENT",
+                "STRATEGY_BACKTEST_TOTAL_RETURN_ASSESSED",
+                "STRATEGY_BACKTEST_MAX_DRAWDOWN_ASSESSED",
+                "STRATEGY_BACKTEST_WIN_LOSS_QUALITY_ASSESSED",
+                "STRATEGY_BACKTEST_SUBPERIOD_STABILITY_ASSESSED",
+            ]:
+                raise ValueError("阶段2F必须输出固定五类回测finding")
+        elif run.status is RunStatus.INSUFFICIENT_DATA:
+            if (run.decision is not AgentDecision.NOT_APPLICABLE
+                    or run.score != 0 or run.confidence != 0
+                    or run.findings or len(run.errors) != 1
+                    or run.errors[0].code not in {
+                        "STRATEGY_BACKTEST_INPUT_INVALID",
+                        "STRATEGY_BACKTEST_SAMPLE_INSUFFICIENT",
+                        "BACKTEST_NO_TRUSTED_PIT_DAILY_BARS",
+                        "BACKTEST_KNOWLEDGE_TIME_UNVERIFIABLE",
+                        "BACKTEST_SOURCE_REVISION_UNVERIFIABLE",
+                        "BACKTEST_CUTOFF_POLLUTION_UNRESOLVED",
+                        "BACKTEST_SAMPLE_INSUFFICIENT",
+                        "BACKTEST_DAILY_BAR_INVALID",
+                        "BACKTEST_STRATEGY_VERSION_UNVERIFIABLE",
+                        "BACKTEST_PARAMS_INVALID",
+                        "BACKTEST_HASH_MISMATCH",
+                        "BACKTEST_REPLAY_MISMATCH",
+                        "BACKTEST_FUTURE_REQUEST_DATE",
+                        "BACKTEST_DECISION_TIME_NOT_REACHED",
+                    }):
+                raise ValueError("阶段2F回测安全降级状态无效")
+            if (run.errors[0].code == "STRATEGY_BACKTEST_SAMPLE_INSUFFICIENT"
+                    and len(run.evidence) != 1):
+                raise ValueError("阶段2F交易样本不足必须保留可靠事实证据")
+            if (run.errors[0].code != "STRATEGY_BACKTEST_SAMPLE_INSUFFICIENT"
+                    and run.evidence):
+                raise ValueError("阶段2F非法或不可用输入不得生成回测证据")
+        else:
+            raise ValueError("阶段2F STRATEGY_BACKTEST终态无效")
 
     def _validate_stage_2e_technical_analysis_run(
         self,

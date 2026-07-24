@@ -1036,7 +1036,7 @@ class AgentStage2D2B1AIngestionFoundationPostgresIntegrationTest {
                 "SELECT current_database()", String.class));
         assertEquals("stock_quant_test", jdbc.queryForObject("SELECT current_user", String.class));
         assertEquals(TEST_SCHEMA, jdbc.queryForObject("SELECT current_schema()", String.class));
-        assertEquals(List.of("1", "2", "3", "4", "5", "6", "7", "8"), jdbc.query(
+        assertEquals(List.of("1", "2", "3", "4", "5", "6", "7", "8", "9"), jdbc.query(
                 "SELECT version FROM flyway_schema_history WHERE success=TRUE ORDER BY installed_rank",
                 (resultSet, row) -> resultSet.getString(1)));
         assertEquals(0, jdbc.queryForObject(

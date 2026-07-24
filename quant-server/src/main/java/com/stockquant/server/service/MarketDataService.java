@@ -1,6 +1,7 @@
 package com.stockquant.server.service;
 
 import com.stockquant.core.domain.Bar;
+import com.stockquant.server.agent.backtest.MarketDataPersistenceService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -10,21 +11,19 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
-import org.springframework.jdbc.core.BatchPreparedStatementSetter;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
 import java.math.BigDecimal;
-import java.sql.Date;
-import java.sql.PreparedStatement;
-import java.sql.SQLException;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Service
 public class MarketDataService {
@@ -77,15 +76,18 @@ public class MarketDataService {
     private final RestTemplate restTemplate;
     private final String baseUrl;
     private final JdbcTemplate jdbcTemplate;
+    private final MarketDataPersistenceService persistenceService;
 
     public MarketDataService(
             @Value("${quant.ai-service-url}") String baseUrl,
-            JdbcTemplate jdbcTemplate
+            JdbcTemplate jdbcTemplate,
+            MarketDataPersistenceService persistenceService
     ) {
         this.baseUrl = baseUrl.endsWith("/")
                 ? baseUrl.substring(0, baseUrl.length() - 1)
                 : baseUrl;
         this.jdbcTemplate = jdbcTemplate;
+        this.persistenceService = persistenceService;
 
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(5_000);
@@ -132,9 +134,9 @@ public class MarketDataService {
             return cached;
         }
 
-        List<Bar> fetched = fetchHistory(symbol, safeDays);
-        persistBars(symbol, fetched);
-        return fetched;
+        FetchedHistory fetched = fetchHistory(symbol, safeDays);
+        persistBars(symbol, fetched.bars(), fetched.source());
+        return fetched.bars();
     }
 
     @SuppressWarnings("unchecked")
@@ -172,7 +174,7 @@ public class MarketDataService {
                     AnalysisItem item = mapAnalysis(map);
                     items.add(item);
                     if (!item.bars().isEmpty()) {
-                        persistBars(item.symbol(), item.bars());
+                        persistBars(item.symbol(), item.bars(), item.dataSource());
                     }
                 }
             }
@@ -242,7 +244,7 @@ public class MarketDataService {
                     }
                 }
                 bars.sort((a, b) -> a.tradeDate().compareTo(b.tradeDate()));
-                persistBars(symbol, bars);
+                persistBars(symbol, bars, source);
                 counts.put(symbol, bars.size());
                 sources.put(symbol, source);
                 persistedBars += bars.size();
@@ -271,46 +273,14 @@ public class MarketDataService {
     }
 
     public void persistBars(String symbol, List<Bar> bars) {
-        if (bars == null || bars.isEmpty()) {
-            return;
-        }
-        ensureSecurity(symbol);
-        jdbcTemplate.batchUpdate("""
-                insert into daily_bars(
-                    symbol, trade_date, open, high, low, close,
-                    volume, amount, turnover_rate, adjust_type
-                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, 'QFQ')
-                on conflict(symbol, trade_date, adjust_type) do update set
-                    open=excluded.open,
-                    high=excluded.high,
-                    low=excluded.low,
-                    close=excluded.close,
-                    volume=excluded.volume,
-                    amount=excluded.amount,
-                    turnover_rate=excluded.turnover_rate
-                """, new BatchPreparedStatementSetter() {
-            @Override
-            public void setValues(PreparedStatement ps, int i) throws SQLException {
-                Bar bar = bars.get(i);
-                ps.setString(1, symbol);
-                ps.setDate(2, Date.valueOf(bar.tradeDate()));
-                ps.setBigDecimal(3, bar.open());
-                ps.setBigDecimal(4, bar.high());
-                ps.setBigDecimal(5, bar.low());
-                ps.setBigDecimal(6, bar.close());
-                ps.setLong(7, bar.volume());
-                ps.setBigDecimal(8, bar.amount());
-                ps.setBigDecimal(9, bar.turnoverRate());
-            }
-
-            @Override
-            public int getBatchSize() {
-                return bars.size();
-            }
-        });
+        persistBars(symbol, bars, MarketDataPersistenceService.DEFAULT_SOURCE);
     }
 
-    private List<Bar> fetchHistory(String symbol, int days) {
+    public void persistBars(String symbol, List<Bar> bars, String sourceCode) {
+        persistenceService.persistBars(symbol, bars, sourceCode);
+    }
+
+    private FetchedHistory fetchHistory(String symbol, int days) {
         ResponseEntity<List> response = restTemplate.getForEntity(
                 baseUrl + "/market/history/" + symbol + "?days=" + days,
                 List.class
@@ -321,16 +291,26 @@ public class MarketDataService {
         }
 
         List<Bar> bars = new ArrayList<>();
+        Set<String> sources = new LinkedHashSet<>();
         for (Object row : rows) {
             if (row instanceof Map<?, ?> map) {
                 bars.add(mapBar(map));
+                String candidate = string(map.get("dataSource"));
+                if (!candidate.isBlank()) sources.add(candidate.strip());
             }
         }
         if (bars.size() < 30) {
             throw new IllegalStateException("有效K线不足：" + symbol);
         }
+        if (sources.size() > 1) {
+            throw new IllegalStateException(
+                    "同一历史行情响应包含多个来源，不能建立可靠lineage");
+        }
+        String source = sources.isEmpty()
+                ? MarketDataPersistenceService.DEFAULT_SOURCE
+                : sources.iterator().next();
         bars.sort((a, b) -> a.tradeDate().compareTo(b.tradeDate()));
-        return bars;
+        return new FetchedHistory(List.copyOf(bars), source);
     }
 
     private List<Bar> loadBars(String symbol, int days) {
@@ -401,15 +381,6 @@ public class MarketDataService {
         );
     }
 
-    private void ensureSecurity(String symbol) {
-        String exchange = symbol.startsWith("6") ? "SH" : "SZ";
-        jdbcTemplate.update("""
-                insert into securities(symbol, name, exchange, board, is_st, is_active)
-                values (?, ?, ?, 'MAIN', false, true)
-                on conflict(symbol) do nothing
-                """, symbol, symbol, exchange);
-    }
-
     private void validateSymbol(String symbol) {
         if (symbol == null || !symbol.matches("\\d{6}")) {
             throw new IllegalArgumentException("股票代码必须是6位数字");
@@ -462,5 +433,8 @@ public class MarketDataService {
 
     private static boolean boolDefault(Object value, boolean defaultValue) {
         return value == null ? defaultValue : bool(value);
+    }
+
+    private record FetchedHistory(List<Bar> bars, String source) {
     }
 }

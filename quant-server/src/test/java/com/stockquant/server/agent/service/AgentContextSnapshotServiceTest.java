@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stockquant.core.domain.Bar;
 import com.stockquant.core.indicator.Indicators;
+import com.stockquant.server.agent.backtest.AgentBacktestContextService;
+import com.stockquant.server.agent.backtest.BacktestContracts;
 import com.stockquant.server.agent.repository.AgentContextReadRepository;
 import com.stockquant.server.agent.repository.AgentContextReadRepository.DailyBarRecord;
 import com.stockquant.server.agent.repository.AgentContextReadRepository.SecurityRecord;
@@ -29,6 +31,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class AgentContextSnapshotServiceTest {
@@ -45,6 +48,54 @@ class AgentContextSnapshotServiceTest {
                 .getAnnotation(Transactional.class);
         assertTrue(transaction.readOnly());
         assertEquals(Isolation.REPEATABLE_READ, transaction.isolation());
+        Transactional versioned = AgentContextSnapshotService.class
+                .getMethod("create", String.class, LocalDate.class, String.class)
+                .getAnnotation(Transactional.class);
+        assertTrue(versioned.readOnly());
+        assertEquals(Isolation.REPEATABLE_READ, versioned.isolation());
+    }
+
+    @Test
+    void selectsStage2FProfileWithoutChangingLegacyEntry() {
+        Instant instant = Instant.parse("2026-07-14T05:00:00Z");
+        AgentContextReadRepository repository = emptyRepository();
+        AgentMarketBreadthContextService breadth = mock(AgentMarketBreadthContextService.class);
+        AgentScanResultContextService scan = mock(AgentScanResultContextService.class);
+        AgentBacktestContextService backtest = mock(AgentBacktestContextService.class);
+        when(breadth.create(SYMBOL, TRADE_DATE, instant))
+                .thenReturn(unavailableResearch("marketBreadth", instant));
+        when(scan.create(SYMBOL, TRADE_DATE, instant))
+                .thenReturn(unavailableResearch("scanResult", instant));
+        var reliable = objectMapper.createObjectNode();
+        reliable.put("available", true);
+        reliable.put("contextProfile", BacktestContracts.CONTEXT_PROFILE);
+        when(backtest.create(SYMBOL, TRADE_DATE, instant)).thenReturn(reliable);
+        AgentContextSnapshotService service = new AgentContextSnapshotService(
+                objectMapper,
+                hashService,
+                repository,
+                new AgentTechnicalMetricsService(),
+                new AgentDataQualityContextService(),
+                breadth,
+                scan,
+                backtest,
+                Clock.fixed(instant, ZoneOffset.UTC));
+
+        var legacy = service.create(SYMBOL, TRADE_DATE);
+        var explicitlyLegacy = service.create(
+                SYMBOL, TRADE_DATE, "1.4.0-stage-2e-technical-analysis-v1");
+        var stage2F = service.create(
+                SYMBOL, TRADE_DATE, BacktestContracts.RULE_VERSION);
+
+        assertEquals(legacy.contextHash(), explicitlyLegacy.contextHash());
+        assertEquals(
+                "BACKTEST_INPUT_CUTOFF_UNVERIFIABLE",
+                legacy.value().path("backtestContext").path("reasonCode").asText());
+        assertEquals(
+                BacktestContracts.CONTEXT_PROFILE,
+                stage2F.value().path("backtestContext").path("contextProfile").asText());
+        assertFalse(legacy.contextHash().equals(stage2F.contextHash()));
+        verify(backtest).create(SYMBOL, TRADE_DATE, instant);
     }
 
     @Test

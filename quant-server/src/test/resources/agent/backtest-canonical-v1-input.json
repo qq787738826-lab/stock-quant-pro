@@ -1,0 +1,14 @@
+{
+  "z": "é",
+  "a": [
+    1.2300,
+    null,
+    {
+      "utc": "2025-01-02T03:04:05.123456Z",
+      "flag": true
+    }
+  ],
+  "negativeZero": -0.000,
+  "empty": "",
+  "presentNull": null
+}

@@ -20,6 +20,7 @@ from .models import (
     STAGE_2B_DATA_QUALITY_RULE_VERSION,
     STAGE_2D_MARKET_REGIME_RULE_VERSION,
     STAGE_2E_TECHNICAL_ANALYSIS_RULE_VERSION,
+    STAGE_2F_STRATEGY_BACKTEST_RULE_VERSION,
 )
 
 
@@ -30,6 +31,7 @@ class ChiefDecisionService:
         data_quality: AgentOutput,
         market_regime: AgentOutput,
         technical_analysis: AgentOutput,
+        strategy_backtest: AgentOutput,
         generated_at: datetime,
     ) -> FinalDecision:
         if request.ruleVersion == STAGE_2B_DATA_QUALITY_RULE_VERSION:
@@ -143,6 +145,49 @@ class ChiefDecisionService:
                 executionMode=request.executionMode,
                 generatedAt=generated_at,
             )
+        if request.ruleVersion == STAGE_2F_STRATEGY_BACKTEST_RULE_VERSION:
+            if data_quality.gateStatus is GateStatus.BLOCKED:
+                decision = FinalDecisionCode.BLOCKED_BY_DATA_QUALITY
+                gate_status = GateStatus.BLOCKED
+                confidence = data_quality.confidence
+                findings = list(data_quality.findings)
+                summary = (
+                    "DATA_QUALITY上下文无效，总控已按安全门禁阻断。"
+                    if data_quality.confidence == 0
+                    else "DATA_QUALITY规则发现阻断事实，总控已停止后续分析。"
+                )
+            else:
+                decision = FinalDecisionCode.INSUFFICIENT_DATA
+                gate_status = data_quality.gateStatus
+                confidence = 0
+                findings = [
+                    *data_quality.findings,
+                    *market_regime.findings,
+                    *technical_analysis.findings,
+                    *strategy_backtest.findings,
+                ]
+                summary = (
+                    "DATA_QUALITY、MARKET_REGIME、TECHNICAL_ANALYSIS与可靠"
+                    "STRATEGY_BACKTEST规则已按冻结边界执行；公告风险和仓位风险"
+                    "尚未实现，无法形成团队投资结论。"
+                )
+            return FinalDecision(
+                taskId=request.taskId,
+                decision=decision,
+                gateStatus=gate_status,
+                vetoed=False,
+                score=0,
+                confidence=confidence,
+                summary=summary,
+                findings=findings,
+                sourceRunIds=[run_id for _, run_id in request.runIds.ordered()],
+                vetoIds=[],
+                contextHash=request.contextHash,
+                tradeDate=request.tradeDate,
+                ruleVersion=request.ruleVersion,
+                executionMode=request.executionMode,
+                generatedAt=generated_at,
+            )
         return FinalDecision(
             taskId=request.taskId,
             decision=FinalDecisionCode.BLOCKED_BY_DATA_QUALITY,
@@ -184,10 +229,12 @@ class AgentTeamOrchestrator:
         )
         market_regime = runs[1]
         technical_analysis = runs[2]
+        strategy_backtest = runs[3]
         evidence = [
             *data_quality.evidence,
             *market_regime.evidence,
             *technical_analysis.evidence,
+            *strategy_backtest.evidence,
         ]
         return AgentTeamResponse(
             taskId=request.taskId,
@@ -203,6 +250,7 @@ class AgentTeamOrchestrator:
                 data_quality,
                 market_regime,
                 technical_analysis,
+                strategy_backtest,
                 generated_at,
             ),
             generatedAt=generated_at,

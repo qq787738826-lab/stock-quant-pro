@@ -390,7 +390,7 @@ class AgentStage2EPostgresPythonIntegrationTest {
         assertEquals("stock_quant_test", jdbc.queryForObject("SELECT current_database()", String.class));
         assertEquals("stock_quant_test", jdbc.queryForObject("SELECT current_user", String.class));
         assertEquals(TEST_SCHEMA, jdbc.queryForObject("SELECT current_schema()", String.class));
-        assertEquals(List.of("1", "2", "3", "4", "5", "6", "7", "8"), jdbc.queryForList("""
+        assertEquals(List.of("1", "2", "3", "4", "5", "6", "7", "8", "9"), jdbc.queryForList("""
                 SELECT version FROM flyway_schema_history
                 WHERE success=TRUE ORDER BY installed_rank
                 """, String.class));
