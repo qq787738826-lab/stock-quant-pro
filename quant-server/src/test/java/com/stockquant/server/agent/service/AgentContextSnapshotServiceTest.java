@@ -6,6 +6,8 @@ import com.stockquant.core.domain.Bar;
 import com.stockquant.core.indicator.Indicators;
 import com.stockquant.server.agent.backtest.AgentBacktestContextService;
 import com.stockquant.server.agent.backtest.BacktestContracts;
+import com.stockquant.server.agent.portfolio.AgentPortfolioContextService;
+import com.stockquant.server.agent.portfolio.PortfolioContracts;
 import com.stockquant.server.agent.repository.AgentContextReadRepository;
 import com.stockquant.server.agent.repository.AgentContextReadRepository.DailyBarRecord;
 import com.stockquant.server.agent.repository.AgentContextReadRepository.SecurityRecord;
@@ -96,6 +98,72 @@ class AgentContextSnapshotServiceTest {
                 stage2F.value().path("backtestContext").path("contextProfile").asText());
         assertFalse(legacy.contextHash().equals(stage2F.contextHash()));
         verify(backtest).create(SYMBOL, TRADE_DATE, instant);
+    }
+
+    @Test
+    void selectsStage2HProfileWithoutChangingLegacyOrStage2FHashes() {
+        Instant instant = Instant.parse("2026-07-14T05:00:00Z");
+        AgentContextReadRepository repository = emptyRepository();
+        AgentMarketBreadthContextService breadth = mock(AgentMarketBreadthContextService.class);
+        AgentScanResultContextService scan = mock(AgentScanResultContextService.class);
+        AgentBacktestContextService backtest = mock(AgentBacktestContextService.class);
+        AgentPortfolioContextService portfolio = mock(AgentPortfolioContextService.class);
+        when(breadth.create(SYMBOL, TRADE_DATE, instant))
+                .thenReturn(unavailableResearch("marketBreadth", instant));
+        when(scan.create(SYMBOL, TRADE_DATE, instant))
+                .thenReturn(unavailableResearch("scanResult", instant));
+        var reliable = objectMapper.createObjectNode();
+        reliable.put("available", true);
+        reliable.put("contextProfile", BacktestContracts.CONTEXT_PROFILE);
+        when(backtest.create(SYMBOL, TRADE_DATE, instant)).thenReturn(reliable);
+        var frozenPortfolio = objectMapper.createObjectNode();
+        frozenPortfolio.put("available", true);
+        frozenPortfolio.put("contextProfile", PortfolioContracts.CONTEXT_PROFILE);
+        when(portfolio.create(SYMBOL, TRADE_DATE, instant)).thenReturn(frozenPortfolio);
+
+        AgentContextSnapshotService withoutStage2H = new AgentContextSnapshotService(
+                objectMapper,
+                hashService,
+                repository,
+                new AgentTechnicalMetricsService(),
+                new AgentDataQualityContextService(),
+                breadth,
+                scan,
+                backtest,
+                instantClock(instant));
+        AgentContextSnapshotService withStage2H = new AgentContextSnapshotService(
+                objectMapper,
+                hashService,
+                repository,
+                new AgentTechnicalMetricsService(),
+                new AgentDataQualityContextService(),
+                breadth,
+                scan,
+                backtest,
+                portfolio,
+                instantClock(instant));
+
+        var oldLegacy = withoutStage2H.create(SYMBOL, TRADE_DATE);
+        var newLegacy = withStage2H.create(SYMBOL, TRADE_DATE);
+        var oldStage2F = withoutStage2H.create(
+                SYMBOL, TRADE_DATE, BacktestContracts.RULE_VERSION);
+        var newStage2F = withStage2H.create(
+                SYMBOL, TRADE_DATE, BacktestContracts.RULE_VERSION);
+        var stage2H = withStage2H.create(
+                SYMBOL, TRADE_DATE, PortfolioContracts.RULE_VERSION);
+
+        assertEquals(oldLegacy.contextHash(), newLegacy.contextHash());
+        assertEquals(oldLegacy.value(), newLegacy.value());
+        assertEquals(oldStage2F.contextHash(), newStage2F.contextHash());
+        assertEquals(oldStage2F.value(), newStage2F.value());
+        assertEquals(
+                PortfolioContracts.CONTEXT_PROFILE,
+                stage2H.value().path("portfolioContext").path("contextProfile").asText());
+        assertEquals(
+                BacktestContracts.CONTEXT_PROFILE,
+                stage2H.value().path("backtestContext").path("contextProfile").asText());
+        assertFalse(stage2H.contextHash().equals(newStage2F.contextHash()));
+        verify(portfolio).create(SYMBOL, TRADE_DATE, instant);
     }
 
     @Test
@@ -267,6 +335,10 @@ class AgentContextSnapshotServiceTest {
                 objectMapper, hashService, repository, new AgentTechnicalMetricsService(),
                 new AgentDataQualityContextService(), breadth, scan,
                 Clock.fixed(instant, ZoneOffset.UTC));
+    }
+
+    private static Clock instantClock(Instant instant) {
+        return Clock.fixed(instant, ZoneOffset.UTC);
     }
 
     private com.fasterxml.jackson.databind.node.ObjectNode unavailableResearch(String section, Instant instant) {

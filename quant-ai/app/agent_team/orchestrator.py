@@ -17,10 +17,12 @@ from .models import (
     FinalDecision,
     FinalDecisionCode,
     GateStatus,
+    FormalVeto,
     STAGE_2B_DATA_QUALITY_RULE_VERSION,
     STAGE_2D_MARKET_REGIME_RULE_VERSION,
     STAGE_2E_TECHNICAL_ANALYSIS_RULE_VERSION,
     STAGE_2F_STRATEGY_BACKTEST_RULE_VERSION,
+    STAGE_2H_POSITION_RISK_RULE_VERSION,
 )
 
 
@@ -32,6 +34,8 @@ class ChiefDecisionService:
         market_regime: AgentOutput,
         technical_analysis: AgentOutput,
         strategy_backtest: AgentOutput,
+        position_risk: AgentOutput,
+        vetoes: list[FormalVeto],
         generated_at: datetime,
     ) -> FinalDecision:
         if request.ruleVersion == STAGE_2B_DATA_QUALITY_RULE_VERSION:
@@ -188,6 +192,65 @@ class ChiefDecisionService:
                 executionMode=request.executionMode,
                 generatedAt=generated_at,
             )
+        if request.ruleVersion == STAGE_2H_POSITION_RISK_RULE_VERSION:
+            findings = [
+                *data_quality.findings,
+                *market_regime.findings,
+                *technical_analysis.findings,
+                *strategy_backtest.findings,
+                *position_risk.findings,
+            ]
+            if vetoes:
+                decision = FinalDecisionCode.REJECTED_BY_VETO
+                gate_status = GateStatus.BLOCKED
+                vetoed = True
+                confidence = position_risk.confidence
+                summary = (
+                    "POSITION_RISK基于当前模拟账户冻结事实产生正式否决；"
+                    "该否决优先于请求证券的数据质量门禁。"
+                )
+            elif data_quality.gateStatus is GateStatus.BLOCKED:
+                decision = FinalDecisionCode.BLOCKED_BY_DATA_QUALITY
+                gate_status = GateStatus.BLOCKED
+                vetoed = False
+                confidence = data_quality.confidence
+                summary = (
+                    "POSITION_RISK已独立评估当前模拟账户且未产生正式否决；"
+                    "DATA_QUALITY仍阻断本次团队分析。"
+                )
+            else:
+                decision = FinalDecisionCode.INSUFFICIENT_DATA
+                gate_status = (
+                    GateStatus.WARN
+                    if GateStatus.WARN in (
+                        data_quality.gateStatus,
+                        position_risk.gateStatus,
+                    )
+                    else GateStatus.PASS
+                )
+                vetoed = False
+                confidence = 0
+                summary = (
+                    "可靠POSITION_RISK已按当前模拟账户事实执行且无正式否决；"
+                    "ANNOUNCEMENT_RISK尚未实现，无法形成完整团队结论。"
+                )
+            return FinalDecision(
+                taskId=request.taskId,
+                decision=decision,
+                gateStatus=gate_status,
+                vetoed=vetoed,
+                score=0,
+                confidence=confidence,
+                summary=summary,
+                findings=findings,
+                sourceRunIds=[run_id for _, run_id in request.runIds.ordered()],
+                vetoIds=[veto.vetoId for veto in vetoes],
+                contextHash=request.contextHash,
+                tradeDate=request.tradeDate,
+                ruleVersion=request.ruleVersion,
+                executionMode=request.executionMode,
+                generatedAt=generated_at,
+            )
         return FinalDecision(
             taskId=request.taskId,
             decision=FinalDecisionCode.BLOCKED_BY_DATA_QUALITY,
@@ -225,8 +288,12 @@ class AgentTeamOrchestrator:
         runs = [data_quality]
         runs.extend(
             agent.analyze(request, generated_at, data_quality.gateStatus)
-            for agent in self._agents[1:]
+            for agent in self._agents[1:5]
         )
+        position_risk, vetoes = self._agents[5].analyze_with_vetoes(
+            request, generated_at, data_quality.gateStatus
+        )
+        runs.append(position_risk)
         market_regime = runs[1]
         technical_analysis = runs[2]
         strategy_backtest = runs[3]
@@ -235,6 +302,7 @@ class AgentTeamOrchestrator:
             *market_regime.evidence,
             *technical_analysis.evidence,
             *strategy_backtest.evidence,
+            *position_risk.evidence,
         ]
         return AgentTeamResponse(
             taskId=request.taskId,
@@ -244,13 +312,15 @@ class AgentTeamOrchestrator:
             executionMode=request.executionMode,
             agentRuns=runs,
             evidence=evidence,
-            vetoes=[],
+            vetoes=vetoes,
             finalDecision=self._chief.decide(
                 request,
                 data_quality,
                 market_regime,
                 technical_analysis,
                 strategy_backtest,
+                position_risk,
+                vetoes,
                 generated_at,
             ),
             generatedAt=generated_at,

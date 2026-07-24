@@ -7,6 +7,7 @@ from .data_quality import DataQualityRuleEngine
 from .market_regime import MarketRegimeRuleEngine
 from .technical_analysis import TechnicalAnalysisRuleEngine
 from .strategy_backtest import StrategyBacktestRuleEngine
+from .position_risk import PositionRiskRuleEngine
 from .models import (
     AgentCode,
     AgentDecision,
@@ -19,6 +20,8 @@ from .models import (
     STAGE_2D_MARKET_REGIME_RULE_VERSION,
     STAGE_2E_TECHNICAL_ANALYSIS_RULE_VERSION,
     STAGE_2F_STRATEGY_BACKTEST_RULE_VERSION,
+    STAGE_2H_POSITION_RISK_RULE_VERSION,
+    FormalVeto,
 )
 
 
@@ -27,11 +30,13 @@ _DATA_QUALITY_RULE_VERSIONS = frozenset({
     STAGE_2D_MARKET_REGIME_RULE_VERSION,
     STAGE_2E_TECHNICAL_ANALYSIS_RULE_VERSION,
     STAGE_2F_STRATEGY_BACKTEST_RULE_VERSION,
+    STAGE_2H_POSITION_RISK_RULE_VERSION,
 })
 _MARKET_REGIME_RULE_VERSIONS = frozenset({
     STAGE_2D_MARKET_REGIME_RULE_VERSION,
     STAGE_2E_TECHNICAL_ANALYSIS_RULE_VERSION,
     STAGE_2F_STRATEGY_BACKTEST_RULE_VERSION,
+    STAGE_2H_POSITION_RISK_RULE_VERSION,
 })
 
 
@@ -182,6 +187,7 @@ class TechnicalAnalysisAgent(InsufficientDataAgent):
         if request.ruleVersion not in {
             STAGE_2E_TECHNICAL_ANALYSIS_RULE_VERSION,
             STAGE_2F_STRATEGY_BACKTEST_RULE_VERSION,
+            STAGE_2H_POSITION_RISK_RULE_VERSION,
         }:
             return super().analyze(request, generated_at, data_quality_gate)
         evaluation = self._engine.evaluate(
@@ -224,7 +230,10 @@ class StrategyBacktestAgent(InsufficientDataAgent):
         generated_at: datetime,
         data_quality_gate: GateStatus | None = None,
     ) -> AgentOutput:
-        if request.ruleVersion != STAGE_2F_STRATEGY_BACKTEST_RULE_VERSION:
+        if request.ruleVersion not in {
+            STAGE_2F_STRATEGY_BACKTEST_RULE_VERSION,
+            STAGE_2H_POSITION_RISK_RULE_VERSION,
+        }:
             return super().analyze(request, generated_at, data_quality_gate)
         evaluation = self._engine.evaluate(
             request,
@@ -263,3 +272,47 @@ class PositionRiskAgent(InsufficientDataAgent):
     run_id_field = "positionRisk"
     summary = "因数据质量门禁阻断且无真实仓位证据，未执行资金仓位风控分析。"
     pending_summary = "资金仓位风控规则尚未实现且无真实仓位证据，未执行资金仓位风控分析。"
+
+    def __init__(self) -> None:
+        self._engine = PositionRiskRuleEngine()
+
+    def analyze_with_vetoes(
+        self,
+        request: AgentTeamRequest,
+        generated_at: datetime,
+        data_quality_gate: GateStatus | None = None,
+    ) -> tuple[AgentOutput, list[FormalVeto]]:
+        if request.ruleVersion != STAGE_2H_POSITION_RISK_RULE_VERSION:
+            return super().analyze(
+                request, generated_at, data_quality_gate
+            ), []
+        evaluation = self._engine.evaluate(request, generated_at)
+        return AgentOutput(
+            taskId=request.taskId,
+            runId=request.runIds.positionRisk,
+            agentCode=AgentCode.POSITION_RISK,
+            status=evaluation.status,
+            gateStatus=evaluation.gate_status,
+            decision=evaluation.decision,
+            veto=evaluation.veto,
+            score=evaluation.score,
+            confidence=evaluation.confidence,
+            summary=evaluation.summary,
+            findings=list(evaluation.findings),
+            evidence=list(evaluation.evidence),
+            errors=list(evaluation.errors),
+            contextHash=request.contextHash,
+            ruleVersion=request.ruleVersion,
+            executionMode=request.executionMode,
+            generatedAt=generated_at,
+        ), list(evaluation.vetoes)
+
+    def analyze(
+        self,
+        request: AgentTeamRequest,
+        generated_at: datetime,
+        data_quality_gate: GateStatus | None = None,
+    ) -> AgentOutput:
+        return self.analyze_with_vetoes(
+            request, generated_at, data_quality_gate
+        )[0]

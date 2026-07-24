@@ -28,9 +28,9 @@
 - 用户 merge 批准：批准人、批准时间、批准对象
 - 里程碑形成时明确未包含的范围（仅作历史边界，不代表当前状态）：
 
-## 截至冻结基线的历史摘要
+## 历史摘要
 
-审计基线：`04d14fe9aee05ba0396e5d8f6454668da944f7b1`。下列测试结果均引用仓库已有阶段验收文档或 `CURRENT_STATE.md`；除非明确标为 GitHub Actions，否则都是本地执行证据。当前仓库没有为这些历史阶段单独保存 GitHub Actions 结果索引。
+治理日志初始化审计基线：`04d14fe9aee05ba0396e5d8f6454668da944f7b1`；此后只追加已经完成、验收或合入的里程碑。下列测试结果均引用仓库已有阶段验收文档或 `CURRENT_STATE.md`；除非明确标为 GitHub Actions，否则都是本地执行证据。当前仓库没有为这些历史阶段单独保存 GitHub Actions 结果索引。
 
 | 阶段 | 已验证里程碑 | 实现、修复与验收提交 | 合并提交 | 测试证据索引 | 阶段验收证据 | 用户 merge 批准记录 |
 |---|---|---|---|---|---|---|
@@ -44,3 +44,4 @@
 | 2D-2B-1B-0 | 已完成的文档契约阶段 | `c97d6a2c954f536eedd42796b1112aeaab421417`；复审修复 `28c312dcbe26103c5f2b45c043ec6a8f81a08ae0`；复审状态同步 `81f29484fb8a9017bb0a28a57a2403985e1e0785` | `63e01f83f93ce6878458086695ba68c060ea5eb8` | [事件物化契约](stage-2d2b1b-security-event-materialization-design.md)：文档交叉一致性与契约复审，本阶段没有生产实现 | 当时采用的独立 GitHub 审查已通过；分级明细未单独固定 | 未单独记录 merge 审批元数据；合入事实可由 merge SHA 验证 |
 | 2D-2B-1B-1 | 已完成并合入 | `18151800d07fd7d2e6706b88869df5b7d0aa8ba0`；复审修复 `b6cb263f863f91753f043e0fa19e85501873111f` | 实现 `9aebcbf7d5a315d1edd61d85bf2944a454f72ffe`；状态同步 `c2293cff03c142f8a14ffbfcbc8c808004cd3c5a` | [事件物化契约与验收](stage-2d2b1b-security-event-materialization-design.md)：V8 真实 PostgreSQL `6/0/0/0`、`Skipped=0`；兼容 PostgreSQL、Java/Python 回归及 public 隔离 | 当时采用的独立 GitHub 复审 `PASS`；分级关闭明细未单独固定 | 未单独记录 merge 审批元数据；两次合入事实可由 merge SHA 验证 |
 | 2E-1 | 已完成并合入 | `93ccf7c6da380be91ca342f6c5e8815f8e7dfe07` | `adb781c3ffb41ff13a14538067e838a60a65bea9`；状态同步 `04d14fe9aee05ba0396e5d8f6454668da944f7b1` | [2E-1 验收](stage-2e1-technical-analysis-v1.md)：Python `77/0/0`、真实跨语言 `4/0/0/0`、真实 PostgreSQL `2/0/0/0`，两类真实闭环均 `Skipped=0` | 当时采用的独立 GitHub 最终复审 `PASS`，`HIGH 0 / MEDIUM 0 / LOW 0` | 未单独记录 merge 审批人和时间；合入及最终状态同步事实可由 SHA 验证 |
+| 2F | 已完成并 fast-forward 合入 | 首次实现 `4ae0ac4ebc12aef559b9f88e7e1dfacc2b00a573`；knowledge-time BLOCKER 修复及最终提交 `4b1ee01a86b027ec43deaab18e6a68a098e0e2f4` | 集成分支 fast-forward 至 `4b1ee01a86b027ec43deaab18e6a68a098e0e2f4`，无额外 merge commit | [2F 验收](stage-2f-strategy-backtest-v1.md)：最终复测 `quant-core 4/0/0/0`、Java 定向 `27/0/0/0`、Python `83/0/0/0`；2F PostgreSQL `7/0/0/0`、真实 Java/Python `4/0/0/0`、真实 PostgreSQL/Python/JSONB `2/0/0/0`，真实组均 `Skipped=0`；public 基线不变 | ChatGPT 已基于实际最终 Git 提交验收 `PASS`；精确验收时间无仓库证据，记为 `UNKNOWN` | 用户已批准 merge；精确批准时间无仓库证据，记为 `UNKNOWN` |
