@@ -89,6 +89,12 @@ public class AgentBacktestContextService {
                     BacktestContracts.NO_TRUSTED_PIT_DAILY_BARS,
                     "请求日期以前没有可信PIT QFQ日线观察");
         }
+        if (!validKnowledgeTimes(observations, decisionTime)) {
+            return unavailable(
+                    context,
+                    BacktestContracts.KNOWLEDGE_TIME_UNVERIFIABLE,
+                    "PIT daily-bar trade date or knowledge-time ordering is unverifiable");
+        }
         if (!validObservations(observations, symbol, requestTradeDate, decisionTime)) {
             return unavailable(
                     context,
@@ -565,6 +571,24 @@ public class AgentBacktestContextService {
         value.set("subperiods", subperiods.deepCopy());
         value.set("stability", stability.deepCopy());
         return value;
+    }
+
+    private static boolean validKnowledgeTimes(
+            List<ObservedDailyBar> values,
+            Instant knowledgeCutoff
+    ) {
+        for (ObservedDailyBar value : values) {
+            if (value == null
+                    || !BacktestContracts.validDailyBarKnowledgeTimes(
+                    value.tradeDate(),
+                    value.firstObservedAt(),
+                    value.knownAt(),
+                    value.recordedAt())
+                    || value.knownAt().isAfter(knowledgeCutoff)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static boolean validObservations(

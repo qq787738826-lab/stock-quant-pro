@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, time, timezone
 from decimal import Decimal, ROUND_HALF_UP
 import re
 from typing import Any
@@ -377,13 +377,23 @@ class StrategyBacktestRuleEngine:
             if not isinstance(item, dict) or item.get("symbol") != request.symbol:
                 raise ValueError("bar证券代码无效")
             trade_date = date.fromisoformat(_text(item, "tradeDate"))
-            if trade_date > request_date or previous is not None and trade_date <= previous:
+            if (trade_date.weekday() >= 5
+                    or trade_date > request_date
+                    or previous is not None and trade_date <= previous):
                 raise ValueError("bar日期无效")
             previous = trade_date
             _validate_bar(item)
             known_at = _instant(item.get("knownAt"))
             first_observed = _instant(item.get("firstObservedAt"))
-            if known_at > cutoff or first_observed > known_at:
+            earliest_known_at = datetime.combine(
+                trade_date,
+                time(15, 0),
+                tzinfo=ZoneInfo(MARKET_TIMEZONE),
+            ).astimezone(timezone.utc)
+            if (first_observed < earliest_known_at
+                    or known_at < earliest_known_at
+                    or known_at > cutoff
+                    or first_observed > known_at):
                 raise ValueError("bar knowledge-time无效")
             for field in (
                 "sourceCode",

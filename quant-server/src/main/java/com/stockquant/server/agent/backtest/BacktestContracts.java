@@ -4,6 +4,9 @@ import com.stockquant.core.backtest.BacktestEngine;
 import com.stockquant.core.domain.BacktestModels;
 
 import java.math.BigDecimal;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Set;
@@ -23,6 +26,8 @@ public final class BacktestContracts {
     public static final String PARAMETER_SCHEMA_VERSION = "BACKTEST_PARAMS_V1";
     public static final String ADJUST_TYPE = "QFQ";
     public static final ZoneId MARKET_ZONE = ZoneId.of("Asia/Shanghai");
+    public static final LocalTime DAILY_BAR_EARLIEST_KNOWN_TIME =
+            LocalTime.of(15, 0);
     public static final int MAXIMUM_BARS = 500;
     public static final int MINIMUM_CONTEXT_BARS = 120;
     public static final String SPLIT_ALGORITHM =
@@ -86,5 +91,37 @@ public final class BacktestContracts {
 
     public static BacktestModels.Request parameters() {
         return PARAMETERS;
+    }
+
+    public static boolean isSupportedDailyBarTradeDate(LocalDate tradeDate) {
+        return tradeDate != null && tradeDate.getDayOfWeek().getValue() <= 5;
+    }
+
+    public static Instant earliestDailyBarKnownAt(LocalDate tradeDate) {
+        if (tradeDate == null) {
+            throw new IllegalArgumentException("tradeDate must not be null");
+        }
+        return tradeDate.atTime(DAILY_BAR_EARLIEST_KNOWN_TIME)
+                .atZone(MARKET_ZONE)
+                .toInstant();
+    }
+
+    public static boolean validDailyBarKnowledgeTimes(
+            LocalDate tradeDate,
+            Instant firstObservedAt,
+            Instant knownAt,
+            Instant recordedAt
+    ) {
+        if (!isSupportedDailyBarTradeDate(tradeDate)
+                || firstObservedAt == null
+                || knownAt == null
+                || recordedAt == null) {
+            return false;
+        }
+        Instant earliestKnownAt = earliestDailyBarKnownAt(tradeDate);
+        return !firstObservedAt.isBefore(earliestKnownAt)
+                && !knownAt.isBefore(earliestKnownAt)
+                && !firstObservedAt.isAfter(knownAt)
+                && !knownAt.isAfter(recordedAt);
     }
 }

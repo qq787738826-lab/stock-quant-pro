@@ -166,13 +166,13 @@
 - 当前状态：任务分支 `codex/1.4.0-stage-2f-strategy-backtest-v1` 已完成实现与 Codex 本地验证；尚待 ChatGPT 基于实际 Git commit 验收，尚未合入集成分支。本状态不等于验收 PASS 或用户 merge 批准。
 - 交付文档：[完整 2F 任务书](tasks/2f-reliable-strategy-backtest-v1.md)、[2F-0 实现契约](tasks/2f0-backtest-context-foundation.md)和[阶段实现与本地验证记录](stage-2f-strategy-backtest-v1.md)。
 - 连续交付：2F-0、knowledge-time/PIT、参数/版本/Hash、可回放事实、`STRATEGY_BACKTEST` V1、Java/Python 契约、自动化测试与真实 PostgreSQL 已作为同一大阶段连续实现，不拆成独立提交或验收阶段。
-- PIT 模型：任务分支新增 V9 append-only `market_data_observation_batches` 与 `daily_bar_observations`；`daily_bars` 继续作为当前态兼容投影。本地行情成功持久化在同一事务内捕获观察版本，as-of 输入同时受 `tradeDate` 与 `knowledgeCutoff` 约束。V1 至 V8 不变，不回填或伪造历史 known time。
+- PIT 模型：任务分支新增 V9 append-only `market_data_observation_batches` 与 `daily_bar_observations`；`daily_bars` 继续作为当前态兼容投影。持久化入口和数据库均拒绝周末日线；可靠观察只接受周一至周五且 `firstObservedAt`、`knownAt` 均不早于该交易日上海时间 15:00 的完整日线。工作日收盘前当日日线不进入 PIT、不产生空批次，但可继续更新兼容投影。合格观察版本与当前态在同一事务内持久化，as-of 输入同时受 `tradeDate` 与 `knowledgeCutoff` 约束。V1 至 V8 不变，不回填或伪造历史 known time。
 - 兼容 profile：只有规则版本 `1.4.0-stage-2f-strategy-backtest-v1` 选择 `AGENT_CONTEXT_2F_V1/BACKTEST_CONTEXT_V1`；旧入口和 2B、2D-1、2E-1 的 contextSnapshot、contextHash、缓存键与结果保持兼容。
 - Canonical 契约：`BACKTEST_CANONICAL_V1` 冻结 SHA-256、编码、Unicode、对象/数组顺序、UTC 微秒时间、Decimal、null/缺失、字段白名单与独立 `dataVersion`；Java 生成 `inputDataHash`、`strategyDefinitionHash`、`backtestResultHash`，Java/Python 使用固定输入、canonical 文本和预期 Hash 的黄金向量交叉验证。
 - 策略事实：冻结 `SMA20_NEXT_OPEN_RISK_EXIT_V1/BACKTEST_ENGINE_V1/BACKTEST_PARAMS_V1` 和七项完整参数；Java 执行完整窗口及 EARLY/MIDDLE/LATE 三个稳定子区间，Python 不重跑回测。
 - 规则输出：有效输入固定产生样本充分性、总收益、最大回撤、胜率与盈亏比、跨时间子区间稳定性五类 finding，按冻结阈值计算 `[0,100]` score 与最高 80 confidence。DATA_QUALITY 阻断、上下文不可用、输入非法或交易样本不足均安全降级。
 - 当前安全限制：普通配置来源没有可验证 revision，因此真实普通捕获仍返回 `BACKTEST_SOURCE_REVISION_UNVERIFIABLE`，不会被误写为可靠历史输入。内容 Hash 不替代 knowledge-time 证据。
-- 本地验收：真实 2F V1 至 V9 PostgreSQL `5/0/0/0`、真实 Java/Python `4/0/0/0`、真实 PostgreSQL/Python/JSONB/原子失败 `2/0/0/0`，均 `Skipped=0`；其他回归与已知 public V6 checksum 环境问题详见阶段文档。这些是 Codex 本地证据，不是 GitHub Actions CI。
+- 本地验收：针对最终 knowledge-time 修复的真实 2F V1 至 V9 PostgreSQL `7/0/0/0`、真实 Java/Python `4/0/0/0`、真实 PostgreSQL/Python/JSONB/原子失败 `2/0/0/0`，均 `Skipped=0`；其他回归与已知 public V6 checksum 环境问题详见阶段文档。这些是 Codex 本地证据，不是 GitHub Actions CI。
 - 禁止范围：外部行情、旧结果权威化、参数寻优、投资建议、收益承诺、自动交易、正式 veto 或总控升级。POSITION_RISK 仍是唯一正式否决权。
 - 阶段边界：Codex 完成单次 commit 和普通 push 后停止，由 ChatGPT 检查实际提交；验收通过后仍须用户批准 merge。不得自行开始 2G 或其他阶段。
 

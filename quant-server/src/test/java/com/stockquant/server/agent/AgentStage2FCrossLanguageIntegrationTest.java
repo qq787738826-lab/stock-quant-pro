@@ -91,6 +91,16 @@ class AgentStage2FCrossLanguageIntegrationTest {
         assertEquals(RunStatus.INSUFFICIENT_DATA, invalidStrategy.status());
         assertEquals(List.of("STRATEGY_BACKTEST_INPUT_INVALID"),
                 invalidStrategy.errors().stream().map(item -> item.code()).toList());
+
+        AgentTeamResponse predated = call(AgentStage2FTestFixtures.request(
+                AgentStage2FTestFixtures.Scenario.PREDATED_BAR));
+        AgentOutput predatedStrategy = run(
+                predated, AgentCode.STRATEGY_BACKTEST);
+        assertEquals(RunStatus.INSUFFICIENT_DATA, predatedStrategy.status());
+        assertEquals(List.of("STRATEGY_BACKTEST_INPUT_INVALID"),
+                predatedStrategy.errors().stream().map(item -> item.code()).toList());
+        assertTrue(predatedStrategy.findings().isEmpty());
+        assertTrue(predatedStrategy.evidence().isEmpty());
     }
 
     @Test

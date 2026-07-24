@@ -71,48 +71,60 @@ public class MarketDataPersistenceService {
         String normalizedSource = sourceCode == null || sourceCode.isBlank()
                 ? DEFAULT_SOURCE : sourceCode.strip();
         Instant observedAt = BacktestCanonicalHashService.microsecondInstant(clock.instant());
-        String suffix = UUID.randomUUID().toString();
-        String batchVersion = "OBS_BATCH_V1-" + suffix;
-        String datasetVersion = "LOCAL_DATASET_V1-" + suffix;
-        String metadata = sourceMetadata(normalizedSource, sourceRevision);
-        long batchId = observationRepository.insertBatch(
-                batchVersion,
-                normalizedSource,
-                datasetVersion,
-                captureType,
-                observedAt,
-                bars.size(),
-                metadata);
-
+        List<Bar> reliableBars = bars.stream()
+                .filter(bar -> eligibleForPitObservation(bar, observedAt))
+                .toList();
+        String batchVersion = null;
+        String datasetVersion = null;
         int appended = 0;
-        for (Bar bar : bars) {
-            String contentHash = canonicalHashService.hash(
-                    contentPayload(normalizedSource, bar));
-            String observationVersion = canonicalHashService.hash(
-                    observationVersionPayload(
-                            batchVersion,
-                            datasetVersion,
-                            normalizedSource,
-                            sourceRevision,
-                            observedAt,
-                            contentHash));
-            if (observationRepository.appendIfChanged(
-                    batchId,
+        if (!reliableBars.isEmpty()) {
+            String suffix = UUID.randomUUID().toString();
+            batchVersion = "OBS_BATCH_V1-" + suffix;
+            datasetVersion = "LOCAL_DATASET_V1-" + suffix;
+            String metadata = sourceMetadata(normalizedSource, sourceRevision);
+            long batchId = observationRepository.insertBatch(
                     batchVersion,
-                    datasetVersion,
                     normalizedSource,
-                    sourceRevision,
-                    bar,
+                    datasetVersion,
+                    captureType,
                     observedAt,
-                    contentHash,
-                    observationVersion)) {
-                appended++;
+                    reliableBars.size(),
+                    metadata);
+
+            for (Bar bar : reliableBars) {
+                String contentHash = canonicalHashService.hash(
+                        contentPayload(normalizedSource, bar));
+                String observationVersion = canonicalHashService.hash(
+                        observationVersionPayload(
+                                batchVersion,
+                                datasetVersion,
+                                normalizedSource,
+                                sourceRevision,
+                                observedAt,
+                                contentHash));
+                if (observationRepository.appendIfChanged(
+                        batchId,
+                        batchVersion,
+                        datasetVersion,
+                        normalizedSource,
+                        sourceRevision,
+                        bar,
+                        observedAt,
+                        contentHash,
+                        observationVersion)) {
+                    appended++;
+                }
             }
         }
 
         ensureSecurity(symbol);
         persistCurrentProjection(symbol, bars);
         return new CaptureResult(batchVersion, datasetVersion, bars.size(), appended);
+    }
+
+    private static boolean eligibleForPitObservation(Bar bar, Instant observedAt) {
+        return !observedAt.isBefore(
+                BacktestContracts.earliestDailyBarKnownAt(bar.tradeDate()));
     }
 
     ObjectNode contentPayload(String sourceCode, Bar bar) {
@@ -242,6 +254,8 @@ public class MarketDataPersistenceService {
         LocalDate previousDate = null;
         for (Bar bar : bars) {
             if (bar == null || !symbol.equals(bar.symbol()) || bar.tradeDate() == null
+                    || !BacktestContracts.isSupportedDailyBarTradeDate(
+                    bar.tradeDate())
                     || bar.open() == null || bar.high() == null
                     || bar.low() == null || bar.close() == null
                     || bar.open().signum() <= 0 || bar.high().signum() <= 0

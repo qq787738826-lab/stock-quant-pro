@@ -63,14 +63,20 @@ content hash。
 - as-of 查询同时限定 `tradeDate<=requestTradeDate` 与
   `knownAt<=knowledgeCutoff`，按 known time、recorded time、物理 ID 和逻辑版本
   稳定选择当时可见版本。
+- 数据库拒绝周末日线，以及早于对应交易日上海时间 15:00 的
+  `firstObservedAt` 或 `knownAt`。
 - 合理索引覆盖 source、symbol、adjust type、trade date、known time 与 batch。
 - 迁移不把执行时间冒充历史首次观察时间；早于首次可信观察的请求保持不可用。
 
 ### 3.3 捕获事务
 
-成功的本地行情持久化统一经过 `MarketDataPersistenceService`：同一事务内创建
-观察批次、按内容变化追加 PIT 版本，再更新兼容的 `daily_bars` 当前态投影。任一步
-失败均回滚整个持久化事务。Agent 读取不触发网络，Python 不访问数据库。
+成功的本地行情持久化统一经过 `MarketDataPersistenceService`：持久化入口拒绝
+周末日线，只为周一至周五且
+捕获时刻不早于该交易日上海时间 15:00 的完整日线创建观察批次、按内容变化追加
+PIT 版本，再更新兼容的 `daily_bars` 当前态投影。工作日收盘前当日日线不进入 PIT，
+不创建空批次，但可以继续更新兼容投影；混合输入的 `record_count` 只计算合格 PIT
+记录。任一步失败均回滚整个持久化事务。Agent 读取不触发网络，Python 不访问
+数据库。
 
 当前普通配置源不提供可验证的 source revision，捕获时如实保存 `null`；
 `AgentBacktestContextService` 因而返回
@@ -87,10 +93,15 @@ content hash。
 - 未来请求日期使用 `BACKTEST_FUTURE_REQUEST_DATE`；请求日日终尚未到达使用
   `BACKTEST_DECISION_TIME_NOT_REACHED`。
 - 每条可靠输入必须同时满足业务日期与 knowledge-time 上界。
+- 完整日线的最早合法知识时间是其交易日上海时间 15:00；可靠输入必须是周一至
+  周五，并满足 `firstObservedAt`、`knownAt` 均不早于该时刻、
+  `firstObservedAt<=knownAt<=recordedAt`。
 
 内容 Hash 只证明给定内容的稳定性，不证明其在历史决策时点已经可知。cutoff 后
 覆盖、未来公司行动导致 QFQ 改写、来源修订、迟到数据和同交易日多 knowledge-time
-版本必须由不可变观察版本隔离；证据不足时保持 `available=false`。
+版本必须由不可变观察版本隔离；证据不足时保持 `available=false`。周末日线直接
+拒绝；本阶段不引入新的正式交易日历来源，法定节假日仍由实际来源和后续正式
+日历能力治理。
 
 ## 5. 可靠 backtestContext
 
@@ -266,6 +277,25 @@ Java/Python 白名单冻结：
 不能冒充真实闭环；对应 2E/2F 真实跨语言闭环已另外执行 `8/0/0/0`、
 `Skipped=0`。
 
+针对 ChatGPT 实际提交验收发现的日线最早知识时间 BLOCKER，增量修复后重新执行：
+
+| 范围 | 运行/失败/错误/跳过 |
+|---|---|
+| `quant-core` 全量 | `4/0/0/0` |
+| Java contract/service/profile/contextHash 定向 | `27/0/0/0` |
+| Python `compileall` | 通过 |
+| Python 完整 unittest | `83/0/0/0` |
+| 2F V1–V9 真实 PostgreSQL | `7/0/0/0` |
+| 2F 真实 Java/Python HTTP | `4/0/0/0` |
+| 2F 真实 PostgreSQL/Python/JSONB/原子失败 | `2/0/0/0` |
+| 2D V1–V9 PostgreSQL 兼容 | `10/0/0/0` |
+| 2E 真实跨语言与 PostgreSQL 兼容 | `6/0/0/0` |
+
+上述五组真实集成测试均为 `Skipped=0`；新场景覆盖数据库周末/15:00 前拒绝、
+Java mocked 倒填安全不可用、Python 倒填输入非法、合法迟到回填及旧 cutoff、
+Hash、重放和 profile/contextHash 兼容。所有结果仍是 Codex 本地执行证据，不是
+GitHub Actions CI。
+
 绑定专用数据库 public 的全量 `quant-server` 尝试运行 286 项，出现 15 个启动
 错误和 14 项跳过，原因是专用测试库 public 已存在的历史 V6 checksum 与当前仓库
 不一致；该次运行不得描述为通过。未执行 Flyway repair/clean，未修改、删除或
@@ -274,9 +304,10 @@ Java/Python 白名单冻结：
 扩展指纹前后不变。
 
 真实 PostgreSQL 覆盖 append-only 触发器、同内容幂等、内容/revision 变化、A→B→A、
-as-of cutoff、cutoff 后污染、未来公司行动造成历史 QFQ 改写、迟到数据、同日多
-knowledge-time、120/500 窗口、JSONB、失败原子性、六 run、空正式 veto 与精确
-清理。最终 `git diff --check` 结果记录在本阶段提交前检查中。
+as-of cutoff、周末和 15:00 前观察拒绝、收盘前兼容投影、合法迟到回填、cutoff 后
+污染、未来公司行动造成历史 QFQ 改写、来源修订、同日多 knowledge-time、120/500
+窗口、JSONB、失败原子性、六 run、空正式 veto 与精确清理。最终
+`git diff --check` 结果记录在本阶段提交前检查中。
 
 ## 11. 未实现与验收边界
 

@@ -392,6 +392,11 @@ final class AgentStage2FStrategyBacktestValidator {
                 Instant firstObservedAt = canonicalInstant(bar, "firstObservedAt");
                 if (date.isAfter(request.tradeDate())
                         || previous != null && !date.isAfter(previous)
+                        || !BacktestContracts.isSupportedDailyBarTradeDate(date)
+                        || firstObservedAt.isBefore(
+                        BacktestContracts.earliestDailyBarKnownAt(date))
+                        || knownAt.isBefore(
+                        BacktestContracts.earliestDailyBarKnownAt(date))
                         || knownAt.isAfter(canonicalInstant(
                         context, "knowledgeCutoff"))
                         || firstObservedAt.isAfter(knownAt)

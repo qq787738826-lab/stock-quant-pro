@@ -85,9 +85,19 @@ CREATE TABLE daily_bar_observations (
         CHECK (source_revision IS NULL OR btrim(source_revision) <> ''),
     CONSTRAINT ck_daily_bar_observations_dataset
         CHECK (btrim(dataset_version) <> ''),
+    CONSTRAINT ck_daily_bar_observations_weekday
+        CHECK (EXTRACT(ISODOW FROM trade_date) BETWEEN 1 AND 5),
     CONSTRAINT ck_daily_bar_observations_time
         CHECK (
-            first_observed_at <= known_at
+            first_observed_at >= (
+                (trade_date + TIME '15:00:00')
+                AT TIME ZONE 'Asia/Shanghai'
+            )
+            AND known_at >= (
+                (trade_date + TIME '15:00:00')
+                AT TIME ZONE 'Asia/Shanghai'
+            )
+            AND first_observed_at <= known_at
             AND known_at <= recorded_at
         ),
     CONSTRAINT ck_daily_bar_observations_content_hash
@@ -147,6 +157,6 @@ COMMENT ON TABLE daily_bar_observations IS
 COMMENT ON COLUMN daily_bar_observations.source_revision IS
     'Provider revision when explicitly supplied; NULL means the provider supplied no revision identifier.';
 COMMENT ON COLUMN daily_bar_observations.known_at IS
-    'Earliest locally evidenced availability time for this observation occurrence.';
+    'Earliest locally evidenced availability time; never before trade-date 15:00 Asia/Shanghai.';
 COMMENT ON COLUMN daily_bar_observations.canonical_content_hash IS
     'BACKTEST_CANONICAL_V1 content hash excluding physical IDs and capture timestamps.';

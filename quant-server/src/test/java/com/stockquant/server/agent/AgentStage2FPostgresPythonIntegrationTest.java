@@ -44,6 +44,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -143,8 +144,7 @@ class AgentStage2FPostgresPythonIntegrationTest {
     void persistsReliableStrategyBacktestThroughRealPostgresAndPython()
             throws Exception {
         assertIsolatedDatabaseAndMigrations();
-        LocalDate tradeDate = LocalDate.now(BacktestContracts.MARKET_ZONE)
-                .minusDays(1);
+        LocalDate tradeDate = completedTradingDate();
         freezeCaptureTime(tradeDate);
         insertScenario(SUCCESS_SYMBOL, SUCCESS_COMPANION, tradeDate);
         freezeDecisionTimeReached(tradeDate);
@@ -249,8 +249,7 @@ class AgentStage2FPostgresPythonIntegrationTest {
     void rejectsTamperedStage2FResponseWithoutPartialResultPersistence()
             throws Exception {
         assertIsolatedDatabaseAndMigrations();
-        LocalDate tradeDate = LocalDate.now(BacktestContracts.MARKET_ZONE)
-                .minusDays(1);
+        LocalDate tradeDate = completedTradingDate();
         freezeCaptureTime(tradeDate);
         insertScenario(INVALID_SYMBOL, INVALID_COMPANION, tradeDate);
         freezeDecisionTimeReached(tradeDate);
@@ -326,7 +325,7 @@ class AgentStage2FPostgresPythonIntegrationTest {
 
     private void freezeCaptureTime(LocalDate tradeDate) {
         when(agentTemporalClock.instant()).thenReturn(
-                tradeDate.atTime(12, 0)
+                tradeDate.atTime(15, 0)
                         .atZone(BacktestContracts.MARKET_ZONE)
                         .toInstant());
     }
@@ -344,14 +343,14 @@ class AgentStage2FPostgresPythonIntegrationTest {
             int count
     ) {
         List<Bar> values = new ArrayList<>();
-        LocalDate start = tradeDate.minusDays(count - 1L);
+        List<LocalDate> tradeDates = tradingDates(tradeDate, count);
         for (int index = 0; index < count; index++) {
             BigDecimal close = new BigDecimal("20.00")
                     .add(new BigDecimal("0.10")
                             .multiply(BigDecimal.valueOf(index)));
             values.add(new Bar(
                     symbol,
-                    start.plusDays(index),
+                    tradeDates.get(index),
                     close,
                     close.add(new BigDecimal("0.50")),
                     close.subtract(new BigDecimal("0.50")),
@@ -360,6 +359,28 @@ class AgentStage2FPostgresPythonIntegrationTest {
                     new BigDecimal("1000000.00"),
                     new BigDecimal("0.5000")));
         }
+        return List.copyOf(values);
+    }
+
+    private static LocalDate completedTradingDate() {
+        LocalDate candidate = LocalDate.now(BacktestContracts.MARKET_ZONE)
+                .minusDays(1);
+        while (!BacktestContracts.isSupportedDailyBarTradeDate(candidate)) {
+            candidate = candidate.minusDays(1);
+        }
+        return candidate;
+    }
+
+    private static List<LocalDate> tradingDates(LocalDate end, int count) {
+        List<LocalDate> values = new ArrayList<>();
+        LocalDate candidate = end;
+        while (values.size() < count) {
+            if (BacktestContracts.isSupportedDailyBarTradeDate(candidate)) {
+                values.add(candidate);
+            }
+            candidate = candidate.minusDays(1);
+        }
+        Collections.reverse(values);
         return List.copyOf(values);
     }
 

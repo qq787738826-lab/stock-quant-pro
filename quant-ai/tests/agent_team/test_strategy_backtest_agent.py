@@ -20,7 +20,7 @@ from app.agent_team.strategy_backtest import (
     UNAVAILABLE_REASON_CODES,
 )
 
-from .test_technical_analysis_agent import stage_2e_payload
+from .test_technical_analysis_agent import _trading_dates, stage_2e_payload
 
 
 GOLDEN_DIR = (Path(__file__).resolve().parents[3]
@@ -41,12 +41,14 @@ def stage_2f_payload(
     payload = stage_2e_payload()
     payload["ruleVersion"] = STAGE_2F_STRATEGY_BACKTEST_RULE_VERSION
     request_date = date.fromisoformat(payload["tradeDate"])
-    start = request_date - timedelta(days=bar_count - 1)
+    trade_dates = _trading_dates(request_date, bar_count)
     known_at = datetime.combine(
         request_date,
-        time(8, 0),
-        tzinfo=timezone.utc,
-    ).isoformat(timespec="microseconds").replace("+00:00", "Z")
+        time(15, 0),
+        tzinfo=timezone(timedelta(hours=8)),
+    ).astimezone(timezone.utc).isoformat(
+        timespec="microseconds"
+    ).replace("+00:00", "Z")
     decision_time = (
         datetime.combine(
             request_date + timedelta(days=1),
@@ -62,7 +64,7 @@ def stage_2f_payload(
     observations: list[dict] = []
     versions: list[str] = []
     for index in range(bar_count):
-        trade_date = start + timedelta(days=index)
+        trade_date = trade_dates[index]
         bar = {
             "symbol": payload["symbol"],
             "tradeDate": trade_date.isoformat(),
@@ -292,11 +294,12 @@ def _result(
     initial = Decimal("100000")
     final = initial * (Decimal("1") + total_return)
     trades = []
+    trade_dates = _trading_dates(request_date, trade_count)
     for index in range(trade_count):
         trades.append({
             "sequence": index + 1,
-            "entryDate": (request_date - timedelta(days=trade_count - index)).isoformat(),
-            "exitDate": (request_date - timedelta(days=trade_count - index)).isoformat(),
+            "entryDate": trade_dates[index].isoformat(),
+            "exitDate": trade_dates[index].isoformat(),
             "entryPrice": 100.0,
             "exitPrice": 101.0,
             "quantity": 100,
@@ -522,6 +525,59 @@ class StrategyBacktestAgentTest(unittest.TestCase):
         self.assertEqual(0, sample.confidence)
         self.assertEqual(1, len(sample.evidence))
         self.assertEqual((), sample.findings)
+
+    def test_predated_and_weekend_bars_are_input_invalid(self):
+        pre_close = datetime.combine(
+            date.fromisoformat(stage_2f_payload()["tradeDate"]),
+            time(14, 59, 59),
+            tzinfo=timezone(timedelta(hours=8)),
+        ).astimezone(timezone.utc).isoformat(
+            timespec="microseconds"
+        ).replace("+00:00", "Z")
+
+        known_at_payload = stage_2f_payload()
+        known_at_payload["contextSnapshot"]["backtestContext"]["bars"][-1][
+            "knownAt"
+        ] = pre_close
+        known_at_run = strategy_run(analyze(known_at_payload))
+        self.assertEqual(
+            "STRATEGY_BACKTEST_INPUT_INVALID",
+            known_at_run["errors"][0]["code"],
+        )
+        self.assertEqual([], known_at_run["findings"])
+        self.assertEqual([], known_at_run["evidence"])
+        self.assertEqual((0, 0), (
+            known_at_run["score"],
+            known_at_run["confidence"],
+        ))
+
+        first_observed_payload = stage_2f_payload()
+        first_observed_payload["contextSnapshot"]["backtestContext"]["bars"][-1][
+            "firstObservedAt"
+        ] = pre_close
+        first_observed_run = strategy_run(analyze(first_observed_payload))
+        self.assertEqual(
+            "STRATEGY_BACKTEST_INPUT_INVALID",
+            first_observed_run["errors"][0]["code"],
+        )
+        self.assertEqual([], first_observed_run["findings"])
+
+        weekend_payload = stage_2f_payload()
+        bars = weekend_payload["contextSnapshot"]["backtestContext"]["bars"]
+        friday_index = next(
+            index for index, item in enumerate(bars[:-1])
+            if date.fromisoformat(item["tradeDate"]).weekday() == 4
+        )
+        friday = date.fromisoformat(bars[friday_index]["tradeDate"])
+        bars[friday_index]["tradeDate"] = (
+            friday + timedelta(days=1)
+        ).isoformat()
+        weekend_run = strategy_run(analyze(weekend_payload))
+        self.assertEqual(
+            "STRATEGY_BACKTEST_INPUT_INVALID",
+            weekend_run["errors"][0]["code"],
+        )
+        self.assertEqual([], weekend_run["findings"])
 
 
 if __name__ == "__main__":

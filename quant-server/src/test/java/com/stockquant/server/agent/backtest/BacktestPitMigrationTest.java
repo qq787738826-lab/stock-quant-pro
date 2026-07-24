@@ -44,7 +44,12 @@ class BacktestPitMigrationTest {
                 "batch_version",
                 "idx_daily_bar_observations_as_of",
                 "known_at desc",
-                "adjust_type = 'qfq'")) {
+                "adjust_type = 'qfq'",
+                "extract(isodow from trade_date) between 1 and 5",
+                "time '15:00:00'",
+                "at time zone 'asia/shanghai'",
+                "first_observed_at >=",
+                "known_at >=")) {
             assertTrue(normalized.contains(required), required);
         }
         for (String forbidden : List.of(

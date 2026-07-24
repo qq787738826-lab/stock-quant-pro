@@ -87,19 +87,23 @@ commit 的验收 / 尚未合入**。
 表只追加，禁止 `UPDATE`、`DELETE` 和 `TRUNCATE`。相同来源下连续重复的相同内容
 保持幂等；内容变化以及 A→B→A 的再次变化必须形成新版本。as-of 查询按
 `knownAt<=knowledgeCutoff` 选择每个交易日当时最新可见版本，并用冻结逻辑版本
-稳定打破相同 `knownAt` 的顺序。
+稳定打破相同 `knownAt` 的顺序。数据库同时拒绝周末日线，以及
+`firstObservedAt` 或 `knownAt` 早于该交易日上海时间 15:00 的完整日线。
 
 ### 4.3 捕获事务
 
 `MarketDataService` 的成功本地持久化委托给独立事务服务，在同一事务内：
 
-1. 记录本地观察批次；
-2. 对每条 bar 加事务级稳定并发锁；
-3. 仅在相对最后观察内容变化时追加版本；
-4. 更新 `daily_bars` 当前态兼容投影。
+1. 拒绝周末日线，并过滤捕获时刻早于该工作日上海时间 15:00 的非完整日线；
+2. 仅在至少存在一条合格 PIT 记录时创建本地观察批次，`record_count` 只计合格
+   记录；
+3. 对每条合格 bar 加事务级稳定并发锁；
+4. 仅在相对最后观察内容变化时追加版本；
+5. 更新全部合法业务输入的 `daily_bars` 当前态兼容投影。
 
 任一步失败时整个持久化事务回滚。Agent 上下文读取只访问本地 PostgreSQL，
-不触发网络；Python 不访问数据库。
+不触发网络；Python 不访问数据库。工作日收盘前当日日线仍可更新兼容投影，但不写可靠
+PIT 观察，也不创建空批次。
 
 已有 `daily_bars` 不得由迁移时间伪装成历史首次观察。若未来执行
 `BOOTSTRAP_CURRENT_STATE`，其 `knownAt` 只能是真实捕获时间，不能证明更早时点
@@ -114,12 +118,18 @@ commit 的验收 / 尚未合入**。
 - `knowledgeCutoff=decisionTime`；
 - 非交易日可选择请求日期以前最近的有效输入交易日，cutoff 仍为请求日期日终；
 - 未来请求日期安全不可用；
-- 每条输入同时满足 `tradeDate<=requestTradeDate` 和
-  `knownAt<=knowledgeCutoff`。
+- 完整日线的 `earliestDailyBarKnownAt` 是其 `tradeDate` 当日
+  `15:00:00 Asia/Shanghai`；
+- 每条输入必须是周一至周五，并满足
+  `firstObservedAt>=earliestDailyBarKnownAt`、
+  `knownAt>=earliestDailyBarKnownAt`、`firstObservedAt<=knownAt<=recordedAt`、
+  `tradeDate<=requestTradeDate` 和 `knownAt<=knowledgeCutoff`。
 
 只满足业务日期不能声明无前视。内容 Hash 只能证明内容稳定，不能证明历史时点
 可得。迟到数据、cutoff 后覆盖、来源修订、未来公司行动导致的 QFQ 变化和同一
 交易日不同 knowledge-time 版本，都必须由观察版本隔离或返回稳定不可用状态。
+周末日线直接拒绝；本阶段不引入新的正式交易日历来源，法定节假日仍由实际数据
+来源和后续正式日历能力治理。
 
 ## 6. 上下文 profile 与兼容
 
@@ -293,15 +303,16 @@ Java/Python 契约至少冻结并区分：
 
 覆盖 V9 结构、append-only、连续相同内容幂等、内容修订与 A→B→A、as-of cutoff、
 cutoff 后覆盖、未来公司行动 QFQ 变化、来源修订、迟到数据、同日不同
-knowledge-time、非交易日、乱序/重复/非法 OHLCV、500/120 边界、七参数、
-引擎和退出优先级、三个子区间、三个 Hash、黄金向量、JSONB、contextHash、
-新旧 profile、旧规则 Hash、失败原子性、缓存幂等和无业务副作用。
+knowledge-time、周末、15:00 前 `firstObservedAt`/`knownAt`、合法历史回填、
+收盘前兼容投影、乱序/重复/非法 OHLCV、500/120 边界、七参数、引擎和退出优先级、
+三个子区间、三个 Hash、黄金向量、JSONB、contextHash、新旧 profile、旧规则
+Hash、失败原子性、缓存幂等和无业务副作用。
 
 ### 13.2 Python
 
-覆盖 Context 模型、黄金向量、三个 Hash、五类 finding、全部 score/confidence
-边界、DQ PASS/WARN/BLOCKED、不可用、非法输入、样本不足、无 veto、无投资建议
-和旧版本回归。
+覆盖 Context 模型、黄金向量、三个 Hash、周末与 15:00 前观察输入拒绝、五类
+finding、全部 score/confidence 边界、DQ PASS/WARN/BLOCKED、不可用、非法输入、
+样本不足、无 veto、无投资建议和旧版本回归。
 
 ### 13.3 Java/Python 与真实 PostgreSQL
 

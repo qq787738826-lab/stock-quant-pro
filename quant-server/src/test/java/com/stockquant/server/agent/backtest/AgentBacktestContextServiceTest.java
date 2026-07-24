@@ -12,6 +12,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -29,7 +30,7 @@ class AgentBacktestContextServiceTest {
     private static final String SYMBOL = "600001";
     private static final LocalDate REQUEST_DATE = LocalDate.of(2025, 6, 30);
     private static final Instant QUERY_TIME = Instant.parse("2025-06-30T16:00:00Z");
-    private static final Instant OBSERVED_AT = Instant.parse("2025-01-01T08:00:00Z");
+    private static final Instant OBSERVED_AT = Instant.parse("2025-06-30T07:00:00Z");
 
     private final ObjectMapper mapper = new ObjectMapper();
     private final BacktestCanonicalHashService hashes =
@@ -182,6 +183,49 @@ class AgentBacktestContextServiceTest {
         assertFalse(capped.path("bars").get(499).path("tradeDate").asText().isBlank());
     }
 
+    @Test
+    void rejectsMockedDailyBarBackfilledBeforeItsShanghaiClose() {
+        List<ObservedDailyBar> predated = new ArrayList<>(observations(120));
+        ObservedDailyBar original = predated.get(predated.size() - 1);
+        Instant beforeClose = BacktestContracts
+                .earliestDailyBarKnownAt(original.tradeDate())
+                .minusSeconds(1);
+        predated.set(predated.size() - 1, new ObservedDailyBar(
+                original.physicalId(),
+                original.observationVersion(),
+                original.symbol(),
+                original.tradeDate(),
+                original.adjustType(),
+                original.open(),
+                original.high(),
+                original.low(),
+                original.close(),
+                original.volume(),
+                original.amount(),
+                original.turnoverRate(),
+                original.sourceCode(),
+                original.sourceRevision(),
+                original.datasetVersion(),
+                beforeClose,
+                beforeClose,
+                beforeClose.plusSeconds(1),
+                original.canonicalContentHash(),
+                original.batchVersion(),
+                original.captureType(),
+                original.batchObservedAt(),
+                original.batchRecordedAt(),
+                original.sourceMetadataJson()));
+
+        JsonNode context = service(predated, predated.size())
+                .create(SYMBOL, REQUEST_DATE, QUERY_TIME);
+
+        assertFalse(context.path("available").asBoolean());
+        assertFalse(context.path("pointInTimeGuaranteed").asBoolean());
+        assertEquals(
+                BacktestContracts.KNOWLEDGE_TIME_UNVERIFIABLE,
+                context.path("reasonCode").asText());
+    }
+
     private AgentBacktestContextService service(
             List<ObservedDailyBar> observations,
             long totalCount
@@ -200,13 +244,13 @@ class AgentBacktestContextServiceTest {
 
     private List<ObservedDailyBar> observations(int count) {
         List<ObservedDailyBar> values = new ArrayList<>();
-        LocalDate start = REQUEST_DATE.minusDays(count - 1L);
+        List<LocalDate> tradeDates = tradingDates(REQUEST_DATE, count);
         for (int index = 0; index < count; index++) {
             BigDecimal close = new BigDecimal("20")
                     .add(new BigDecimal("0.10").multiply(BigDecimal.valueOf(index)));
             Bar bar = new Bar(
                     SYMBOL,
-                    start.plusDays(index),
+                    tradeDates.get(index),
                     close,
                     close.add(new BigDecimal("0.50")),
                     close.subtract(new BigDecimal("0.50")),
@@ -243,6 +287,19 @@ class AgentBacktestContextServiceTest {
                     OBSERVED_AT.plusSeconds(1),
                     "{\"revisionSemantics\":\"TEST_FIXTURE\"}"));
         }
+        return List.copyOf(values);
+    }
+
+    private static List<LocalDate> tradingDates(LocalDate end, int count) {
+        List<LocalDate> values = new ArrayList<>();
+        LocalDate candidate = end;
+        while (values.size() < count) {
+            if (BacktestContracts.isSupportedDailyBarTradeDate(candidate)) {
+                values.add(candidate);
+            }
+            candidate = candidate.minusDays(1);
+        }
+        Collections.reverse(values);
         return List.copyOf(values);
     }
 

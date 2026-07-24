@@ -1,9 +1,11 @@
 package com.stockquant.server.agent;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stockquant.core.domain.Bar;
 import com.stockquant.server.QuantServerApplication;
 import com.stockquant.server.agent.backtest.AgentBacktestContextService;
+import com.stockquant.server.agent.backtest.BacktestCanonicalHashService;
 import com.stockquant.server.agent.backtest.BacktestContracts;
 import com.stockquant.server.agent.backtest.MarketDataObservationRepository;
 import com.stockquant.server.agent.backtest.MarketDataPersistenceService;
@@ -25,11 +27,13 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Timestamp;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -41,6 +45,7 @@ import java.util.concurrent.locks.LockSupport;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -63,8 +68,10 @@ class AgentStage2FBacktestPostgresIntegrationTest {
 
     @Autowired MarketDataPersistenceService persistenceService;
     @Autowired MarketDataObservationRepository observationRepository;
+    @Autowired BacktestCanonicalHashService canonicalHashService;
     @Autowired AgentBacktestContextService contextService;
     @Autowired JdbcTemplate jdbc;
+    @Autowired ObjectMapper objectMapper;
 
     @DynamicPropertySource
     static void configure(DynamicPropertyRegistry registry) {
@@ -107,9 +114,11 @@ class AgentStage2FBacktestPostgresIntegrationTest {
                         """, String.class));
         long observationBaseline = count("daily_bar_observations");
         long currentBarBaseline = count("daily_bars");
-        LocalDate requestDate = Instant.now().atZone(SHANGHAI).toLocalDate();
+        LocalDate requestDate = LocalDate.of(2025, 6, 30);
+        Instant firstCaptureTime = BacktestContracts
+                .earliestDailyBarKnownAt(requestDate);
         List<Bar> original = bars(SYMBOL, requestDate, 120, BigDecimal.ZERO);
-        var first = persistenceService.persistBars(
+        var first = persistenceAt(firstCaptureTime).persistBars(
                 SYMBOL,
                 original,
                 "TEST_FIXTURE_STAGE_2F",
@@ -123,7 +132,7 @@ class AgentStage2FBacktestPostgresIntegrationTest {
                 Instant.class,
                 SYMBOL);
 
-        var repeated = persistenceService.persistBars(
+        var repeated = persistenceAt(firstCaptureTime).persistBars(
                 SYMBOL,
                 original,
                 "TEST_FIXTURE_STAGE_2F",
@@ -146,7 +155,7 @@ class AgentStage2FBacktestPostgresIntegrationTest {
                 previous.volume(),
                 previous.amount(),
                 previous.turnoverRate()));
-        var revision = persistenceService.persistBars(
+        var revision = persistenceAt(firstCaptureTime.plusSeconds(60)).persistBars(
                 SYMBOL,
                 revised,
                 "TEST_FIXTURE_STAGE_2F",
@@ -155,7 +164,7 @@ class AgentStage2FBacktestPostgresIntegrationTest {
         assertEquals(120, revision.appendedObservationCount(),
                 "a new source revision must remain visible in every selected bar lineage");
         assertEquals(observationBaseline + 240, count("daily_bar_observations"));
-        var repeatedRevision = persistenceService.persistBars(
+        var repeatedRevision = persistenceAt(firstCaptureTime.plusSeconds(60)).persistBars(
                 SYMBOL,
                 revised,
                 "TEST_FIXTURE_STAGE_2F",
@@ -192,7 +201,7 @@ class AgentStage2FBacktestPostgresIntegrationTest {
         assertEquals("REVISION_B", afterRevision.get(10).sourceRevision());
 
         LockSupport.parkNanos(Duration.ofMillis(2).toNanos());
-        var reverted = persistenceService.persistBars(
+        var reverted = persistenceAt(firstCaptureTime.plusSeconds(120)).persistBars(
                 SYMBOL,
                 original,
                 "TEST_FIXTURE_STAGE_2F",
@@ -240,6 +249,129 @@ class AgentStage2FBacktestPostgresIntegrationTest {
     }
 
     @Test
+    void preCloseDailyBarUpdatesCurrentProjectionWithoutFalsePitBatch() {
+        LocalDate tradeDate = LocalDate.of(2025, 6, 30);
+        Instant preClose = tradeDate.atTime(14, 59, 59)
+                .atZone(SHANGHAI)
+                .toInstant();
+        MarketDataPersistenceService preClosePersistence =
+                persistenceAt(preClose);
+        long batchBaseline = count("market_data_observation_batches");
+        long observationBaseline = count("daily_bar_observations");
+
+        String currentOnlySymbol = "600976";
+        var currentOnly = preClosePersistence.persistBars(
+                currentOnlySymbol,
+                bars(currentOnlySymbol, tradeDate, 1, BigDecimal.ZERO),
+                "TEST_FIXTURE_STAGE_2F",
+                "REVISION_PRE_CLOSE",
+                "TEST_FIXTURE");
+        assertNull(currentOnly.batchVersion());
+        assertNull(currentOnly.datasetVersion());
+        assertEquals(0, currentOnly.appendedObservationCount());
+        assertEquals(batchBaseline, count("market_data_observation_batches"));
+        assertEquals(observationBaseline, count("daily_bar_observations"));
+        assertEquals(1, jdbc.queryForObject("""
+                SELECT count(*) FROM daily_bars WHERE symbol=?
+                """, Integer.class, currentOnlySymbol));
+
+        String mixedSymbol = "600977";
+        var mixed = preClosePersistence.persistBars(
+                mixedSymbol,
+                bars(mixedSymbol, tradeDate, 2, BigDecimal.ZERO),
+                "TEST_FIXTURE_STAGE_2F",
+                "REVISION_PRE_CLOSE_MIXED",
+                "TEST_FIXTURE");
+        assertEquals(1, mixed.appendedObservationCount());
+        assertEquals(batchBaseline + 1, count("market_data_observation_batches"));
+        assertEquals(observationBaseline + 1, count("daily_bar_observations"));
+        assertEquals(1, jdbc.queryForObject("""
+                SELECT record_count FROM market_data_observation_batches
+                WHERE batch_version=?
+                """, Integer.class, mixed.batchVersion()));
+        assertEquals(2, jdbc.queryForObject("""
+                SELECT count(*) FROM daily_bars WHERE symbol=?
+                """, Integer.class, mixedSymbol));
+        assertEquals(publicBaseline, currentPublicBaseline());
+    }
+
+    @Test
+    void databaseRejectsPredatedFuturePreCloseAndWeekendDailyBars() {
+        long batchBaseline = count("market_data_observation_batches");
+        long observationBaseline = count("daily_bar_observations");
+
+        LocalDate futureTradeDate = nextTradingDate(
+                LocalDate.now(SHANGHAI).plusDays(1));
+        Instant pastKnowledge = Instant.now().minusSeconds(60);
+        assertThrows(DataAccessException.class, () -> insertObservationAtomically(
+                "600978",
+                futureTradeDate,
+                pastKnowledge,
+                pastKnowledge,
+                pastKnowledge.plusSeconds(1),
+                "1"));
+
+        LocalDate historicalTradeDate = completedTradingDate();
+        Instant preClose = historicalTradeDate.atTime(14, 59, 59)
+                .atZone(SHANGHAI)
+                .toInstant();
+        Instant legalClose = BacktestContracts
+                .earliestDailyBarKnownAt(historicalTradeDate);
+        assertThrows(DataAccessException.class, () -> insertObservationAtomically(
+                "600979",
+                historicalTradeDate,
+                preClose,
+                legalClose,
+                legalClose.plusSeconds(1),
+                "2"));
+        assertThrows(DataAccessException.class, () -> insertObservationAtomically(
+                "600980",
+                historicalTradeDate,
+                preClose,
+                preClose,
+                legalClose.plusSeconds(1),
+                "3"));
+
+        LocalDate weekend = nextSaturday(historicalTradeDate);
+        Instant weekendClose = weekend.atTime(15, 0)
+                .atZone(SHANGHAI)
+                .toInstant();
+        assertThrows(DataAccessException.class, () -> insertObservationAtomically(
+                "600981",
+                weekend,
+                weekendClose,
+                weekendClose,
+                weekendClose.plusSeconds(1),
+                "4"));
+        Bar weekdayTemplate = bars(
+                "600982", historicalTradeDate, 1, BigDecimal.ZERO).get(0);
+        Bar weekendBar = new Bar(
+                weekdayTemplate.symbol(),
+                weekend,
+                weekdayTemplate.open(),
+                weekdayTemplate.high(),
+                weekdayTemplate.low(),
+                weekdayTemplate.close(),
+                weekdayTemplate.volume(),
+                weekdayTemplate.amount(),
+                weekdayTemplate.turnoverRate());
+        assertThrows(IllegalArgumentException.class, () -> persistenceAt(
+                weekendClose).persistBars(
+                "600982",
+                List.of(weekendBar),
+                "TEST_FIXTURE_STAGE_2F",
+                "REVISION_WEEKEND",
+                "TEST_FIXTURE"));
+
+        assertEquals(batchBaseline, count("market_data_observation_batches"));
+        assertEquals(observationBaseline, count("daily_bar_observations"));
+        assertEquals(0, jdbc.queryForObject("""
+                SELECT count(*) FROM daily_bars WHERE symbol='600982'
+                """, Integer.class));
+        assertEquals(publicBaseline, currentPublicBaseline());
+    }
+
+    @Test
     void failedPersistenceRollsBackBatchObservationAndCurrentProjection() {
         String symbol = "600972";
         long batchBaseline = count("market_data_observation_batches");
@@ -263,7 +395,7 @@ class AgentStage2FBacktestPostgresIntegrationTest {
         try {
             assertThrows(DataAccessException.class, () -> persistenceService.persistBars(
                     symbol,
-                    bars(symbol, LocalDate.now(), 2, BigDecimal.ZERO),
+                    bars(symbol, completedTradingDate(), 2, BigDecimal.ZERO),
                     "TEST_FIXTURE_STAGE_2F",
                     "REVISION_ATOMIC_FAILURE",
                     "TEST_FIXTURE"));
@@ -286,7 +418,7 @@ class AgentStage2FBacktestPostgresIntegrationTest {
 
         Bar precise = new Bar(
                 symbol,
-                LocalDate.now(),
+                completedTradingDate(),
                 new BigDecimal("20.00001"),
                 new BigDecimal("21.00001"),
                 new BigDecimal("19.00001"),
@@ -301,7 +433,8 @@ class AgentStage2FBacktestPostgresIntegrationTest {
                 "REVISION_PRECISION",
                 "TEST_FIXTURE"));
 
-        List<Bar> ordered = bars(symbol, LocalDate.now(), 2, BigDecimal.ZERO);
+        List<Bar> ordered = bars(
+                symbol, completedTradingDate(), 2, BigDecimal.ZERO);
         assertThrows(IllegalArgumentException.class, () -> persistenceService.persistBars(
                 symbol,
                 List.of(ordered.get(1), ordered.get(0)),
@@ -322,7 +455,8 @@ class AgentStage2FBacktestPostgresIntegrationTest {
     @Test
     void lateHistoricalBarsRemainUnavailableBeforeTheirKnowledgeTime() {
         String symbol = "600973";
-        LocalDate historicalRequestDate = LocalDate.now(SHANGHAI).minusDays(30);
+        LocalDate historicalRequestDate = previousOrSameTradingDate(
+                LocalDate.now(SHANGHAI).minusDays(30));
         List<Bar> lateBars = bars(
                 symbol,
                 historicalRequestDate,
@@ -356,7 +490,7 @@ class AgentStage2FBacktestPostgresIntegrationTest {
     @Test
     void sameKnownAtSelectsLatestPhysicalObservationDeterministically() {
         String symbol = "600974";
-        LocalDate tradeDate = LocalDate.now(SHANGHAI).minusDays(1);
+        LocalDate tradeDate = completedTradingDate();
         Instant knownAt = Instant.now().minusSeconds(5);
         insertObservation(
                 symbol,
@@ -397,7 +531,7 @@ class AgentStage2FBacktestPostgresIntegrationTest {
     void concurrentIdenticalCapturesProduceOneObservationPerBar()
             throws Exception {
         String symbol = "600975";
-        LocalDate requestDate = LocalDate.now(SHANGHAI);
+        LocalDate requestDate = completedTradingDate();
         List<Bar> input = bars(symbol, requestDate, 120, BigDecimal.ZERO);
         ExecutorService executor = Executors.newFixedThreadPool(2);
         try {
@@ -429,6 +563,55 @@ class AgentStage2FBacktestPostgresIntegrationTest {
                 SELECT count(*) FROM daily_bars WHERE symbol=?
                 """, Integer.class, symbol));
         assertEquals(publicBaseline, currentPublicBaseline());
+    }
+
+    private void insertObservationAtomically(
+            String symbol,
+            LocalDate tradeDate,
+            Instant firstObservedAt,
+            Instant knownAt,
+            Instant recordedAt,
+            String hashDigit
+    ) {
+        String suffix = UUID.randomUUID().toString().replace("-", "");
+        String batchVersion = "PIT_TIME_GUARD_BATCH_" + suffix;
+        String datasetVersion = "PIT_TIME_GUARD_DATASET_" + suffix;
+        jdbc.update("""
+                WITH inserted_batch AS (
+                    INSERT INTO market_data_observation_batches(
+                        batch_version, source_code, dataset_version, capture_type,
+                        observed_at, recorded_at, record_count, source_metadata
+                    ) VALUES (
+                        ?, 'TEST_FIXTURE_STAGE_2F', ?, 'TEST_FIXTURE',
+                        ?, ?, 1, '{}'::jsonb
+                    )
+                    RETURNING id
+                )
+                INSERT INTO daily_bar_observations(
+                    observation_version, batch_id, symbol, trade_date,
+                    adjust_type, open, high, low, close, volume, amount,
+                    turnover_rate, source_code, source_revision,
+                    dataset_version, first_observed_at, known_at, recorded_at,
+                    canonical_content_hash
+                )
+                SELECT ?, inserted_batch.id, ?, ?, 'QFQ',
+                       20, 21, 19, 20, 10000, 1000000, 0.5,
+                       'TEST_FIXTURE_STAGE_2F', 'REVISION_TIME_GUARD',
+                       ?, ?, ?, ?, ?
+                FROM inserted_batch
+                """,
+                batchVersion,
+                datasetVersion,
+                Timestamp.from(firstObservedAt),
+                Timestamp.from(recordedAt),
+                hashDigit.repeat(64),
+                symbol,
+                tradeDate,
+                datasetVersion,
+                Timestamp.from(firstObservedAt),
+                Timestamp.from(knownAt),
+                Timestamp.from(recordedAt),
+                hashDigit.repeat(64));
     }
 
     private void insertObservation(
@@ -489,14 +672,14 @@ class AgentStage2FBacktestPostgresIntegrationTest {
             BigDecimal shift
     ) {
         List<Bar> values = new ArrayList<>();
-        LocalDate start = end.minusDays(count - 1L);
+        List<LocalDate> tradeDates = tradingDates(end, count);
         for (int index = 0; index < count; index++) {
             BigDecimal close = new BigDecimal("20")
                     .add(new BigDecimal("0.10").multiply(BigDecimal.valueOf(index)))
                     .add(shift);
             values.add(new Bar(
                     symbol,
-                    start.plusDays(index),
+                    tradeDates.get(index),
                     close,
                     close.add(new BigDecimal("0.50")),
                     close.subtract(new BigDecimal("0.50")),
@@ -505,6 +688,56 @@ class AgentStage2FBacktestPostgresIntegrationTest {
                     new BigDecimal("1000000.00"),
                     new BigDecimal("0.5000")));
         }
+        return List.copyOf(values);
+    }
+
+    private MarketDataPersistenceService persistenceAt(Instant captureTime) {
+        return new MarketDataPersistenceService(
+                jdbc,
+                observationRepository,
+                canonicalHashService,
+                objectMapper,
+                Clock.fixed(captureTime, SHANGHAI));
+    }
+
+    private static LocalDate completedTradingDate() {
+        return previousOrSameTradingDate(LocalDate.now(SHANGHAI).minusDays(1));
+    }
+
+    private static LocalDate previousOrSameTradingDate(LocalDate date) {
+        LocalDate candidate = date;
+        while (!BacktestContracts.isSupportedDailyBarTradeDate(candidate)) {
+            candidate = candidate.minusDays(1);
+        }
+        return candidate;
+    }
+
+    private static LocalDate nextTradingDate(LocalDate date) {
+        LocalDate candidate = date;
+        while (!BacktestContracts.isSupportedDailyBarTradeDate(candidate)) {
+            candidate = candidate.plusDays(1);
+        }
+        return candidate;
+    }
+
+    private static LocalDate nextSaturday(LocalDate date) {
+        LocalDate candidate = date.plusDays(1);
+        while (candidate.getDayOfWeek().getValue() != 6) {
+            candidate = candidate.plusDays(1);
+        }
+        return candidate;
+    }
+
+    private static List<LocalDate> tradingDates(LocalDate end, int count) {
+        List<LocalDate> values = new ArrayList<>();
+        LocalDate candidate = previousOrSameTradingDate(end);
+        while (values.size() < count) {
+            if (BacktestContracts.isSupportedDailyBarTradeDate(candidate)) {
+                values.add(candidate);
+            }
+            candidate = candidate.minusDays(1);
+        }
+        Collections.reverse(values);
         return List.copyOf(values);
     }
 

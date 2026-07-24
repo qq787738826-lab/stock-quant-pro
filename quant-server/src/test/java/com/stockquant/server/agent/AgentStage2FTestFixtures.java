@@ -16,6 +16,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -31,7 +32,8 @@ final class AgentStage2FTestFixtures {
         WARN,
         BLOCKED,
         UNAVAILABLE,
-        INVALID_HASH
+        INVALID_HASH,
+        PREDATED_BAR
     }
 
     private static final ObjectMapper MAPPER =
@@ -57,6 +59,17 @@ final class AgentStage2FTestFixtures {
                 : reliableContext(base.symbol(), base.tradeDate());
         if (scenario == Scenario.INVALID_HASH) {
             backtest.put("inputDataHash", "0".repeat(64));
+        } else if (scenario == Scenario.PREDATED_BAR) {
+            Instant beforeClose = base.tradeDate()
+                    .atTime(14, 59, 59)
+                    .atZone(BacktestContracts.MARKET_ZONE)
+                    .toInstant();
+            String invalidTime = BacktestCanonicalHashService
+                    .formatInstant(beforeClose);
+            ObjectNode lastBar = (ObjectNode) backtest.withArray("bars")
+                    .get(backtest.withArray("bars").size() - 1);
+            lastBar.put("firstObservedAt", invalidTime);
+            lastBar.put("knownAt", invalidTime);
         }
         snapshot.set("backtestContext", backtest);
         String contextHash = CONTEXT_HASHES.hash(snapshot);
@@ -78,8 +91,8 @@ final class AgentStage2FTestFixtures {
         Instant queriedAt = requestDate.plusDays(1)
                 .atStartOfDay(BacktestContracts.MARKET_ZONE)
                 .toInstant();
-        Instant observedAt = requestDate.minusDays(1)
-                .atTime(8, 0)
+        Instant observedAt = requestDate
+                .atTime(15, 0)
                 .atZone(BacktestContracts.MARKET_ZONE)
                 .toInstant();
         List<ObservedDailyBar> observations = observations(
@@ -126,13 +139,13 @@ final class AgentStage2FTestFixtures {
             Instant observedAt
     ) {
         List<ObservedDailyBar> values = new ArrayList<>();
-        LocalDate start = requestDate.minusDays(119);
+        List<LocalDate> tradeDates = tradingDates(requestDate, 120);
         for (int index = 0; index < 120; index++) {
             BigDecimal close = new BigDecimal("20")
                     .add(new BigDecimal("0.10").multiply(BigDecimal.valueOf(index)));
             Bar bar = new Bar(
                     symbol,
-                    start.plusDays(index),
+                    tradeDates.get(index),
                     close,
                     close.add(new BigDecimal("0.50")),
                     close.subtract(new BigDecimal("0.50")),
@@ -169,6 +182,19 @@ final class AgentStage2FTestFixtures {
                     observedAt.plusSeconds(1),
                     "{\"revisionSemantics\":\"TEST_FIXTURE\"}"));
         }
+        return List.copyOf(values);
+    }
+
+    private static List<LocalDate> tradingDates(LocalDate end, int count) {
+        List<LocalDate> values = new ArrayList<>();
+        LocalDate candidate = end;
+        while (values.size() < count) {
+            if (BacktestContracts.isSupportedDailyBarTradeDate(candidate)) {
+                values.add(candidate);
+            }
+            candidate = candidate.minusDays(1);
+        }
+        Collections.reverse(values);
         return List.copyOf(values);
     }
 
