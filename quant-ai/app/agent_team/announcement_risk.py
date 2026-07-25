@@ -359,9 +359,8 @@ def classify_title(value: str) -> Match:
     groups: set[Group] = set()
     severity = Severity.INFO
     for rule in RULES:
-        if rule.keyword in title and not any(
-            exclusion in title for exclusion in rule.exclusions
-        ):
+        matching_title = _without_phrases(title, rule.exclusions)
+        if rule.keyword in matching_title:
             if rule.tag not in tags:
                 tags.append(rule.tag)
             groups.add(rule.group)
@@ -375,6 +374,13 @@ def classify_title(value: str) -> Match:
         groups.add(Group.FINANCIAL_LITIGATION)
         severity = _max_severity(severity, Severity.HIGH)
     return Match(severity, tuple(tags), frozenset(groups), title)
+
+
+def _without_phrases(value: str, phrases: tuple[str, ...]) -> str:
+    result = value
+    for phrase in sorted(phrases, key=lambda item: (-len(item), item)):
+        result = result.replace(phrase, "")
+    return result
 
 
 def canonical_text(event: dict[str, Any]) -> str:
@@ -709,17 +715,24 @@ def _source_identity(source_url: Any) -> tuple[str, str, str]:
 def _normalize_url(value: Any) -> str:
     if not isinstance(value, str):
         raise ValueError("公告URL必须是字符串")
-    parsed = urlsplit(value.strip())
-    scheme = parsed.scheme.lower()
-    host = (parsed.hostname or "").lower()
+    try:
+        parsed = urlsplit(value.strip())
+        scheme = parsed.scheme.lower()
+        host = (parsed.hostname or "").lower()
+        port = parsed.port
+    except ValueError as error:
+        raise ValueError("公告URL格式非法") from error
     if scheme not in {"http", "https"} or not host:
         raise ValueError("公告URL必须是HTTP或HTTPS")
-    port = parsed.port
-    netloc = host
+    if parsed.username is not None or parsed.password is not None:
+        raise ValueError("公告URL不得包含用户信息")
+    if host != "cninfo.com.cn" and not host.endswith(".cninfo.com.cn"):
+        raise ValueError("公告URL必须属于CNINFO域名")
     if port is not None and not (
         scheme == "http" and port == 80 or scheme == "https" and port == 443
     ):
-        netloc = f"{host}:{port}"
+        raise ValueError("公告URL不得使用非默认端口")
+    netloc = host
     items = [
         (key, item)
         for key, item in parse_qsl(parsed.query, keep_blank_values=True)

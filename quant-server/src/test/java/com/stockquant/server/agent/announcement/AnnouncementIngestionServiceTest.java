@@ -203,6 +203,23 @@ class AnnouncementIngestionServiceTest {
                 () -> service.capture(new CaptureRequest(
                         "000001", START, NOW.atZone(
                         AnnouncementContracts.MARKET_ZONE).toLocalDate().plusDays(1))));
+
+        ProviderRecord valid = record("1212345681", "问询函", START);
+        ObjectNode foreignRaw = (ObjectNode) valid.rawFields().deepCopy();
+        String foreignUrl = "https://example.com/notice/1212345681.pdf";
+        foreignRaw.put("公告链接", foreignUrl);
+        ProviderRecord foreign = new ProviderRecord(
+                valid.symbol(),
+                valid.securityName(),
+                valid.title(),
+                valid.reportedPublishDate(),
+                foreignUrl,
+                foreignRaw);
+        when(provider.fetch(any())).thenReturn(response(
+                START, END, true, 1, 1, List.of(foreign), List.of()));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> service.capture(new CaptureRequest("000001", START, END)));
         verify(transaction, never()).persist(
                 any(), any(), any(), any(), any(), any(), anyList());
     }

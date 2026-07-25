@@ -163,6 +163,45 @@ class AgentSecurityEventsContextServiceTest {
     }
 
     @Test
+    void nonCninfoObservationNeverProducesAvailableContext() {
+        ObservationRecord valid = observation(
+                "1212345678", "问询函", REQUEST_DATE.minusDays(1), CAPTURED_AT);
+        ObservationRecord foreign = new ObservationRecord(
+                valid.sourceAnnouncementId(),
+                valid.sourceIdentityStrength(),
+                valid.symbol(),
+                valid.securityName(),
+                valid.title(),
+                valid.reportedPublishDate(),
+                "https://example.com/notice/1212345678.pdf",
+                valid.normalizedSourceUrl(),
+                valid.sourceUrlHash(),
+                valid.firstObservedAt(),
+                valid.knownAt(),
+                valid.canonicalContentHash(),
+                valid.observationVersion(),
+                valid.batchVersion(),
+                valid.sourceCode(),
+                valid.providerContractVersion(),
+                valid.assuranceLevel(),
+                valid.formalEligible(),
+                valid.pitVerified(),
+                valid.revisionRelationshipGuaranteed(),
+                valid.reportedPublishTimePrecision(),
+                valid.rawPayload());
+        when(repository.findBatches(SYMBOL, QUERIED_AT))
+                .thenReturn(List.of(batch(
+                        true, LOOKBACK_START, REQUEST_DATE, CAPTURED_AT)));
+        when(repository.findAsOf(
+                SYMBOL, LOOKBACK_START, REQUEST_DATE, QUERIED_AT))
+                .thenReturn(List.of(foreign));
+
+        assertReason(
+                AnnouncementContracts.CONTEXT_INVALID,
+                service.create(SYMBOL, REQUEST_DATE, QUERIED_AT));
+    }
+
+    @Test
     void mockedObservationOutsideLookbackNeverProducesAvailableContext() {
         ObservationRecord outside = observation(
                 "1212345678", "问询函", LOOKBACK_START.minusDays(1), CAPTURED_AT);

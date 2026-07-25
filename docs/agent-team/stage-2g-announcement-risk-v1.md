@@ -54,8 +54,10 @@ Agent 任务创建和分析过程不会调用 Provider。
 
 ## 4. 来源身份与 canonical 契约
 
-来源公告 ID 优先从 CNINFO URL 提取明确标识并生成 `CNINFO:<id>`。没有明确 ID 时，
-只允许规范化 HTTP/HTTPS URL 后生成
+来源公告 ID 优先从 CNINFO URL 提取明确标识并生成 `CNINFO:<id>`。URL host 只允许
+`cninfo.com.cn` 或其真实子域，拒绝相似后缀、userinfo 和非默认端口；该门禁在
+Provider、Java canonical/摄取/context/响应校验、Python 规则输入校验和 V10 数据库
+重复执行。没有明确 ID 时，只允许规范化 HTTP/HTTPS URL 后生成
 `CNINFO_URL_SHA256:<64位小写SHA-256>`，并标记
 `sourceIdentityStrength=URL_DERIVED`。无有效 URL 的记录拒绝；标题、公告日期、
 symbol、数组序号和抓取顺序均不得单独生成来源身份。
@@ -134,7 +136,8 @@ Python 只解释 Java 冻结的 securityEvents，不调用 AKShare、数据库�
 2. 财务、债务、审计、诉讼及经营中断；
 3. 股东减持、质押、冻结、担保与资金占用；
 4. 财务更正组合规则及一般更正、补充、澄清；
-5. 撤销风险警示和解除质押/冻结等明确排除。
+5. 撤销风险警示和解除质押/冻结等明确安全短语只从对应规则的匹配副本中移除，再对
+   剩余标题匹配正向关键词；混合标题中的继续实施、新增冻结或新增质押仍须命中风险。
 
 一条公告可以命中多个标签，但只按最高 `CRITICAL/HIGH/WARN/INFO` severity 扣分一次。
 风险事件按 severity、报告日期降序、来源公告 ID、observationVersion 稳定排序。
@@ -156,8 +159,8 @@ Java 生成一个投影完整 securityEvents 的 `QUERY_RESULT` coverage evidenc
 生成绑定 `observationVersion`、canonical Hash 和稳定来源引用的 `SECURITY_EVENT`
 evidence。Finding 只引用存在的 coverage/event evidence。
 
-Java 在持久化前独立复算并校验字段白名单、覆盖、时间、as-of、Hash、事件排序、
-标题规范化、排除、标签、severity、score、固定 confidence、五 finding、evidence、
+Java 在持久化前独立复算并校验字段白名单、CNINFO host/端口、覆盖、时间、as-of、
+Hash、事件排序、标题规范化、短语级排除、标签、severity、score、固定 confidence、五 finding、evidence、
 ANNOUNCEMENT_RISK 无 veto、POSITION_RISK 正式 veto 和总控优先级。非法响应原子失败，
 不留下部分 Agent evidence/veto/decision；已合法持久化的公告事实不受 Agent 响应失败影响。
 
@@ -173,14 +176,14 @@ ANNOUNCEMENT_RISK 无 veto、POSITION_RISK 正式 veto 和总控优先级。非�
 |---|---:|---|
 | 真实 AKShare 前置安全门 | `1/0/0/0` | `akshare==1.18.64`，`000001` 受控历史范围，返回 38 行 |
 | `quant-core` 全量 | `4/0/0/0` | 核心回归 |
-| 2G Java 定向合计 | `39/0/0/0` | Provider/摄取/canonical/context/规则/校验/profile、跨语言、真实 PostgreSQL 与 Live Gate；`Skipped=0` |
+| 2G Java 定向合计 | `42/0/0/0` | Provider/摄取/canonical/context/规则/校验/profile、跨语言、真实 PostgreSQL 与 Live Gate；`Skipped=0` |
 | Python `compileall` | 通过 | `quant-ai/app` 与完整测试模块 |
-| Python 完整 unittest | `111/0/0/0` | Provider、公告规则、所有旧规则和编排回归 |
-| 真实 Java/Python HTTP | `4/0/0/0` | 完整 2G 请求、Hash、五 finding、evidence、六 run；`Skipped=0` |
+| Python 完整 unittest | `112/0/0/0` | Provider、公告规则、所有旧规则和编排回归 |
+| 真实 Java/Python HTTP | `5/0/0/0` | 完整 2G 请求、Hash、短语级混合标题、五 finding、evidence、六 run；`Skipped=0` |
 | V1 至 V10 公告事实 PostgreSQL | `3/0/0/0` | append-only、0/部分批次、幂等、A→B→A、as-of、并发和 public 基线；`Skipped=0` |
 | 真实 PostgreSQL/Python/任务持久化 | `1/0/0/0` | 0/多风险、veto/DQ 优先、JSONB、原子失败及六张 2H 业务表只读；`Skipped=0` |
 | 真实 AKShare Live Gate | `1/0/0/0` | 真实 38 行、Java 摄取、ID/Hash/append-only、随机 Schema 清理；`Skipped=0` |
-| 安全非数据库 `quant-server` 全量 | `331/0/0/55` | 55 项为未提供外部 Python/PostgreSQL/AKShare 环境时的门禁跳过 |
+| 安全非数据库 `quant-server` 全量 | `334/0/0/56` | 56 项为未提供外部 Python/PostgreSQL/AKShare 环境时的门禁跳过 |
 | 2D/2E/2F/2H 真实兼容 | `35/0/0/0` | 随机隔离 Schema，V1 至 V10，`Skipped=0` |
 | `git diff --check` | 通过 | 最终增量无空白错误 |
 
@@ -193,6 +196,9 @@ Schema；public 数据与结构指纹前后不变。任务闭环还验证
 ## 11. 安全结论
 
 - 只新增 V10，未修改 V1 至 V9；
+- AKShare Live Gate 在新增 CNINFO host/端口门禁后仍真实返回 38 行并完成 Java 摄取；
+- Java/Python 对纯安全标题和同时包含继续/新增风险的混合标题产生一致标签、severity、
+  score、finding 和 event evidence 顺序；
 - 未把 AKShare/CNINFO 描述为正式授权、FORMAL、PIT 或历史完整来源；
 - 未提交真实公告响应、Cookie、缓存、代理或敏感网络信息；
 - 未增加隐藏接口、验证码绕过、PDF 批量下载、定时或全市场抓取；

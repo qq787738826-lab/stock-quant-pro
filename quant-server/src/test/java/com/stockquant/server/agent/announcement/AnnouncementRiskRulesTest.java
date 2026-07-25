@@ -10,6 +10,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -46,6 +47,67 @@ class AnnouncementRiskRulesTest {
     }
 
     @Test
+    void phraseLevelExclusionsPreserveMixedTitleRisks() {
+        assertMatch(
+                "关于撤销退市风险警示的公告",
+                Severity.INFO,
+                List.of(),
+                Set.of());
+        assertMatch(
+                "关于撤销退市风险警示并继续实施其他风险警示的公告",
+                Severity.HIGH,
+                List.of("OTHER_RISK_WARNING"),
+                Set.of(Group.REGULATORY_DELISTING));
+        assertMatch(
+                "关于股份解除冻结的公告",
+                Severity.INFO,
+                List.of(),
+                Set.of());
+        assertMatch(
+                "关于股份解除冻结及新增股份冻结的公告",
+                Severity.HIGH,
+                List.of("OWNERSHIP_ENFORCEMENT_HIGH"),
+                Set.of(Group.OWNERSHIP_OPERATION));
+        assertMatch(
+                "关于解除股份质押的公告",
+                Severity.INFO,
+                List.of(),
+                Set.of());
+        assertMatch(
+                "关于解除股份质押及新增股份质押的公告",
+                Severity.WARN,
+                List.of("OWNERSHIP_EXPOSURE_WARN"),
+                Set.of(Group.OWNERSHIP_OPERATION));
+
+        Evaluation evaluation = AnnouncementRiskRules.evaluate(List.of(
+                event(
+                        "CNINFO:1212345681",
+                        "关于撤销退市风险警示并继续实施其他风险警示的公告",
+                        REQUEST_DATE,
+                        "a"),
+                event(
+                        "CNINFO:1212345682",
+                        "关于股份解除冻结及新增股份冻结的公告",
+                        REQUEST_DATE,
+                        "b"),
+                event(
+                        "CNINFO:1212345683",
+                        "关于解除股份质押及新增股份质押的公告",
+                        REQUEST_DATE,
+                        "c")
+        ), REQUEST_DATE);
+        assertEquals(40, evaluation.score());
+        assertEquals(
+                List.of(
+                        "CNINFO:1212345681",
+                        "CNINFO:1212345682",
+                        "CNINFO:1212345683"),
+                evaluation.riskEvents().stream()
+                        .map(value -> value.event().sourceAnnouncementId())
+                        .toList());
+    }
+
+    @Test
     void appliesOneHighestSeverityDeductionPerEventAndStableOrdering() {
         Evaluation evaluation = AnnouncementRiskRules.evaluate(List.of(
                 event("CNINFO:4", "减持计划", REQUEST_DATE.minusDays(149), "4"),
@@ -72,6 +134,18 @@ class AnnouncementRiskRulesTest {
         assertEquals(
                 "ABC, 重大诉讼",
                 AnnouncementRiskRules.normalizeTitle("  ａｂｃ，  重大诉讼  "));
+    }
+
+    private static void assertMatch(
+            String title,
+            Severity severity,
+            List<String> tags,
+            Set<Group> groups
+    ) {
+        var match = AnnouncementRiskRules.classify(title);
+        assertEquals(severity, match.severity(), title);
+        assertEquals(tags, match.tags(), title);
+        assertEquals(groups, match.groups(), title);
     }
 
     private static EventFact event(

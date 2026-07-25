@@ -73,8 +73,9 @@ as-of 读取、contextSnapshot 和 Agent 结果持久化的唯一权威。Python
 - 403、429、验证码和结构漂移立即失败；不得代理轮换或切换隐藏接口。
 - 响应记录 provider/AKShare 版本、请求范围、完整性、块计数、记录和安全错误。
 - 公告记录按报告日期、派生的稳定来源公告 ID、标题升序；空完整结果是有效响应。
-- 有效 URL 必须是 HTTP/HTTPS。优先提取 CNINFO 明确公告 ID；否则规范化 URL 后
-  使用 `CNINFO_URL_SHA256:<hash>`，不得由标题、日期、symbol 或抓取顺序生成身份。
+- 有效 URL 必须是 HTTP/HTTPS，host 只允许 `cninfo.com.cn` 或其真实子域，且不得包含
+  userinfo 或非默认端口。优先提取 CNINFO 明确公告 ID；否则规范化 URL 后使用
+  `CNINFO_URL_SHA256:<hash>`，不得由标题、日期、symbol 或抓取顺序生成身份。
 
 ## 6. V10 append-only 公告事实
 
@@ -124,7 +125,9 @@ URL/规范化 URL/hash、首次观察/已知/记录时间、canonical Hash、观
 
 Python 只对 Java 冻结标题和元数据运行 NFKC、空白/标点/拉丁字母规范化后的确定性匹配。
 冻结规则覆盖退市与风险警示、监管执法、财务债务、诉讼经营、股东减持质押冻结、
-担保占用和更正澄清；撤销风险警示和解除质押/冻结按契约排除。
+担保占用和更正澄清。撤销风险警示和解除质押/冻结只作为精确安全短语从各规则的
+匹配副本中移除，再对剩余标题匹配正向关键词；混合标题中的继续实施、新增冻结或
+新增质押风险不得被全局排除。
 
 一条公告可命中多个标签，但只以最高 severity 扣分一次。风险事件按
 `CRITICAL/HIGH/WARN/INFO`、报告日期降序、来源公告 ID、observationVersion 排序。
@@ -150,9 +153,9 @@ POSITION_RISK veto 和总控优先级。非法响应不留下部分 Agent eviden
 ## 11. 验收
 
 必须覆盖 Provider 字段/切块/排序/重试/访问控制、V10 append-only/幂等/A→B→A/as-of、
-完整空批次和部分批次、securityEvents 覆盖与时间边界、全部关键词和排除、四档时效、
-score/confidence、DQ 降级、五 finding、evidence、六 run、总控优先级、原子失败和旧
-profile/hash 兼容。
+完整空批次和部分批次、securityEvents 覆盖与时间边界、全部关键词、纯安全标题与
+混合风险标题、CNINFO host/端口门禁、四档时效、score/confidence、DQ 降级、
+五 finding、evidence、六 run、总控优先级、原子失败和旧 profile/hash 兼容。
 
 真实验收包括：
 

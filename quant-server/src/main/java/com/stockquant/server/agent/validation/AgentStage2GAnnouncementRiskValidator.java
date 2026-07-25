@@ -85,7 +85,7 @@ final class AgentStage2GAnnouncementRiskValidator {
         ContextFacts facts;
         try {
             facts = parseContext(request);
-        } catch (ContractException error) {
+        } catch (ContractException | IllegalArgumentException error) {
             validateUnavailable(run, AnnouncementContracts.INPUT_INVALID);
             return;
         }

@@ -320,6 +320,22 @@ class AgentStage2GAnnouncementPostgresIntegrationTest {
                        revision_relationship_guaranteed, raw_payload_json
                 FROM announcement_observations WHERE symbol=? LIMIT 1
                 """, "c".repeat(64), symbol));
+        assertDatabaseRejectsUrl(
+                symbol,
+                "https://example.com/notice.pdf",
+                "d");
+        assertDatabaseRejectsUrl(
+                symbol,
+                "https://cninfo.com.cn.evil.example/notice.pdf",
+                "e");
+        assertDatabaseRejectsUrl(
+                symbol,
+                "https://evil-cninfo.com.cn/notice.pdf",
+                "f");
+        assertDatabaseRejectsUrl(
+                symbol,
+                "https://static.cninfo.com.cn:8443/notice.pdf",
+                "0");
 
         assertThrows(DataAccessException.class, () -> jdbc.update(
                 "UPDATE announcement_observations SET title='changed' WHERE symbol=?",
@@ -335,6 +351,46 @@ class AgentStage2GAnnouncementPostgresIntegrationTest {
         assertThrows(DataAccessException.class, () -> jdbc.execute(
                 "TRUNCATE TABLE announcement_capture_batches CASCADE"));
         assertEquals(publicBaseline, currentPublicBaseline());
+    }
+
+    private void assertDatabaseRejectsUrl(
+            String symbol,
+            String sourceUrl,
+            String versionSeed
+    ) {
+        assertThrows(DataAccessException.class, () -> jdbc.update("""
+                INSERT INTO announcement_observations (
+                    batch_id, batch_version, source_code, provider_contract_version,
+                    source_announcement_id, source_identity_strength, symbol,
+                    security_name, title, reported_publish_date,
+                    reported_publish_time_precision, source_url,
+                    normalized_source_url, source_url_hash,
+                    first_observed_at, known_at, recorded_at,
+                    canonical_content_hash, observation_version,
+                    assurance_level, formal_eligible, pit_verified,
+                    revision_relationship_guaranteed, raw_payload_json
+                )
+                SELECT batch_id, batch_version, source_code, provider_contract_version,
+                       ?, source_identity_strength, symbol,
+                       security_name, title, reported_publish_date,
+                       reported_publish_time_precision, ?, ?, source_url_hash,
+                       first_observed_at, known_at, recorded_at,
+                       canonical_content_hash, ?,
+                       assurance_level, formal_eligible, pit_verified,
+                       revision_relationship_guaranteed,
+                       jsonb_set(
+                           raw_payload_json,
+                           '{公告链接}',
+                           to_jsonb(CAST(? AS text)),
+                           false)
+                FROM announcement_observations WHERE symbol=? LIMIT 1
+                """,
+                "CNINFO:DOMAIN_" + versionSeed,
+                sourceUrl,
+                sourceUrl,
+                versionSeed.repeat(64),
+                sourceUrl,
+                symbol));
     }
 
     @Test

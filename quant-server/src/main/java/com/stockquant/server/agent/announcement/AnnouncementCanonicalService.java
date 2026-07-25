@@ -160,8 +160,20 @@ public class AnnouncementCanonicalService {
             if (!Set.of("http", "https").contains(scheme) || blank(host)) {
                 throw new IllegalArgumentException("公告URL必须是HTTP或HTTPS");
             }
+            if (source.getRawUserInfo() != null) {
+                throw new IllegalArgumentException("公告URL不得包含用户信息");
+            }
+            if (!host.equals("cninfo.com.cn")
+                    && !host.endsWith(".cninfo.com.cn")) {
+                throw new IllegalArgumentException("公告URL必须属于CNINFO域名");
+            }
             int port = source.getPort();
-            if (scheme.equals("http") && port == 80 || scheme.equals("https") && port == 443) {
+            if (port != -1
+                    && !(scheme.equals("http") && port == 80)
+                    && !(scheme.equals("https") && port == 443)) {
+                throw new IllegalArgumentException("公告URL不得使用非默认端口");
+            }
+            if (port != -1) {
                 port = -1;
             }
             List<QueryParameter> parameters = queryParameters(source.getRawQuery()).stream()

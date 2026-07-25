@@ -178,6 +178,76 @@ class AnnouncementRiskAgentTest(unittest.TestCase):
         self.assertEqual("CRITICAL", match.severity.value)
         self.assertIn("REGULATORY_ENFORCEMENT_CRITICAL", match.tags)
 
+    def test_phrase_level_exclusions_preserve_mixed_title_risks(self) -> None:
+        cases = (
+            (
+                "关于撤销退市风险警示的公告",
+                "INFO",
+                (),
+                frozenset(),
+            ),
+            (
+                "关于撤销退市风险警示并继续实施其他风险警示的公告",
+                "HIGH",
+                ("OTHER_RISK_WARNING",),
+                frozenset({Group.REGULATORY_DELISTING}),
+            ),
+            (
+                "关于股份解除冻结的公告",
+                "INFO",
+                (),
+                frozenset(),
+            ),
+            (
+                "关于股份解除冻结及新增股份冻结的公告",
+                "HIGH",
+                ("OWNERSHIP_ENFORCEMENT_HIGH",),
+                frozenset({Group.OWNERSHIP_OPERATION}),
+            ),
+            (
+                "关于解除股份质押的公告",
+                "INFO",
+                (),
+                frozenset(),
+            ),
+            (
+                "关于解除股份质押及新增股份质押的公告",
+                "WARN",
+                ("OWNERSHIP_EXPOSURE_WARN",),
+                frozenset({Group.OWNERSHIP_OPERATION}),
+            ),
+        )
+        for title, severity, tags, groups in cases:
+            with self.subTest(title=title):
+                match = classify_title(title)
+                self.assertEqual(severity, match.severity.value)
+                self.assertEqual(tags, match.tags)
+                self.assertEqual(groups, match.groups)
+
+        events = [
+            _event(cases[1][0], TRADE_DATE, "1212345681"),
+            _event(cases[3][0], TRADE_DATE, "1212345682"),
+            _event(cases[5][0], TRADE_DATE, "1212345683"),
+        ]
+        result = self.engine.evaluate(
+            _request(events),
+            QUERIED_AT,
+            GateStatus.PASS,
+        )
+        self.assertEqual(40, result.score)
+        self.assertEqual(
+            [
+                "announcement-risk-event-"
+                + events[0]["observationVersion"],
+                "announcement-risk-event-"
+                + events[1]["observationVersion"],
+                "announcement-risk-event-"
+                + events[2]["observationVersion"],
+            ],
+            [item.evidenceId for item in result.evidence[1:]],
+        )
+        self.assertEqual(5, len(result.findings))
+
     def test_financial_correction_combination_is_high(self) -> None:
         match = classify_title("关于年报补充更正的公告")
         self.assertEqual("HIGH", match.severity.value)
@@ -239,6 +309,27 @@ class AnnouncementRiskAgentTest(unittest.TestCase):
         ] = "0" * 64
         invalid = self.engine.evaluate(request, QUERIED_AT, GateStatus.PASS)
         self.assertEqual("ANNOUNCEMENT_RISK_INPUT_INVALID", invalid.errors[0].code)
+
+        for source_url in (
+            "https://example.com/notice.pdf",
+            "https://cninfo.com.cn.evil.example/notice.pdf",
+            "https://evil-cninfo.com.cn/notice.pdf",
+            "https://static.cninfo.com.cn:8443/notice.pdf",
+        ):
+            with self.subTest(source_url=source_url):
+                invalid_source = _request([_event("立案调查")])
+                invalid_source.contextSnapshot.securityEvents["events"][0][
+                    "sourceUrl"
+                ] = source_url
+                invalid = self.engine.evaluate(
+                    invalid_source,
+                    QUERIED_AT,
+                    GateStatus.PASS,
+                )
+                self.assertEqual(
+                    "ANNOUNCEMENT_RISK_INPUT_INVALID",
+                    invalid.errors[0].code,
+                )
 
     def test_inconsistent_capture_age_and_out_of_window_event_are_invalid(
         self,

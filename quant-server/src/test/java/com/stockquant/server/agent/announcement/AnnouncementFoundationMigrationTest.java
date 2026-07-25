@@ -46,6 +46,8 @@ class AnnouncementFoundationMigrationTest {
                 "known_at <= recorded_at",
                 "jsonb_typeof(provider_metadata_json) = 'object'",
                 "jsonb_typeof(raw_payload_json) = 'object'",
+                "cninfo[.]com[.]cn",
+                "raw_payload_json ->> '公告链接' = source_url",
                 "idx_announcement_capture_batches_coverage",
                 "idx_announcement_observations_as_of",
                 "reported_publish_date")) {

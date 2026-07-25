@@ -113,8 +113,14 @@ CREATE TABLE announcement_observations (
         ),
     CONSTRAINT ck_announcement_observations_url
         CHECK (
-            source_url ~* '^https?://'
-            AND normalized_source_url ~ '^https?://'
+            (
+                source_url ~* '^http://([a-z0-9-]+[.])*cninfo[.]com[.]cn(:80)?([/?#]|$)'
+                OR source_url ~* '^https://([a-z0-9-]+[.])*cninfo[.]com[.]cn(:443)?([/?#]|$)'
+            )
+            AND (
+                normalized_source_url ~* '^http://([a-z0-9-]+[.])*cninfo[.]com[.]cn(:80)?([/?#]|$)'
+                OR normalized_source_url ~* '^https://([a-z0-9-]+[.])*cninfo[.]com[.]cn(:443)?([/?#]|$)'
+            )
             AND source_url_hash ~ '^[0-9a-f]{64}$'
         ),
     CONSTRAINT ck_announcement_observations_date
@@ -141,7 +147,10 @@ CREATE TABLE announcement_observations (
             AND reported_publish_time_precision = 'DATE_ONLY'
         ),
     CONSTRAINT ck_announcement_observations_payload
-        CHECK (jsonb_typeof(raw_payload_json) = 'object')
+        CHECK (
+            jsonb_typeof(raw_payload_json) = 'object'
+            AND raw_payload_json ->> '公告链接' = source_url
+        )
 );
 
 CREATE INDEX idx_announcement_capture_batches_coverage

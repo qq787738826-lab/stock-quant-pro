@@ -21,6 +21,8 @@ final class AgentStage2GTestFixtures {
         MULTI_RISK,
         UNAVAILABLE,
         INVALID_HASH,
+        INVALID_SOURCE_URL,
+        MIXED_EXCLUSION_RISKS,
         POSITION_VETO,
         DATA_QUALITY_BLOCKED_WITH_VETO
     }
@@ -78,6 +80,40 @@ final class AgentStage2GTestFixtures {
                     base.tradeDate().minusDays(1));
             ((ObjectNode) events.withArray("events").get(0))
                     .put("canonicalContentHash", "0".repeat(64));
+        }
+        if (scenario == Scenario.INVALID_SOURCE_URL) {
+            addEvent(
+                    events,
+                    base.symbol(),
+                    base.tradeDate(),
+                    "1212345680",
+                    "问询函",
+                    base.tradeDate().minusDays(1));
+            ((ObjectNode) events.withArray("events").get(0))
+                    .put("sourceUrl", "https://example.com/notice.pdf");
+        }
+        if (scenario == Scenario.MIXED_EXCLUSION_RISKS) {
+            addEvent(
+                    events,
+                    base.symbol(),
+                    base.tradeDate(),
+                    "1212345681",
+                    "关于撤销退市风险警示并继续实施其他风险警示的公告",
+                    base.tradeDate());
+            addEvent(
+                    events,
+                    base.symbol(),
+                    base.tradeDate(),
+                    "1212345682",
+                    "关于股份解除冻结及新增股份冻结的公告",
+                    base.tradeDate());
+            addEvent(
+                    events,
+                    base.symbol(),
+                    base.tradeDate(),
+                    "1212345683",
+                    "关于解除股份质押及新增股份质押的公告",
+                    base.tradeDate());
         }
         snapshot.set("securityEvents", events);
         String contextHash = CONTEXT_HASHES.hash(snapshot);

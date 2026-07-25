@@ -126,9 +126,10 @@ public class AnnouncementIngestionService {
                     || record.reportedPublishDate().isAfter(request.endDate())
                     || record.reportedPublishDate().isAfter(
                     observedAt.atZone(AnnouncementContracts.MARKET_ZONE).toLocalDate())
-                    || !validRawFields(record.rawFields())) {
+                    || !validRawFields(record)) {
                 throw new IllegalArgumentException("AKShare公告Provider记录范围或原始字段无效");
             }
+            canonicalService.normalizeUrl(record.sourceUrl());
             AnnouncementFact fact = canonicalService.prepare(
                     record, observedAt, batchVersion);
             if (!identities.add(fact.sourceAnnouncementId())) {
@@ -162,7 +163,8 @@ public class AnnouncementIngestionService {
         }
     }
 
-    private static boolean validRawFields(JsonNode value) {
+    private static boolean validRawFields(ProviderRecord record) {
+        JsonNode value = record.rawFields();
         if (value == null || !value.isObject()) {
             return false;
         }
@@ -171,12 +173,27 @@ public class AnnouncementIngestionService {
         if (!names.equals(RAW_FIELDS)) {
             return false;
         }
-        for (JsonNode item : value) {
-            if (!item.isTextual() && !item.isNull()) {
-                return false;
-            }
-        }
-        return true;
+        return textualEquals(value, "代码", record.symbol())
+                && textualEquals(value, "简称", record.securityName())
+                && textualEquals(value, "公告标题", record.title())
+                && record.reportedPublishDate() != null
+                && textualEquals(
+                value,
+                "公告时间",
+                record.reportedPublishDate().toString())
+                && textualEquals(value, "公告链接", record.sourceUrl());
+    }
+
+    private static boolean textualEquals(
+            JsonNode value,
+            String field,
+            String expected
+    ) {
+        JsonNode item = value.get(field);
+        return item != null
+                && item.isTextual()
+                && expected != null
+                && expected.equals(item.textValue());
     }
 
     private static boolean blank(String value) {

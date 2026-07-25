@@ -12,6 +12,7 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -68,14 +69,18 @@ class AnnouncementCanonicalServiceTest {
                 explicit.normalizedUrl());
 
         SourceIdentity fallback = service.sourceIdentity(
-                "https://example.cn/path/report"
+                "https://www.cninfo.com.cn/path/report"
                         + "?b=2&utm_medium=x&a=1#fragment");
         assertEquals("URL_DERIVED", fallback.strength());
         assertTrue(fallback.sourceAnnouncementId()
                 .matches("^CNINFO_URL_SHA256:[0-9a-f]{64}$"));
         assertEquals(
-                "https://example.cn/path/report?a=1&b=2",
+                "https://www.cninfo.com.cn/path/report?a=1&b=2",
                 fallback.normalizedUrl());
+        assertEquals(
+                "http://static.cninfo.com.cn/finalpage/x.pdf",
+                service.normalizeUrl(
+                        "HTTP://STATIC.CNINFO.COM.CN:80/finalpage/x.pdf"));
     }
 
     @Test
@@ -97,6 +102,18 @@ class AnnouncementCanonicalServiceTest {
         assertThrows(
                 IllegalArgumentException.class,
                 () -> service.sourceIdentity("file:///tmp/a.pdf"));
+        for (String sourceUrl : List.of(
+                "https://example.com/a.pdf",
+                "https://cninfo.com.cn.evil.example/a.pdf",
+                "https://evil-cninfo.com.cn/a.pdf",
+                "https://static.cninfo.com.cn:8443/a.pdf",
+                "http://static.cninfo.com.cn:443/a.pdf",
+                "https://user@static.cninfo.com.cn/a.pdf")) {
+            assertThrows(
+                    IllegalArgumentException.class,
+                    () -> service.sourceIdentity(sourceUrl),
+                    sourceUrl);
+        }
         assertThrows(
                 IllegalArgumentException.class,
                 () -> service.prepare(

@@ -69,8 +69,8 @@ public final class AnnouncementRiskRules {
         LinkedHashSet<Group> groups = new LinkedHashSet<>();
         Severity severity = Severity.INFO;
         for (Rule rule : RULES) {
-            if (title.contains(rule.keyword())
-                    && rule.exclusions().stream().noneMatch(title::contains)) {
+            String matchingTitle = withoutPhrases(title, rule.exclusions());
+            if (matchingTitle.contains(rule.keyword())) {
                 tags.add(rule.tag());
                 groups.add(rule.group());
                 severity = max(severity, rule.severity());
@@ -83,6 +83,19 @@ public final class AnnouncementRiskRules {
             severity = max(severity, Severity.HIGH);
         }
         return new Match(severity, List.copyOf(tags), Set.copyOf(groups), title);
+    }
+
+    private static String withoutPhrases(String value, Set<String> phrases) {
+        String result = value;
+        List<String> ordered = phrases.stream()
+                .sorted(Comparator.comparingInt(String::length)
+                        .reversed()
+                        .thenComparing(Comparator.naturalOrder()))
+                .toList();
+        for (String phrase : ordered) {
+            result = result.replace(phrase, "");
+        }
+        return result;
     }
 
     public static String normalizeTitle(String value) {

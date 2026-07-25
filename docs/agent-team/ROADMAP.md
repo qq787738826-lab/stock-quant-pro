@@ -180,13 +180,13 @@
 
 - 当前状态：任务分支 `codex/1.4.0-stage-2g-announcement-risk-v1` 已完成实现与 Codex 本地验证；尚待 ChatGPT 基于实际 Git commit 验收，尚未合入集成分支。本状态不等于验收 PASS、用户 merge 批准或正式来源资格。
 - 交付文档：[完整 2G 任务书](tasks/2g-akshare-announcement-risk-v1.md)和[阶段实现与本地验证记录](stage-2g-announcement-risk-v1.md)。
-- 来源边界：固定 `akshare==1.18.64`，通过公开 `stock_zh_a_disclosure_report_cninfo` 函数提供 `AKSHARE_CNINFO_RESEARCH_V1/AKSHARE_CNINFO_PROVIDER_V1`。来源资格固定为 `RESEARCH`、`formalEligible=false`、`pitVerified=false`、`revisionRelationshipGuaranteed=false`、`DATE_ONLY`；不得宣称正式授权、历史绝对完整或自动交易资格。
+- 来源边界：固定 `akshare==1.18.64`，通过公开 `stock_zh_a_disclosure_report_cninfo` 函数提供 `AKSHARE_CNINFO_RESEARCH_V1/AKSHARE_CNINFO_PROVIDER_V1`。公告 URL 只允许 `cninfo.com.cn` 或其真实子域及默认端口；Provider、Java、Python 和 V10 共同拒绝相似域名、userinfo 与非默认端口。来源资格固定为 `RESEARCH`、`formalEligible=false`、`pitVerified=false`、`revisionRelationshipGuaranteed=false`、`DATE_ONLY`；不得宣称正式授权、历史绝对完整或自动交易资格。
 - Provider 边界：FastAPI Provider Bridge 与 Agent Rule Engine 严格分离；只有手动、默认关闭的 Java 摄取入口能够调用 Provider。Agent 任务创建和分析不访问 AKShare、数据库外部网络或 PDF。
 - 事实模型：V10 新增 append-only `announcement_capture_batches` 与 `announcement_observations`；完整空批次是有效覆盖，部分批次不能证明无风险公告。Java 冻结 `firstObservedAt` 和 `knownAt`，生成 `ANNOUNCEMENT_CANONICAL_V1` Hash 与观察版本；同内容幂等，变化和 A→B→A 保留新版本，不回填历史 knowledge-time。
 - 兼容 profile：只有规则版本 `1.4.0-stage-2g-announcement-risk-v1` 选择 `AGENT_CONTEXT_2G_V1/SECURITY_EVENTS_CONTEXT_V1`，同时复用 2F backtestContext 与 2H portfolioContext；旧 2B、2D-1、2E-1、2F、2H profile/contextHash 保持兼容。
-- 规则输出：Python 只解释 Java 冻结的公告标题和元数据，按退市/监管、财务债务诉讼、股东减持质押担保经营、更正澄清等冻结关键词、排除和最高 severity 运行确定性规则。每公告只扣分一次，四档 recency 使用 `HALF_UP`，confidence 固定 40，生成五类 finding、coverage/event evidence，永不生成正式 veto。
+- 规则输出：Python 只解释 Java 冻结的公告标题和元数据，按退市/监管、财务债务诉讼、股东减持质押担保经营、更正澄清等冻结关键词、短语级排除和最高 severity 运行确定性规则。明确安全短语只从对应规则匹配副本中移除，混合标题中的继续或新增风险仍被保留。每公告只扣分一次，四档 recency 使用 `HALF_UP`，confidence 固定 40，生成五类 finding、coverage/event evidence，永不生成正式 veto。
 - 总控边界：POSITION_RISK 正式 veto 继续最高优先，其次 DATA_QUALITY 阻断；两者均不存在时六个专业 run 已执行，但因 2I 未实现仍为 `INSUFFICIENT_DATA/0/0`。2G 不实现综合评分、投资结论或交易指令。
-- 本地验收：真实 AKShare 安全门和 Live Gate 使用 `000001` 受控历史范围返回 38 行；2G Java 定向 `39/0/0/0`、Python unittest `111/0/0/0`、真实 V1 至 V10 PostgreSQL/跨语言/Live Gate 均 `Skipped=0`；`quant-core` `4/0/0/0`、安全非数据库 `quant-server` `331/0/0/55`、2D/2E/2F/2H 真实兼容 `35/0/0/0`。这些是 Codex 本地证据，不是 GitHub Actions CI；55 项为环境门禁跳过。
+- 本地验收：真实 AKShare 安全门和 Live Gate 使用 `000001` 受控历史范围返回 38 行，新增 CNINFO 域名门禁未拒绝真实链接；2G Java 定向 `42/0/0/0`、Python unittest `112/0/0/0`、真实 V1 至 V10 PostgreSQL/跨语言/Live Gate 均 `Skipped=0`；`quant-core` `4/0/0/0`、安全非数据库 `quant-server` `334/0/0/56`、2D/2E/2F/2H 真实兼容 `35/0/0/0`。这些是 Codex 本地证据，不是 GitHub Actions CI；56 项为环境门禁跳过。
 - 禁止范围：正式来源资格、FORMAL/PIT、隐藏接口或反爬绕过、PDF 批量下载、定时或全市场抓取、LLM 事实生成、非 POSITION_RISK 正式 veto、投资建议、自动交易和 2I。
 - 阶段边界：Codex 完成单次 commit 和普通 push 后停止，由 ChatGPT 检查实际提交；验收通过后仍须用户批准 merge，不得自行合并或开始 2I。
 

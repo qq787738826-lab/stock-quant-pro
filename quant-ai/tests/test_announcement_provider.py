@@ -99,23 +99,41 @@ class AnnouncementProviderTest(unittest.TestCase):
 
     def test_source_identity_prefers_cninfo_id_and_normalizes_url(self) -> None:
         identity, strength, normalized = provider._source_identity(
-            "HTTPS://Example.COM:443/a.pdf?utm_source=x&announcementId=ABC123&b=2&a=1#f"
+            "HTTPS://Static.CNINFO.COM.CN:443/a.pdf"
+            "?utm_source=x&announcementId=ABC123&b=2&a=1#f"
         )
         self.assertEqual("CNINFO:ABC123", identity)
         self.assertEqual("CNINFO_ID", strength)
         self.assertEqual(
-            "https://example.com/a.pdf?a=1&announcementId=ABC123&b=2",
+            "https://static.cninfo.com.cn/a.pdf"
+            "?a=1&announcementId=ABC123&b=2",
             normalized,
         )
         derived, strength, _ = provider._source_identity(
-            "https://example.com/notice/no-id.pdf"
+            "https://cninfo.com.cn/notice/no-id.pdf"
         )
         self.assertRegex(derived, r"^CNINFO_URL_SHA256:[0-9a-f]{64}$")
         self.assertEqual("URL_DERIVED", strength)
+        self.assertEqual(
+            "http://static.cninfo.com.cn/a.pdf",
+            provider._normalize_url(
+                "HTTP://STATIC.CNINFO.COM.CN:80/a.pdf"
+            ),
+        )
 
     def test_rejects_invalid_url_symbol_range_and_schema(self) -> None:
-        with self.assertRaises(provider.ProviderSchemaChanged):
-            provider._normalize_url("ftp://example.com/a.pdf")
+        for source_url in (
+            "ftp://static.cninfo.com.cn/a.pdf",
+            "https://example.com/a.pdf",
+            "https://cninfo.com.cn.evil.example/a.pdf",
+            "https://evil-cninfo.com.cn/a.pdf",
+            "https://static.cninfo.com.cn:8443/a.pdf",
+            "http://static.cninfo.com.cn:443/a.pdf",
+            "https://user@static.cninfo.com.cn/a.pdf",
+        ):
+            with self.subTest(source_url=source_url):
+                with self.assertRaises(provider.ProviderSchemaChanged):
+                    provider._normalize_url(source_url)
         with self.assertRaises(ValidationError):
             provider.AnnouncementProviderRequest(
                 symbol="1",

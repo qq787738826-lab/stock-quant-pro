@@ -365,20 +365,30 @@ def _source_identity(source_url: str) -> tuple[str, str, str]:
 
 
 def _normalize_url(source_url: str) -> str:
+    if not isinstance(source_url, str):
+        raise ProviderSchemaChanged("announcement URL must be a string")
     try:
         parsed = urlsplit(source_url.strip())
+        scheme = parsed.scheme.lower()
+        host = (parsed.hostname or "").lower()
+        port = parsed.port
     except ValueError as error:
         raise ProviderSchemaChanged("invalid announcement URL") from error
-    scheme = parsed.scheme.lower()
-    host = (parsed.hostname or "").lower()
     if scheme not in {"http", "https"} or not host:
         raise ProviderSchemaChanged("announcement URL must be HTTP or HTTPS")
-    port = parsed.port
-    netloc = host
+    if parsed.username is not None or parsed.password is not None:
+        raise ProviderSchemaChanged(
+            "announcement URL must not contain user information"
+        )
+    if host != "cninfo.com.cn" and not host.endswith(".cninfo.com.cn"):
+        raise ProviderSchemaChanged("announcement URL must use a CNINFO host")
     if port is not None and not (
         scheme == "http" and port == 80 or scheme == "https" and port == 443
     ):
-        netloc = f"{host}:{port}"
+        raise ProviderSchemaChanged(
+            "announcement URL must not use a non-default port"
+        )
+    netloc = host
     query_items = []
     for key, value in parse_qsl(parsed.query, keep_blank_values=True):
         normalized_key = key.lower()

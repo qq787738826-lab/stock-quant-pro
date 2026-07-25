@@ -84,6 +84,16 @@ class AgentStage2GCrossLanguageIntegrationTest {
                 invalidRun.errors().stream().map(item -> item.code()).toList());
         assertTrue(invalidRun.findings().isEmpty());
 
+        AgentTeamResponse invalidSource = call(AgentStage2GTestFixtures.request(
+                AgentStage2GTestFixtures.Scenario.INVALID_SOURCE_URL));
+        AgentOutput invalidSourceRun = run(
+                invalidSource,
+                AgentCode.ANNOUNCEMENT_RISK);
+        assertEquals(List.of("ANNOUNCEMENT_RISK_INPUT_INVALID"),
+                invalidSourceRun.errors().stream()
+                        .map(item -> item.code()).toList());
+        assertTrue(invalidSourceRun.findings().isEmpty());
+
         AgentTeamResponse blocked = call(AgentStage2GTestFixtures.request(
                 AgentStage2GTestFixtures.Scenario.DATA_QUALITY_BLOCKED_WITH_VETO));
         assertEquals(GateStatus.BLOCKED,
@@ -106,6 +116,29 @@ class AgentStage2GCrossLanguageIntegrationTest {
         assertFalse(run(response, AgentCode.ANNOUNCEMENT_RISK).veto());
         assertTrue(response.vetoes().stream()
                 .allMatch(item -> item.agentCode() == AgentCode.POSITION_RISK));
+    }
+
+    @Test
+    void mixedSafeAndRiskPhrasesRemainConsistentAcrossLanguages()
+            throws Exception {
+        AgentTeamResponse response = call(AgentStage2GTestFixtures.request(
+                AgentStage2GTestFixtures.Scenario.MIXED_EXCLUSION_RISKS));
+        AgentOutput run = run(response, AgentCode.ANNOUNCEMENT_RISK);
+        assertEquals(RunStatus.COMPLETED, run.status());
+        assertEquals(GateStatus.WARN, run.gateStatus());
+        assertEquals(40, run.score());
+        assertEquals(5, run.findings().size());
+        assertEquals(4, run.evidence().size());
+        assertEquals(
+                List.of(
+                        "CNINFO:1212345681",
+                        "CNINFO:1212345682",
+                        "CNINFO:1212345683"),
+                run.evidence().subList(1, 4).stream()
+                        .map(item -> item.fields().get("event")
+                                .get("sourceAnnouncementId").asText())
+                        .toList());
+        assertFalse(run.veto());
     }
 
     @Test
