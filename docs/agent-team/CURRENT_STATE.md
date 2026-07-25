@@ -51,7 +51,14 @@
 - 阶段 2H 任务分支：`codex/1.4.0-stage-2h-position-risk-v1`
 - 阶段 2H 规则版本：`1.4.0-stage-2h-position-risk-v1`
 - 阶段 2H context profile / Schema：`AGENT_CONTEXT_2H_V1` / `PORTFOLIO_CONTEXT_V1`
-- 阶段 2H 当前状态：任务分支实现与 Codex 本地验证完成；尚待 ChatGPT 基于实际 Git commit 验收；尚未合入集成分支。
+- 阶段 2H 实现及最终提交：`a898e21df38594a6aca1429a3dfd5e28c2cf7f72`
+- 阶段 2H 当前状态：已通过 ChatGPT 对实际 Git 提交的验收；用户已批准 merge；集成分支已 fast-forward 至 `a898e21df38594a6aca1429a3dfd5e28c2cf7f72`。精确验收和批准时间无仓库证据，记为 `UNKNOWN`。
+- 阶段 2G 冻结集成基线：`a898e21df38594a6aca1429a3dfd5e28c2cf7f72`
+- 阶段 2G 任务分支：`codex/1.4.0-stage-2g-announcement-risk-v1`
+- 阶段 2G 规则版本：`1.4.0-stage-2g-announcement-risk-v1`
+- 阶段 2G context profile / Schema：`AGENT_CONTEXT_2G_V1` / `SECURITY_EVENTS_CONTEXT_V1`
+- 阶段 2G 研究来源 / Provider / canonical 契约：`AKSHARE_CNINFO_RESEARCH_V1` / `AKSHARE_CNINFO_PROVIDER_V1` / `ANNOUNCEMENT_CANONICAL_V1`
+- 阶段 2G 当前状态：任务分支实现与 Codex 本地验证完成；尚待 ChatGPT 基于实际 Git commit 验收；尚未合入集成分支。该状态不表示来源获得 FORMAL/PIT 资格。
 - `master`：`27d9099 chore: checkpoint Stock Quant Pro 1.3.1 and remove tracked cache`
 - 版本号仍保持 `1.3.1`；尚未发布 `1.4.0`。
 
@@ -81,33 +88,34 @@
 - 阶段 2D-2B-1B-1：TEST/DEMO security event materialization foundation 已完成、通过独立 GitHub 复审并合入；V8 实现 `manifestContractVersion`、TEST/DEMO 稳定证券身份、显式 source identity mapping、`SECURITY_STATUS_RAW_TEST_V1`、V1 event 物化与复用、normalization result、唯一 event lineage、`INGESTION_MANIFEST_V2_SECURITY_EVENT`、Java/PostgreSQL 双重门禁，以及幂等、并发和原子失败保护。resolved event 在 2D-2B-2 前仍被禁止进入 history。
 - 阶段 2E-1：确定性 TECHNICAL_ANALYSIS V1 已完成、通过独立 GitHub 最终复审并合入；只解释冻结的 `technicalMetrics` 与 `marketData`，形成五类固定 finding，通过 Java/Python 双重校验并受 DATA_QUALITY 门禁约束，不产生正式 veto，总控仍保持安全不足状态。
 - 阶段 2F：可靠回测基础与 STRATEGY_BACKTEST 确定性规则 V1 已完成、通过 ChatGPT 对实际 Git 提交的验收并经用户批准 fast-forward 合入；V9 建立 append-only PIT 日线观察，精确 profile 提供可靠 `backtestContext`、canonical 三领域 Hash、冻结回测策略和五类确定性 finding。STRATEGY_BACKTEST 不产生正式 veto。
+- 阶段 2H：可靠模拟持仓上下文与 POSITION_RISK 正式否决 V1 已完成、通过 ChatGPT 对实际 Git 提交的验收并经用户批准 fast-forward 合入；精确 profile 只读冻结默认模拟账户当前状态，POSITION_RISK 是唯一能够生成正式 veto 的专业智能体。该能力不接入真实账户，不修改模拟账户业务表，也不生成交易执行指令。
 
 阶段 2D-1、2D-2A、2D-2B-1A、文档阶段 2D-2B-1B-0 和 TEST/DEMO 实现阶段 2D-2B-1B-1 完成不等于完整阶段 2D、完整阶段 2D-2 或完整阶段 2D-2B 完成；这些上位阶段仍处于进行中。已完成内容是基础设施、只读事实上下文、数据质量门禁、受限的当前证券池宽度状态规则、时态事实基础、来源无关摄取基础、事件物化契约及 TEST/DEMO event 物化基础。当前 event 物化能力不包含正式来源、FORMAL/PIT、history/calendar projection、Universe、完整六智能体分析、完整市场环境模型、历史无前视市场宽度、真实股票分析或投资建议能力。
 
 ## 当前任务分支候选实现（未验收、未合入）
 
-阶段 2H 在任务分支完成了默认模拟账户 `accountId=1` 的 Agent 专用只读
-Repository、`REPEATABLE_READ` 只读事务、版本化
-`AGENT_CONTEXT_2H_V1/PORTFOLIO_CONTEXT_V1`、当前模拟账户风险事实、
-确定性 POSITION_RISK V1、唯一正式 veto 和总控 veto 优先级。Java 冻结并重算
-账户、持仓、本地 QFQ 估值、待确认委托和权益历史；Python 只校验并解释冻结事实。
-实现与测试详情见 [stage-2h-position-risk-v1.md](stage-2h-position-risk-v1.md)。
+阶段 2G 在任务分支完成了研究级 AKShare/CNINFO Provider Bridge、Java 权威摄取、
+V10 append-only 公告批次与观察版本、as-of `securityEvents`、确定性
+ANNOUNCEMENT_RISK V1、Java/Python 双重校验和真实 PostgreSQL/HTTP/AKShare 本地验收。
+实现与测试详情见 [stage-2g-announcement-risk-v1.md](stage-2g-announcement-risk-v1.md)。
 
 该候选实现尚无 ChatGPT 验收结论、用户 merge 批准或集成提交，因此不得写入
-“已完成并验收”或 [PROGRESS_LOG.md](PROGRESS_LOG.md)。它只支持上海时区当前自然日
-的当前模拟账户状态，明确声明 `historicalPointInTimeGuaranteed=false`；不读取真实
-账户、不写模拟账户业务表、不生成交易执行指令，也不开始仍受外部来源阻断的 2G。
+[PROGRESS_LOG.md](PROGRESS_LOG.md)。来源固定为 `RESEARCH`，并明确
+`formalEligible=false`、`pitVerified=false`、`revisionRelationshipGuaranteed=false`、
+`reportedPublishTimePrecision=DATE_ONLY`；它不解除 2D 正式证券状态来源和许可阻断，
+不声明历史公告绝对完整，不接入自动任务或全市场抓取，也不开始 2I。
 
 ## 权威边界与真实可用能力
 
 Java 是 `taskId`、六个 `runId`、状态、幂等与缓存、持久化和跨语言响应校验的唯一权威。Python 无状态，只处理 Java 传入的只读 `contextSnapshot`，不访问任务数据库。PostgreSQL 已包含 task、run、evidence、veto、decision 五类持久化结构。Vue 可创建、轮询、恢复并展示任务。本地脚本可安全启动、复用和精确停止 Python、Java、Vue。
 
-当前集成分支真实可用的是 Java 权威任务和持久化、阶段 2A 第一批四类上下文、确定性技术指标、确定性 DATA_QUALITY 门禁、`marketBreadth` 只读事实、`scanResult` 历史扫描事实、阶段 2D-1 受限的当前证券池宽度状态规则、阶段 2E-1 确定性 TECHNICAL_ANALYSIS V1、阶段 2F 可靠回测基础与确定性 STRATEGY_BACKTEST V1、V6 时态事实基础、V7 来源无关摄取基础、V8 TEST/DEMO security event 物化基础、V9 append-only PIT 日线观察、Hash 与 JSONB 稳定往返、缺数安全降级、失败原子性和 Vue 工作台观察能力。V8 已实现 run 创建时冻结的 `manifestContractVersion`、TEST/DEMO 稳定证券身份与显式 source identity mapping、`SECURITY_STATUS_RAW_TEST_V1`、`SECURITY_STATUS_EVENT_V1` 物化与严格复用、每 terminal attempt 唯一 normalization result、每逻辑 event 唯一 lineage、`INGESTION_MANIFEST_V2_SECURITY_EVENT`、Java/PostgreSQL 双重门禁，以及幂等、两个 backend 并发和原子失败保护。FORMAL/PIT 继续由数据库门禁拒绝，resolved event 在 2D-2B-2 前不得进入 `security_status_history`；当前尚未形成正式 history/calendar projection 或 Universe。集成分支已实现 DATA_QUALITY、受限 MARKET_REGIME、TECHNICAL_ANALYSIS 和 STRATEGY_BACKTEST 四个专业智能体规则；ANNOUNCEMENT_RISK 与 POSITION_RISK 仍未实现，因此仍不具备完整六智能体分析、完整 MARKET_REGIME、公告风险、持仓风险、投资建议或自动交易能力。
+当前集成分支真实可用的是 Java 权威任务和持久化、阶段 2A 第一批四类上下文、确定性技术指标、确定性 DATA_QUALITY 门禁、`marketBreadth` 只读事实、`scanResult` 历史扫描事实、阶段 2D-1 受限的当前证券池宽度状态规则、阶段 2E-1 确定性 TECHNICAL_ANALYSIS V1、阶段 2F 可靠回测基础与确定性 STRATEGY_BACKTEST V1、阶段 2H 可靠模拟持仓上下文与确定性 POSITION_RISK V1、V6 时态事实基础、V7 来源无关摄取基础、V8 TEST/DEMO security event 物化基础、V9 append-only PIT 日线观察、Hash 与 JSONB 稳定往返、缺数安全降级、失败原子性和 Vue 工作台观察能力。V8 已实现 run 创建时冻结的 `manifestContractVersion`、TEST/DEMO 稳定证券身份与显式 source identity mapping、`SECURITY_STATUS_RAW_TEST_V1`、`SECURITY_STATUS_EVENT_V1` 物化与严格复用、每 terminal attempt 唯一 normalization result、每逻辑 event 唯一 lineage、`INGESTION_MANIFEST_V2_SECURITY_EVENT`、Java/PostgreSQL 双重门禁，以及幂等、两个 backend 并发和原子失败保护。FORMAL/PIT 继续由数据库门禁拒绝，resolved event 在 2D-2B-2 前不得进入 `security_status_history`；当前尚未形成正式 history/calendar projection 或 Universe。集成分支已实现 DATA_QUALITY、受限 MARKET_REGIME、TECHNICAL_ANALYSIS、STRATEGY_BACKTEST 和 POSITION_RISK 五个专业智能体规则；ANNOUNCEMENT_RISK 仍未实现，因此仍不具备完整六智能体分析、公告风险、投资建议或自动交易能力。
 
-当前 2H 任务分支在上述集成事实之上增加候选的可靠模拟持仓上下文和
-POSITION_RISK V1。只有精确 2H 规则版本启用新 profile；POSITION_RISK 是唯一
-可生成正式 veto 的专业智能体。即使 2H 输入完整且不存在 veto，
-ANNOUNCEMENT_RISK 仍未实现，总控继续保持安全不足结论。
+当前 2G 任务分支在上述集成事实之上增加候选的研究级公告事实和
+ANNOUNCEMENT_RISK V1。只有精确 2G 规则版本启用 `AGENT_CONTEXT_2G_V1`；
+ANNOUNCEMENT_RISK 永不生成正式 veto，POSITION_RISK 仍是唯一正式否决权。
+即使六个专业 run 均已执行且没有正式 veto 或 DATA_QUALITY 阻断，2I 尚未实现，
+总控仍保持 `INSUFFICIENT_DATA`。
 
 ## 九类 contextSnapshot 实际状态
 
@@ -118,9 +126,9 @@ ANNOUNCEMENT_RISK 仍未实现，总控继续保持安全不足结论。
 | `marketBreadth` | 已由 Java 在同一只读事务内基于当前 MAIN、active、非 ST 证券及 QFQ 日线确定性生成；统一有效日期和前一有效日期；阶段 2D-1 仅将其用于当前日期受限宽度状态。证券池不是历史版本，`pointInTimeGuaranteed=false`、`universePointInTimeGuaranteed=false`、`futureDataExcluded=false`，历史日期不能进行无前视分类 |
 | `scanResult` | 已从已完成、正式、FULL 扫描任务中只读接入；按交易日、完成时间和 ID 稳定选择；只输出白名单事实，不输出推荐字段；生产输入截止日期和算法版本不可完全证明 |
 | `technicalMetrics` | 已由 Java 基于同一事务冻结的本地 QFQ 日线，使用 `JAVA_INDICATORS_V1` 确定性计算 |
-| `backtestContext` | 旧规则继续以 `BACKTEST_INPUT_CUTOFF_UNVERIFIABLE` 安全不可用；集成分支只有精确 2F 或 2H 规则版本选择可靠 profile。只有本地 PIT 观察属于周一至周五、`firstObservedAt` 与 `knownAt` 均不早于该交易日上海时间 15:00，并同时满足日期/knowledge cutoff、source revision、lineage、Hash、版本、120 条最低窗口和输入校验时才可用。当前普通配置源 revision 为 `null`，因此实际仍以 `BACKTEST_SOURCE_REVISION_UNVERIFIABLE` 安全不可用 |
-| `securityEvents` | 对智能体 contextSnapshot 仍不可用；V8 只建立 TEST/DEMO 摄取侧 event 物化基础，尚无正式来源，也未接入该上下文 |
-| `portfolioContext` | 集成分支及旧规则保持结构化不可用；仅 2H 任务分支的精确规则版本选择 `AGENT_CONTEXT_2H_V1/PORTFOLIO_CONTEXT_V1`，通过 Agent 专用只读 Repository 冻结 `accountId=1` 当前模拟账户事实。只支持上海时区当前自然日，`historicalPointInTimeGuaranteed=false`；历史/未来日期、非法账户事实、缺失或超过 7 天的本地 QFQ 估值均安全不可用 |
+| `backtestContext` | 旧规则继续以 `BACKTEST_INPUT_CUTOFF_UNVERIFIABLE` 安全不可用；集成分支的精确 2F/2H 规则版本以及任务分支的精确 2G 规则版本选择可靠 profile。只有本地 PIT 观察属于周一至周五、`firstObservedAt` 与 `knownAt` 均不早于该交易日上海时间 15:00，并同时满足日期/knowledge cutoff、source revision、lineage、Hash、版本、120 条最低窗口和输入校验时才可用。当前普通配置源 revision 为 `null`，因此实际仍以 `BACKTEST_SOURCE_REVISION_UNVERIFIABLE` 安全不可用 |
+| `securityEvents` | 集成分支仍结构化不可用；V8 只建立 TEST/DEMO 证券状态摄取侧 event 物化基础。仅 2G 任务分支的精确规则版本通过 `AGENT_CONTEXT_2G_V1/SECURITY_EVENTS_CONTEXT_V1` 接入研究级公告观察；只有 180 日范围完整、`complete=true`、截至 knowledge cutoff 可见且不超过 24 小时的正确来源批次才可用，完整 0 公告批次可形成 `available=true, events=[]` |
+| `portfolioContext` | 集成分支只有精确 2H 规则版本（2G 任务分支也显式复用）选择 `AGENT_CONTEXT_2H_V1/PORTFOLIO_CONTEXT_V1`，通过 Agent 专用只读 Repository 冻结 `accountId=1` 当前模拟账户事实。只支持上海时区当前自然日，`historicalPointInTimeGuaranteed=false`；历史/未来日期、非法账户事实、缺失或超过 7 天的本地 QFQ 估值均安全不可用 |
 | `dataQualityContext` | 已生成只读数据质量事实；不包含评分、规则门禁、决策或否决，数据库查询正常时即使证券和日线缺失仍可用 |
 
 ## 六智能体与总控实际状态
@@ -140,19 +148,23 @@ BLOCKED 时继承阻断；上下文不可用、输入非法或交易样本不足
 confidence 只可为 40、60、80，DATA_QUALITY WARN 时最高 50。完整规则见
 [stage-2f-strategy-backtest-v1.md](stage-2f-strategy-backtest-v1.md)。
 
-2H 任务分支的 POSITION_RISK 只解释 Java 冻结的 `portfolioContext`，即使
+阶段 2H 的 POSITION_RISK 只解释 Java 冻结的 `portfolioContext`，即使
 DATA_QUALITY 为 BLOCKED，只要组合上下文有效仍继续评估账户风险。它按账户回撤、
 当日损失、持仓数量、当前/预计集中度、止损和移动止损的冻结顺序生成正式 veto；
 无 veto 时固定生成五类 finding 并按阈值计算 safety score 和自身完整性 confidence。
 目标位只产生警告，不产生 veto。完整规则见
 [stage-2h-position-risk-v1.md](stage-2h-position-risk-v1.md)。
 
-2H 总控优先级为：正式 veto 优先于 DATA_QUALITY 阻断并形成
+2H 及后续规则的总控优先级为：正式 veto 优先于 DATA_QUALITY 阻断并形成
 `REJECTED_BY_VETO/BLOCKED/vetoed=true/score=0`；无 veto 但 DATA_QUALITY 阻断时
-保持 `BLOCKED_BY_DATA_QUALITY`；两者均不存在时因 ANNOUNCEMENT_RISK 尚未实现而
-保持 `INSUFFICIENT_DATA`。TECHNICAL_ANALYSIS 与 STRATEGY_BACKTEST 不产生正式 veto，
-POSITION_RISK 是唯一正式否决权。总控不是第七个 run；2H 候选实现仍不构成完整六智能体
-分析、投资建议或交易信号。
+保持 `BLOCKED_BY_DATA_QUALITY`。集成分支两者均不存在时因 ANNOUNCEMENT_RISK
+尚未实现而保持 `INSUFFICIENT_DATA`。2G 任务分支的 ANNOUNCEMENT_RISK 只解释 Java
+冻结的研究级 `securityEvents`，按标题确定性规则生成五类 finding、研究证据、
+`[0,100]` score 和固定 40 confidence，不调用网络、数据库、PDF 或 LLM，也不产生
+正式 veto；两类阻断均不存在时，六个专业 run 已执行但因 2I 未实现，总控仍保持
+`INSUFFICIENT_DATA/0/0`。TECHNICAL_ANALYSIS、STRATEGY_BACKTEST 与 ANNOUNCEMENT_RISK
+均不产生正式 veto，POSITION_RISK 是唯一正式否决权。总控不是第七个 run；当前候选
+实现仍不构成投资建议或交易信号。
 
 ## 数据库、前端与本地运行
 
@@ -164,7 +176,8 @@ POSITION_RISK 是唯一正式否决权。总控不是第七个 run；2H 候选�
 - 阶段 2E-1 同样未修改 Flyway、V1 至 V8、外层 JSON Schema、`CONTEXT_SCHEMA_VERSION`、contextHash 算法或数据库持久化结构；Java 继续在单事务持久化前完成独立响应校验。
 - 阶段 2F 的 V9 新增 `market_data_observation_batches` 与 `daily_bar_observations`，两表均由数据库触发器禁止 `UPDATE`、`DELETE`、`TRUNCATE`；持久化入口和数据库均拒绝周末日线，V9 还在数据库层拒绝交易日上海时间 15:00 前的 `first_observed_at`/`known_at`。`daily_bars` 保留为当前态兼容投影；工作日收盘前当日日线不会进入可靠 PIT 观察，也不会创建空观察批次，但可继续按原业务更新该兼容投影。成功合格 PIT 捕获与当前态更新位于同一事务；迁移不回填历史 known time，也不修改 V1 至 V8。本地验收只在随机临时 Schema 应用 V9，没有向专用测试库 public 应用迁移。
 - 阶段 2F 只对精确规则版本启用 `AGENT_CONTEXT_2F_V1/BACKTEST_CONTEXT_V1`；外层 `CONTEXT_SCHEMA_VERSION`、旧入口、旧规则 contextSnapshot/contextHash/cache key 与六 run 结构保持兼容。Java 使用 `BACKTEST_CANONICAL_V1` 生成三个领域 Hash，Python 不访问数据库或重跑回测。
-- 阶段 2H 任务分支不新增 Flyway；只对精确规则版本启用 `AGENT_CONTEXT_2H_V1/PORTFOLIO_CONTEXT_V1`，并继续复用可靠 `backtestContext`。Agent 专用 Repository 在同一 `REPEATABLE_READ` 只读事务读取现有模拟账户、持仓、待确认委托、权益快照、设置与本地 QFQ 估值，不调用 `PortfolioService` 写路径，不修改任何模拟账户业务表。旧 profile/contextHash 和六 run 结构保持兼容。
+- 阶段 2H 不新增 Flyway；只对精确规则版本启用 `AGENT_CONTEXT_2H_V1/PORTFOLIO_CONTEXT_V1`，并继续复用可靠 `backtestContext`。Agent 专用 Repository 在同一 `REPEATABLE_READ` 只读事务读取现有模拟账户、持仓、待确认委托、权益快照、设置与本地 QFQ 估值，不调用 `PortfolioService` 写路径，不修改任何模拟账户业务表。旧 profile/contextHash 和六 run 结构保持兼容。
+- 阶段 2G 任务分支只新增 V10 `announcement_capture_batches` 与 `announcement_observations`；两表由数据库触发器拒绝 `UPDATE`、`DELETE`、`TRUNCATE`。Java 在 Provider 外部调用结束后冻结 `observedAt`，以 `knownAt=firstObservedAt` 保存日期级研究公告事实；同内容幂等，内容变化及 A→B→A 追加新版本。完整空批次保留覆盖证据，部分批次不证明无事件。V10 不修改 V1 至 V9，不向历史回填 knowledge-time，也不改变 2D 证券状态事实模型。
 - 阶段 2D-2A 冻结 `SECURITY_STATUS_EVENT_V1`；数据库层禁止 dataset/event 的 `UPDATE`、`DELETE`、`TRUNCATE`，history/calendar 只允许一次 `known_to: NULL -> 非NULL` 关闭。上一/下一开市日不持久化，统一按同 exchange、同 knowledge cutoff 的日历事实动态推导。
 - 阶段 2D-2B-1B-1 仅在 TEST/DEMO 边界内把 `SECURITY_STATUS_RAW_TEST_V1` 物化或复用为 V1 event；V8 同时在 Java 和 PostgreSQL 阻止 FORMAL/PIT 提升，并在 2D-2B-2 独立实现前禁止任何 resolved event 写入 `security_status_history`。
 - `contextHash` 按 JSON 数值的数学值规范化，对象字段稳定排序、数组保持业务顺序；API、PostgreSQL JSONB 与持久化快照重算结果一致。
@@ -177,7 +190,7 @@ POSITION_RISK 是唯一正式否决权。总控不是第七个 run；2H 候选�
 
 ## 禁止范围
 
-当前智能体团队阶段禁止新增接入或宣称已具备：实时行情查询、新 AKShare 查询、公告上下文、真实账户或除 `accountId=1` 只读当前状态之外的模拟持仓上下文、历史持仓 PIT、LLM/付费 API、超出已冻结 DATA_QUALITY、MARKET_REGIME V1、TECHNICAL_ANALYSIS V1、STRATEGY_BACKTEST V1 和任务分支 POSITION_RISK V1 的评分策略、交易写操作、自动下单和券商控制。不得编造价格、指标、证据或投资结论。阶段 2D-1、2E-1、2F 和任务分支 2H 的 score 均不构成完整市场判断、收益预测、投资建议或交易信号；正式 veto 仅表示冻结账户风险规则拒绝，不是交易执行指令。
+当前智能体团队阶段禁止接入或宣称已具备：实时外部行情、正式公告资格、全市场自动公告抓取、公告 PDF 语义分析、真实账户、`accountId=1` 当前只读状态之外的模拟持仓上下文、历史持仓 PIT、LLM/付费 API、超出已冻结 DATA_QUALITY、MARKET_REGIME V1、TECHNICAL_ANALYSIS V1、STRATEGY_BACKTEST V1、POSITION_RISK V1 和任务分支 ANNOUNCEMENT_RISK V1 的评分策略、交易写操作、自动下单和券商控制。2G 任务分支只增加默认关闭、手动触发的 AKShare/CNINFO 研究 Provider；不得把它描述为 FORMAL/PIT、正式授权、历史完整或可用于自动交易。不得编造价格、指标、证据或投资结论。各专业 Agent score 均不构成完整市场判断、收益预测、投资建议或交易信号；正式 veto 仅表示冻结账户风险规则拒绝，不是交易执行指令。
 
 ## 已知问题与最近测试
 
@@ -210,6 +223,8 @@ POSITION_RISK 是唯一正式否决权。总控不是第七个 run；2H 候选�
 - 阶段 2F 安全非数据库 `quant-server` 回归为 `242/0/0/8`；8 项只属于 2E/2F 外部 Python/PostgreSQL 环境门禁，不能冒充真实闭环，对应真实跨语言测试已另行以 `8/0/0/0`、`Skipped=0` 运行。绑定专用数据库 public 的全量尝试运行 286 项，因既有 V6 checksum 不一致产生 15 个启动错误和 14 项跳过，因此不描述为通过。未 repair/clean 或改动 public；所有 2F 与兼容 PostgreSQL 验收在随机临时 Schema 运行 V1 至 V9、精确删除测试 Schema，并验证 public 数据与结构指纹前后不变。
 - 阶段 2H 的结果均为 Codex 本地执行证据，不是 GitHub Actions CI：`quant-core` 全量 `4/0/0/0`；2H Java 定向 `26/0/0/0`；Python `compileall` 通过、完整 unittest `92/0/0/0`；真实 Java/Python HTTP `4/0/0/0`、真实 V1 至 V9 PostgreSQL/JSONB/持久化/业务表只读闭环 `2/0/0/0`，两组均 `Skipped=0`；安全非数据库 `quant-server` 全量 `301/0/0/46`；随机隔离 Schema 的 2D/2E/2F 真实兼容 `29/0/0/0`、`Skipped=0`。
 - `quant-server` 的 46 项跳过属于未提供外部 Python/PostgreSQL 集成环境变量时的环境门禁，不能冒充真实闭环。另一次包含绑定专用数据库 public 的旧 2D 测试类的兼容尝试为 29 项通过、1 项 ApplicationContext 错误，原因仍是已知 V6 checksum 不一致，因此不描述为全量通过；未 repair/clean、删除、重建或修改 public。2H 真实验收在随机临时 Schema 运行 V1 至 V9并精确清理，验证 public 基线及 `portfolio_accounts`、`positions`、`manual_orders`、`simulated_trades`、`account_equity_snapshots`、`risk_events` 逐行指纹前后不变。
+- 阶段 2G 的结果均为 Codex 本地执行证据，不是 GitHub Actions CI：真实 AKShare 安全门使用固定 `akshare==1.18.64`、`000001` 和受控历史范围成功返回 38 行；`quant-core` 全量 `4/0/0/0`；2G Java 定向合计 `39/0/0/0`、`Skipped=0`，其中真实 Java/Python HTTP `4/0/0/0`、V1 至 V10 PostgreSQL 公告事实 `3/0/0/0`、真实 PostgreSQL/Python/任务持久化 `1/0/0/0`、真实 AKShare Live Gate `1/0/0/0`；Python `compileall` 通过、完整 unittest `111/0/0/0`；安全非数据库 `quant-server` 全量 `331/0/0/55`；随机隔离 Schema 的 2D/2E/2F/2H 真实兼容 `35/0/0/0`、`Skipped=0`。
+- `quant-server` 的 55 项跳过属于未提供外部 Python/PostgreSQL/AKShare 集成环境变量时的环境门禁，不能冒充真实闭环。2G 的 PostgreSQL、跨语言、任务持久化和 Live Gate 均已另行真实运行且 `Skipped=0`；随机测试 Schema 均被精确删除，public 数据与结构指纹前后不变，2H 六张模拟账户业务表前后逐行一致。未对 public 执行 Flyway repair/clean，也未把真实公告响应、Cookie 或访问凭据写入仓库。
 
 ## 当前后续入口与阻断
 
@@ -219,6 +234,6 @@ POSITION_RISK 是唯一正式否决权。总控不是第七个 run；2H 候选�
 
 完整阶段 2D、完整阶段 2D-2 和完整阶段 2D-2B 仍处于进行中。阶段 2D-2A、2D-2B-1A、文档阶段 2D-2B-1B-0 与 TEST/DEMO 实现阶段 2D-2B-1B-1 已完成；该工作线的唯一入口只是解决 2D-2B-1B-2 的外部前置决策，不是立即开始 adapter、2D-2B-2 或 Universe 实现。阶段 2E-1 已完成独立复审并合入，但没有自动批准或开始任何 2E 后续任务。
 
-**在智能体规则能力工作线上，2H 任务分支实现与 Codex 本地验证已经完成；本阶段提交推送后的唯一入口是由 ChatGPT 基于实际 Git commit 验收，2H 尚未合入。** 2F 已完成验收并经用户批准 fast-forward 合入。2G 因正式公告来源、数据许可和 revision/时间语义尚未解决而保持阻断、未开始；优先实施完全依赖本地模拟账户的 2H 不等于放弃 2G，也不自动批准 2I。ChatGPT 尚未对 2H 给出验收结论，用户尚未批准 2H merge；Codex 不得自行合并或开始 2G、2I 或其他阶段。
+**在智能体规则能力工作线上，2G 任务分支实现与 Codex 本地验证已经完成；本阶段提交推送后的唯一入口是由 ChatGPT 基于实际 Git commit 验收，2G 尚未合入。** 2H 已完成验收并经用户批准 fast-forward 合入。2G 使用的 AKShare/CNINFO 仅为 `RESEARCH` 来源，不解除正式公告或证券状态来源、许可、revision 与 PIT 阻断，也不自动批准 2I。ChatGPT 尚未对本次 2G 提交给出验收结论，用户尚未批准 2G merge；Codex 不得自行合并或开始 2I 或其他阶段。
 
-阻断项包括正式证券状态来源、数据许可、本地持久化权利、历史回放权利、稳定 source instrument ID、revision 语义以及 published/effective 时间语义。当前免费聚合源和 `securities` 当前态投影均不得被视为正式来源。当前仍未实现正式 source adapter、FORMAL 摄取、PIT_VERIFIED、`SECURITY_STATUS_EVENT_V2`、`security_status_history` 正式投影、trading calendar projection、Universe snapshot、正式外部 PIT 行情与公司行动、`MARKET_BREADTH_V2`、完整 MARKET_REGIME 或生产扫描切换；历史市场宽度无前视回放和评测集也尚未建立。阶段 2E-1 之外的 TECHNICAL_ANALYSIS 扩展未开始；阶段 2F 已完成并合入，2G 受外部公告来源与许可阻断而未开始，2H 仅为待验收、未合入的任务分支候选实现，2I 未开始。阶段 2D-2B 禁止外部行情补数、LLM 权威决策、投资建议和交易写操作。
+阻断项包括正式证券状态来源、数据许可、本地持久化权利、历史回放权利、稳定 source instrument ID、revision 语义以及 published/effective 时间语义。当前免费聚合源和 `securities` 当前态投影均不得被视为正式来源；2G 的研究级 AKShare/CNINFO 公告来源同样不得用于解除这些门禁。当前仍未实现正式 source adapter、FORMAL 摄取、PIT_VERIFIED、`SECURITY_STATUS_EVENT_V2`、`security_status_history` 正式投影、trading calendar projection、Universe snapshot、正式外部 PIT 行情与公司行动、`MARKET_BREADTH_V2`、完整 MARKET_REGIME、公告 PDF 语义分析或生产扫描切换；历史市场宽度无前视回放和评测集也尚未建立。阶段 2E-1 之外的 TECHNICAL_ANALYSIS 扩展未开始；阶段 2F 与 2H 已完成并合入，2G 仅为待 ChatGPT 验收、未合入的任务分支候选实现，2I 未开始。阶段 2D-2B 禁止外部行情补数、LLM 权威决策、投资建议和交易写操作。

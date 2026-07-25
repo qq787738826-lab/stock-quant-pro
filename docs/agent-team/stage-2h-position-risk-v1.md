@@ -2,18 +2,21 @@
 
 ## 1. 状态
 
-状态：**实现与 Codex 本地验证完成，待 ChatGPT 基于实际 Git 提交验收，未合入集成分支。**
+状态：**已实现、Codex 本地验证通过、ChatGPT 实际 Git 提交验收 PASS，并经用户批准 fast-forward 合入集成分支。**
 
 - 冻结集成基线：`4b1ee01a86b027ec43deaab18e6a68a098e0e2f4`
 - 任务分支：`codex/1.4.0-stage-2h-position-risk-v1`
+- 实现及最终提交：`a898e21df38594a6aca1429a3dfd5e28c2cf7f72`
+- 集成方式与集成 HEAD：fast-forward 至 `a898e21df38594a6aca1429a3dfd5e28c2cf7f72`，无额外 merge commit
+- ChatGPT 验收：`PASS`；精确验收时间无仓库证据，记为 `UNKNOWN`
+- 用户 merge 批准：已批准；精确批准时间无仓库证据，记为 `UNKNOWN`
 - 规则版本：`1.4.0-stage-2h-position-risk-v1`
 - context profile：`AGENT_CONTEXT_2H_V1`
 - portfolioContext Schema：`PORTFOLIO_CONTEXT_V1`
 - 固定模拟账户：`accountId=1`
 - 完整范围与验收任务书：[2h-reliable-position-risk-v1.md](tasks/2h-reliable-position-risk-v1.md)
 
-本状态不代表 ChatGPT 验收 PASS、用户 merge 批准或已合入。当前事实以
-[CURRENT_STATE.md](CURRENT_STATE.md) 为唯一权威来源。
+当前项目事实以 [CURRENT_STATE.md](CURRENT_STATE.md) 为唯一权威来源。
 
 ## 2. 仓库事实与实现边界
 
@@ -177,6 +180,7 @@ ApplicationContext 错误，原因是已知 V6 checksum 不一致，因此不描
 - 没有修改现金、持仓、委托、成交、权益快照或风险事件；
 - 没有输出买卖建议、自动交易指令或收益承诺；
 - 正式 veto 是账户风险拒绝事实，不是交易执行指令；
-- 2G 仍受公告来源、许可和 revision 语义阻断，未开始；
-- 2I 和其他阶段未开始；
-- 本任务分支未合入，等待 ChatGPT 基于实际 Git 提交验收。
+- 2G 不属于 2H 的实现范围；其后续独立授权与当前状态以
+  [CURRENT_STATE.md](CURRENT_STATE.md) 为准；
+- 2H 没有开始 2I 或其他阶段；
+- 2H 已通过 ChatGPT 实际提交验收并经用户批准 fast-forward 合入，无额外 merge commit。

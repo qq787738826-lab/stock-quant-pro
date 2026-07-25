@@ -6,6 +6,8 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.stockquant.server.agent.model.AgentModels.ContextSnapshot;
 import com.stockquant.server.agent.backtest.AgentBacktestContextService;
 import com.stockquant.server.agent.backtest.BacktestContracts;
+import com.stockquant.server.agent.announcement.AgentSecurityEventsContextService;
+import com.stockquant.server.agent.announcement.AnnouncementContracts;
 import com.stockquant.server.agent.portfolio.AgentPortfolioContextService;
 import com.stockquant.server.agent.portfolio.PortfolioContracts;
 import com.stockquant.server.agent.repository.AgentContextReadRepository;
@@ -31,7 +33,6 @@ import java.util.Comparator;
 public class AgentContextSnapshotService {
 
     public static final String CONTEXT_SCHEMA_VERSION = "1.0";
-    private static final List<String> UNAVAILABLE_SECTIONS = List.of("securityEvents");
     private static final String UNAVAILABLE_REASON = "该只读上下文尚未接入现有业务数据源";
 
     private final ObjectMapper objectMapper;
@@ -43,6 +44,7 @@ public class AgentContextSnapshotService {
     private final AgentScanResultContextService scanResultContextService;
     private final AgentBacktestContextService backtestContextService;
     private final AgentPortfolioContextService portfolioContextService;
+    private final AgentSecurityEventsContextService securityEventsContextService;
     private final Clock clock;
 
     public AgentContextSnapshotService(
@@ -64,6 +66,7 @@ public class AgentContextSnapshotService {
                 scanResultContextService,
                 null,
                 null,
+                null,
                 Clock.systemUTC());
     }
 
@@ -78,6 +81,7 @@ public class AgentContextSnapshotService {
             AgentScanResultContextService scanResultContextService,
             AgentBacktestContextService backtestContextService,
             AgentPortfolioContextService portfolioContextService,
+            AgentSecurityEventsContextService securityEventsContextService,
             @Qualifier("agentTemporalClock") Clock clock
     ) {
         this.objectMapper = objectMapper;
@@ -89,6 +93,7 @@ public class AgentContextSnapshotService {
         this.scanResultContextService = scanResultContextService;
         this.backtestContextService = backtestContextService;
         this.portfolioContextService = portfolioContextService;
+        this.securityEventsContextService = securityEventsContextService;
         this.clock = clock;
     }
 
@@ -111,6 +116,33 @@ public class AgentContextSnapshotService {
                 marketBreadthContextService,
                 scanResultContextService,
                 null,
+                null,
+                null,
+                clock);
+    }
+
+    AgentContextSnapshotService(
+            ObjectMapper objectMapper,
+            AgentContextHashService hashService,
+            AgentContextReadRepository readRepository,
+            AgentTechnicalMetricsService technicalMetricsService,
+            AgentDataQualityContextService dataQualityContextService,
+            AgentMarketBreadthContextService marketBreadthContextService,
+            AgentScanResultContextService scanResultContextService,
+            AgentBacktestContextService backtestContextService,
+            AgentPortfolioContextService portfolioContextService,
+            Clock clock
+    ) {
+        this(
+                objectMapper,
+                hashService,
+                readRepository,
+                technicalMetricsService,
+                dataQualityContextService,
+                marketBreadthContextService,
+                scanResultContextService,
+                backtestContextService,
+                portfolioContextService,
                 null,
                 clock);
     }
@@ -136,12 +168,13 @@ public class AgentContextSnapshotService {
                 scanResultContextService,
                 backtestContextService,
                 null,
+                null,
                 clock);
     }
 
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public ContextSnapshot create(String symbol, LocalDate tradeDate) {
-        return createInternal(symbol, tradeDate, false, false);
+        return createInternal(symbol, tradeDate, false, false, false);
     }
 
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
@@ -150,15 +183,19 @@ public class AgentContextSnapshotService {
                 symbol,
                 tradeDate,
                 BacktestContracts.RULE_VERSION.equals(ruleVersion)
-                        || PortfolioContracts.RULE_VERSION.equals(ruleVersion),
-                PortfolioContracts.RULE_VERSION.equals(ruleVersion));
+                        || PortfolioContracts.RULE_VERSION.equals(ruleVersion)
+                        || AnnouncementContracts.RULE_VERSION.equals(ruleVersion),
+                PortfolioContracts.RULE_VERSION.equals(ruleVersion)
+                        || AnnouncementContracts.RULE_VERSION.equals(ruleVersion),
+                AnnouncementContracts.RULE_VERSION.equals(ruleVersion));
     }
 
     private ContextSnapshot createInternal(
             String symbol,
             LocalDate tradeDate,
             boolean reliableBacktestProfile,
-            boolean stage2HProfile
+            boolean reliablePortfolioProfile,
+            boolean stage2GProfile
     ) {
         Instant queriedAt = clock.instant();
         Optional<SecurityRecord> security = readRepository.findSecurity(symbol);
@@ -184,12 +221,15 @@ public class AgentContextSnapshotService {
                 reliableBacktestProfile
                         ? requiredBacktestContextService().create(symbol, tradeDate, queriedAt)
                         : backtestContext(symbol, tradeDate, queriedAt));
-        for (String section : UNAVAILABLE_SECTIONS) {
-            root.set(section, unavailableContext(symbol, tradeDate, queriedAt));
-        }
+        root.set(
+                "securityEvents",
+                stage2GProfile
+                        ? requiredSecurityEventsContextService().create(
+                        symbol, tradeDate, queriedAt)
+                        : unavailableContext(symbol, tradeDate, queriedAt));
         root.set(
                 "portfolioContext",
-                stage2HProfile
+                reliablePortfolioProfile
                         ? requiredPortfolioContextService().create(symbol, tradeDate, queriedAt)
                         : unavailableContext(symbol, tradeDate, queriedAt));
         root.set("dataQualityContext", dataQualityContext(dataQuality, symbol, tradeDate, queriedAt));
@@ -208,6 +248,13 @@ public class AgentContextSnapshotService {
             throw new IllegalStateException("阶段2H portfolioContext服务不可用");
         }
         return portfolioContextService;
+    }
+
+    private AgentSecurityEventsContextService requiredSecurityEventsContextService() {
+        if (securityEventsContextService == null) {
+            throw new IllegalStateException("阶段2G securityEvents服务不可用");
+        }
+        return securityEventsContextService;
     }
 
     private ObjectNode securityContext(

@@ -8,6 +8,7 @@ from .market_regime import MarketRegimeRuleEngine
 from .technical_analysis import TechnicalAnalysisRuleEngine
 from .strategy_backtest import StrategyBacktestRuleEngine
 from .position_risk import PositionRiskRuleEngine
+from .announcement_risk import AnnouncementRiskRuleEngine
 from .models import (
     AgentCode,
     AgentDecision,
@@ -21,6 +22,7 @@ from .models import (
     STAGE_2E_TECHNICAL_ANALYSIS_RULE_VERSION,
     STAGE_2F_STRATEGY_BACKTEST_RULE_VERSION,
     STAGE_2H_POSITION_RISK_RULE_VERSION,
+    STAGE_2G_ANNOUNCEMENT_RISK_RULE_VERSION,
     FormalVeto,
 )
 
@@ -31,12 +33,14 @@ _DATA_QUALITY_RULE_VERSIONS = frozenset({
     STAGE_2E_TECHNICAL_ANALYSIS_RULE_VERSION,
     STAGE_2F_STRATEGY_BACKTEST_RULE_VERSION,
     STAGE_2H_POSITION_RISK_RULE_VERSION,
+    STAGE_2G_ANNOUNCEMENT_RISK_RULE_VERSION,
 })
 _MARKET_REGIME_RULE_VERSIONS = frozenset({
     STAGE_2D_MARKET_REGIME_RULE_VERSION,
     STAGE_2E_TECHNICAL_ANALYSIS_RULE_VERSION,
     STAGE_2F_STRATEGY_BACKTEST_RULE_VERSION,
     STAGE_2H_POSITION_RISK_RULE_VERSION,
+    STAGE_2G_ANNOUNCEMENT_RISK_RULE_VERSION,
 })
 
 
@@ -188,6 +192,7 @@ class TechnicalAnalysisAgent(InsufficientDataAgent):
             STAGE_2E_TECHNICAL_ANALYSIS_RULE_VERSION,
             STAGE_2F_STRATEGY_BACKTEST_RULE_VERSION,
             STAGE_2H_POSITION_RISK_RULE_VERSION,
+            STAGE_2G_ANNOUNCEMENT_RISK_RULE_VERSION,
         }:
             return super().analyze(request, generated_at, data_quality_gate)
         evaluation = self._engine.evaluate(
@@ -233,6 +238,7 @@ class StrategyBacktestAgent(InsufficientDataAgent):
         if request.ruleVersion not in {
             STAGE_2F_STRATEGY_BACKTEST_RULE_VERSION,
             STAGE_2H_POSITION_RISK_RULE_VERSION,
+            STAGE_2G_ANNOUNCEMENT_RISK_RULE_VERSION,
         }:
             return super().analyze(request, generated_at, data_quality_gate)
         evaluation = self._engine.evaluate(
@@ -266,6 +272,42 @@ class AnnouncementRiskAgent(InsufficientDataAgent):
     summary = "因数据质量门禁阻断，未执行公告事件风险分析。"
     pending_summary = "公告事件风险规则尚未实现，未执行公告事件风险分析。"
 
+    def __init__(self) -> None:
+        self._engine = AnnouncementRiskRuleEngine()
+
+    def analyze(
+        self,
+        request: AgentTeamRequest,
+        generated_at: datetime,
+        data_quality_gate: GateStatus | None = None,
+    ) -> AgentOutput:
+        if request.ruleVersion != STAGE_2G_ANNOUNCEMENT_RISK_RULE_VERSION:
+            return super().analyze(request, generated_at, data_quality_gate)
+        evaluation = self._engine.evaluate(
+            request,
+            generated_at,
+            data_quality_gate if data_quality_gate is not None else GateStatus.BLOCKED,
+        )
+        return AgentOutput(
+            taskId=request.taskId,
+            runId=request.runIds.announcementRisk,
+            agentCode=AgentCode.ANNOUNCEMENT_RISK,
+            status=evaluation.status,
+            gateStatus=evaluation.gate_status,
+            decision=evaluation.decision,
+            veto=False,
+            score=evaluation.score,
+            confidence=evaluation.confidence,
+            summary=evaluation.summary,
+            findings=list(evaluation.findings),
+            evidence=list(evaluation.evidence),
+            errors=list(evaluation.errors),
+            contextHash=request.contextHash,
+            ruleVersion=request.ruleVersion,
+            executionMode=request.executionMode,
+            generatedAt=generated_at,
+        )
+
 
 class PositionRiskAgent(InsufficientDataAgent):
     agent_code = AgentCode.POSITION_RISK
@@ -282,7 +324,10 @@ class PositionRiskAgent(InsufficientDataAgent):
         generated_at: datetime,
         data_quality_gate: GateStatus | None = None,
     ) -> tuple[AgentOutput, list[FormalVeto]]:
-        if request.ruleVersion != STAGE_2H_POSITION_RISK_RULE_VERSION:
+        if request.ruleVersion not in {
+            STAGE_2H_POSITION_RISK_RULE_VERSION,
+            STAGE_2G_ANNOUNCEMENT_RISK_RULE_VERSION,
+        }:
             return super().analyze(
                 request, generated_at, data_quality_gate
             ), []

@@ -1,0 +1,17 @@
+{
+  "assuranceLevel": "RESEARCH",
+  "contractVersion": "ANNOUNCEMENT_CANONICAL_V1",
+  "formalEligible": false,
+  "normalizedSourceUrl": "https://static.cninfo.com.cn/finalpage/2025-01-02/1212345678.pdf",
+  "pitVerified": false,
+  "providerContractVersion": "AKSHARE_CNINFO_PROVIDER_V1",
+  "reportedPublishDate": "2025-01-02",
+  "reportedPublishTimePrecision": "DATE_ONLY",
+  "revisionRelationshipGuaranteed": false,
+  "securityName": "平安银行",
+  "sourceAnnouncementId": "CNINFO:1212345678",
+  "sourceCode": "AKSHARE_CNINFO_RESEARCH_V1",
+  "sourceIdentityStrength": "CNINFO_ID",
+  "symbol": "000001",
+  "title": "关于2024年年度报告更正公告"
+}

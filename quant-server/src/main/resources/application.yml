@@ -40,6 +40,13 @@ stockquant:
       core-pool-size: 1
       max-pool-size: 2
       queue-capacity: 20
+  announcement:
+    akshare:
+      enabled: ${ANNOUNCEMENT_AKSHARE_ENABLED:false}
+      base-url: ${ANNOUNCEMENT_AKSHARE_BASE_URL:${quant.ai-service-url}}
+      connect-timeout: 5s
+      # One logical request may contain 13 serialized 30-day AKShare chunks.
+      read-timeout: 25m
 logging:
   file:
     name: logs/quant-server.log

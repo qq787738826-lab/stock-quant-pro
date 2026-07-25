@@ -15,9 +15,11 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 from app.agent_team.router import router as agent_team_router
+from app.announcement_provider import router as announcement_provider_router
 
 app = FastAPI(title="Stock Quant AI & Data Service", version="1.3.1")
 app.include_router(agent_team_router)
+app.include_router(announcement_provider_router)
 
 
 class AnalyzeRequest(BaseModel):

@@ -176,28 +176,32 @@
 - 禁止范围：外部行情、旧结果权威化、参数寻优、投资建议、收益承诺、自动交易、正式 veto 或总控升级。POSITION_RISK 仍是唯一正式否决权。
 - 阶段边界：2F 已完成并合入不自动批准或开始 2G、2H、2I 或其他阶段。
 
-## 2G：公告上下文和 ANNOUNCEMENT_RISK（未开始）
+## 2G：AKShare/CNINFO 公告事实基础与 ANNOUNCEMENT_RISK 确定性规则 V1（任务分支待验收）
 
-- 当前状态：正式公告来源、数据许可和 revision/时间语义尚未解决，2G 继续阻断且未开始；暂缓不等于放弃 2G。
-- 目标：接入可验证公告上下文并建立公告风险规则。
-- 输入：经批准的公告数据源与 securityEvents。
-- 输出：事件证据、严重度和非正式风险提示。
-- 依赖：数据源合规与缓存设计必须在对应大阶段架构中先行冻结。
-- 禁止范围：新闻编造、非 POSITION_RISK 正式 veto、LLM 事实生成。
-- 验收条件：原文引用可追溯、时间准确、重复事件去重。
+- 当前状态：任务分支 `codex/1.4.0-stage-2g-announcement-risk-v1` 已完成实现与 Codex 本地验证；尚待 ChatGPT 基于实际 Git commit 验收，尚未合入集成分支。本状态不等于验收 PASS、用户 merge 批准或正式来源资格。
+- 交付文档：[完整 2G 任务书](tasks/2g-akshare-announcement-risk-v1.md)和[阶段实现与本地验证记录](stage-2g-announcement-risk-v1.md)。
+- 来源边界：固定 `akshare==1.18.64`，通过公开 `stock_zh_a_disclosure_report_cninfo` 函数提供 `AKSHARE_CNINFO_RESEARCH_V1/AKSHARE_CNINFO_PROVIDER_V1`。来源资格固定为 `RESEARCH`、`formalEligible=false`、`pitVerified=false`、`revisionRelationshipGuaranteed=false`、`DATE_ONLY`；不得宣称正式授权、历史绝对完整或自动交易资格。
+- Provider 边界：FastAPI Provider Bridge 与 Agent Rule Engine 严格分离；只有手动、默认关闭的 Java 摄取入口能够调用 Provider。Agent 任务创建和分析不访问 AKShare、数据库外部网络或 PDF。
+- 事实模型：V10 新增 append-only `announcement_capture_batches` 与 `announcement_observations`；完整空批次是有效覆盖，部分批次不能证明无风险公告。Java 冻结 `firstObservedAt` 和 `knownAt`，生成 `ANNOUNCEMENT_CANONICAL_V1` Hash 与观察版本；同内容幂等，变化和 A→B→A 保留新版本，不回填历史 knowledge-time。
+- 兼容 profile：只有规则版本 `1.4.0-stage-2g-announcement-risk-v1` 选择 `AGENT_CONTEXT_2G_V1/SECURITY_EVENTS_CONTEXT_V1`，同时复用 2F backtestContext 与 2H portfolioContext；旧 2B、2D-1、2E-1、2F、2H profile/contextHash 保持兼容。
+- 规则输出：Python 只解释 Java 冻结的公告标题和元数据，按退市/监管、财务债务诉讼、股东减持质押担保经营、更正澄清等冻结关键词、排除和最高 severity 运行确定性规则。每公告只扣分一次，四档 recency 使用 `HALF_UP`，confidence 固定 40，生成五类 finding、coverage/event evidence，永不生成正式 veto。
+- 总控边界：POSITION_RISK 正式 veto 继续最高优先，其次 DATA_QUALITY 阻断；两者均不存在时六个专业 run 已执行，但因 2I 未实现仍为 `INSUFFICIENT_DATA/0/0`。2G 不实现综合评分、投资结论或交易指令。
+- 本地验收：真实 AKShare 安全门和 Live Gate 使用 `000001` 受控历史范围返回 38 行；2G Java 定向 `39/0/0/0`、Python unittest `111/0/0/0`、真实 V1 至 V10 PostgreSQL/跨语言/Live Gate 均 `Skipped=0`；`quant-core` `4/0/0/0`、安全非数据库 `quant-server` `331/0/0/55`、2D/2E/2F/2H 真实兼容 `35/0/0/0`。这些是 Codex 本地证据，不是 GitHub Actions CI；55 项为环境门禁跳过。
+- 禁止范围：正式来源资格、FORMAL/PIT、隐藏接口或反爬绕过、PDF 批量下载、定时或全市场抓取、LLM 事实生成、非 POSITION_RISK 正式 veto、投资建议、自动交易和 2I。
+- 阶段边界：Codex 完成单次 commit 和普通 push 后停止，由 ChatGPT 检查实际提交；验收通过后仍须用户批准 merge，不得自行合并或开始 2I。
 
-## 2H：可靠模拟持仓上下文与 POSITION_RISK 正式否决 V1（任务分支待验收）
+## 2H：可靠模拟持仓上下文与 POSITION_RISK 正式否决 V1（已完成并合入）
 
-- 当前状态：任务分支 `codex/1.4.0-stage-2h-position-risk-v1` 已完成实现与 Codex 本地验证；尚待 ChatGPT 基于实际 Git commit 验收，尚未合入集成分支。本状态不等于验收 PASS 或用户 merge 批准。
-- 优先实施原因：2H 完全依赖本地模拟账户和本地 PostgreSQL，不依赖 2G 尚未解决的外部公告来源；该顺序不代表放弃 2G，也不自动批准 2I。
+- 当前状态：实现及最终提交 `a898e21df38594a6aca1429a3dfd5e28c2cf7f72` 已通过 ChatGPT 对实际 Git 提交的验收；用户已批准 merge，集成分支已 fast-forward 至该提交。精确验收和批准时间无仓库证据，记为 `UNKNOWN`。
+- 优先实施原因：2H 完全依赖本地模拟账户和本地 PostgreSQL，因此在当时 2G 外部公告来源方案尚未冻结时先行完成；该历史顺序不代表放弃 2G，也不自动批准 2I。
 - 交付文档：[完整 2H 任务书](tasks/2h-reliable-position-risk-v1.md)和[阶段实现与本地验证记录](stage-2h-position-risk-v1.md)。
 - 版本：规则 `1.4.0-stage-2h-position-risk-v1`、profile `AGENT_CONTEXT_2H_V1`、Schema `PORTFOLIO_CONTEXT_V1`，只对精确 2H 规则版本启用。
 - 输入边界：Agent 专用只读 Repository 在同一 `REPEATABLE_READ` 只读事务内冻结默认模拟账户 `accountId=1`、持仓、待确认委托、本地 QFQ 估值价及权益历史；只支持上海时区当前自然日，不声明历史持仓 PIT。
 - 输出：五类稳定 finding、确定性 safety score/confidence、按冻结顺序生成的正式 veto，以及正式 veto 优先于 DATA_QUALITY 阻断的总控结论。只有 POSITION_RISK 可以产生正式 veto，六个 run 不变。
 - 只读与兼容：不调用会结算、刷新行情、保存快照或写风险事件的业务方法，不修改任何模拟账户业务表；旧 2B、2D-1、2E-1、2F profile/contextHash 和规则保持兼容，没有新增 Flyway。
 - 本地验收：`quant-core` `4/0/0/0`；2H Java 定向 `26/0/0/0`；Python `compileall` 通过、完整 unittest `92/0/0/0`；真实 Java/Python `4/0/0/0`、真实 V1 至 V9 PostgreSQL `2/0/0/0`，均 `Skipped=0`；`quant-server` 安全全量 `301/0/0/46`；2D/2E/2F 真实兼容 `29/0/0/0`、`Skipped=0`。这些是 Codex 本地证据，不是 GitHub Actions CI；46 项是环境门禁跳过。
-- 禁止范围：真实账户、券商控制、自动下单、交易执行指令、业务表写入、外部数据源、2G、2I 或其他阶段。
-- 阶段边界：Codex 完成单次 commit 和普通 push 后停止，由 ChatGPT 检查实际提交；验收通过后仍须用户批准 merge，不得自行合并或开始下一阶段。
+- 禁止范围：真实账户、券商控制、自动下单、交易执行指令、业务表写入、外部数据源或历史持仓 PIT。
+- 阶段边界：2H 已完成并合入不自动批准或开始 2G、2I 或其他阶段。
 
 ## 2I：总控综合决策（未开始）
 

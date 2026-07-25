@@ -16,6 +16,7 @@ STAGE_2D_MARKET_REGIME_RULE_VERSION = "1.4.0-stage-2d-market-regime-v1"
 STAGE_2E_TECHNICAL_ANALYSIS_RULE_VERSION = "1.4.0-stage-2e-technical-analysis-v1"
 STAGE_2F_STRATEGY_BACKTEST_RULE_VERSION = "1.4.0-stage-2f-strategy-backtest-v1"
 STAGE_2H_POSITION_RISK_RULE_VERSION = "1.4.0-stage-2h-position-risk-v1"
+STAGE_2G_ANNOUNCEMENT_RISK_RULE_VERSION = "1.4.0-stage-2g-announcement-risk-v1"
 
 
 class StrictModel(BaseModel):
@@ -384,7 +385,85 @@ class AgentTeamResponse(StrictModel):
             self._validate_stage_2f_strategy_backtest(runs_by_code)
         elif self.ruleVersion == STAGE_2H_POSITION_RISK_RULE_VERSION:
             self._validate_stage_2h_position_risk(runs_by_code)
+        elif self.ruleVersion == STAGE_2G_ANNOUNCEMENT_RISK_RULE_VERSION:
+            self._validate_stage_2g_announcement_risk(runs_by_code)
         return self
+
+    def _validate_stage_2g_announcement_risk(
+        self,
+        runs_by_code: dict[AgentCode, AgentOutput],
+    ) -> None:
+        data_quality = runs_by_code[AgentCode.DATA_QUALITY]
+        announcement_risk = runs_by_code[AgentCode.ANNOUNCEMENT_RISK]
+        position_risk = runs_by_code[AgentCode.POSITION_RISK]
+        final = self.finalDecision
+
+        expected_source_run_ids = [runs_by_code[code].runId for code in AgentCode]
+        if final.sourceRunIds != expected_source_run_ids:
+            raise ValueError("阶段2G sourceRunIds必须保持六智能体固定顺序")
+        if announcement_risk.veto:
+            raise ValueError("阶段2G ANNOUNCEMENT_RISK不得产生正式veto")
+        if data_quality.gateStatus is GateStatus.BLOCKED:
+            if (announcement_risk.status is not RunStatus.INSUFFICIENT_DATA
+                    or announcement_risk.gateStatus is not GateStatus.NOT_APPLICABLE
+                    or announcement_risk.decision is not AgentDecision.NOT_APPLICABLE
+                    or announcement_risk.score != 0
+                    or announcement_risk.confidence != 0
+                    or announcement_risk.findings or announcement_risk.evidence
+                    or announcement_risk.errors):
+                raise ValueError("阶段2G DATA_QUALITY阻断时公告风险必须安全降级")
+        elif announcement_risk.status is RunStatus.COMPLETED:
+            if (announcement_risk.gateStatus not in (GateStatus.PASS, GateStatus.WARN)
+                    or announcement_risk.decision not in (
+                        AgentDecision.PASS, AgentDecision.WARN
+                    )
+                    or len(announcement_risk.findings) != 5
+                    or announcement_risk.confidence != 40
+                    or not announcement_risk.evidence
+                    or announcement_risk.evidence[0].category
+                    is not EvidenceCategory.QUERY_RESULT
+                    or announcement_risk.evidence[0].sourceType
+                    is not EvidenceSourceType.JAVA_ENGINE
+                    or announcement_risk.evidence[0].sourceName
+                    != "AgentSecurityEventsContextService"):
+                raise ValueError("阶段2G有效ANNOUNCEMENT_RISK输出无效")
+        elif announcement_risk.status is RunStatus.INSUFFICIENT_DATA:
+            if (announcement_risk.gateStatus is not GateStatus.NOT_APPLICABLE
+                    or announcement_risk.decision is not AgentDecision.NOT_APPLICABLE
+                    or announcement_risk.score != 0
+                    or announcement_risk.confidence != 0
+                    or announcement_risk.findings or announcement_risk.evidence
+                    or len(announcement_risk.errors) != 1):
+                raise ValueError("阶段2G不可用ANNOUNCEMENT_RISK输出无效")
+        else:
+            raise ValueError("阶段2G ANNOUNCEMENT_RISK终态无效")
+
+        expected_evidence = [
+            item
+            for code in AgentCode
+            for item in runs_by_code[code].evidence
+        ]
+        expected_findings = [
+            item
+            for code in AgentCode
+            for item in runs_by_code[code].findings
+        ]
+        if self.evidence != expected_evidence or final.findings != expected_findings:
+            raise ValueError("阶段2G顶层evidence或总控finding顺序无效")
+        if self.vetoes:
+            if (final.decision is not FinalDecisionCode.REJECTED_BY_VETO
+                    or final.gateStatus is not GateStatus.BLOCKED
+                    or not final.vetoed or final.score != 0
+                    or final.confidence != position_risk.confidence):
+                raise ValueError("阶段2G POSITION_RISK正式veto优先级无效")
+        elif data_quality.gateStatus is GateStatus.BLOCKED:
+            if (final.decision is not FinalDecisionCode.BLOCKED_BY_DATA_QUALITY
+                    or final.gateStatus is not GateStatus.BLOCKED
+                    or final.vetoed or final.score != 0):
+                raise ValueError("阶段2G DATA_QUALITY阻断总控状态无效")
+        elif (final.decision is not FinalDecisionCode.INSUFFICIENT_DATA
+              or final.vetoed or final.score != 0 or final.confidence != 0):
+            raise ValueError("阶段2G在2I实现前必须保持INSUFFICIENT_DATA")
 
     def _validate_stage_2h_position_risk(
         self,

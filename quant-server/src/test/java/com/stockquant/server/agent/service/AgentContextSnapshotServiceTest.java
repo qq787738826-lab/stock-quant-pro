@@ -6,6 +6,8 @@ import com.stockquant.core.domain.Bar;
 import com.stockquant.core.indicator.Indicators;
 import com.stockquant.server.agent.backtest.AgentBacktestContextService;
 import com.stockquant.server.agent.backtest.BacktestContracts;
+import com.stockquant.server.agent.announcement.AgentSecurityEventsContextService;
+import com.stockquant.server.agent.announcement.AnnouncementContracts;
 import com.stockquant.server.agent.portfolio.AgentPortfolioContextService;
 import com.stockquant.server.agent.portfolio.PortfolioContracts;
 import com.stockquant.server.agent.repository.AgentContextReadRepository;
@@ -164,6 +166,97 @@ class AgentContextSnapshotServiceTest {
                 stage2H.value().path("backtestContext").path("contextProfile").asText());
         assertFalse(stage2H.contextHash().equals(newStage2F.contextHash()));
         verify(portfolio).create(SYMBOL, TRADE_DATE, instant);
+    }
+
+    @Test
+    void selectsStage2GProfileWithoutChangingLegacyStage2FOrStage2HHashes() {
+        Instant instant = Instant.parse("2026-07-14T05:00:00Z");
+        AgentContextReadRepository repository = emptyRepository();
+        AgentMarketBreadthContextService breadth =
+                mock(AgentMarketBreadthContextService.class);
+        AgentScanResultContextService scan =
+                mock(AgentScanResultContextService.class);
+        AgentBacktestContextService backtest =
+                mock(AgentBacktestContextService.class);
+        AgentPortfolioContextService portfolio =
+                mock(AgentPortfolioContextService.class);
+        AgentSecurityEventsContextService securityEvents =
+                mock(AgentSecurityEventsContextService.class);
+        when(breadth.create(SYMBOL, TRADE_DATE, instant))
+                .thenReturn(unavailableResearch("marketBreadth", instant));
+        when(scan.create(SYMBOL, TRADE_DATE, instant))
+                .thenReturn(unavailableResearch("scanResult", instant));
+        var reliableBacktest = objectMapper.createObjectNode();
+        reliableBacktest.put("available", true);
+        reliableBacktest.put("contextProfile", BacktestContracts.CONTEXT_PROFILE);
+        when(backtest.create(SYMBOL, TRADE_DATE, instant))
+                .thenReturn(reliableBacktest);
+        var reliablePortfolio = objectMapper.createObjectNode();
+        reliablePortfolio.put("available", true);
+        reliablePortfolio.put("contextProfile", PortfolioContracts.CONTEXT_PROFILE);
+        when(portfolio.create(SYMBOL, TRADE_DATE, instant))
+                .thenReturn(reliablePortfolio);
+        var reliableEvents = objectMapper.createObjectNode();
+        reliableEvents.put("available", true);
+        reliableEvents.put("contextProfile", AnnouncementContracts.CONTEXT_PROFILE);
+        when(securityEvents.create(SYMBOL, TRADE_DATE, instant))
+                .thenReturn(reliableEvents);
+
+        AgentContextSnapshotService beforeStage2G =
+                new AgentContextSnapshotService(
+                        objectMapper,
+                        hashService,
+                        repository,
+                        new AgentTechnicalMetricsService(),
+                        new AgentDataQualityContextService(),
+                        breadth,
+                        scan,
+                        backtest,
+                        portfolio,
+                        instantClock(instant));
+        AgentContextSnapshotService withStage2G =
+                new AgentContextSnapshotService(
+                        objectMapper,
+                        hashService,
+                        repository,
+                        new AgentTechnicalMetricsService(),
+                        new AgentDataQualityContextService(),
+                        breadth,
+                        scan,
+                        backtest,
+                        portfolio,
+                        securityEvents,
+                        instantClock(instant));
+
+        for (String ruleVersion : List.of(
+                "1.4.0-stage-2e-technical-analysis-v1",
+                BacktestContracts.RULE_VERSION,
+                PortfolioContracts.RULE_VERSION)) {
+            var before = beforeStage2G.create(SYMBOL, TRADE_DATE, ruleVersion);
+            var after = withStage2G.create(SYMBOL, TRADE_DATE, ruleVersion);
+            assertEquals(before.value(), after.value(), ruleVersion);
+            assertEquals(before.contextHash(), after.contextHash(), ruleVersion);
+        }
+        var beforeLegacy = beforeStage2G.create(SYMBOL, TRADE_DATE);
+        var afterLegacy = withStage2G.create(SYMBOL, TRADE_DATE);
+        assertEquals(beforeLegacy.value(), afterLegacy.value());
+        assertEquals(beforeLegacy.contextHash(), afterLegacy.contextHash());
+
+        var stage2G = withStage2G.create(
+                SYMBOL, TRADE_DATE, AnnouncementContracts.RULE_VERSION);
+        assertEquals(
+                BacktestContracts.CONTEXT_PROFILE,
+                stage2G.value().path("backtestContext")
+                        .path("contextProfile").asText());
+        assertEquals(
+                PortfolioContracts.CONTEXT_PROFILE,
+                stage2G.value().path("portfolioContext")
+                        .path("contextProfile").asText());
+        assertEquals(
+                AnnouncementContracts.CONTEXT_PROFILE,
+                stage2G.value().path("securityEvents")
+                        .path("contextProfile").asText());
+        verify(securityEvents).create(SYMBOL, TRADE_DATE, instant);
     }
 
     @Test

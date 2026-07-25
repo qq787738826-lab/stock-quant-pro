@@ -49,6 +49,8 @@ public class AgentResponseValidator {
             "1.4.0-stage-2f-strategy-backtest-v1";
     private static final String STAGE_2H_POSITION_RISK_RULE_VERSION =
             "1.4.0-stage-2h-position-risk-v1";
+    private static final String STAGE_2G_ANNOUNCEMENT_RISK_RULE_VERSION =
+            "1.4.0-stage-2g-announcement-risk-v1";
     private static final ZoneId STAGE_2D_MARKET_ZONE = ZoneId.of("Asia/Shanghai");
     private static final BigDecimal STAGE_2D_MIN_COVERAGE_RATIO = new BigDecimal("1.00000000");
     private static final int STAGE_2D_MIN_COMPARABLE_SYMBOL_COUNT = 2;
@@ -309,6 +311,8 @@ public class AgentResponseValidator {
             validateStage2FStrategyBacktest(request, response, runs, dataQuality);
         } else if (STAGE_2H_POSITION_RISK_RULE_VERSION.equals(request.ruleVersion())) {
             validateStage2HPositionRisk(request, response, runs, dataQuality);
+        } else if (STAGE_2G_ANNOUNCEMENT_RISK_RULE_VERSION.equals(request.ruleVersion())) {
+            validateStage2GAnnouncementRisk(request, response, runs, dataQuality);
         }
     }
 
@@ -1143,6 +1147,107 @@ public class AgentResponseValidator {
         }
         require(!containsForbiddenStage2ESummary(decision.summary()),
                 "阶段2H总控摘要不得包含投资建议、交易指令或收益承诺");
+    }
+
+    private static void validateStage2GAnnouncementRisk(
+            AgentTeamRequest request,
+            AgentTeamResponse response,
+            List<AgentOutput> runs,
+            AgentOutput dataQuality
+    ) {
+        validateStage2BDataQualityOutput(request, dataQuality);
+        AgentOutput marketRegime = runs.stream()
+                .filter(run -> run.agentCode() == AgentCode.MARKET_REGIME)
+                .findFirst().orElseThrow();
+        AgentOutput technicalAnalysis = runs.stream()
+                .filter(run -> run.agentCode() == AgentCode.TECHNICAL_ANALYSIS)
+                .findFirst().orElseThrow();
+        AgentOutput strategyBacktest = runs.stream()
+                .filter(run -> run.agentCode() == AgentCode.STRATEGY_BACKTEST)
+                .findFirst().orElseThrow();
+        AgentOutput announcementRisk = runs.stream()
+                .filter(run -> run.agentCode() == AgentCode.ANNOUNCEMENT_RISK)
+                .findFirst().orElseThrow();
+        AgentOutput positionRisk = runs.stream()
+                .filter(run -> run.agentCode() == AgentCode.POSITION_RISK)
+                .findFirst().orElseThrow();
+
+        if (dataQuality.gateStatus() == GateStatus.BLOCKED) {
+            validateStage2DBlockedMarketRegime(marketRegime);
+            AgentStage2ETechnicalAnalysisValidator.validateBlocked(technicalAnalysis);
+            AgentStage2FStrategyBacktestValidator.validateBlocked(strategyBacktest);
+        } else {
+            require(dataQuality.gateStatus() == GateStatus.PASS
+                            || dataQuality.gateStatus() == GateStatus.WARN,
+                    "阶段2G DATA_QUALITY门禁必须为PASS、WARN或BLOCKED");
+            validateStage2DMarketRegimeOutput(
+                    request, marketRegime, dataQuality.gateStatus());
+            AgentStage2ETechnicalAnalysisValidator.validate(
+                    request, technicalAnalysis, dataQuality.gateStatus());
+            AgentStage2FStrategyBacktestValidator.validate(
+                    request, strategyBacktest, dataQuality.gateStatus());
+        }
+        AgentStage2GAnnouncementRiskValidator.validate(
+                request, announcementRisk, dataQuality);
+        AgentStage2HPositionRiskValidator.validate(
+                request, response, positionRisk, dataQuality);
+
+        List<Evidence> expectedEvidence = new ArrayList<>();
+        List<Finding> expectedFindings = new ArrayList<>();
+        for (AgentCode code : AgentCode.PROFESSIONAL_AGENTS) {
+            AgentOutput run = runs.stream()
+                    .filter(candidate -> candidate.agentCode() == code)
+                    .findFirst().orElseThrow();
+            expectedEvidence.addAll(run.evidence());
+            expectedFindings.addAll(run.findings());
+        }
+        require(response.evidence().size() == expectedEvidence.size(),
+                "阶段2G顶层evidence数量不一致");
+        for (int index = 0; index < expectedEvidence.size(); index++) {
+            require(sameEvidence(response.evidence().get(index), expectedEvidence.get(index)),
+                    "阶段2G顶层evidence必须按六智能体固定顺序输出");
+        }
+        FinalDecision decision = response.finalDecision();
+        require(decision.findings().equals(expectedFindings),
+                "阶段2G总控finding必须按六智能体固定顺序拼接");
+        List<Long> expectedRunIds = AgentCode.PROFESSIONAL_AGENTS.stream()
+                .map(code -> request.runIds().byAgentCode().get(code))
+                .toList();
+        require(decision.sourceRunIds().equals(expectedRunIds),
+                "阶段2G sourceRunIds必须保持六智能体固定顺序");
+
+        if (!response.vetoes().isEmpty()) {
+            require(decision.decision() == FinalDecisionCode.REJECTED_BY_VETO
+                            && decision.gateStatus() == GateStatus.BLOCKED
+                            && decision.vetoed()
+                            && decision.score() == 0
+                            && Objects.equals(decision.confidence(), positionRisk.confidence())
+                            && decision.vetoIds().equals(
+                            response.vetoes().stream().map(FormalVeto::vetoId).toList()),
+                    "阶段2G POSITION_RISK正式veto必须优先形成REJECTED_BY_VETO");
+        } else if (dataQuality.gateStatus() == GateStatus.BLOCKED) {
+            require(decision.decision() == FinalDecisionCode.BLOCKED_BY_DATA_QUALITY
+                            && decision.gateStatus() == GateStatus.BLOCKED
+                            && !decision.vetoed()
+                            && decision.score() == 0
+                            && Objects.equals(decision.confidence(), dataQuality.confidence()),
+                    "阶段2G无veto时DATA_QUALITY阻断优先级无效");
+        } else {
+            GateStatus expectedGate = runs.stream()
+                    .anyMatch(run -> run.gateStatus() == GateStatus.WARN)
+                    ? GateStatus.WARN : GateStatus.PASS;
+            require(decision.decision() == FinalDecisionCode.INSUFFICIENT_DATA
+                            && decision.gateStatus() == expectedGate
+                            && !decision.vetoed()
+                            && decision.vetoIds().isEmpty()
+                            && decision.score() == 0
+                            && decision.confidence() == 0
+                            && "六个专业运行已完成，但2I综合决策规则尚未实现。"
+                            .equals(decision.summary()),
+                    "阶段2G不得在2I前升级为综合决策");
+        }
+        require(!containsForbiddenStage2ESummary(decision.summary()),
+                "阶段2G总控摘要不得包含投资建议、交易指令或收益承诺");
     }
 
     private static boolean containsForbiddenStage2ESummary(String summary) {
