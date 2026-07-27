@@ -203,9 +203,9 @@
 - 禁止范围：真实账户、券商控制、自动下单、交易执行指令、业务表写入、外部数据源或历史持仓 PIT。
 - 阶段边界：2H 已完成并合入不自动批准或开始 2G、2I 或其他阶段。
 
-## 2I：确定性总控综合决策 V1（任务分支待验收）
+## 2I：确定性总控综合决策 V1（已完成并合入）
 
-- 当前状态：任务分支 `codex/1.4.0-stage-2i-chief-decision-v1` 已完成实现与 Codex 本地验证，待 ChatGPT 基于实际 Git 提交验收，未合入集成分支。
+- 当前状态：实现提交 `8c391be46aa7c823577c0a15f866165473341708`，终态修复及最终提交 `954959f5832d01ba1f7211d3e6ebbd8c93feab22`；ChatGPT 已基于实际最终 Git 提交验收 PASS，用户已批准 merge，集成分支已纯 fast-forward 至最终提交。精确验收和批准时间无仓库证据，记为 `UNKNOWN`。
 - 交付文档：[完整 2I 任务书](tasks/2i-deterministic-chief-decision-v1.md)和[阶段实现与本地验证记录](stage-2i-chief-decision-v1.md)。
 - 版本与兼容：规则 `1.4.0-stage-2i-chief-decision-v1`、总控契约 `CHIEF_DECISION_V1`、权重契约 `CHIEF_SCORE_WEIGHTS_V1`；精确 2I 规则版本复用与 2G 完全相同的 `AGENT_CONTEXT_2G_V1` 组合上下文，不增加外层字段、子 Context Schema、Flyway 或第七个 run，也不改变旧规则版本结果和 contextHash。
 - 输入角色：DATA_QUALITY 只作门禁和 confidence 上限；MARKET_REGIME V1 的 score/confidence 权重均为 0，但必须处于合法终态；正常综合只使用 TECHNICAL_ANALYSIS 25、STRATEGY_BACKTEST 35、ANNOUNCEMENT_RISK 20、POSITION_RISK 20。
@@ -214,17 +214,28 @@
 - 持久化终态：专业 run 状态与总控决策状态分层保存。精确 2I ruleVersion 的 `REJECTED_BY_VETO`、`BLOCKED_BY_DATA_QUALITY`、`RESEARCH_ONLY`、`WATCH`、`PASS_TO_MANUAL_REVIEW` 均为完成的确定结果并进入 completed cache；只有最终 `INSUFFICIENT_DATA` 保持 `task=PARTIAL/decision status=INSUFFICIENT_DATA`。旧阶段映射不变。
 - 工作台：只增加六类 finalDecision 的中文展示标签；`PASS_TO_MANUAL_REVIEW` 仅表示进入人工研究复核，不增加买卖、下单、仓位调整或收益预测能力。
 - 本地验收：2I Java 纯规则、context 与终态映射 `23/0/0/0`、Python unittest `123/0/0/0`、真实 Java/Python HTTP `12/0/0/0`、旧阶段真实 HTTP 兼容 `17/0/0/0`、V1 至 V10 真实 PostgreSQL/Python/任务持久化 `2/0/0/0`、随机隔离 Schema PostgreSQL 兼容 `26/0/0/0`、Java AKShare Live Gate `1/0/0/0`，真实组均 `Skipped=0`；`quant-core` `4/0/0/0`、安全非数据库 `quant-server` `360/0/0/69`、Vue build 通过。这些均为 Codex 本地证据，不是 GitHub Actions CI；69 项是环境门禁跳过，不能冒充真实闭环。真实持久化覆盖五种确定总控结果完成缓存、最终不足非完成、专业 run 原状态和物理 veto 映射；随机 Schema 已精确清理，public 基线不变。
-- 禁止范围：LLM 权威裁决、专业规则阈值漂移、外部访问、事实写入、真实账户、自动交易、投资建议、新迁移和 3A。
-- 阶段边界：Codex 完成单次 commit 和普通 push 后停止，由 ChatGPT 基于实际提交验收；不得自行 merge 或开始 3A。
+- 禁止范围：LLM 权威裁决、专业规则阈值漂移、外部访问、事实写入、真实账户、自动交易、投资建议和 2I 专用迁移。
+- 阶段边界：2I 已完成并合入不代表普通请求必然具备完整输入，也不自动完成 3A 或批准 3B。
 
-## 3A：影子运行（未开始）
+## 3A：受控影子运行、就绪度观测与长期验证（进行中）
 
-- 目标：在不影响交易的情况下长期观察规则稳定性。
-- 输入：真实只读上下文和完整团队结果。
-- 输出：运行指标、失败分布、漂移和人工复核记录。
-- 依赖：2I。
-- 禁止范围：自动交易、账户写入、收益宣传。
-- 验收条件：安全运行窗口、可回滚版本、人工审阅流程完备。
+- 目标：在不影响交易和业务事实的情况下，以真实 2I Agent 任务长期观察规则稳定性、就绪度、失败、漂移和人工复核。
+- 输入：真实只读上下文、完整团队结果、当前持仓和最新已完成扫描候选的受控选择。
+- 输出：影子批次/item、决策与不足分布、漂移、数据库事实指标和 append-only 人工复核记录。
+- 依赖：已完成并合入的 2I。
+- 禁止范围：自动交易、账户或市场事实写入、自动外部摄取、全市场遍历、收益统计或宣传。
+- 完整验收条件：不少于 20 个有效观察日、200 个 shadow item，覆盖确定、不足、阻断、veto 和失败；主要 reasonCode 完成人工复核；持续验证业务表只读；形成正式观察报告，再由 ChatGPT 和用户决定是否进入 3B。
+
+### 3A-1：受控影子运行与就绪度观测基础 V1（任务分支待验收）
+
+- 当前状态：任务分支 `codex/1.4.0-stage-3a1-shadow-readiness-v1` 已完成实现与 Codex 本地验证，待 ChatGPT 基于实际 Git 提交验收，未合入；scheduler 默认关闭，未开始长期观察。
+- 交付文档：[完整 3A-1 任务书](tasks/3a1-controlled-shadow-readiness-v1.md)和[阶段实现与本地验证记录](stage-3a1-shadow-readiness-v1.md)。
+- V11：新增 `agent_shadow_batches`、`agent_shadow_items`、append-only `agent_shadow_reviews`，并增加 `SHADOW` TriggerType；批次/item 终态事实由数据库触发器保护，复核更正只能追加。
+- 选择：EXPLICIT 只接受去重排序后的 1 至 20 个六位 symbol；AUTO 先当前模拟持仓、后最新已完成扫描 eligible 候选，默认 10、硬上限 20，选择和来源引用通过稳定 Hash 冻结。
+- 运行：默认 `enabled=false/scheduler-enabled=false`；双开关、安全窗口、工作日、运行冲突、最大并发 2、取消与批次级熔断共同保护。runner 只通过现有 Java 任务系统执行精确 2I 规则，不直接调用 Python 或写 Agent 结果。
+- 观测：结构化提取六 run reasonCode，比较同 symbol/同 ruleVersion 最近终态的 context、决策、分数、confidence、run、veto 与 reason 漂移；指标由数据库事实即时查询，不维护手工计数缓存。
+- 本地验收：3A-1 Java 定向 `15/0/0/0`、Python unittest `123/0/0/0`、V1 至 V11 真实 PostgreSQL/Java/Python 受控试运行 `1/0/0/0`、V1 至 V11 旧阶段真实兼容 `29/0/0/0`、AKShare Live Gate `1/0/0/0`，真实组均 `Skipped=0`；`quant-core` `4/0/0/0`、安全 `quant-server` `376/0/0/41`、Vue build 通过。这些是 Codex 本地证据，不是 GitHub Actions CI；41 项为外部 PostgreSQL/AKShare 环境门禁跳过。
+- 阶段边界：3A-1 只建立技术基础，不伪造长期观察历史，不完成 3A，不启动 3B；Codex commit/push 后停止并等待 ChatGPT 基于实际提交验收。
 
 ## 3B：评测集、版本管理和长期复盘（未开始）
 

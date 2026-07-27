@@ -34,7 +34,7 @@ export type RunStatus =
 export type GateStatus = 'PASS' | 'WARN' | 'BLOCKED' | 'NOT_APPLICABLE'
 export type RunDecision = 'PASS' | 'WARN' | 'REJECT' | 'NOT_APPLICABLE'
 export type ExecutionMode = 'LOCAL_RULES'
-export type TriggerType = 'MANUAL' | 'SCAN_CANDIDATE' | 'SCHEDULED' | 'RETRY'
+export type TriggerType = 'MANUAL' | 'SCAN_CANDIDATE' | 'SCHEDULED' | 'RETRY' | 'SHADOW'
 export type Severity = 'INFO' | 'WARN' | 'HIGH' | 'CRITICAL'
 export type EvidenceCategory =
   | 'MARKET_DATA'

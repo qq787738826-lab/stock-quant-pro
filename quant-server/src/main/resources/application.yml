@@ -40,6 +40,18 @@ stockquant:
       core-pool-size: 1
       max-pool-size: 2
       queue-capacity: 20
+    shadow:
+      enabled: ${AGENT_SHADOW_ENABLED:false}
+      scheduler-enabled: ${AGENT_SHADOW_SCHEDULER_ENABLED:false}
+      rule-version: 1.4.0-stage-2i-chief-decision-v1
+      cron: "0 50 16 * * MON-FRI"
+      zone: Asia/Shanghai
+      safe-window-start: "16:40"
+      safe-window-end: "18:30"
+      max-symbols: 10
+      max-concurrency: 2
+      item-timeout: 5m
+      poll-interval: 2s
   announcement:
     akshare:
       enabled: ${ANNOUNCEMENT_AKSHARE_ENABLED:false}

@@ -13,6 +13,7 @@ export default createRouter({
     { path: '/backtest', component: () => import('./views/Backtest.vue') },
     { path: '/ai', component: () => import('./views/Ai.vue') },
     { path: '/agent-team', component: () => import('./views/AgentTeamWorkbench.vue') },
+    { path: '/agent-shadow', component: () => import('./views/AgentShadowWorkbench.vue') },
     { path: '/market', component: () => import('./views/Market.vue') },
     { path: '/data', component: () => import('./views/DataCenter.vue') },
     { path: '/watchlist', component: placeholder('自选股') },

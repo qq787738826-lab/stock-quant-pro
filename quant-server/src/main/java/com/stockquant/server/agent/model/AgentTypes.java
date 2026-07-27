@@ -40,7 +40,7 @@ public final class AgentTypes {
 
     public enum ExecutionMode { LOCAL_RULES }
 
-    public enum TriggerType { MANUAL, SCAN_CANDIDATE, SCHEDULED, RETRY }
+    public enum TriggerType { MANUAL, SCAN_CANDIDATE, SCHEDULED, RETRY, SHADOW }
 
     public enum Severity { INFO, WARN, HIGH, CRITICAL }
 

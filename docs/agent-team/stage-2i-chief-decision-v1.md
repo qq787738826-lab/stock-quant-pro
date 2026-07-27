@@ -2,7 +2,7 @@
 
 ## 1. 状态
 
-状态：**任务分支实现与 Codex 本地验证完成，待 ChatGPT 基于实际 Git 提交验收，未合入集成分支。**
+状态：**已实现、Codex 本地验证通过、ChatGPT 基于实际最终 Git 提交验收 PASS、用户批准 merge，已纯 fast-forward 合入集成分支。**
 
 - 冻结集成基线：`681fee989f08c4c1e4edaa8cf787c97a95a27784`
 - 任务分支：`codex/1.4.0-stage-2i-chief-decision-v1`
@@ -10,10 +10,15 @@
 - 总控契约：`CHIEF_DECISION_V1`
 - 权重契约：`CHIEF_SCORE_WEIGHTS_V1`
 - 复用 context profile：`AGENT_CONTEXT_2G_V1`
+- 首次实现提交：`8c391be46aa7c823577c0a15f866165473341708`
+- 总控终态持久化修复及最终提交：`954959f5832d01ba1f7211d3e6ebbd8c93feab22`
+- 集成方式：纯 fast-forward 至 `954959f5832d01ba1f7211d3e6ebbd8c93feab22`
+- ChatGPT 验收时间：`UNKNOWN`
+- 用户 merge 批准时间：`UNKNOWN`
 - 完整任务书：[2i-deterministic-chief-decision-v1.md](tasks/2i-deterministic-chief-decision-v1.md)
 
-该状态不代表 ChatGPT 验收 PASS、用户 merge 批准或已经合入。当前项目事实以
-[CURRENT_STATE.md](CURRENT_STATE.md) 为唯一权威来源；3A 尚未开始。
+当前项目事实以 [CURRENT_STATE.md](CURRENT_STATE.md) 为唯一权威来源。后续 3A-1
+任务是独立阶段，不改写 2I 已完成并合入的历史事实。
 
 ## 2. 范围与兼容
 
@@ -190,4 +195,4 @@ public 的旧 `AgentStage2DPostgresPythonIntegrationTest` 的兼容尝试为 `27
 - 未修改行情、公告、持仓或模拟账户事实；
 - POSITION_RISK 仍是唯一正式否决权；
 - 未增加真实账户、券商接口、自动下单、投资建议、仓位建议或收益预测；
-- 任务分支尚未合入，3A 尚未开始。
+- 2I 已完成并合入；该事实不代表 3A 长期观察已经完成，也不自动批准 3B。

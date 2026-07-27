@@ -33,6 +33,14 @@ class AgentCode(str, Enum):
     POSITION_RISK = "POSITION_RISK"
 
 
+class TriggerType(str, Enum):
+    MANUAL = "MANUAL"
+    SCAN_CANDIDATE = "SCAN_CANDIDATE"
+    SCHEDULED = "SCHEDULED"
+    RETRY = "RETRY"
+    SHADOW = "SHADOW"
+
+
 class RunStatus(str, Enum):
     COMPLETED = "COMPLETED"
     PARTIAL = "PARTIAL"

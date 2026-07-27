@@ -12,7 +12,10 @@ import org.springframework.http.converter.json.MappingJackson2HttpMessageConvert
 import org.springframework.web.client.RestClient;
 
 @Configuration
-@EnableConfigurationProperties(AgentTeamProperties.class)
+@EnableConfigurationProperties({
+        AgentTeamProperties.class,
+        AgentShadowProperties.class
+})
 public class AgentTeamConfig {
 
     @Bean(name = "agentTeamExecutor")
@@ -26,6 +29,22 @@ public class AgentTeamConfig {
         executor.setMaxPoolSize(settings.getMaxPoolSize());
         executor.setQueueCapacity(settings.getQueueCapacity());
         executor.setThreadNamePrefix("agent-team-");
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(10);
+        executor.initialize();
+        return executor;
+    }
+
+    @Bean(name = "agentShadowExecutor")
+    TaskExecutor agentShadowExecutor(AgentShadowProperties properties) {
+        properties.validateFrozenContract();
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(1);
+        executor.setMaxPoolSize(1);
+        executor.setQueueCapacity(4);
+        executor.setAllowCoreThreadTimeOut(true);
+        executor.setKeepAliveSeconds(30);
+        executor.setThreadNamePrefix("agent-shadow-");
         executor.setWaitForTasksToCompleteOnShutdown(true);
         executor.setAwaitTerminationSeconds(10);
         executor.initialize();
