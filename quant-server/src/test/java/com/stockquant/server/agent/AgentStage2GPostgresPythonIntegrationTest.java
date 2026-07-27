@@ -347,6 +347,7 @@ class AgentStage2GPostgresPythonIntegrationTest {
                 0,
                 0,
                 "PARTIAL");
+        assertChiefNotInCompletedCache(insufficient);
 
         configureChiefPositionVeto(CHIEF_VETO_SYMBOL);
         CreatedTask veto = executeChief(
@@ -357,8 +358,11 @@ class AgentStage2GPostgresPythonIntegrationTest {
                 "BLOCKED",
                 0,
                 100,
-                "PARTIAL");
+                "COMPLETED");
         assertTrue(((Boolean) decision(veto.task().id()).get("vetoed")));
+        assertTrue(runs(veto.task().id()).stream().anyMatch(
+                row -> "INSUFFICIENT_DATA".equals(row.get("status"))));
+        assertChiefCompletedCacheHit(veto, CHIEF_VETO_SYMBOL);
 
         configureCompleteNoRiskAccount();
         CreatedTask blocked = executeChief(
@@ -369,7 +373,10 @@ class AgentStage2GPostgresPythonIntegrationTest {
                 "BLOCKED",
                 0,
                 100,
-                "PARTIAL");
+                "COMPLETED");
+        assertTrue(runs(blocked.task().id()).stream().anyMatch(
+                row -> "INSUFFICIENT_DATA".equals(row.get("status"))));
+        assertChiefCompletedCacheHit(blocked, CHIEF_BLOCKED_SYMBOL);
 
         configureCompleteNoRiskAccount();
         assertChiefTamperedResponseFailsAtomically();
@@ -488,6 +495,22 @@ class AgentStage2GPostgresPythonIntegrationTest {
                     response,
                     expected.getValue());
         }
+        AgentTeamRequest partialRequest = insertFixedChiefTask(
+                AgentStage2ITestFixtures.request(
+                        AgentStage2ITestFixtures.Scenario.POSITION_PARTIAL));
+        AgentTeamResponse partialResponse = objectMapper.readValue(
+                forwardToPython(objectMapper.writeValueAsBytes(partialRequest)),
+                AgentTeamResponse.class);
+        responseValidator.validate(partialRequest, partialResponse);
+        resultPersistence.persist(partialResponse, Duration.ofMillis(7));
+        assertFixedChiefPersistence(
+                partialRequest,
+                partialResponse,
+                "RESEARCH_ONLY");
+        assertEquals(
+                "PARTIAL",
+                run(runs(partialRequest.taskId()), "POSITION_RISK")
+                        .get("status"));
         assertEquals(businessBefore, businessTableRows());
     }
 
@@ -618,7 +641,7 @@ class AgentStage2GPostgresPythonIntegrationTest {
                 expectedConfidence,
                 number(persistedDecision, "confidence"));
         assertEquals(
-                "COMPLETED".equals(expectedTaskStatus)
+                !"INSUFFICIENT_DATA".equals(expectedDecision)
                         ? "COMPLETED"
                         : "INSUFFICIENT_DATA",
                 persistedDecision.get("status"));
@@ -648,6 +671,13 @@ class AgentStage2GPostgresPythonIntegrationTest {
                 (Array) persistedDecision.get("veto_ids"));
         if ("REJECTED_BY_VETO".equals(expectedDecision)) {
             assertFalse(vetoIds.isEmpty());
+            assertEquals(
+                    jdbc.queryForList(
+                            "SELECT id FROM agent_vetoes "
+                                    + "WHERE task_id=? ORDER BY id",
+                            Long.class,
+                            taskId),
+                    vetoIds);
         } else {
             assertEquals(List.of(), vetoIds);
         }
@@ -660,6 +690,30 @@ class AgentStage2GPostgresPythonIntegrationTest {
                         "SELECT rule_version FROM agent_decisions WHERE task_id=?",
                         String.class,
                         taskId));
+    }
+
+    private void assertChiefCompletedCacheHit(
+            CreatedTask completed,
+            String symbol
+    ) {
+        long taskCount = count("SELECT count(*) FROM agent_tasks");
+        int pythonCalls = calls(completed.task().id());
+        CreatedTask cached = taskService.create(
+                chiefRequest(symbol),
+                "stage-2i-completed-cache");
+        assertFalse(cached.newlyCreated());
+        assertEquals(completed.task().id(), cached.task().id());
+        assertEquals(pythonCalls, calls(completed.task().id()));
+        assertEquals(taskCount, count("SELECT count(*) FROM agent_tasks"));
+    }
+
+    private void assertChiefNotInCompletedCache(CreatedTask insufficient) {
+        assertTrue(cacheService.completed(new CacheKey(
+                insufficient.task().symbol(),
+                insufficient.task().tradeDate(),
+                insufficient.task().contextHash(),
+                insufficient.task().ruleVersion(),
+                insufficient.task().executionMode())).isEmpty());
     }
 
     private void assertChiefTamperedResponseFailsAtomically() {

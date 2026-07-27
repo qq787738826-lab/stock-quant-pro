@@ -211,8 +211,9 @@
 - 输入角色：DATA_QUALITY 只作门禁和 confidence 上限；MARKET_REGIME V1 的 score/confidence 权重均为 0，但必须处于合法终态；正常综合只使用 TECHNICAL_ANALYSIS 25、STRATEGY_BACKTEST 35、ANNOUNCEMENT_RISK 20、POSITION_RISK 20。
 - 优先级：合法 POSITION_RISK 正式 veto 最高，其次 DATA_QUALITY 阻断，再次为必要 run 不足；只有完整输入才按固定 `HALF_UP` 公式形成 `RESEARCH_ONLY`、`WATCH` 或 `PASS_TO_MANUAL_REVIEW`。
 - 输出：`sourceRunIds` 精确包含固定六 run，`vetoIds` 只引用 POSITION_RISK；顶层 findings/evidence 继续按六 run 顺序拼接，不创建总控 finding/evidence。Java 在持久化前独立复算决策、权重、边界、风险 severity、summary 和顺序，非法响应原子失败。
+- 持久化终态：专业 run 状态与总控决策状态分层保存。精确 2I ruleVersion 的 `REJECTED_BY_VETO`、`BLOCKED_BY_DATA_QUALITY`、`RESEARCH_ONLY`、`WATCH`、`PASS_TO_MANUAL_REVIEW` 均为完成的确定结果并进入 completed cache；只有最终 `INSUFFICIENT_DATA` 保持 `task=PARTIAL/decision status=INSUFFICIENT_DATA`。旧阶段映射不变。
 - 工作台：只增加六类 finalDecision 的中文展示标签；`PASS_TO_MANUAL_REVIEW` 仅表示进入人工研究复核，不增加买卖、下单、仓位调整或收益预测能力。
-- 本地验收：2I Java 纯规则与 context `20/0/0/0`、Python unittest `123/0/0/0`、真实 Java/Python HTTP `12/0/0/0`、旧阶段真实 HTTP 兼容 `17/0/0/0`、V1 至 V10 真实 PostgreSQL/Python/任务持久化 `2/0/0/0`、随机隔离 Schema PostgreSQL 兼容 `26/0/0/0`、Java AKShare Live Gate `1/0/0/0`，真实组均 `Skipped=0`；`quant-core` `4/0/0/0`、安全非数据库 `quant-server` `357/0/0/69`、Vue build 通过。这些均为 Codex 本地证据，不是 GitHub Actions CI；69 项是环境门禁跳过，不能冒充真实闭环。随机 Schema 已精确清理，public 基线不变。
+- 本地验收：2I Java 纯规则、context 与终态映射 `23/0/0/0`、Python unittest `123/0/0/0`、真实 Java/Python HTTP `12/0/0/0`、旧阶段真实 HTTP 兼容 `17/0/0/0`、V1 至 V10 真实 PostgreSQL/Python/任务持久化 `2/0/0/0`、随机隔离 Schema PostgreSQL 兼容 `26/0/0/0`、Java AKShare Live Gate `1/0/0/0`，真实组均 `Skipped=0`；`quant-core` `4/0/0/0`、安全非数据库 `quant-server` `360/0/0/69`、Vue build 通过。这些均为 Codex 本地证据，不是 GitHub Actions CI；69 项是环境门禁跳过，不能冒充真实闭环。真实持久化覆盖五种确定总控结果完成缓存、最终不足非完成、专业 run 原状态和物理 veto 映射；随机 Schema 已精确清理，public 基线不变。
 - 禁止范围：LLM 权威裁决、专业规则阈值漂移、外部访问、事实写入、真实账户、自动交易、投资建议、新迁移和 3A。
 - 阶段边界：Codex 完成单次 commit 和普通 push 后停止，由 ChatGPT 基于实际提交验收；不得自行 merge 或开始 3A。
 

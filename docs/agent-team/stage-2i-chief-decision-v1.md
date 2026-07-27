@@ -138,9 +138,20 @@ run 终态；已合法存在的行情、公告和模拟账户事实不受影响�
 ## 9. 持久化与工作台
 
 2I 继续使用 V5 的 `agent_tasks`、`agent_runs`、`agent_evidence`、`agent_vetoes` 和
-`agent_decisions`，没有迁移。`REJECTED_BY_VETO`、`BLOCKED_BY_DATA_QUALITY`、
-`INSUFFICIENT_DATA`、`RESEARCH_ONLY`、`WATCH`、`PASS_TO_MANUAL_REVIEW` 都沿用现有
-确定性终态映射与 JSONB 往返。
+`agent_decisions`，没有迁移。专业 run 状态与总控决策状态是两个独立层级；精确
+2I ruleVersion 显式依据 `finalDecision.decision` 映射总控终态：
+
+- `REJECTED_BY_VETO`、`BLOCKED_BY_DATA_QUALITY`、`RESEARCH_ONLY`、`WATCH`、
+  `PASS_TO_MANUAL_REVIEW` 均保存为
+  `agent_decisions.status=COMPLETED/agent_tasks.status=COMPLETED`；
+- 只有最终 `INSUFFICIENT_DATA` 保存为
+  `agent_decisions.status=INSUFFICIENT_DATA/agent_tasks.status=PARTIAL`；
+- veto/DQ 优先形成确定总控结果时，下游专业 run 的 `PARTIAL/INSUFFICIENT_DATA`
+  保持原样；POSITION_RISK `PARTIAL` 可综合形成 `RESEARCH_ONLY` 时同样不改写该 run；
+- 五种确定结果进入既有 completed cache，最终 `INSUFFICIENT_DATA` 不冒充完成缓存；
+- 旧 2B、2D-1、2E-1、2F、2G、2H 仍沿用既有终态映射。
+
+所有决策继续完成 JSONB 往返；非法响应仍在持久化前被原子拒绝。
 
 Vue 工作台只增加 finalDecision 中文标签：仓位风险否决、数据质量阻断、数据不足、
 仅限研究、持续观察、进入人工研究复核；继续显示 score、confidence、vetoed、summary
@@ -153,14 +164,14 @@ Vue 工作台只增加 finalDecision 中文标签：仓位风险否决、数据�
 | 测试组 | 运行/失败/错误/跳过 | 说明 |
 |---|---:|---|
 | `quant-core` 全量 | `4/0/0/0` | 核心回归 |
-| 2I Java纯规则与上下文定向 | `20/0/0/0` | 权重、边界、优先级、共享向量、profile/contextHash |
+| 2I Java纯规则、上下文与终态映射定向 | `23/0/0/0` | 权重、边界、优先级、共享向量、profile/contextHash、精确2I finalDecision终态与旧版本兼容 |
 | Python `compileall` | 通过 | `quant-ai/app` 与测试模块 |
 | Python完整unittest | `123/0/0/0` | 2I规则、共享向量与全部旧规则回归 |
 | 2I真实Java/Python HTTP | `12/0/0/0` | 六种决策和六类篡改拒绝；`Skipped=0` |
 | 2E/2F/2G/2H真实HTTP兼容 | `17/0/0/0` | 旧规则实际调用；`Skipped=0` |
-| 安全非数据库 `quant-server` 全量 | `357/0/0/69` | 69项为外部Python/PostgreSQL/AKShare环境门禁跳过 |
+| 安全非数据库 `quant-server` 全量 | `360/0/0/69` | 69项为外部Python/PostgreSQL/AKShare环境门禁跳过 |
 | Vue生产build | 通过 | `vue-tsc -b` 与 `vite build` |
-| V1至V10真实PostgreSQL/Python/任务持久化 | `2/0/0/0` | 2I综合结果、JSONB、缓存幂等、veto/DQ优先和非法响应原子失败；`Skipped=0` |
+| V1至V10真实PostgreSQL/Python/任务持久化 | `2/0/0/0` | 五种确定总控结果的COMPLETED终态与缓存、最终不足非完成、专业run原状态、物理veto映射、JSONB和非法响应原子失败；`Skipped=0` |
 | 随机隔离Schema PostgreSQL兼容 | `26/0/0/0` | 2D-2A、2D-2B、2E、2F、2G、2H 从V1迁移至V10；`Skipped=0` |
 | 2G真实AKShare Live Gate | `1/0/0/0` | 真实Provider、Java摄取、ID/Hash/append-only、随机Schema清理；`Skipped=0` |
 

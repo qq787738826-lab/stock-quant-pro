@@ -1,10 +1,12 @@
 package com.stockquant.server.agent.service;
 
+import com.stockquant.server.agent.chief.ChiefDecisionContracts;
 import com.stockquant.server.agent.model.AgentModels.AgentOutput;
 import com.stockquant.server.agent.model.AgentModels.AgentTeamResponse;
 import com.stockquant.server.agent.model.AgentModels.Evidence;
 import com.stockquant.server.agent.model.AgentTypes.AgentCode;
 import com.stockquant.server.agent.model.AgentTypes.DecisionStatus;
+import com.stockquant.server.agent.model.AgentTypes.FinalDecisionCode;
 import com.stockquant.server.agent.model.AgentTypes.RunStatus;
 import com.stockquant.server.agent.model.AgentTypes.TaskStatus;
 import com.stockquant.server.agent.repository.AgentDecisionRepository;
@@ -54,7 +56,7 @@ public class AgentResultPersistenceService {
         evidenceRepository.saveAll(response.taskId(), response.evidence(), evidenceOwners);
         Map<String, Long> vetoIds = vetoRepository.saveAll(response.vetoes());
 
-        DecisionStatus decisionStatus = decisionStatus(response.agentRuns());
+        DecisionStatus decisionStatus = decisionStatus(response);
         decisionRepository.save(response.finalDecision(), decisionStatus.name(), vetoIds, duration);
         taskRepository.markFinished(response.taskId(), taskStatus(decisionStatus));
     }
@@ -75,7 +77,24 @@ public class AgentResultPersistenceService {
         return Map.copyOf(owners);
     }
 
-    private static DecisionStatus decisionStatus(List<AgentOutput> outputs) {
+    static DecisionStatus decisionStatus(AgentTeamResponse response) {
+        if (ChiefDecisionContracts.RULE_VERSION.equals(response.ruleVersion())) {
+            FinalDecisionCode finalDecision = response.finalDecision().decision();
+            return switch (finalDecision) {
+                case REJECTED_BY_VETO,
+                     BLOCKED_BY_DATA_QUALITY,
+                     RESEARCH_ONLY,
+                     WATCH,
+                     PASS_TO_MANUAL_REVIEW -> DecisionStatus.COMPLETED;
+                case INSUFFICIENT_DATA -> DecisionStatus.INSUFFICIENT_DATA;
+            };
+        }
+        return legacyDecisionStatus(response.agentRuns());
+    }
+
+    private static DecisionStatus legacyDecisionStatus(
+            List<AgentOutput> outputs
+    ) {
         if (outputs.stream().anyMatch(output -> output.status() == RunStatus.PARTIAL
                 || output.status() == RunStatus.FAILED)) {
             return DecisionStatus.PARTIAL;

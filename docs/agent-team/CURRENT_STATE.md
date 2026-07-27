@@ -109,6 +109,13 @@
 Flyway、专业 run、finding 或 evidence。实现与测试详情见
 [stage-2i-chief-decision-v1.md](stage-2i-chief-decision-v1.md)。
 
+精确 2I ruleVersion 已区分专业 run 状态与总控决策终态：
+`REJECTED_BY_VETO`、`BLOCKED_BY_DATA_QUALITY`、`RESEARCH_ONLY`、`WATCH` 和
+`PASS_TO_MANUAL_REVIEW` 是确定完成结果，task/decision 均保存为 `COMPLETED` 并可命中
+既有完成缓存；只有最终 `INSUFFICIENT_DATA` 保持
+`task=PARTIAL/decision status=INSUFFICIENT_DATA`。该映射不改写专业 run 状态，也不改变
+2B、2D-1、2E-1、2F、2G、2H 的持久化与缓存语义。
+
 该候选实现已完成专用 PostgreSQL/Python 任务持久化闭环、随机隔离 Schema 兼容矩阵与
 Java AKShare Live Gate，仍无 ChatGPT 验收结论、用户 merge 批准或集成提交，
 因此不得写入 [PROGRESS_LOG.md](PROGRESS_LOG.md)。它不改变六个专业规则或
@@ -194,7 +201,7 @@ DATA_QUALITY 只作门禁和 confidence 上限，MARKET_REGIME V1 权重为 0 �
 - 阶段 2F 只对精确规则版本启用 `AGENT_CONTEXT_2F_V1/BACKTEST_CONTEXT_V1`；外层 `CONTEXT_SCHEMA_VERSION`、旧入口、旧规则 contextSnapshot/contextHash/cache key 与六 run 结构保持兼容。Java 使用 `BACKTEST_CANONICAL_V1` 生成三个领域 Hash，Python 不访问数据库或重跑回测。
 - 阶段 2H 不新增 Flyway；只对精确规则版本启用 `AGENT_CONTEXT_2H_V1/PORTFOLIO_CONTEXT_V1`，并继续复用可靠 `backtestContext`。Agent 专用 Repository 在同一 `REPEATABLE_READ` 只读事务读取现有模拟账户、持仓、待确认委托、权益快照、设置与本地 QFQ 估值，不调用 `PortfolioService` 写路径，不修改任何模拟账户业务表。旧 profile/contextHash 和六 run 结构保持兼容。
 - 阶段 2G 的 V10 新增 `announcement_capture_batches` 与 `announcement_observations`；两表由数据库触发器拒绝 `UPDATE`、`DELETE`、`TRUNCATE`。Java 在 Provider 外部调用结束后冻结 `observedAt`，以 `knownAt=firstObservedAt` 保存日期级研究公告事实；同内容幂等，内容变化及 A→B→A 追加新版本。完整空批次保留覆盖证据，部分批次不证明无事件。V10 不修改 V1 至 V9，不向历史回填 knowledge-time，也不改变 2D 证券状态事实模型。
-- 阶段 2I 不新增迁移或持久化表，继续使用 V5 的 `agent_tasks`、`agent_runs`、`agent_evidence`、`agent_vetoes` 与 `agent_decisions`；精确规则版本复用 2G 组合上下文且不改变其 contextHash。非法 Python 响应在现有事务边界内原子失败，不影响已经合法存在的行情、公告或模拟账户事实。
+- 阶段 2I 不新增迁移或持久化表，继续使用 V5 的 `agent_tasks`、`agent_runs`、`agent_evidence`、`agent_vetoes` 与 `agent_decisions`；精确规则版本复用 2G 组合上下文且不改变其 contextHash。精确 2I 规则以 finalDecision 显式映射总控终态：五种确定结果为 `COMPLETED`，只有最终 `INSUFFICIENT_DATA` 为 `task=PARTIAL/decision status=INSUFFICIENT_DATA`；专业 run 状态保持原样。非法 Python 响应在现有事务边界内原子失败，不影响已经合法存在的行情、公告或模拟账户事实。
 - 阶段 2D-2A 冻结 `SECURITY_STATUS_EVENT_V1`；数据库层禁止 dataset/event 的 `UPDATE`、`DELETE`、`TRUNCATE`，history/calendar 只允许一次 `known_to: NULL -> 非NULL` 关闭。上一/下一开市日不持久化，统一按同 exchange、同 knowledge cutoff 的日历事实动态推导。
 - 阶段 2D-2B-1B-1 仅在 TEST/DEMO 边界内把 `SECURITY_STATUS_RAW_TEST_V1` 物化或复用为 V1 event；V8 同时在 Java 和 PostgreSQL 阻止 FORMAL/PIT 提升，并在 2D-2B-2 独立实现前禁止任何 resolved event 写入 `security_status_history`。
 - `contextHash` 按 JSON 数值的数学值规范化，对象字段稳定排序、数组保持业务顺序；API、PostgreSQL JSONB 与持久化快照重算结果一致。
@@ -242,7 +249,7 @@ DATA_QUALITY 只作门禁和 confidence 上限，MARKET_REGIME V1 权重为 0 �
 - `quant-server` 的 46 项跳过属于未提供外部 Python/PostgreSQL 集成环境变量时的环境门禁，不能冒充真实闭环。另一次包含绑定专用数据库 public 的旧 2D 测试类的兼容尝试为 29 项通过、1 项 ApplicationContext 错误，原因仍是已知 V6 checksum 不一致，因此不描述为全量通过；未 repair/clean、删除、重建或修改 public。2H 真实验收在随机临时 Schema 运行 V1 至 V9并精确清理，验证 public 基线及 `portfolio_accounts`、`positions`、`manual_orders`、`simulated_trades`、`account_equity_snapshots`、`risk_events` 逐行指纹前后不变。
 - 阶段 2G 的结果均为 Codex 本地执行证据，不是 GitHub Actions CI：真实 AKShare 安全门使用固定 `akshare==1.18.64`、`000001` 和受控历史范围成功返回 38 行，新增 CNINFO 域名门禁未拒绝真实链接；`quant-core` 全量 `4/0/0/0`；2G Java 定向合计 `42/0/0/0`、`Skipped=0`，其中真实 Java/Python HTTP `5/0/0/0`、V1 至 V10 PostgreSQL 公告事实 `3/0/0/0`、真实 PostgreSQL/Python/任务持久化 `1/0/0/0`、真实 AKShare Live Gate `1/0/0/0`；Python `compileall` 通过、完整 unittest `112/0/0/0`；安全非数据库 `quant-server` 全量 `334/0/0/56`；随机隔离 Schema 的 2D/2E/2F/2H 真实兼容 `35/0/0/0`、`Skipped=0`。
 - `quant-server` 的 56 项跳过属于未提供外部 Python/PostgreSQL/AKShare 集成环境变量时的环境门禁，不能冒充真实闭环。2G 的 PostgreSQL、跨语言、任务持久化和 Live Gate 均已另行真实运行且 `Skipped=0`；随机测试 Schema 均被精确删除，public 数据与结构指纹前后不变，2H 六张模拟账户业务表前后逐行一致。未对 public 执行 Flyway repair/clean，也未把真实公告响应、Cookie 或访问凭据写入仓库。
-- 阶段 2I 的结果均为 Codex 本地执行证据，不是 GitHub Actions CI：`quant-core` 全量 `4/0/0/0`；2I Java 纯规则与 context 定向 `20/0/0/0`；Python `compileall` 通过、完整 unittest `123/0/0/0`；真实 Java/Python HTTP `12/0/0/0`、2E/2F/2G/2H 真实 HTTP 兼容 `17/0/0/0`；V1 至 V10 真实 PostgreSQL/Python/任务持久化 `2/0/0/0`；随机隔离 Schema 的 2D-2A/2D-2B/2E/2F/2G/2H PostgreSQL 兼容 `26/0/0/0`；Java AKShare Live Gate `1/0/0/0`。所有真实组均 `Skipped=0`。安全非数据库 `quant-server` 全量为 `357/0/0/69`，69 项仅为未提供外部 Python/PostgreSQL/AKShare 环境时的门禁跳过，不能冒充真实闭环；Vue 生产 build 通过。
+- 阶段 2I 的结果均为 Codex 本地执行证据，不是 GitHub Actions CI：`quant-core` 全量 `4/0/0/0`；2I Java 纯规则、context 与终态映射定向 `23/0/0/0`；Python `compileall` 通过、完整 unittest `123/0/0/0`；真实 Java/Python HTTP `12/0/0/0`、2E/2F/2G/2H 真实 HTTP 兼容 `17/0/0/0`；V1 至 V10 真实 PostgreSQL/Python/任务持久化 `2/0/0/0`，覆盖五种确定总控结果的完成终态和缓存、最终不足非完成、专业 run 原状态与物理 veto 映射；随机隔离 Schema 的 2D-2A/2D-2B/2E/2F/2G/2H PostgreSQL 兼容 `26/0/0/0`；Java AKShare Live Gate `1/0/0/0`。所有真实组均 `Skipped=0`。安全非数据库 `quant-server` 全量为 `360/0/0/69`，69 项仅为未提供外部 Python/PostgreSQL/AKShare 环境时的门禁跳过，不能冒充真实闭环；Vue 生产 build 通过。
 - 2I 真实数据库与 Live Gate 均在随机隔离 Schema 从 V1 迁移至 V10，测试内验证 public 数据和结构指纹前后不变；本轮结束后只读检查确认相关随机 Schema 残留数为 0。另一次把绑定专用库 public 的旧 `AgentStage2DPostgresPythonIntegrationTest` 加入兼容批次时得到 `27/0/1/0`，唯一 ApplicationContext 错误仍由已知 V6 checksum 不一致导致，因此不描述为通过；未执行 Flyway repair/clean，未修改、删除或重建 public。
 
 ## 当前后续入口与阻断

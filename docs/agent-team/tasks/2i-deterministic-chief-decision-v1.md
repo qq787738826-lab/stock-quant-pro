@@ -155,7 +155,25 @@ score、confidence、summary、finding/evidence 顺序、sourceRunIds 和 vetoId
 - 不留下部分成功 run 终态；
 - 已合法存在的行情、公告和模拟账户事实不受影响。
 
-## 9. 测试与验收
+## 9. 持久化终态与缓存
+
+专业 run 状态与总控决策状态属于两个不同层级。精确规则版本
+`1.4.0-stage-2i-chief-decision-v1` 必须显式依据 `finalDecision.decision` 映射总控终态，
+不得再仅依据六个专业 run 是否含 `PARTIAL` 或 `INSUFFICIENT_DATA` 推导：
+
+- `REJECTED_BY_VETO`、`BLOCKED_BY_DATA_QUALITY`、`RESEARCH_ONLY`、`WATCH`、
+  `PASS_TO_MANUAL_REVIEW` 都是已经确定的总控结果，`agent_decisions.status` 与
+  `agent_tasks.status` 均保存为 `COMPLETED`；
+- 只有最终结果为 `INSUFFICIENT_DATA` 时，分别保存为
+  `agent_decisions.status=INSUFFICIENT_DATA` 与 `agent_tasks.status=PARTIAL`；
+- 专业 run 的原始状态保持不变；veto 或 DQ 优先级已经形成确定结果时，不得把下游
+  `PARTIAL/INSUFFICIENT_DATA` 篡改为 `COMPLETED`，也不得反向降级总控终态；
+- 五种确定结果可进入既有 completed cache；同 CacheKey 且 `forceRefresh=false`
+  必须复用原任务且不再次调用 Python，最终 `INSUFFICIENT_DATA` 不得进入完成缓存；
+- 该映射只对精确 2I ruleVersion 生效，旧 2B、2D-1、2E-1、2F、2G、2H
+  继续使用既有 run 派生终态语义。
+
+## 10. 测试与验收
 
 必须覆盖：
 
@@ -172,7 +190,7 @@ score、confidence、summary、finding/evidence 顺序、sourceRunIds 和 vetoId
   2G AKShare Live Gate、Vue build、文档链接及 `git diff --check`；
 - public Schema 基线前后不变，临时 Schema 精确清理。
 
-## 10. 完成边界
+## 11. 完成边界
 
 任务分支完成标准是实现和 Codex 本地验证通过、单次 commit 并普通 push。
 这不等于 ChatGPT 已验收或用户已批准 merge；不得在任务分支文档中提前声明
