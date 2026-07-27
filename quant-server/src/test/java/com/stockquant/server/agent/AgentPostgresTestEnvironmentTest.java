@@ -2,9 +2,15 @@ package com.stockquant.server.agent;
 
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.UUID;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AgentPostgresTestEnvironmentTest {
 
@@ -61,6 +67,68 @@ class AgentPostgresTestEnvironmentTest {
                 () -> AgentPostgresTestEnvironment.validate("invalid", "invalid", PASSWORD));
 
         assertFalse(error.getMessage().contains(PASSWORD));
+    }
+
+    @Test
+    void migrationTargetCanNeverBePublicOrCallerControlled() {
+        assertThrows(IllegalStateException.class,
+                () -> AgentPostgresTestEnvironment
+                        .requireSafeMigrationSchema("public"));
+        assertThrows(IllegalStateException.class,
+                () -> AgentPostgresTestEnvironment
+                        .requireSafeMigrationSchema("stage_fixture"));
+        String schema = AgentPostgresTestEnvironment
+                .isolatedSchemaName(
+                        "safety_gate",
+                        UUID.fromString(
+                                "00000000-0000-0000-0000-000000000001"));
+        AgentPostgresTestEnvironment
+                .requireSafeMigrationSchema(schema);
+        assertEquals(
+                "agent_it_safety_gate_"
+                        + "00000000000000000000000000000001",
+                schema);
+        assertTrue(AgentPostgresTestEnvironment.schemaUrl(
+                new AgentPostgresTestEnvironment.Credentials(
+                        AgentPostgresTestEnvironment.REQUIRED_URL,
+                        AgentPostgresTestEnvironment.REQUIRED_USERNAME,
+                        PASSWORD),
+                schema).endsWith("currentSchema=" + schema));
+    }
+
+    @Test
+    void everySpringPostgresIntegrationTestDeclaresIsolation()
+            throws IOException {
+        Path testRoot = Path.of(
+                "src/test/java/com/stockquant/server/agent");
+        try (var files = Files.walk(testRoot)) {
+            for (Path file : files
+                    .filter(path -> path.toString().endsWith(".java"))
+                    .toList()) {
+                String source = Files.readString(file);
+                assertFalse(source.contains(
+                                "AgentPostgresTestEnvironment"
+                                        + ".registerDataSource"),
+                        file + " must not bind a Spring test to public");
+                if (!source.contains("@SpringBootTest")
+                        || !source.contains(
+                        "STOCK_QUANT_TEST_DB_URL")) {
+                    continue;
+                }
+                boolean sharedGuard = source.contains(
+                        "registerIsolatedDataSource");
+                boolean explicitGuard = source.contains(
+                        "currentSchema=")
+                        && source.contains(
+                        "spring.flyway.default-schema")
+                        && source.contains("spring.flyway.schemas")
+                        && source.contains(
+                        "spring.flyway.create-schemas");
+                assertTrue(sharedGuard || explicitGuard,
+                        file + " must configure a random isolated "
+                                + "schema before Flyway migrate");
+            }
+        }
     }
 
     private static void assertRejected(String url, String username, String password) {

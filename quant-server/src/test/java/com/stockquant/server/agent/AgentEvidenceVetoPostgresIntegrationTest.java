@@ -61,6 +61,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @EnabledIfEnvironmentVariable(named = "STOCK_QUANT_TEST_DB_PASSWORD", matches = ".+")
 class AgentEvidenceVetoPostgresIntegrationTest {
 
+    private static AgentPostgresTestEnvironment.IsolatedSchema database;
     private static final Duration WAIT_TIMEOUT = Duration.ofSeconds(10);
     private static final LocalDate TRADE_DATE = LocalDate.of(2026, 7, 14);
     private static final String EVIDENCE_SYMBOL = "600731";
@@ -83,7 +84,9 @@ class AgentEvidenceVetoPostgresIntegrationTest {
 
     @DynamicPropertySource
     static void registerProperties(DynamicPropertyRegistry registry) {
-        AgentPostgresTestEnvironment.registerDataSource(registry);
+        database = AgentPostgresTestEnvironment
+                .registerIsolatedDataSource(
+                        registry, "evidence_veto");
         registry.add("stockquant.agent-team.base-url",
                 () -> "http://127.0.0.1:" + STUB_SERVER.getAddress().getPort());
     }
@@ -102,6 +105,9 @@ class AgentEvidenceVetoPostgresIntegrationTest {
     @AfterAll
     static void stopStub() {
         STUB_SERVER.stop(0);
+        if (database != null) {
+            database.close();
+        }
     }
 
     @Test

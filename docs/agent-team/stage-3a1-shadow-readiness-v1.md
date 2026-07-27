@@ -2,21 +2,22 @@
 
 ## 1. 状态
 
-状态：**任务分支实现与 Codex 本地验证完成，待 ChatGPT 基于实际 Git 提交验收，未合入。**
+状态：**已实现、通过 ChatGPT 对实际 Git 提交的验收，并经用户批准纯 fast-forward 合入。**
 
 - 冻结基线：`954959f5832d01ba1f7211d3e6ebbd8c93feab22`
 - 任务分支：`codex/1.4.0-stage-3a1-shadow-readiness-v1`
-- 目标提交：`feat(agent): complete controlled shadow run v1`
-- ChatGPT 实际 Git 提交验收：尚未进行
-- 是否合入：否
+- 实现及最终提交：`99b369fcc652b8344453532a7ff9597751a6040b`
+- ChatGPT 实际 Git 提交验收：`PASS`
+- 用户 merge 批准时间：`UNKNOWN`
+- 是否合入：是，集成分支纯 fast-forward 至最终提交
 - `enabled`：默认 `false`
 - `scheduler-enabled`：默认 `false`
 - 完整 3A：未完成
 - 3B：未开始
 - 完整任务书：[3a1-controlled-shadow-readiness-v1.md](tasks/3a1-controlled-shadow-readiness-v1.md)
 
-当前项目事实以 [CURRENT_STATE.md](CURRENT_STATE.md) 为唯一权威来源。本文件不得在
-ChatGPT 基于实际 Git 提交验收前写为 PASS，也不得将 3A-1 写成完整 3A 已完成。
+当前项目事实以 [CURRENT_STATE.md](CURRENT_STATE.md) 为唯一权威来源。3A-1 合入仍不得
+被描述为完整 3A 已完成。
 
 ## 2. 目标与冻结边界
 
@@ -160,9 +161,16 @@ Codex 本地测试在 scheduler 关闭状态下，以 EXPLICIT 模式对去重�
 真实组均使用随机隔离 Schema，测试内验证 public 数据和结构指纹前后不变并精确删除
 Schema；未执行 Flyway repair/clean。安全全量中的 41 项跳过不能冒充真实闭环。
 
-## 10. 完成边界
+## 10. 合入后首次启动门禁
 
-3A-1 完成只表示受控影子运行与就绪度观测技术基础在任务分支实现并完成本地验证。
+3A-1 合入后第一次准备真实受控观察时，Java 启动在创建 Shadow 批次前被专用测试库
+public 的 V6 checksum 不一致阻断，因此没有产生真实观察 batch、item 或 Agent task。
+该问题由独立 [3A-R1 迁移血统恢复阶段](stage-3ar1-flyway-v6-lineage-recovery.md)
+处理；不得把启动失败描述为 3A-1 控制面功能失败，也不得用 repair/clean 绕过。
+
+## 11. 完成边界
+
+3A-1 完成只表示受控影子运行与就绪度观测技术基础已经实现、验收并合入。
 完整 3A 至少仍需：
 
 - 不少于 20 个有效观察日；
@@ -173,4 +181,4 @@ Schema；未执行 Flyway repair/clean。安全全量中的 41 项跳过不能�
 - 正式观察报告；
 - ChatGPT 验收及用户决定是否进入 3B。
 
-本阶段不伪造长期运行历史，不开启 scheduler，不开始长期观察或 3B；任务分支未合入。
+本阶段不伪造长期运行历史，不开启 scheduler，不开始长期观察或 3B。

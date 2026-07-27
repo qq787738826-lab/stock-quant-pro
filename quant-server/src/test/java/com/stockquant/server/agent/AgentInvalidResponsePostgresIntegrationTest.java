@@ -58,6 +58,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @EnabledIfEnvironmentVariable(named = "STOCK_QUANT_TEST_DB_PASSWORD", matches = ".+")
 class AgentInvalidResponsePostgresIntegrationTest {
 
+    private static AgentPostgresTestEnvironment.IsolatedSchema database;
     private static final Duration WAIT_TIMEOUT = Duration.ofSeconds(10);
     private static final LocalDate TRADE_DATE = LocalDate.of(2026, 7, 14);
     private static final String LEAK_MARKER = "STAGE_1D3C_RESPONSE_BODY_MUST_NOT_BE_PERSISTED";
@@ -81,7 +82,9 @@ class AgentInvalidResponsePostgresIntegrationTest {
 
     @DynamicPropertySource
     static void registerProperties(DynamicPropertyRegistry registry) {
-        AgentPostgresTestEnvironment.registerDataSource(registry);
+        database = AgentPostgresTestEnvironment
+                .registerIsolatedDataSource(
+                        registry, "invalid_response");
         registry.add("stockquant.agent-team.base-url",
                 () -> "http://127.0.0.1:" + STUB_SERVER.getAddress().getPort());
     }
@@ -101,6 +104,9 @@ class AgentInvalidResponsePostgresIntegrationTest {
     @AfterAll
     static void stopStub() {
         STUB_SERVER.stop(0);
+        if (database != null) {
+            database.close();
+        }
     }
 
     static Stream<Scenario> invalidScenarios() {

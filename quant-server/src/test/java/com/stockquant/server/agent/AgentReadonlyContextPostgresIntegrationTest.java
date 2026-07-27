@@ -53,6 +53,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @EnabledIfEnvironmentVariable(named = "STOCK_QUANT_TEST_DB_PASSWORD", matches = ".+")
 class AgentReadonlyContextPostgresIntegrationTest {
 
+    private static AgentPostgresTestEnvironment.IsolatedSchema database;
     private static final String SYMBOL = "699991";
     private static final LocalDate TRADE_DATE = LocalDate.of(2026, 7, 14);
     private static final String DATA_SOURCE = "TEST_FIXTURE_STAGE_2A";
@@ -85,7 +86,9 @@ class AgentReadonlyContextPostgresIntegrationTest {
 
     @DynamicPropertySource
     static void configure(DynamicPropertyRegistry registry) {
-        AgentPostgresTestEnvironment.registerDataSource(registry);
+        database = AgentPostgresTestEnvironment
+                .registerIsolatedDataSource(
+                        registry, "readonly_context");
         registry.add("stockquant.agent-team.base-url",
                 () -> "http://127.0.0.1:" + STUB_SERVER.getAddress().getPort());
     }
@@ -115,6 +118,9 @@ class AgentReadonlyContextPostgresIntegrationTest {
     @AfterAll
     static void stopStub() {
         STUB_SERVER.stop(0);
+        if (database != null) {
+            database.close();
+        }
     }
 
     @Test

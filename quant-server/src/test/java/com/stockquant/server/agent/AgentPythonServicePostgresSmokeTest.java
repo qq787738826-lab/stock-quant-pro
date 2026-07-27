@@ -9,6 +9,7 @@ import com.stockquant.server.agent.model.AgentTypes.ExecutionMode;
 import com.stockquant.server.agent.model.AgentTypes.TriggerType;
 import com.stockquant.server.agent.service.AgentContextHashService;
 import com.stockquant.server.agent.service.AgentTaskService;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -43,6 +44,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @EnabledIfEnvironmentVariable(named = "STOCK_QUANT_PYTHON_BASE_URL", matches = ".+")
 class AgentPythonServicePostgresSmokeTest {
 
+    private static AgentPostgresTestEnvironment.IsolatedSchema database;
     private static final Duration WAIT_TIMEOUT = Duration.ofSeconds(15);
     private static final String RULE_VERSION = "1.4.0-stage-2b-dq-v1";
     private static final String DATA_SOURCE = "TEST_FIXTURE_STAGE_2B";
@@ -66,8 +68,17 @@ class AgentPythonServicePostgresSmokeTest {
 
     @DynamicPropertySource
     static void safeTestProperties(DynamicPropertyRegistry registry) {
-        AgentPostgresTestEnvironment.registerDataSource(registry);
+        database = AgentPostgresTestEnvironment
+                .registerIsolatedDataSource(
+                        registry, "python_smoke");
         AgentPythonSmokeEnvironment.registerBaseUrl(registry);
+    }
+
+    @AfterAll
+    static void cleanDatabase() {
+        if (database != null) {
+            database.close();
+        }
     }
 
     @Test

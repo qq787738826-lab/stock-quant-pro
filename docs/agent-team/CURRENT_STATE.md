@@ -71,7 +71,11 @@
 - 阶段 3A-1 冻结集成基线：`954959f5832d01ba1f7211d3e6ebbd8c93feab22`
 - 阶段 3A-1 任务分支：`codex/1.4.0-stage-3a1-shadow-readiness-v1`
 - 阶段 3A-1 契约：`SHADOW_RUN_CONTROL_V1` / `SHADOW_SELECTION_V1` / `SHADOW_OUTCOME_SNAPSHOT_V1` / `SHADOW_REVIEW_V1` / `SHADOW_METRICS_V1`
-- 阶段 3A-1 当前状态：任务分支实现与 Codex 本地验证已完成，待 ChatGPT 基于实际 Git 提交验收，未合入集成分支；scheduler 默认关闭，完整 3A 未完成，3B 未开始。
+- 阶段 3A-1 实现及最终提交：`99b369fcc652b8344453532a7ff9597751a6040b`
+- 阶段 3A-1 当前状态：已通过 ChatGPT 对实际 Git 提交的验收；用户已批准 merge；集成分支已纯 fast-forward 至 `99b369fcc652b8344453532a7ff9597751a6040b`。精确验收和批准时间无仓库证据，记为 `UNKNOWN`。scheduler 默认关闭，完整 3A 未完成，3B 未开始。
+- 阶段 3A-R1 冻结集成基线：`99b369fcc652b8344453532a7ff9597751a6040b`
+- 阶段 3A-R1 任务分支：`codex/1.4.0-stage-3ar1-flyway-v6-lineage-recovery`
+- 阶段 3A-R1 当前状态：V6 血统恢复、V12 前向承接、测试隔离修复与 Codex 本地验证已完成，待 ChatGPT 基于实际 Git 提交验收，未合入；未创建专用测试库 public 真实 Shadow 批次，长期 3A 观察和 3B 均未开始。
 - `master`：`27d9099 chore: checkpoint Stock Quant Pro 1.3.1 and remove tracked cache`
 - 版本号仍保持 `1.3.1`；尚未发布 `1.4.0`。
 
@@ -104,32 +108,40 @@
 - 阶段 2H：可靠模拟持仓上下文与 POSITION_RISK 正式否决 V1 已完成、通过 ChatGPT 对实际 Git 提交的验收并经用户批准 fast-forward 合入；精确 profile 只读冻结默认模拟账户当前状态，POSITION_RISK 是唯一能够生成正式 veto 的专业智能体。该能力不接入真实账户，不修改模拟账户业务表，也不生成交易执行指令。
 - 阶段 2G：研究级 AKShare/CNINFO 公告事实基础与 ANNOUNCEMENT_RISK 确定性规则 V1 已完成、通过 ChatGPT 对实际 Git 提交的验收并经用户批准纯 fast-forward 合入；V10 建立 append-only 公告捕获批次与观察版本，精确 profile 提供 as-of `securityEvents`，冻结标题规则、短语级排除、研究来源 confidence 和 coverage/event evidence。ANNOUNCEMENT_RISK 不产生正式 veto，来源不具备 FORMAL/PIT 资格。
 - 阶段 2I：确定性总控综合决策 V1 已完成、通过 ChatGPT 对实际 Git 提交的验收并经用户批准纯 fast-forward 合入；精确规则版本复用 2G 组合上下文，以固定权重和优先级形成可由 Java 独立复算的五种确定结果或安全不足结果。总控不是第七个 run，不产生独立 finding/evidence，也不生成投资建议或交易指令。
+- 阶段 3A-1：受控影子运行与就绪度观测基础 V1 已完成、通过 ChatGPT 对实际 Git 提交的验收并经用户批准纯 fast-forward 合入；V11 建立 shadow batch、item、append-only review、结构化 reason、漂移、指标、取消和熔断控制面。功能和 scheduler 仍默认关闭；该技术基础不等于完整 3A 长期观察已经完成。
 
 阶段 2D-1、2D-2A、2D-2B-1A、文档阶段 2D-2B-1B-0 和 TEST/DEMO 实现阶段 2D-2B-1B-1 完成不等于完整阶段 2D、完整阶段 2D-2 或完整阶段 2D-2B 完成；这些上位阶段仍处于进行中。已完成内容是基础设施、只读事实上下文、数据质量门禁、受限的当前证券池宽度状态规则、时态事实基础、来源无关摄取基础、事件物化契约及 TEST/DEMO event 物化基础。当前 event 物化能力不包含正式来源、FORMAL/PIT、history/calendar projection、Universe、完整六智能体分析、完整市场环境模型、历史无前视市场宽度、真实股票分析或投资建议能力。
 
 ## 当前任务分支候选实现（未验收、未合入）
 
-阶段 3A-1 在任务分支实现 V11 影子运行事实模型、`SHADOW` 触发类型、受控选择与批次
-runner、结构化不足原因、结果漂移、数据库事实指标、append-only 人工复核、取消与熔断、
-只读 API 以及独立 `/agent-shadow` 工作台。影子任务只通过既有 Java Agent 任务系统运行
-精确 2I 规则版本，不绕过任务持久化，不自动同步行情或公告，不调用模拟账户写路径，也
-不生成交易或收益结论。实现与测试详情见
-[stage-3a1-shadow-readiness-v1.md](stage-3a1-shadow-readiness-v1.md)。
+阶段 3A-R1 在任务分支把仓库 V6 恢复为专用测试库实际应用的 Git 历史内容和 Flyway
+checksum `-981595186`，并用 V12 前向承接后来追加的时态表不可变、knowledge-close 和
+旧日历导航列删除语义。V7 至 V11 不依赖该 delta 在 V7 前存在，因此不使用 V6.1 或
+out-of-order。完整审计、迁移和测试证据见
+[stage-3ar1-flyway-v6-lineage-recovery.md](stage-3ar1-flyway-v6-lineage-recovery.md)。
 
-配置 `enabled=false`、`scheduler-enabled=false` 保持默认完全关闭；scheduler 未启用。
-任务分支已用 EXPLICIT 三只证券在随机隔离 Schema、真实 Java 任务系统与真实 Python
-服务中完成受控试运行，并验证第二批完成缓存复用、漂移、复核、业务事实只读、public
-基线与精确清理。该实现仍无 ChatGPT 验收结论、用户 merge 批准或集成提交，因此不得写入
-[PROGRESS_LOG.md](PROGRESS_LOG.md)，也不得描述为完整 3A 已完成。
+首次真实 3A 观察启动在创建 Shadow 批次前被 V6 checksum 校验阻断。随后本阶段第一次
+全量回归暴露既有 `AgentEvidenceVetoPostgresIntegrationTest` 未隔离 Flyway Schema，
+意外把专用测试库 public 使用合法迁移链从 V6 前向迁移到 V12。用户选择接受该 V12
+状态；没有 repair、clean、回滚、备份恢复、历史表修改或手工 checksum。迁移前完整业务
+表指纹没有证据，无法证明的比较记为 `UNKNOWN`；V12 成功前置门禁证明被删除的两个旧
+日历导航列当时没有非空值。
+
+全部会运行 Flyway migrate 的 PostgreSQL 集成测试现已改用随机隔离 Schema，并显式设置
+datasource `currentSchema`、Hikari schema、Flyway default-schema/schemas 与
+`create-schemas=false`；公共安全门在目标为 public 时立即失败。最终真实矩阵和全量
+回归前后，当前 public V12 的全表行、结构和 Flyway 历史指纹一致，随机 Schema 残留为
+0，Shadow batch/item/review 均为 0。
 
 完整 3A 仍要求不少于 20 个有效观察日、200 个 shadow item、主要 reasonCode 人工复核、
-持续业务表只读证明和正式观察报告。当前没有开启 scheduler、长期观察或 3B。
+持续业务表只读证明和正式观察报告。当前没有开启 scheduler、创建真实 Shadow 观察批次、
+开始长期观察或 3B。
 
 ## 权威边界与真实可用能力
 
 Java 是 `taskId`、六个 `runId`、状态、幂等与缓存、持久化和跨语言响应校验的唯一权威。Python 无状态，只处理 Java 传入的只读 `contextSnapshot`，不访问任务数据库。PostgreSQL 已包含 task、run、evidence、veto、decision 五类持久化结构。Vue 可创建、轮询、恢复并展示任务。本地脚本可安全启动、复用和精确停止 Python、Java、Vue。
 
-当前集成分支真实可用的是 Java 权威任务和持久化、阶段 2A 第一批四类上下文、确定性技术指标、确定性 DATA_QUALITY 门禁、`marketBreadth` 只读事实、`scanResult` 历史扫描事实、阶段 2D-1 受限的当前证券池宽度状态规则、阶段 2E-1 确定性 TECHNICAL_ANALYSIS V1、阶段 2F 可靠回测基础与确定性 STRATEGY_BACKTEST V1、阶段 2H 可靠模拟持仓上下文与确定性 POSITION_RISK V1、阶段 2G 研究级公告事实与确定性 ANNOUNCEMENT_RISK V1、阶段 2I 确定性总控综合决策 V1、V6 时态事实基础、V7 来源无关摄取基础、V8 TEST/DEMO security event 物化基础、V9 append-only PIT 日线观察、V10 append-only 公告观察、Hash 与 JSONB 稳定往返、缺数安全降级、失败原子性和 Vue 工作台观察能力。V8 已实现 run 创建时冻结的 `manifestContractVersion`、TEST/DEMO 稳定证券身份与显式 source identity mapping、`SECURITY_STATUS_RAW_TEST_V1`、`SECURITY_STATUS_EVENT_V1` 物化与严格复用、每 terminal attempt 唯一 normalization result、每逻辑 event 唯一 lineage、`INGESTION_MANIFEST_V2_SECURITY_EVENT`、Java/PostgreSQL 双重门禁，以及幂等、两个 backend 并发和原子失败保护。FORMAL/PIT 继续由数据库门禁拒绝，resolved event 在 2D-2B-2 前不得进入 `security_status_history`；当前尚未形成正式 history/calendar projection 或 Universe。ANNOUNCEMENT_RISK 的 AKShare/CNINFO 来源仍只具备 `RESEARCH` 资格，不声明正式授权、历史绝对完整或 PIT。
+当前集成分支真实可用的是 Java 权威任务和持久化、阶段 2A 第一批四类上下文、确定性技术指标、确定性 DATA_QUALITY 门禁、`marketBreadth` 只读事实、`scanResult` 历史扫描事实、阶段 2D-1 受限的当前证券池宽度状态规则、阶段 2E-1 确定性 TECHNICAL_ANALYSIS V1、阶段 2F 可靠回测基础与确定性 STRATEGY_BACKTEST V1、阶段 2H 可靠模拟持仓上下文与确定性 POSITION_RISK V1、阶段 2G 研究级公告事实与确定性 ANNOUNCEMENT_RISK V1、阶段 2I 确定性总控综合决策 V1、阶段 3A-1 默认关闭的受控 Shadow 控制与观测基础、V6 时态事实基础、V7 来源无关摄取基础、V8 TEST/DEMO security event 物化基础、V9 append-only PIT 日线观察、V10 append-only 公告观察、V11 Shadow 事实、Hash 与 JSONB 稳定往返、缺数安全降级、失败原子性和 Vue 工作台观察能力。V8 已实现 run 创建时冻结的 `manifestContractVersion`、TEST/DEMO 稳定证券身份与显式 source identity mapping、`SECURITY_STATUS_RAW_TEST_V1`、`SECURITY_STATUS_EVENT_V1` 物化与严格复用、每 terminal attempt 唯一 normalization result、每逻辑 event 唯一 lineage、`INGESTION_MANIFEST_V2_SECURITY_EVENT`、Java/PostgreSQL 双重门禁，以及幂等、两个 backend 并发和原子失败保护。FORMAL/PIT 继续由数据库门禁拒绝，resolved event 在 2D-2B-2 前不得进入 `security_status_history`；当前尚未形成正式 history/calendar projection 或 Universe。ANNOUNCEMENT_RISK 的 AKShare/CNINFO 来源仍只具备 `RESEARCH` 资格，不声明正式授权、历史绝对完整或 PIT。
 
 精确 2I 规则版本启用 `CHIEF_DECISION_V1/CHIEF_SCORE_WEIGHTS_V1`；总控只读取六个专业
 run，不成为第七个 run，不产生独立 finding/evidence，并由 Java 在持久化前独立复算。
@@ -193,7 +205,7 @@ DATA_QUALITY 只作门禁和 confidence 上限，MARKET_REGIME V1 权重为 0 �
 
 ## 数据库、前端与本地运行
 
-- 集成分支数据库 Schema 当前为 Flyway V10；当前 3A-1 任务分支候选新增 V11。V6 新增 dataset 版本、不可变证券状态事件、双时间证券状态历史和 SSE/SZSE 版本化交易日历；V7 新增来源无关 ingestion run、security/calendar raw、run-record 关联、terminal attempt、retry、namespace、assurance、封存与 Manifest V1；V8 新增 `manifestContractVersion`、TEST/DEMO 稳定证券身份及显式来源映射、normalization result、event lineage、Manifest V2 和相应数据库不可绕过门禁；V9 新增 append-only PIT 日线观察；V10 新增 append-only 公告捕获批次与观察版本；候选 V11 新增 shadow batch、item、append-only review 和 `SHADOW` TriggerType。V6/V7 均不回填现有 `securities` 或 `daily_bars`，V8 不接入正式来源，V9/V10 不伪造历史 known time。
+- 集成分支迁移链当前为 Flyway V1 至 V11；当前 3A-R1 任务分支候选新增 V12。V6 新增 dataset 版本、证券状态事件、双时间证券状态历史和 SSE/SZSE 版本化交易日历；V7 新增来源无关 ingestion run、security/calendar raw、run-record 关联、terminal attempt、retry、namespace、assurance、封存与 Manifest V1；V8 新增 `manifestContractVersion`、TEST/DEMO 稳定证券身份及显式来源映射、normalization result、event lineage、Manifest V2 和相应数据库不可绕过门禁；V9 新增 append-only PIT 日线观察；V10 新增 append-only 公告捕获批次与观察版本；V11 新增 shadow batch、item、append-only review 和 `SHADOW` TriggerType；候选 V12 前向承接原本被错误追加回 V6 的时态表不可变保护、knowledge-close 门禁与旧日历导航列删除。V6/V7 均不回填现有 `securities` 或 `daily_bars`，V8 不接入正式来源，V9/V10 不伪造历史 known time。
 - 阶段 2A 使用 Agent 专用只读 Repository 查询 `securities` 和截止请求日的 QFQ `daily_bars`；四类上下文在 `REPEATABLE_READ` 只读事务中冻结，不执行市场数据同步或数据库写操作。
 - 阶段 2C 未修改 Flyway 或外层 JSON Schema，`CONTEXT_SCHEMA_VERSION` 仍为 `1.0`。
 - `marketBreadth`、`scanResult` 与阶段 2A 四类上下文在同一个 `REPEATABLE_READ` 只读事务内冻结；Python 始终不直连数据库。旧 profile 的 `backtestContext` 不运行 `BacktestEngine`；仅 2F 精确 profile 由 Java 使用 PIT 观察事实运行冻结引擎。
@@ -204,14 +216,15 @@ DATA_QUALITY 只作门禁和 confidence 上限，MARKET_REGIME V1 权重为 0 �
 - 阶段 2H 不新增 Flyway；只对精确规则版本启用 `AGENT_CONTEXT_2H_V1/PORTFOLIO_CONTEXT_V1`，并继续复用可靠 `backtestContext`。Agent 专用 Repository 在同一 `REPEATABLE_READ` 只读事务读取现有模拟账户、持仓、待确认委托、权益快照、设置与本地 QFQ 估值，不调用 `PortfolioService` 写路径，不修改任何模拟账户业务表。旧 profile/contextHash 和六 run 结构保持兼容。
 - 阶段 2G 的 V10 新增 `announcement_capture_batches` 与 `announcement_observations`；两表由数据库触发器拒绝 `UPDATE`、`DELETE`、`TRUNCATE`。Java 在 Provider 外部调用结束后冻结 `observedAt`，以 `knownAt=firstObservedAt` 保存日期级研究公告事实；同内容幂等，内容变化及 A→B→A 追加新版本。完整空批次保留覆盖证据，部分批次不证明无事件。V10 不修改 V1 至 V9，不向历史回填 knowledge-time，也不改变 2D 证券状态事实模型。
 - 阶段 2I 不新增迁移或持久化表，继续使用 V5 的 `agent_tasks`、`agent_runs`、`agent_evidence`、`agent_vetoes` 与 `agent_decisions`；精确规则版本复用 2G 组合上下文且不改变其 contextHash。精确 2I 规则以 finalDecision 显式映射总控终态：五种确定结果为 `COMPLETED`，只有最终 `INSUFFICIENT_DATA` 为 `task=PARTIAL/decision status=INSUFFICIENT_DATA`；专业 run 状态保持原样。非法 Python 响应在现有事务边界内原子失败，不影响已经合法存在的行情、公告或模拟账户事实。
-- 阶段 3A-1 候选 V11 新增 `agent_shadow_batches`、`agent_shadow_items`、`agent_shadow_reviews`，并把 `SHADOW` 加入既有任务触发类型硬约束。batch/item 只允许受控生命周期更新，终态身份、任务引用、结果快照和漂移由数据库触发器保护；review 禁止 `UPDATE/DELETE/TRUNCATE`，更正只能追加并引用被取代记录。影子 runner 只创建既有 2I Agent 任务，不直接写 run/decision，也不修改行情、公告或模拟账户事实。
+- 阶段 3A-1 的 V11 新增 `agent_shadow_batches`、`agent_shadow_items`、`agent_shadow_reviews`，并把 `SHADOW` 加入既有任务触发类型硬约束。batch/item 只允许受控生命周期更新，终态身份、任务引用、结果快照和漂移由数据库触发器保护；review 禁止 `UPDATE/DELETE/TRUNCATE`，更正只能追加并引用被取代记录。影子 runner 只创建既有 2I Agent 任务，不直接写 run/decision，也不修改行情、公告或模拟账户事实。
+- 阶段 3A-R1 恢复 V6 的已应用历史内容并冻结 checksum `-981595186`；V12 只前向承接两个 V6 版本的合法 Schema delta，删除旧日历导航列前必须证明其无非空值。所有执行 migrate 的数据库集成测试必须使用随机隔离 Schema，并显式配置 datasource `currentSchema`、Hikari schema、Flyway default-schema/schemas 与 `create-schemas=false`；准备向 public migrate 时立即失败。
 - 阶段 2D-2A 冻结 `SECURITY_STATUS_EVENT_V1`；数据库层禁止 dataset/event 的 `UPDATE`、`DELETE`、`TRUNCATE`，history/calendar 只允许一次 `known_to: NULL -> 非NULL` 关闭。上一/下一开市日不持久化，统一按同 exchange、同 knowledge cutoff 的日历事实动态推导。
 - 阶段 2D-2B-1B-1 仅在 TEST/DEMO 边界内把 `SECURITY_STATUS_RAW_TEST_V1` 物化或复用为 V1 event；V8 同时在 Java 和 PostgreSQL 阻止 FORMAL/PIT 提升，并在 2D-2B-2 独立实现前禁止任何 resolved event 写入 `security_status_history`。
 - `contextHash` 按 JSON 数值的数学值规范化，对象字段稳定排序、数组保持业务顺序；API、PostgreSQL JSONB 与持久化快照重算结果一致。
 - 阶段 2B 质量 evidence 固定来源为 `JAVA_ENGINE/AgentContextSnapshotService/contextSnapshot`，只投影四类冻结上下文；所有 DATA_QUALITY finding 引用该权威 evidence。
 - Java 纳秒 `Instant` 与 Python `datetime` 往返时间按微秒传输精度规范化比较，双方截断到微秒后必须完全相等；相差 1 微秒即拒绝，不改写冻结上下文或 Hash。
 - 逻辑 evidence ID、逻辑 veto ID 与数据库物理主键的映射规则已冻结。
-- Agent 任务工作台路由为 `/agent-team`，通过 `taskId` query 恢复任务；3A-1 候选新增独立 `/agent-shadow` 只读观测与人工复核工作台；旧 `/ai` 页面保留。
+- Agent 任务工作台路由为 `/agent-team`，通过 `taskId` query 恢复任务；3A-1 新增独立 `/agent-shadow` 只读观测与人工复核工作台；旧 `/ai` 页面保留。
 - 工作台使用真实 Java API，不包含运行时 mock 或前端生成的分析结论。
 - `start-agent-team-local.ps1` / `stop-agent-team-local.ps1` 使用可信状态、PID/启动时间、进程树、互斥锁和敏感环境隔离。
 
@@ -242,7 +255,7 @@ DATA_QUALITY 只作门禁和 confidence 上限，MARKET_REGIME V1 权重为 0 �
 - 阶段 2D-2B-1A 已完成并合入。其真实 PostgreSQL 测试在随机临时 Schema 内从 V1 顺序迁移至 V7，覆盖 raw/attempt 不可变、namespace、assurance、retry、封存、Manifest V1、两个 backend 并发幂等与冲突；测试结束删除临时 Schema且 public 基线未变化。
 - 阶段 2D-2B-1B-1 的测试结果均为 Codex 本地执行证据，不是 GitHub Actions CI：V8 真实 PostgreSQL 为 `6/0/0/0`、`Skipped=0`；2D-2A 兼容 PostgreSQL 为 `2/0/0/0`；2D-2B-1A 兼容 PostgreSQL 为 `2/0/0/0`；`quant-server` 为 `255/0/0/21`；`quant-core` 为 `1/0/0/0`；Python unittest 68 项通过；Python `compileall` 通过；`git diff --check` 通过。
 - `quant-server` 的 21 项跳过属于非数据库全量回归中的环境门禁跳过，不能冒充真实 PostgreSQL 测试；V8 真实 PostgreSQL 测试单独以 `Skipped=0` 完成。
-- 本地专用测试库 public Schema 存在 V6 checksum 与当前仓库不一致的历史环境问题。2D-2B-1B-1 未执行 Flyway repair 或 clean，未修改、删除或重建 public，并通过随机 Schema 隔离完成真实 PostgreSQL 验收；该问题属于独立环境治理事项，不能被描述为 V8 功能失败，也不能被静默修复或掩盖。
+- 本地专用测试库 public Schema 曾存在 V6 checksum 与仓库被改写版本不一致的历史环境问题。2D-2B-1B-1 当时未执行 Flyway repair 或 clean，未修改、删除或重建 public，并通过随机 Schema 隔离完成真实 PostgreSQL 验收；该问题不属于 V8 功能失败。3A-R1 已从 Git 历史确认 public 实际 V6 checksum `-981595186`，并把仓库 V6 恢复为该已应用内容。
 - 正式证券状态来源、数据许可、本地持久化权利、历史回放权利、稳定 source instrument ID、revision 语义以及 published/effective 时间语义尚未批准，因此 FORMAL/PIT 摄取继续阻断。
 - 阶段 2E-1 的测试结果均为 Codex 本地执行证据，不是 GitHub Actions CI：Python `compileall` 通过、unittest `77/0/0`；真实 Java/Python 跨语言闭环 `4/0/0/0`、`Skipped=0`；专用 `stock_quant_test` 随机临时 Schema 的真实 PostgreSQL 闭环 `2/0/0/0`、`Skipped=0`；`quant-server` 全量 `261/0/0/27`；`quant-core` 全量 `1/0/0/0`。`quant-server` 的 27 项跳过是未提供外部集成环境变量时的门禁跳过，不能冒充真实 PostgreSQL 或真实 Python 闭环；两类真实闭环已分别单独以 `Skipped=0` 执行。
 - 阶段 2E-1 的真实 PostgreSQL 测试从 V1 至 V8 迁移随机临时 Schema，覆盖六个 run、证据顺序、空正式 veto、Hash、非法响应原子失败与精确清理；临时 Schema 最终删除，public 数据计数、关系/约束/触发器/函数指纹、Flyway 历史和扩展前后不变。未对存在历史 V6 checksum 问题的 public 执行 repair、clean、删除或重建。
@@ -256,6 +269,8 @@ DATA_QUALITY 只作门禁和 confidence 上限，MARKET_REGIME V1 权重为 0 �
 - 2I 真实数据库与 Live Gate 均在随机隔离 Schema 从 V1 迁移至 V10，测试内验证 public 数据和结构指纹前后不变；本轮结束后只读检查确认相关随机 Schema 残留数为 0。另一次把绑定专用库 public 的旧 `AgentStage2DPostgresPythonIntegrationTest` 加入兼容批次时得到 `27/0/1/0`，唯一 ApplicationContext 错误仍由已知 V6 checksum 不一致导致，因此不描述为通过；未执行 Flyway repair/clean，未修改、删除或重建 public。
 - 阶段 3A-1 的结果均为 Codex 本地执行证据，不是 GitHub Actions CI：3A-1 Java 选择、调度、状态机、runner、结果、指标和 API 定向 `15/0/0/0`；Python `compileall` 通过、完整 unittest `123/0/0/0`；V1 至 V11 真实 PostgreSQL/Java/Python 受控试运行 `1/0/0/0`，EXPLICIT 三只证券首批逐项关联真实 SHADOW Agent 任务，重复批次三项全部命中 completed cache，并验证漂移、append-only 复核、六张模拟账户业务表、行情和公告观察表只读；V1 至 V11 的 2D/2E/2F/2G/2H/2I 真实兼容矩阵 `29/0/0/0`；Java AKShare Live Gate `1/0/0/0`。所有真实组均 `Skipped=0`。`quant-core` 全量 `4/0/0/0`，安全非数据库 `quant-server` 全量 `376/0/0/41`；41 项仅为外部 PostgreSQL/AKShare 环境门禁跳过，不能冒充真实闭环。Vue 类型检查与生产 build 通过。
 - 3A-1 真实测试均在随机隔离 Schema 顺序应用 V1 至 V11，并在每组结束后精确删除；public 数据和结构指纹前后不变，测试随机 Schema 残留为 0。受控试运行 scheduler 始终关闭，不调用 AKShare 摄取、行情同步、全市场扫描或 Portfolio 写路径，结果不作为收益或策略有效性证明。
+- 阶段 3A-R1 的结果均为 Codex 本地执行证据，不是 GitHub Actions CI：V6/V12 静态迁移与隔离安全门 `16/0/0/0`；原触发类随机 Schema 复测 `2/0/0/0`；双血统迁移、Schema 指纹收敛和 public 只读 validate `1/0/0/0`；旧 V6 血统克隆 Java/Python 单证券控制面 `1/0/0/0`；全部真实 PostgreSQL 兼容矩阵 `47/0/0/0`；Java AKShare Live Gate `1/0/0/0`；上述真实组均 `Skipped=0`。`quant-server` 全量 `388/0/0/0`、`quant-core` 全量 `4/0/0/0`、Python `compileall` 通过且完整 unittest `123/0/0/0`、Vue 类型检查与生产 build 通过。
+- 3A-R1 首次全量回归中，既有 `AgentEvidenceVetoPostgresIntegrationTest` 的 Flyway 隔离缺陷意外把专用测试库 public 从 V6 通过合法迁移链前向迁移到 V12。没有 repair、clean、回滚、恢复备份、删除 V7 至 V12 对象、手工 checksum 或修改 `flyway_schema_history`。迁移事件前的完整业务表行数/逐行指纹没有快照，因此跨事件比较无法验证；V12 事务前置保护成功证明被删除的两个旧导航列当时没有非空值。接受 V12 后的最终回归前后，public 全表行、结构和 Flyway 历史指纹一致；只读检查确认 V1 至 V12 各一条成功记录、无失败或重复，V6 checksum `-981595186`、V12 checksum `-178798261`，随机 Schema 残留为 0，Shadow batch/item/review 均为 0。
 
 ## 当前后续入口与阻断
 
@@ -265,6 +280,6 @@ DATA_QUALITY 只作门禁和 confidence 上限，MARKET_REGIME V1 权重为 0 �
 
 完整阶段 2D、完整阶段 2D-2 和完整阶段 2D-2B 仍处于进行中。阶段 2D-2A、2D-2B-1A、文档阶段 2D-2B-1B-0 与 TEST/DEMO 实现阶段 2D-2B-1B-1 已完成；该工作线的唯一入口只是解决 2D-2B-1B-2 的外部前置决策，不是立即开始 adapter、2D-2B-2 或 Universe 实现。阶段 2E-1 已完成独立复审并合入，但没有自动批准或开始任何 2E 后续任务。
 
-**在智能体规则能力工作线上，2I 已通过验收并经用户批准纯 fast-forward 合入；当前唯一已授权候选是 3A-1 受控影子运行与就绪度观测技术基础。** 3A-1 任务分支实现与 Codex 本地验证已完成，待 ChatGPT 基于实际 Git 提交验收，未合入；scheduler 仍默认关闭，完整 3A 的长期观察尚未开始。2G 使用的 AKShare/CNINFO 仅为 `RESEARCH` 来源，不解除正式公告或证券状态来源、许可、revision 与 PIT 阻断。Codex 不得把环境门禁跳过冒充真实闭环，不得自行合并、开始长期观察、3B 或其他阶段。
+**在智能体规则能力工作线上，3A-1 已通过验收并经用户批准纯 fast-forward 合入；当前唯一已授权候选是 3A-R1 Flyway V6 迁移血统恢复。** 3A-R1 任务分支实现与 Codex 本地验证已完成，待 ChatGPT 基于实际 Git 提交验收，未合入。首次真实观察尚未创建 Shadow 批次；scheduler 仍默认关闭，完整 3A 的长期观察尚未开始。2G 使用的 AKShare/CNINFO 仅为 `RESEARCH` 来源，不解除正式公告或证券状态来源、许可、revision 与 PIT 阻断。Codex 不得自行合并、开始长期观察、3B 或其他阶段。
 
-阻断项包括正式证券状态来源、数据许可、本地持久化权利、历史回放权利、稳定 source instrument ID、revision 语义以及 published/effective 时间语义。当前免费聚合源和 `securities` 当前态投影均不得被视为正式来源；2G 的研究级 AKShare/CNINFO 公告来源同样不得用于解除这些门禁。当前仍未实现正式 source adapter、FORMAL 摄取、PIT_VERIFIED、`SECURITY_STATUS_EVENT_V2`、`security_status_history` 正式投影、trading calendar projection、Universe snapshot、正式外部 PIT 行情与公司行动、`MARKET_BREADTH_V2`、完整 MARKET_REGIME、公告 PDF 语义分析或生产扫描切换；历史市场宽度无前视回放和固定评测集也尚未建立。阶段 2F、2G、2H 与 2I 已完成并合入；3A-1 仅为待 ChatGPT 验收、未合入的技术基础候选，尚未形成 20 个有效观察日、200 个 shadow item、主要原因人工复核和正式观察报告，因此完整 3A 未完成，3B 未开始。阶段 2D-2B 禁止外部行情补数、LLM 权威决策、投资建议和交易写操作。
+阻断项包括正式证券状态来源、数据许可、本地持久化权利、历史回放权利、稳定 source instrument ID、revision 语义以及 published/effective 时间语义。当前免费聚合源和 `securities` 当前态投影均不得被视为正式来源；2G 的研究级 AKShare/CNINFO 公告来源同样不得用于解除这些门禁。当前仍未实现正式 source adapter、FORMAL 摄取、PIT_VERIFIED、`SECURITY_STATUS_EVENT_V2`、`security_status_history` 正式投影、trading calendar projection、Universe snapshot、正式外部 PIT 行情与公司行动、`MARKET_BREADTH_V2`、完整 MARKET_REGIME、公告 PDF 语义分析或生产扫描切换；历史市场宽度无前视回放和固定评测集也尚未建立。阶段 2F、2G、2H、2I 与 3A-1 已完成并合入；3A-R1 只恢复迁移血统和测试隔离，不形成观察日。当前仍没有 20 个有效观察日、200 个 shadow item、主要原因人工复核和正式观察报告，因此完整 3A 未完成，3B 未开始。阶段 2D-2B 禁止外部行情补数、LLM 权威决策、投资建议和交易写操作。

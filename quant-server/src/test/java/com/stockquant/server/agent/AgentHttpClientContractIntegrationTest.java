@@ -38,6 +38,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @EnabledIfEnvironmentVariable(named = "STOCK_QUANT_TEST_DB_PASSWORD", matches = ".+")
 class AgentHttpClientContractIntegrationTest {
 
+    private static AgentPostgresTestEnvironment.IsolatedSchema database;
     private static final AtomicInteger CALL_COUNT = new AtomicInteger();
     private static final byte[] RESPONSE = resourceBytes(
             "/agent-team-contract/valid-agent-team-response.json");
@@ -55,7 +56,9 @@ class AgentHttpClientContractIntegrationTest {
 
     @DynamicPropertySource
     static void clientBaseUrl(DynamicPropertyRegistry registry) {
-        AgentPostgresTestEnvironment.registerDataSource(registry);
+        database = AgentPostgresTestEnvironment
+                .registerIsolatedDataSource(
+                        registry, "http_client");
         registry.add("stockquant.agent-team.base-url",
                 () -> "http://127.0.0.1:" + SERVER.getAddress().getPort());
     }
@@ -63,6 +66,9 @@ class AgentHttpClientContractIntegrationTest {
     @AfterAll
     static void stopServer() {
         SERVER.stop(0);
+        if (database != null) {
+            database.close();
+        }
     }
 
     @Test

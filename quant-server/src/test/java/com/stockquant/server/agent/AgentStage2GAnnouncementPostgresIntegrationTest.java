@@ -137,9 +137,10 @@ class AgentStage2GAnnouncementPostgresIntegrationTest {
     }
 
     @Test
-    void migratesV1ToV11AndPersistsEmptyPartialAndVersionedCaptures() {
+    void migratesV1ToV12AndPersistsEmptyPartialAndVersionedCaptures() {
         assertEquals(
-                List.of("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11"),
+                List.of("1", "2", "3", "4", "5", "6",
+                        "7", "8", "9", "10", "11", "12"),
                 jdbc.queryForList("""
                         SELECT version FROM flyway_schema_history
                         WHERE success=TRUE ORDER BY installed_rank

@@ -9,6 +9,7 @@ import com.stockquant.server.agent.model.AgentTypes.ExecutionMode;
 import com.stockquant.server.agent.model.AgentTypes.TriggerType;
 import com.stockquant.server.agent.service.AgentContextHashService;
 import com.stockquant.server.agent.service.AgentTaskService;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -46,6 +47,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @EnabledIfEnvironmentVariable(named = "STOCK_QUANT_PYTHON_BASE_URL", matches = ".+")
 class AgentStage2DPostgresPythonIntegrationTest {
 
+    private static AgentPostgresTestEnvironment.IsolatedSchema database;
     private static final String RULE_VERSION = "1.4.0-stage-2d-market-regime-v1";
     private static final String DATA_SOURCE = "TEST_FIXTURE_STAGE_2D1";
     private static final ZoneId SHANGHAI = ZoneId.of("Asia/Shanghai");
@@ -72,8 +74,17 @@ class AgentStage2DPostgresPythonIntegrationTest {
 
     @DynamicPropertySource
     static void safeTestProperties(DynamicPropertyRegistry registry) {
-        AgentPostgresTestEnvironment.registerDataSource(registry);
+        database = AgentPostgresTestEnvironment
+                .registerIsolatedDataSource(
+                        registry, "stage2d_python");
         AgentPythonSmokeEnvironment.registerBaseUrl(registry);
+    }
+
+    @AfterAll
+    static void cleanDatabase() {
+        if (database != null) {
+            database.close();
+        }
     }
 
     @Test

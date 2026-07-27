@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stockquant.server.QuantServerApplication;
 import com.stockquant.server.agent.service.AgentContextHashService;
 import com.stockquant.server.agent.service.AgentContextSnapshotService;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
@@ -28,6 +29,7 @@ import static org.junit.jupiter.api.Assertions.*;
 @EnabledIfEnvironmentVariable(named = "STOCK_QUANT_TEST_DB_USERNAME", matches = ".+")
 @EnabledIfEnvironmentVariable(named = "STOCK_QUANT_TEST_DB_PASSWORD", matches = ".+")
 class AgentStage2CReadonlyContextPostgresIntegrationTest {
+    private static AgentPostgresTestEnvironment.IsolatedSchema database;
     private static final String SYMBOL = "699992";
     private static final String SOURCE = "TEST_FIXTURE_STAGE_2C";
     private static final LocalDate DATE = LocalDate.of(2099, 1, 15);
@@ -41,7 +43,15 @@ class AgentStage2CReadonlyContextPostgresIntegrationTest {
     private Map<String, Integer> baseline;
 
     @DynamicPropertySource static void configure(DynamicPropertyRegistry registry) {
-        AgentPostgresTestEnvironment.registerDataSource(registry);
+        database = AgentPostgresTestEnvironment
+                .registerIsolatedDataSource(
+                        registry, "stage2c_context");
+    }
+
+    @AfterAll static void cleanDatabase() {
+        if (database != null) {
+            database.close();
+        }
     }
 
     @AfterEach void cleanupPrecisely() {

@@ -65,6 +65,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @EnabledIfEnvironmentVariable(named = "STOCK_QUANT_TEST_DB_PASSWORD", matches = ".+")
 class AgentTaskPostgresIntegrationTest {
 
+    private static AgentPostgresTestEnvironment.IsolatedSchema database;
     private static final Duration WAIT_TIMEOUT = Duration.ofSeconds(10);
     private static final ObjectMapper STUB_MAPPER = new ObjectMapper();
     private static final List<Long> TASKS_TO_DELETE = new CopyOnWriteArrayList<>();
@@ -93,7 +94,9 @@ class AgentTaskPostgresIntegrationTest {
 
     @DynamicPropertySource
     static void agentTeamBaseUrl(DynamicPropertyRegistry registry) {
-        AgentPostgresTestEnvironment.registerDataSource(registry);
+        database = AgentPostgresTestEnvironment
+                .registerIsolatedDataSource(
+                        registry, "agent_task");
         registry.add("stockquant.agent-team.base-url",
                 () -> "http://127.0.0.1:" + stubServer.getAddress().getPort());
     }
@@ -119,6 +122,9 @@ class AgentTaskPostgresIntegrationTest {
     static void stopStub() {
         if (stubServer != null) {
             stubServer.stop(0);
+        }
+        if (database != null) {
+            database.close();
         }
     }
 

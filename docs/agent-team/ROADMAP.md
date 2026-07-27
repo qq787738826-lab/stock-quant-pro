@@ -226,16 +226,26 @@
 - 禁止范围：自动交易、账户或市场事实写入、自动外部摄取、全市场遍历、收益统计或宣传。
 - 完整验收条件：不少于 20 个有效观察日、200 个 shadow item，覆盖确定、不足、阻断、veto 和失败；主要 reasonCode 完成人工复核；持续验证业务表只读；形成正式观察报告，再由 ChatGPT 和用户决定是否进入 3B。
 
-### 3A-1：受控影子运行与就绪度观测基础 V1（任务分支待验收）
+### 3A-1：受控影子运行与就绪度观测基础 V1（已完成并合入）
 
-- 当前状态：任务分支 `codex/1.4.0-stage-3a1-shadow-readiness-v1` 已完成实现与 Codex 本地验证，待 ChatGPT 基于实际 Git 提交验收，未合入；scheduler 默认关闭，未开始长期观察。
+- 当前状态：实现及最终提交 `99b369fcc652b8344453532a7ff9597751a6040b` 已通过 ChatGPT 对实际 Git 提交的验收；用户已批准 merge，集成分支已纯 fast-forward 至该提交。精确验收和批准时间无仓库证据，记为 `UNKNOWN`。scheduler 默认关闭，未开始长期观察。
 - 交付文档：[完整 3A-1 任务书](tasks/3a1-controlled-shadow-readiness-v1.md)和[阶段实现与本地验证记录](stage-3a1-shadow-readiness-v1.md)。
 - V11：新增 `agent_shadow_batches`、`agent_shadow_items`、append-only `agent_shadow_reviews`，并增加 `SHADOW` TriggerType；批次/item 终态事实由数据库触发器保护，复核更正只能追加。
 - 选择：EXPLICIT 只接受去重排序后的 1 至 20 个六位 symbol；AUTO 先当前模拟持仓、后最新已完成扫描 eligible 候选，默认 10、硬上限 20，选择和来源引用通过稳定 Hash 冻结。
 - 运行：默认 `enabled=false/scheduler-enabled=false`；双开关、安全窗口、工作日、运行冲突、最大并发 2、取消与批次级熔断共同保护。runner 只通过现有 Java 任务系统执行精确 2I 规则，不直接调用 Python 或写 Agent 结果。
 - 观测：结构化提取六 run reasonCode，比较同 symbol/同 ruleVersion 最近终态的 context、决策、分数、confidence、run、veto 与 reason 漂移；指标由数据库事实即时查询，不维护手工计数缓存。
 - 本地验收：3A-1 Java 定向 `15/0/0/0`、Python unittest `123/0/0/0`、V1 至 V11 真实 PostgreSQL/Java/Python 受控试运行 `1/0/0/0`、V1 至 V11 旧阶段真实兼容 `29/0/0/0`、AKShare Live Gate `1/0/0/0`，真实组均 `Skipped=0`；`quant-core` `4/0/0/0`、安全 `quant-server` `376/0/0/41`、Vue build 通过。这些是 Codex 本地证据，不是 GitHub Actions CI；41 项为外部 PostgreSQL/AKShare 环境门禁跳过。
-- 阶段边界：3A-1 只建立技术基础，不伪造长期观察历史，不完成 3A，不启动 3B；Codex commit/push 后停止并等待 ChatGPT 基于实际提交验收。
+- 阶段边界：3A-1 只建立技术基础，不伪造长期观察历史，不完成 3A，不启动 3B。
+
+### 3A-R1：Flyway V6 迁移血统恢复（任务分支待验收）
+
+- 当前状态：任务分支 `codex/1.4.0-stage-3ar1-flyway-v6-lineage-recovery` 已完成 V6 血统恢复、V12 前向承接、数据库测试隔离修复与 Codex 本地验证，待 ChatGPT 基于实际 Git 提交验收，未合入。
+- 交付文档：[完整 3A-R1 任务书](tasks/3ar1-flyway-v6-lineage-recovery.md)和[阶段实现与本地验证记录](stage-3ar1-flyway-v6-lineage-recovery.md)。
+- 血统：V6 恢复为提交 `39f929aadebf9e1df6c392d38b97d7058b17dfff` 的已应用内容，checksum `-981595186`；首个改写提交为 `3a3eebd2ef580d31a6b02aab1a7204ea02fdba58`。V7 至 V11 不依赖后来 delta 在 V7 前存在，因此 V12 前向承接不可变、knowledge-close 和旧日历导航列删除。
+- public 事件：第一次全量回归中，既有 `AgentEvidenceVetoPostgresIntegrationTest` 的隔离缺陷把专用测试库 public 通过合法链从 V6 前向迁移到 V12。没有 repair、clean、回滚、恢复备份、删除对象、修改历史或手工 checksum；这不是生产迁移。迁移前完整业务表指纹没有证据，无法验证的比较记为 `UNKNOWN`。
+- 隔离：所有执行 Flyway migrate 的 PostgreSQL 测试必须创建随机 Schema，显式设置 datasource `currentSchema`、Hikari schema、Flyway default-schema/schemas 和 `create-schemas=false`；目标为 public 时立即失败。当前 public 只做只读 validate 和完整指纹保护。
+- 本地验收：V6/V12 静态与隔离安全门 `16/0/0/0`、原触发类隔离复测 `2/0/0/0`、双血统迁移/指纹/public validate `1/0/0/0`、旧血统克隆 Java/Python 单证券 `1/0/0/0`、全部真实 PostgreSQL 兼容矩阵 `47/0/0/0`、AKShare Live Gate `1/0/0/0`，真实组均 `Skipped=0`；`quant-server` `388/0/0/0`、`quant-core` `4/0/0/0`、Python `123/0/0/0` 与 compileall、Vue build 均通过。随机 Schema 残留为 0，接受后的 public V12 基线前后不变。
+- 阶段边界：3A-R1 只恢复迁移血统和测试隔离，不修改 Shadow 功能或 Agent 规则，不创建 public 真实 Shadow 批次，不开启 scheduler，不积累长期观察日，也不启动 3B。
 
 ## 3B：评测集、版本管理和长期复盘（未开始）
 

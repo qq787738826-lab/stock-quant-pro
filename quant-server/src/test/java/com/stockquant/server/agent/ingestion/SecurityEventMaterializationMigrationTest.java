@@ -62,7 +62,7 @@ class SecurityEventMaterializationMigrationTest {
         expected.put("V3__selection_validation.sql", "db330ed855b4cc5ff3ae66436b6c992f16edbe9646d6ca19d40be4931105d484");
         expected.put("V4__simulated_trading.sql", "75f1f46ed2f3a0a2e74853b30356c84c6a16dc0d13cba6fa7db40d20cc541631");
         expected.put("V5__agent_team.sql", "571c75de267081422922b93334a5a172c9102f66b435810cf9b6a4af7a337fb1");
-        expected.put("V6__temporal_market_foundation.sql", "1bddfbff8130281127ec4e19f1504673cf0c1dce964b4c8316b2c70107d798ac");
+        expected.put("V6__temporal_market_foundation.sql", "d3eca49c109a3d81c7a31b8acae446b293825868df82601ddb785aa80621c6a4");
         expected.put("V7__market_data_ingestion_foundation.sql", "036a0a2f45214ae7fa03ae5d51ccddc7f3323b339eedde8bd26b6164fd1c43d4");
         for (Map.Entry<String, String> entry : expected.entrySet()) {
             assertEquals(entry.getValue(), sha256(Files.readAllBytes(MIGRATIONS.resolve(entry.getKey()))),
