@@ -23,6 +23,7 @@ from .models import (
     STAGE_2F_STRATEGY_BACKTEST_RULE_VERSION,
     STAGE_2H_POSITION_RISK_RULE_VERSION,
     STAGE_2G_ANNOUNCEMENT_RISK_RULE_VERSION,
+    STAGE_2I_CHIEF_DECISION_RULE_VERSION,
     FormalVeto,
 )
 
@@ -34,6 +35,7 @@ _DATA_QUALITY_RULE_VERSIONS = frozenset({
     STAGE_2F_STRATEGY_BACKTEST_RULE_VERSION,
     STAGE_2H_POSITION_RISK_RULE_VERSION,
     STAGE_2G_ANNOUNCEMENT_RISK_RULE_VERSION,
+    STAGE_2I_CHIEF_DECISION_RULE_VERSION,
 })
 _MARKET_REGIME_RULE_VERSIONS = frozenset({
     STAGE_2D_MARKET_REGIME_RULE_VERSION,
@@ -41,6 +43,7 @@ _MARKET_REGIME_RULE_VERSIONS = frozenset({
     STAGE_2F_STRATEGY_BACKTEST_RULE_VERSION,
     STAGE_2H_POSITION_RISK_RULE_VERSION,
     STAGE_2G_ANNOUNCEMENT_RISK_RULE_VERSION,
+    STAGE_2I_CHIEF_DECISION_RULE_VERSION,
 })
 
 
@@ -193,6 +196,7 @@ class TechnicalAnalysisAgent(InsufficientDataAgent):
             STAGE_2F_STRATEGY_BACKTEST_RULE_VERSION,
             STAGE_2H_POSITION_RISK_RULE_VERSION,
             STAGE_2G_ANNOUNCEMENT_RISK_RULE_VERSION,
+            STAGE_2I_CHIEF_DECISION_RULE_VERSION,
         }:
             return super().analyze(request, generated_at, data_quality_gate)
         evaluation = self._engine.evaluate(
@@ -239,6 +243,7 @@ class StrategyBacktestAgent(InsufficientDataAgent):
             STAGE_2F_STRATEGY_BACKTEST_RULE_VERSION,
             STAGE_2H_POSITION_RISK_RULE_VERSION,
             STAGE_2G_ANNOUNCEMENT_RISK_RULE_VERSION,
+            STAGE_2I_CHIEF_DECISION_RULE_VERSION,
         }:
             return super().analyze(request, generated_at, data_quality_gate)
         evaluation = self._engine.evaluate(
@@ -281,7 +286,10 @@ class AnnouncementRiskAgent(InsufficientDataAgent):
         generated_at: datetime,
         data_quality_gate: GateStatus | None = None,
     ) -> AgentOutput:
-        if request.ruleVersion != STAGE_2G_ANNOUNCEMENT_RISK_RULE_VERSION:
+        if request.ruleVersion not in {
+            STAGE_2G_ANNOUNCEMENT_RISK_RULE_VERSION,
+            STAGE_2I_CHIEF_DECISION_RULE_VERSION,
+        }:
             return super().analyze(request, generated_at, data_quality_gate)
         evaluation = self._engine.evaluate(
             request,
@@ -327,6 +335,7 @@ class PositionRiskAgent(InsufficientDataAgent):
         if request.ruleVersion not in {
             STAGE_2H_POSITION_RISK_RULE_VERSION,
             STAGE_2G_ANNOUNCEMENT_RISK_RULE_VERSION,
+            STAGE_2I_CHIEF_DECISION_RULE_VERSION,
         }:
             return super().analyze(
                 request, generated_at, data_quality_gate

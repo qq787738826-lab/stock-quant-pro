@@ -10,6 +10,7 @@ from .agents import (
     StrategyBacktestAgent,
     TechnicalAnalysisAgent,
 )
+from .chief_decision import ChiefDecisionRuleEngine, ordered_findings
 from .models import (
     AgentOutput,
     AgentTeamRequest,
@@ -24,10 +25,14 @@ from .models import (
     STAGE_2F_STRATEGY_BACKTEST_RULE_VERSION,
     STAGE_2H_POSITION_RISK_RULE_VERSION,
     STAGE_2G_ANNOUNCEMENT_RISK_RULE_VERSION,
+    STAGE_2I_CHIEF_DECISION_RULE_VERSION,
 )
 
 
 class ChiefDecisionService:
+    def __init__(self) -> None:
+        self._stage_2i = ChiefDecisionRuleEngine()
+
     def decide(
         self,
         request: AgentTeamRequest,
@@ -40,6 +45,35 @@ class ChiefDecisionService:
         vetoes: list[FormalVeto],
         generated_at: datetime,
     ) -> FinalDecision:
+        if request.ruleVersion == STAGE_2I_CHIEF_DECISION_RULE_VERSION:
+            runs = [
+                data_quality,
+                market_regime,
+                technical_analysis,
+                strategy_backtest,
+                announcement_risk,
+                position_risk,
+            ]
+            evaluation = self._stage_2i.evaluate(runs, vetoes)
+            return FinalDecision(
+                taskId=request.taskId,
+                decision=evaluation.decision,
+                gateStatus=evaluation.gate_status,
+                vetoed=evaluation.vetoed,
+                score=evaluation.score,
+                confidence=evaluation.confidence,
+                summary=evaluation.summary,
+                findings=ordered_findings(runs),
+                sourceRunIds=[
+                    run_id for _, run_id in request.runIds.ordered()
+                ],
+                vetoIds=list(evaluation.veto_ids),
+                contextHash=request.contextHash,
+                tradeDate=request.tradeDate,
+                ruleVersion=request.ruleVersion,
+                executionMode=request.executionMode,
+                generatedAt=generated_at,
+            )
         if request.ruleVersion == STAGE_2B_DATA_QUALITY_RULE_VERSION:
             if data_quality.gateStatus is GateStatus.BLOCKED:
                 decision = FinalDecisionCode.BLOCKED_BY_DATA_QUALITY

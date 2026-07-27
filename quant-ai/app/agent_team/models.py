@@ -17,6 +17,7 @@ STAGE_2E_TECHNICAL_ANALYSIS_RULE_VERSION = "1.4.0-stage-2e-technical-analysis-v1
 STAGE_2F_STRATEGY_BACKTEST_RULE_VERSION = "1.4.0-stage-2f-strategy-backtest-v1"
 STAGE_2H_POSITION_RISK_RULE_VERSION = "1.4.0-stage-2h-position-risk-v1"
 STAGE_2G_ANNOUNCEMENT_RISK_RULE_VERSION = "1.4.0-stage-2g-announcement-risk-v1"
+STAGE_2I_CHIEF_DECISION_RULE_VERSION = "1.4.0-stage-2i-chief-decision-v1"
 
 
 class StrictModel(BaseModel):
@@ -387,7 +388,41 @@ class AgentTeamResponse(StrictModel):
             self._validate_stage_2h_position_risk(runs_by_code)
         elif self.ruleVersion == STAGE_2G_ANNOUNCEMENT_RISK_RULE_VERSION:
             self._validate_stage_2g_announcement_risk(runs_by_code)
+        elif self.ruleVersion == STAGE_2I_CHIEF_DECISION_RULE_VERSION:
+            self._validate_stage_2i_chief_decision(runs_by_code)
         return self
+
+    def _validate_stage_2i_chief_decision(
+        self,
+        runs_by_code: dict[AgentCode, AgentOutput],
+    ) -> None:
+        from .chief_decision import ChiefDecisionRuleEngine, ordered_findings
+
+        ordered_runs = [runs_by_code[code] for code in AgentCode]
+        final = self.finalDecision
+        expected_source_run_ids = [run.runId for run in ordered_runs]
+        expected_evidence = [
+            item
+            for run in ordered_runs
+            for item in run.evidence
+        ]
+        expected = ChiefDecisionRuleEngine().evaluate(ordered_runs, self.vetoes)
+        if final.sourceRunIds != expected_source_run_ids:
+            raise ValueError("阶段2I sourceRunIds必须保持六智能体固定顺序")
+        if self.evidence != expected_evidence:
+            raise ValueError("阶段2I顶层evidence必须按六智能体固定顺序拼接")
+        if final.findings != ordered_findings(ordered_runs):
+            raise ValueError("阶段2I总控findings必须按六智能体固定顺序拼接")
+        if (
+            final.decision is not expected.decision
+            or final.gateStatus is not expected.gate_status
+            or final.vetoed is not expected.vetoed
+            or final.score != expected.score
+            or final.confidence != expected.confidence
+            or final.summary != expected.summary
+            or final.vetoIds != list(expected.veto_ids)
+        ):
+            raise ValueError("阶段2I总控确定性复算不一致")
 
     def _validate_stage_2g_announcement_risk(
         self,

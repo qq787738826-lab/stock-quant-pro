@@ -18,6 +18,7 @@ final class AgentStage2GTestFixtures {
 
     enum Scenario {
         NO_EVENT,
+        WARN_RISK,
         MULTI_RISK,
         UNAVAILABLE,
         INVALID_HASH,
@@ -69,6 +70,15 @@ final class AgentStage2GTestFixtures {
                     "1212345679",
                     "减持计划公告",
                     base.tradeDate().minusDays(10));
+        }
+        if (scenario == Scenario.WARN_RISK) {
+            addEvent(
+                    events,
+                    base.symbol(),
+                    base.tradeDate(),
+                    "1212345677",
+                    "减持计划公告",
+                    base.tradeDate());
         }
         if (scenario == Scenario.INVALID_HASH) {
             addEvent(

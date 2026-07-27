@@ -15,12 +15,21 @@ import com.stockquant.server.agent.announcement.AnnouncementProviderModels.Provi
 import com.stockquant.server.agent.api.CreateAgentTaskRequest;
 import com.stockquant.server.agent.backtest.BacktestContracts;
 import com.stockquant.server.agent.backtest.MarketDataPersistenceService;
+import com.stockquant.server.agent.chief.ChiefDecisionContracts;
+import com.stockquant.server.agent.model.AgentModels.AgentTeamRequest;
+import com.stockquant.server.agent.model.AgentModels.AgentTeamResponse;
+import com.stockquant.server.agent.model.AgentModels.CacheKey;
 import com.stockquant.server.agent.model.AgentModels.CreatedTask;
+import com.stockquant.server.agent.model.AgentModels.RunIds;
+import com.stockquant.server.agent.model.AgentTypes.AgentCode;
 import com.stockquant.server.agent.model.AgentTypes.ExecutionMode;
 import com.stockquant.server.agent.model.AgentTypes.TriggerType;
 import com.stockquant.server.agent.portfolio.PortfolioContracts;
+import com.stockquant.server.agent.service.AgentCacheService;
 import com.stockquant.server.agent.service.AgentContextHashService;
+import com.stockquant.server.agent.service.AgentResultPersistenceService;
 import com.stockquant.server.agent.service.AgentTaskService;
+import com.stockquant.server.agent.validation.AgentResponseValidator;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterAll;
@@ -43,6 +52,7 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.sql.Array;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
@@ -53,6 +63,8 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -88,13 +100,31 @@ class AgentStage2GPostgresPythonIntegrationTest {
     private static final String BLOCKED_SYMBOL = "600804";
     private static final String INVALID_SYMBOL = "600805";
     private static final String COMPANION_SYMBOL = "600811";
+    private static final String CHIEF_PASS_SYMBOL = "600821";
+    private static final String CHIEF_WATCH_SYMBOL = "600822";
+    private static final String CHIEF_RESEARCH_SYMBOL = "600823";
+    private static final String CHIEF_VETO_SYMBOL = "600824";
+    private static final String CHIEF_BLOCKED_SYMBOL = "600825";
+    private static final String CHIEF_INSUFFICIENT_SYMBOL = "600826";
+    private static final String CHIEF_INVALID_SYMBOL = "600827";
+    private static final String CHIEF_COMPANION_SYMBOL = "600831";
     private static final String SOURCE = "TEST_FIXTURE_STAGE_2G";
     private static final LocalDate ANALYSIS_DATE = LocalDate.of(2026, 7, 25);
+    private static final LocalDate CHIEF_ANALYSIS_DATE =
+            LocalDate.of(2026, 7, 24);
     private static final LocalDate CAPTURE_START = ANALYSIS_DATE.minusDays(179);
+    private static final LocalDate CHIEF_CAPTURE_START =
+            CHIEF_ANALYSIS_DATE.minusDays(179);
     private static final Instant CAPTURE_INSTANT = ANALYSIS_DATE.atTime(11, 0)
             .atZone(AnnouncementContracts.MARKET_ZONE).toInstant();
     private static final Instant QUERY_INSTANT = ANALYSIS_DATE.atTime(12, 0)
             .atZone(AnnouncementContracts.MARKET_ZONE).toInstant();
+    private static final Instant CHIEF_CAPTURE_INSTANT =
+            CHIEF_ANALYSIS_DATE.atTime(11, 0)
+                    .atZone(AnnouncementContracts.MARKET_ZONE).toInstant();
+    private static final Instant CHIEF_QUERY_INSTANT =
+            CHIEF_ANALYSIS_DATE.atTime(12, 0)
+                    .atZone(AnnouncementContracts.MARKET_ZONE).toInstant();
     private static final Duration WAIT_TIMEOUT = Duration.ofSeconds(30);
     private static final String SCHEMA_PREFIX = "stage_2g_team_it_";
     private static final String TEST_SCHEMA = SCHEMA_PREFIX
@@ -129,6 +159,9 @@ class AgentStage2GPostgresPythonIntegrationTest {
     @Autowired AnnouncementIngestionService ingestion;
     @Autowired MarketDataPersistenceService marketDataPersistence;
     @Autowired AgentContextHashService contextHashes;
+    @Autowired AgentCacheService cacheService;
+    @Autowired AgentResponseValidator responseValidator;
+    @Autowired AgentResultPersistenceService resultPersistence;
     @Autowired JdbcTemplate jdbc;
     @Autowired ObjectMapper objectMapper;
     @MockBean AnnouncementProviderClient provider;
@@ -240,6 +273,109 @@ class AgentStage2GPostgresPythonIntegrationTest {
         assertEquals(publicBaseline, currentPublicBaseline());
     }
 
+    @Test
+    void closesStage2ICompositePersistencePriorityCacheAndAtomicFailure()
+            throws Exception {
+        assertMigrations();
+        prepareChiefMarketData(
+                CHIEF_PASS_SYMBOL,
+                CHIEF_WATCH_SYMBOL,
+                CHIEF_RESEARCH_SYMBOL,
+                CHIEF_VETO_SYMBOL,
+                CHIEF_INSUFFICIENT_SYMBOL,
+                CHIEF_INVALID_SYMBOL,
+                CHIEF_COMPANION_SYMBOL);
+        captureChief(CHIEF_PASS_SYMBOL, List.of());
+        captureChief(CHIEF_WATCH_SYMBOL, List.of(record(
+                CHIEF_WATCH_SYMBOL,
+                "1212820001",
+                "\u51cf\u6301\u8ba1\u5212\u516c\u544a",
+                CHIEF_ANALYSIS_DATE)));
+        captureChief(CHIEF_RESEARCH_SYMBOL, List.of(record(
+                CHIEF_RESEARCH_SYMBOL,
+                "1212820002",
+                "\u91cd\u5927\u8bc9\u8bbc\u516c\u544a",
+                CHIEF_ANALYSIS_DATE)));
+        captureChief(CHIEF_VETO_SYMBOL, List.of());
+        captureChief(CHIEF_BLOCKED_SYMBOL, List.of());
+        captureChief(CHIEF_INVALID_SYMBOL, List.of());
+
+        assertFixedChiefOutcomesPersistThroughRealPythonAndPostgres();
+
+        configureCompleteNoRiskAccount();
+        CreatedTask pass = executeChief(
+                CHIEF_PASS_SYMBOL, "stage-2i-pass", true);
+        assertChiefDecision(
+                pass,
+                "INSUFFICIENT_DATA",
+                "NOT_APPLICABLE",
+                0,
+                0,
+                "PARTIAL");
+
+        configureCompleteNoRiskAccount();
+        CreatedTask watch = executeChief(
+                CHIEF_WATCH_SYMBOL, "stage-2i-watch", true);
+        assertChiefDecision(
+                watch,
+                "INSUFFICIENT_DATA",
+                "NOT_APPLICABLE",
+                0,
+                0,
+                "PARTIAL");
+
+        configureCompleteNoRiskAccount();
+        CreatedTask research = executeChief(
+                CHIEF_RESEARCH_SYMBOL, "stage-2i-research", true);
+        assertChiefDecision(
+                research,
+                "INSUFFICIENT_DATA",
+                "NOT_APPLICABLE",
+                0,
+                0,
+                "PARTIAL");
+
+        configureCompleteNoRiskAccount();
+        CreatedTask insufficient = executeChief(
+                CHIEF_INSUFFICIENT_SYMBOL,
+                "stage-2i-insufficient",
+                false);
+        assertChiefDecision(
+                insufficient,
+                "INSUFFICIENT_DATA",
+                "NOT_APPLICABLE",
+                0,
+                0,
+                "PARTIAL");
+
+        configureChiefPositionVeto(CHIEF_VETO_SYMBOL);
+        CreatedTask veto = executeChief(
+                CHIEF_VETO_SYMBOL, "stage-2i-veto", true);
+        assertChiefDecision(
+                veto,
+                "REJECTED_BY_VETO",
+                "BLOCKED",
+                0,
+                100,
+                "PARTIAL");
+        assertTrue(((Boolean) decision(veto.task().id()).get("vetoed")));
+
+        configureCompleteNoRiskAccount();
+        CreatedTask blocked = executeChief(
+                CHIEF_BLOCKED_SYMBOL, "stage-2i-dq-blocked", true);
+        assertChiefDecision(
+                blocked,
+                "BLOCKED_BY_DATA_QUALITY",
+                "BLOCKED",
+                0,
+                100,
+                "PARTIAL");
+
+        configureCompleteNoRiskAccount();
+        assertChiefTamperedResponseFailsAtomically();
+        assertEquals(publicBaseline, currentPublicBaseline());
+    }
+
     private void capture(String symbol, List<ProviderRecord> records) {
         providerRecords.put(symbol, List.copyOf(records));
         now.set(CAPTURE_INSTANT);
@@ -249,6 +385,22 @@ class AgentStage2GPostgresPythonIntegrationTest {
         assertEquals(records.size(), result.recordCount());
         assertEquals(records.size(), result.appendedCount());
         now.set(QUERY_INSTANT);
+    }
+
+    private void captureChief(
+            String symbol,
+            List<ProviderRecord> records
+    ) {
+        providerRecords.put(symbol, List.copyOf(records));
+        now.set(CHIEF_CAPTURE_INSTANT);
+        var result = ingestion.capture(new CaptureRequest(
+                symbol,
+                CHIEF_CAPTURE_START,
+                CHIEF_ANALYSIS_DATE));
+        assertTrue(result.complete());
+        assertEquals(records.size(), result.recordCount());
+        assertEquals(records.size(), result.appendedCount());
+        now.set(CHIEF_QUERY_INSTANT);
     }
 
     private CreatedTask execute(String symbol, String requestedBy) {
@@ -278,6 +430,270 @@ class AgentStage2GPostgresPythonIntegrationTest {
                         .path("securityEvents").path("contextProfile").asText());
         assertPersistedContext(created);
         return created;
+    }
+
+    private CreatedTask executeChief(
+            String symbol,
+            String requestedBy,
+            boolean expectedSecurityEventsAvailable
+    ) {
+        Map<String, List<String>> businessBefore = businessTableRows();
+        long observationCount = count(
+                "SELECT count(*) FROM announcement_observations");
+        CreatedTask created = taskService.create(
+                chiefRequest(symbol),
+                requestedBy);
+        assertTrue(created.newlyCreated());
+        long taskId = created.task().id();
+        await(
+                () -> Set.of("PARTIAL", "COMPLETED", "FAILED")
+                        .contains(taskStatus(taskId)),
+                "stage 2I task did not reach a terminal state");
+        assertFalse("FAILED".equals(taskStatus(taskId)),
+                () -> "forwarded response=" + FORWARDED_RESPONSES.get(taskId));
+        assertEquals(1, calls(taskId));
+        assertEquals(businessBefore, businessTableRows());
+        assertEquals(observationCount, count(
+                "SELECT count(*) FROM announcement_observations"));
+        assertEquals(
+                expectedSecurityEventsAvailable,
+                created.task().contextSnapshot()
+                        .path("securityEvents").path("available").asBoolean());
+        assertPersistedContext(created);
+        return created;
+    }
+
+    private void assertFixedChiefOutcomesPersistThroughRealPythonAndPostgres()
+            throws Exception {
+        Map<String, List<String>> businessBefore = businessTableRows();
+        for (var expected : List.of(
+                Map.entry(
+                        AgentStage2ITestFixtures.Scenario.NO_EVENT,
+                        "PASS_TO_MANUAL_REVIEW"),
+                Map.entry(
+                        AgentStage2ITestFixtures.Scenario.WARN_EVENT,
+                        "WATCH"),
+                Map.entry(
+                        AgentStage2ITestFixtures.Scenario.MULTI_RISK,
+                        "RESEARCH_ONLY"))) {
+            AgentTeamRequest request = insertFixedChiefTask(
+                    AgentStage2ITestFixtures.request(expected.getKey()));
+            AgentTeamResponse response = objectMapper.readValue(
+                    forwardToPython(objectMapper.writeValueAsBytes(request)),
+                    AgentTeamResponse.class);
+            responseValidator.validate(request, response);
+            resultPersistence.persist(response, Duration.ofMillis(7));
+            assertFixedChiefPersistence(
+                    request,
+                    response,
+                    expected.getValue());
+        }
+        assertEquals(businessBefore, businessTableRows());
+    }
+
+    private AgentTeamRequest insertFixedChiefTask(AgentTeamRequest fixture) {
+        long taskId = jdbc.queryForObject("""
+                INSERT INTO agent_tasks(
+                    symbol, trade_date, status, context_schema_version,
+                    context_snapshot_json, context_generated_at, context_hash,
+                    rule_version, execution_mode, trigger_type, requested_by,
+                    force_refresh, cache_hit, started_at, created_at, updated_at
+                ) VALUES (
+                    ?, ?, 'RUNNING', ?, ?::jsonb, ?, ?, ?,
+                    'LOCAL_RULES', 'MANUAL', 'stage-2i-fixed-persistence',
+                    FALSE, FALSE, CURRENT_TIMESTAMP,
+                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                )
+                RETURNING id
+                """,
+                Long.class,
+                fixture.symbol(),
+                fixture.tradeDate(),
+                fixture.contextSchemaVersion(),
+                writeJson(fixture.contextSnapshot()),
+                OffsetDateTime.ofInstant(
+                        fixture.requestedAt(),
+                        ZoneOffset.UTC),
+                fixture.contextHash(),
+                ChiefDecisionContracts.RULE_VERSION);
+        List<Long> runIds = new ArrayList<>();
+        for (AgentCode code : AgentCode.PROFESSIONAL_AGENTS) {
+            runIds.add(jdbc.queryForObject("""
+                    INSERT INTO agent_runs(
+                        task_id, agent_code, attempt_no, status,
+                        gate_status, decision, veto,
+                        started_at, created_at, updated_at
+                    ) VALUES (
+                        ?, ?, 1, 'RUNNING', 'NOT_APPLICABLE',
+                        'NOT_APPLICABLE', FALSE,
+                        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                    )
+                    RETURNING id
+                    """, Long.class, taskId, code.name()));
+        }
+        RunIds ids = new RunIds(
+                runIds.get(0),
+                runIds.get(1),
+                runIds.get(2),
+                runIds.get(3),
+                runIds.get(4),
+                runIds.get(5));
+        return new AgentTeamRequest(
+                fixture.schemaVersion(),
+                taskId,
+                ids,
+                fixture.symbol(),
+                fixture.tradeDate(),
+                fixture.contextHash(),
+                fixture.contextSchemaVersion(),
+                ChiefDecisionContracts.RULE_VERSION,
+                fixture.executionMode(),
+                fixture.contextSnapshot(),
+                fixture.requestedAt());
+    }
+
+    private void assertFixedChiefPersistence(
+            AgentTeamRequest request,
+            AgentTeamResponse response,
+            String expectedDecision
+    ) throws Exception {
+        long taskId = request.taskId();
+        assertEquals("COMPLETED", taskStatus(taskId));
+        assertSixRuns(runs(taskId));
+        Map<String, Object> persisted = decision(taskId);
+        assertEquals("COMPLETED", persisted.get("status"));
+        assertEquals(expectedDecision, persisted.get("decision"));
+        assertEquals(
+                response.finalDecision().score(),
+                number(persisted, "score"));
+        assertEquals(
+                response.finalDecision().confidence(),
+                number(persisted, "confidence"));
+        AgentStage2CReadonlyContextPostgresIntegrationTest
+                .assertJsonSemanticallyEquals(
+                        objectMapper.valueToTree(response.finalDecision()),
+                        readJson(String.valueOf(persisted.get("decision_json"))));
+        assertEquals(
+                response.finalDecision().sourceRunIds(),
+                sqlLongs((Array) persisted.get("source_run_ids")));
+        assertEquals(
+                response.evidence().size(),
+                countForTask("agent_evidence", taskId));
+        assertEquals(0, countForTask("agent_vetoes", taskId));
+        assertEquals(1, countForTask("agent_decisions", taskId));
+        var cached = cacheService.completed(new CacheKey(
+                request.symbol(),
+                request.tradeDate(),
+                request.contextHash(),
+                ChiefDecisionContracts.RULE_VERSION,
+                ExecutionMode.LOCAL_RULES));
+        assertTrue(cached.isPresent());
+        assertEquals(taskId, cached.orElseThrow().id());
+    }
+
+    private void assertChiefDecision(
+            CreatedTask created,
+            String expectedDecision,
+            String expectedGate,
+            int expectedScore,
+            int expectedConfidence,
+            String expectedTaskStatus
+    ) throws Exception {
+        long taskId = created.task().id();
+        List<Map<String, Object>> persistedRuns = runs(taskId);
+        assertEquals(
+                expectedTaskStatus,
+                taskStatus(taskId),
+                () -> "runs=" + persistedRuns
+                        + ", decision=" + decision(taskId));
+        assertSixRuns(persistedRuns);
+        assertFalse(persistedRuns.stream().anyMatch(
+                row -> "CHIEF_DECISION".equals(row.get("agent_code"))));
+
+        Map<String, Object> persistedDecision = decision(taskId);
+        assertEquals(expectedDecision, persistedDecision.get("decision"));
+        assertEquals(expectedGate, persistedDecision.get("gate_status"));
+        assertEquals(expectedScore, number(persistedDecision, "score"));
+        assertEquals(
+                expectedConfidence,
+                number(persistedDecision, "confidence"));
+        assertEquals(
+                "COMPLETED".equals(expectedTaskStatus)
+                        ? "COMPLETED"
+                        : "INSUFFICIENT_DATA",
+                persistedDecision.get("status"));
+
+        JsonNode forwarded = FORWARDED_RESPONSES.get(taskId);
+        assertNotNull(forwarded);
+        assertEquals(6, forwarded.path("agentRuns").size());
+        AgentStage2CReadonlyContextPostgresIntegrationTest
+                .assertJsonSemanticallyEquals(
+                        forwarded.path("finalDecision"),
+                        readJson(String.valueOf(
+                                persistedDecision.get("decision_json"))));
+        AgentStage2CReadonlyContextPostgresIntegrationTest
+                .assertJsonSemanticallyEquals(
+                        forwarded.path("finalDecision").path("findings"),
+                        readJson(String.valueOf(
+                                persistedDecision.get("findings_json"))));
+
+        List<Long> runIds = jdbc.queryForList(
+                        "SELECT id FROM agent_runs WHERE task_id=? ORDER BY id",
+                        Long.class,
+                        taskId);
+        assertEquals(
+                runIds,
+                sqlLongs((Array) persistedDecision.get("source_run_ids")));
+        List<Long> vetoIds = sqlLongs(
+                (Array) persistedDecision.get("veto_ids"));
+        if ("REJECTED_BY_VETO".equals(expectedDecision)) {
+            assertFalse(vetoIds.isEmpty());
+        } else {
+            assertEquals(List.of(), vetoIds);
+        }
+        assertEquals(
+                forwarded.path("evidence").size(),
+                countForTask("agent_evidence", taskId));
+        assertEquals(
+                ChiefDecisionContracts.RULE_VERSION,
+                jdbc.queryForObject(
+                        "SELECT rule_version FROM agent_decisions WHERE task_id=?",
+                        String.class,
+                        taskId));
+    }
+
+    private void assertChiefTamperedResponseFailsAtomically() {
+        Map<String, List<String>> businessBefore = businessTableRows();
+        long observationCount = count(
+                "SELECT count(*) FROM announcement_observations");
+        CreatedTask created = taskService.create(
+                chiefRequest(CHIEF_INVALID_SYMBOL),
+                "stage-2i-invalid-response");
+        long taskId = created.task().id();
+        await(
+                () -> "FAILED".equals(taskStatus(taskId)),
+                "tampered stage 2I response did not reach FAILED");
+        assertEquals(1, calls(taskId));
+        assertNotNull(FORWARDED_RESPONSES.get(taskId));
+        assertEquals(0, countForTask("agent_evidence", taskId));
+        assertEquals(0, countForTask("agent_vetoes", taskId));
+        assertEquals(0, countForTask("agent_decisions", taskId));
+        for (Map<String, Object> run : jdbc.queryForList("""
+                SELECT status, score, confidence, veto, summary,
+                       output_json::text AS output_json, error_message
+                FROM agent_runs WHERE task_id=? ORDER BY id
+                """, taskId)) {
+            assertEquals("FAILED", run.get("status"));
+            assertNull(run.get("score"));
+            assertNull(run.get("confidence"));
+            assertEquals(false, run.get("veto"));
+            assertNull(run.get("summary"));
+            assertNull(run.get("output_json"));
+            assertNotNull(run.get("error_message"));
+        }
+        assertEquals(businessBefore, businessTableRows());
+        assertEquals(observationCount, count(
+                "SELECT count(*) FROM announcement_observations"));
     }
 
     private void assertNoEventPersistence(CreatedTask created) {
@@ -442,10 +858,42 @@ class AgentStage2GPostgresPythonIntegrationTest {
         now.set(QUERY_INSTANT);
     }
 
+    private void prepareChiefMarketData(String... symbols) {
+        LocalDate effectiveTradeDate = latestSupportedTradeDate(
+                CHIEF_ANALYSIS_DATE);
+        now.set(effectiveTradeDate.atTime(15, 0)
+                .atZone(BacktestContracts.MARKET_ZONE).toInstant());
+        for (String symbol : symbols) {
+            var result = marketDataPersistence.persistBars(
+                    symbol,
+                    bars(symbol, effectiveTradeDate, 500),
+                    SOURCE,
+                    "REVISION_1",
+                    "TEST_FIXTURE");
+            assertEquals(500, result.appendedObservationCount());
+            jdbc.update("""
+                    UPDATE securities
+                    SET name=?, exchange='SSE', board='MAIN', industry='TEST',
+                        list_date=DATE '2000-01-01', is_st=false, is_active=true,
+                        data_source=?, updated_at=CURRENT_TIMESTAMP
+                    WHERE symbol=?
+                    """, "Stage2I " + symbol, SOURCE, symbol);
+        }
+        now.set(CHIEF_QUERY_INSTANT);
+    }
+
     private void configureNoRiskAccount() {
         resetBusinessTables();
         updateAccount("100000.00", "0.00");
         updateLimits(5, "0.20");
+    }
+
+    private void configureCompleteNoRiskAccount() {
+        configureNoRiskAccount();
+        insertEquitySnapshot(
+                CHIEF_ANALYSIS_DATE.minusDays(2), "100000.00");
+        insertEquitySnapshot(
+                CHIEF_ANALYSIS_DATE.minusDays(1), "100000.00");
     }
 
     private void configurePositionVeto(String symbol) {
@@ -466,6 +914,28 @@ class AgentStage2GPostgresPythonIntegrationTest {
                 """, symbol, ANALYSIS_DATE.minusDays(10));
         insertEquitySnapshot(ANALYSIS_DATE.minusDays(2), "200000.00");
         insertEquitySnapshot(ANALYSIS_DATE.minusDays(1), "200000.00");
+    }
+
+    private void configureChiefPositionVeto(String symbol) {
+        resetBusinessTables();
+        updateAccount("100000.00", "0.00");
+        updateLimits(5, "0.20");
+        jdbc.update("""
+                INSERT INTO positions(
+                    account_id, symbol, quantity, available_quantity,
+                    average_cost, last_price, stop_loss, target_price,
+                    trailing_stop_pct, highest_price, source_plan_id,
+                    opened_at, last_buy_date, updated_at
+                ) VALUES (
+                    1, ?, 1000, 1000, 80.0000, 138.0000, NULL, NULL,
+                    0.0400, 138.0000, NULL,
+                    CURRENT_TIMESTAMP, ?, CURRENT_TIMESTAMP
+                )
+                """, symbol, CHIEF_ANALYSIS_DATE.minusDays(10));
+        insertEquitySnapshot(
+                CHIEF_ANALYSIS_DATE.minusDays(2), "200000.00");
+        insertEquitySnapshot(
+                CHIEF_ANALYSIS_DATE.minusDays(1), "200000.00");
     }
 
     private void resetBusinessTables() {
@@ -572,10 +1042,20 @@ class AgentStage2GPostgresPythonIntegrationTest {
                 TriggerType.MANUAL);
     }
 
+    private static CreateAgentTaskRequest chiefRequest(String symbol) {
+        return new CreateAgentTaskRequest(
+                symbol,
+                CHIEF_ANALYSIS_DATE,
+                ExecutionMode.LOCAL_RULES,
+                ChiefDecisionContracts.RULE_VERSION,
+                false,
+                TriggerType.MANUAL);
+    }
+
     private List<Map<String, Object>> runs(long taskId) {
         return jdbc.queryForList("""
                 SELECT id, agent_code, status, gate_status, decision, score,
-                       confidence, veto, output_json::text AS output_json
+                       confidence, veto
                 FROM agent_runs WHERE task_id=? ORDER BY id
                 """, taskId);
     }
@@ -609,7 +1089,9 @@ class AgentStage2GPostgresPythonIntegrationTest {
 
     private Map<String, Object> decision(long taskId) {
         return jdbc.queryForMap("""
-                SELECT decision, gate_status, vetoed,
+                SELECT status, decision, gate_status, vetoed, score,
+                       confidence, findings_json::text AS findings_json,
+                       source_run_ids, veto_ids,
                        decision_json::text AS decision_json
                 FROM agent_decisions WHERE task_id=?
                 """, taskId);
@@ -641,11 +1123,33 @@ class AgentStage2GPostgresPythonIntegrationTest {
         return ((Number) value.get(field)).intValue();
     }
 
+    private static List<Long> sqlLongs(Array value) throws SQLException {
+        if (value == null) return List.of();
+        Object raw = value.getArray();
+        if (raw instanceof Long[] longs) return List.of(longs);
+        if (raw instanceof Object[] values) {
+            List<Long> result = new ArrayList<>(values.length);
+            for (Object item : values) {
+                result.add(((Number) item).longValue());
+            }
+            return List.copyOf(result);
+        }
+        throw new SQLException("unsupported SQL array representation");
+    }
+
     private JsonNode readJson(String value) {
         try {
             return objectMapper.readTree(value);
         } catch (IOException error) {
             throw new AssertionError("persisted JSON cannot be parsed", error);
+        }
+    }
+
+    private String writeJson(JsonNode value) {
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (IOException error) {
+            throw new AssertionError("fixture JSON cannot be serialized", error);
         }
     }
 
@@ -796,6 +1300,14 @@ class AgentStage2GPostgresPythonIntegrationTest {
                                         ? 99 : run.path("score").asInt() + 1);
                     }
                 }
+            } else if (CHIEF_INVALID_SYMBOL.equals(
+                    request.path("symbol").asText())) {
+                ObjectNode decision = response.with("finalDecision");
+                decision.put(
+                        "score",
+                        decision.path("score").asInt() == 100
+                                ? 99
+                                : decision.path("score").asInt() + 1);
             }
             FORWARDED_RESPONSES.put(taskId, response.deepCopy());
             byte[] output = PROXY_MAPPER.writeValueAsBytes(response);

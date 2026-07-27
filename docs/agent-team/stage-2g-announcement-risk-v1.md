@@ -2,7 +2,7 @@
 
 ## 1. 状态
 
-状态：**任务分支实现与 Codex 本地验证完成，待 ChatGPT 基于实际 Git 提交验收，未合入集成分支。**
+状态：**实现与 Codex 本地验证完成，ChatGPT 实际 Git 提交验收 PASS，用户已批准 merge，已纯 fast-forward 合入集成分支。**
 
 - 冻结集成基线：`a898e21df38594a6aca1429a3dfd5e28c2cf7f72`
 - 任务分支：`codex/1.4.0-stage-2g-announcement-risk-v1`
@@ -12,10 +12,15 @@
 - 来源 / Provider：`AKSHARE_CNINFO_RESEARCH_V1` / `AKSHARE_CNINFO_PROVIDER_V1`
 - canonical 契约：`ANNOUNCEMENT_CANONICAL_V1`
 - AKShare 版本：`1.18.64`
+- 首次实现提交：`9213507785323ab286d2cae147cf1d893dc102b6`
+- 混合标题与 CNINFO 域名门禁修复及最终提交：`681fee989f08c4c1e4edaa8cf787c97a95a27784`
+- 集成分支 fast-forward HEAD：`681fee989f08c4c1e4edaa8cf787c97a95a27784`
+- ChatGPT 验收时间：`UNKNOWN`
+- 用户 merge 批准时间：`UNKNOWN`
 - 完整任务书：[2g-akshare-announcement-risk-v1.md](tasks/2g-akshare-announcement-risk-v1.md)
 
-该状态不代表 ChatGPT 验收 PASS、用户 merge 批准、已合入或来源获得 FORMAL/PIT
-资格。当前项目事实以 [CURRENT_STATE.md](CURRENT_STATE.md) 为唯一权威来源。
+该状态只表示代码树已经通过上述流程合入，不表示来源获得 FORMAL/PIT 资格。
+当前项目事实以 [CURRENT_STATE.md](CURRENT_STATE.md) 为唯一权威来源。
 
 ## 2. 真实来源门禁与资格
 
@@ -205,4 +210,5 @@ Schema；public 数据与结构指纹前后不变。任务闭环还验证
 - Python Agent 不访问数据库或网络，Java 仍是事实、Hash、时间和持久化权威；
 - 未修改真实账户或模拟交易业务事实；
 - 未产生正式公告 veto、投资建议、收益承诺或自动交易能力；
-- 任务分支未合入，未开始 2I 或其他阶段。
+- 2G 提交本身不包含 2I 或其他阶段实现；后续阶段的当前状态以
+  [CURRENT_STATE.md](CURRENT_STATE.md) 为唯一权威来源。

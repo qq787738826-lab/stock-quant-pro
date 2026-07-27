@@ -6,6 +6,7 @@ import com.stockquant.core.domain.Bar;
 import com.stockquant.core.indicator.Indicators;
 import com.stockquant.server.agent.backtest.AgentBacktestContextService;
 import com.stockquant.server.agent.backtest.BacktestContracts;
+import com.stockquant.server.agent.chief.ChiefDecisionContracts;
 import com.stockquant.server.agent.announcement.AgentSecurityEventsContextService;
 import com.stockquant.server.agent.announcement.AnnouncementContracts;
 import com.stockquant.server.agent.portfolio.AgentPortfolioContextService;
@@ -35,6 +36,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -244,6 +246,8 @@ class AgentContextSnapshotServiceTest {
 
         var stage2G = withStage2G.create(
                 SYMBOL, TRADE_DATE, AnnouncementContracts.RULE_VERSION);
+        var stage2I = withStage2G.create(
+                SYMBOL, TRADE_DATE, ChiefDecisionContracts.RULE_VERSION);
         assertEquals(
                 BacktestContracts.CONTEXT_PROFILE,
                 stage2G.value().path("backtestContext")
@@ -256,7 +260,10 @@ class AgentContextSnapshotServiceTest {
                 AnnouncementContracts.CONTEXT_PROFILE,
                 stage2G.value().path("securityEvents")
                         .path("contextProfile").asText());
-        verify(securityEvents).create(SYMBOL, TRADE_DATE, instant);
+        assertEquals(stage2G.value(), stage2I.value());
+        assertEquals(stage2G.contextHash(), stage2I.contextHash());
+        verify(securityEvents, times(2)).create(
+                SYMBOL, TRADE_DATE, instant);
     }
 
     @Test

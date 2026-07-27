@@ -1,4 +1,11 @@
-import type { AgentCode, AgentRun, Evidence, JsonValue, TaskStatus } from './types'
+import type {
+  AgentCode,
+  AgentRun,
+  Evidence,
+  FinalDecisionCode,
+  JsonValue,
+  TaskStatus,
+} from './types'
 
 export const AGENT_ORDER: readonly AgentCode[] = [
   'DATA_QUALITY',
@@ -16,6 +23,15 @@ export const AGENT_NAMES: Record<AgentCode, string> = {
   STRATEGY_BACKTEST: '策略回测',
   ANNOUNCEMENT_RISK: '公告风险',
   POSITION_RISK: '仓位风险',
+}
+
+export const FINAL_DECISION_NAMES: Record<FinalDecisionCode, string> = {
+  REJECTED_BY_VETO: '仓位风险否决',
+  BLOCKED_BY_DATA_QUALITY: '数据质量阻断',
+  INSUFFICIENT_DATA: '数据不足',
+  RESEARCH_ONLY: '仅限研究',
+  WATCH: '持续观察',
+  PASS_TO_MANUAL_REVIEW: '进入人工研究复核',
 }
 
 const TERMINAL_STATUSES = new Set<TaskStatus>([

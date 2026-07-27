@@ -11,6 +11,7 @@ import {
 } from '../agent-team/api'
 import {
   AGENT_NAMES,
+  FINAL_DECISION_NAMES,
   formatJson,
   isTerminalTaskStatus,
   localIsoDate,
@@ -384,7 +385,7 @@ onBeforeUnmount(invalidateRequestsAndStopPolling)
     </section>
 
     <section v-if="task" class="panel decision-panel">
-      <div class="section-heading"><div><p class="eyebrow">FINAL DECISION</p><h2>总控决策</h2></div><el-tag v-if="decision" :type="decision.vetoed ? 'danger' : 'warning'">{{ decision.decision }}</el-tag></div>
+      <div class="section-heading"><div><p class="eyebrow">FINAL DECISION</p><h2>总控决策</h2></div><el-tag v-if="decision" :type="decision.vetoed ? 'danger' : 'warning'">{{ FINAL_DECISION_NAMES[decision.decision] }} / {{ decision.decision }}</el-tag></div>
       <div v-if="!decision" class="empty-state">总控决策尚未生成</div>
       <template v-else>
         <el-alert v-if="decision.decision === 'BLOCKED_BY_DATA_QUALITY'" title="因数据质量不足阻断研究，不属于正式风险否决" type="warning" :closable="false" />

@@ -1,0 +1,173 @@
+{
+  "contractVersion": "CHIEF_DECISION_V1",
+  "weightContractVersion": "CHIEF_SCORE_WEIGHTS_V1",
+  "weights": {
+    "TECHNICAL_ANALYSIS": 25,
+    "STRATEGY_BACKTEST": 35,
+    "ANNOUNCEMENT_RISK": 20,
+    "POSITION_RISK": 20
+  },
+  "vectors": [
+    {
+      "name": "pass_to_manual_review",
+      "runs": [
+        {"agentCode": "DATA_QUALITY", "status": "COMPLETED", "gateStatus": "PASS", "decision": "PASS", "score": 100, "confidence": 100, "veto": false, "riskSeverity": "INFO"},
+        {"agentCode": "MARKET_REGIME", "status": "COMPLETED", "gateStatus": "PASS", "decision": "WARN", "score": 50, "confidence": 0, "veto": false, "riskSeverity": "INFO"},
+        {"agentCode": "TECHNICAL_ANALYSIS", "status": "COMPLETED", "gateStatus": "PASS", "decision": "WARN", "score": 80, "confidence": 100, "veto": false, "riskSeverity": "INFO"},
+        {"agentCode": "STRATEGY_BACKTEST", "status": "COMPLETED", "gateStatus": "PASS", "decision": "WARN", "score": 70, "confidence": 80, "veto": false, "riskSeverity": "INFO"},
+        {"agentCode": "ANNOUNCEMENT_RISK", "status": "COMPLETED", "gateStatus": "PASS", "decision": "PASS", "score": 100, "confidence": 40, "veto": false, "riskSeverity": "INFO"},
+        {"agentCode": "POSITION_RISK", "status": "COMPLETED", "gateStatus": "PASS", "decision": "PASS", "score": 100, "confidence": 100, "veto": false, "riskSeverity": "INFO"}
+      ],
+      "vetoIds": [],
+      "expected": {
+        "weightedScoreSum": 8450,
+        "score": 85,
+        "weightedConfidenceSum": 8100,
+        "confidence": 81,
+        "highestRiskSeverity": "INFO",
+        "decision": "PASS_TO_MANUAL_REVIEW",
+        "gateStatus": "PASS",
+        "vetoed": false,
+        "summary": "CHIEF_DECISION_V1 decision=PASS_TO_MANUAL_REVIEW; compositeScore=85; compositeConfidence=81; MARKET_REGIME V1 is informational with score/confidence weight 0; research or manual review only; no executable action."
+      }
+    },
+    {
+      "name": "watch_score_69",
+      "runs": [
+        {"agentCode": "DATA_QUALITY", "status": "COMPLETED", "gateStatus": "PASS", "decision": "PASS", "score": 100, "confidence": 100, "veto": false, "riskSeverity": "INFO"},
+        {"agentCode": "MARKET_REGIME", "status": "COMPLETED", "gateStatus": "PASS", "decision": "WARN", "score": 0, "confidence": 0, "veto": false, "riskSeverity": "INFO"},
+        {"agentCode": "TECHNICAL_ANALYSIS", "status": "COMPLETED", "gateStatus": "PASS", "decision": "WARN", "score": 60, "confidence": 100, "veto": false, "riskSeverity": "INFO"},
+        {"agentCode": "STRATEGY_BACKTEST", "status": "COMPLETED", "gateStatus": "PASS", "decision": "WARN", "score": 60, "confidence": 80, "veto": false, "riskSeverity": "INFO"},
+        {"agentCode": "ANNOUNCEMENT_RISK", "status": "COMPLETED", "gateStatus": "PASS", "decision": "PASS", "score": 100, "confidence": 40, "veto": false, "riskSeverity": "INFO"},
+        {"agentCode": "POSITION_RISK", "status": "COMPLETED", "gateStatus": "PASS", "decision": "PASS", "score": 65, "confidence": 100, "veto": false, "riskSeverity": "INFO"}
+      ],
+      "vetoIds": [],
+      "expected": {
+        "weightedScoreSum": 6900,
+        "score": 69,
+        "weightedConfidenceSum": 8100,
+        "confidence": 81,
+        "highestRiskSeverity": "INFO",
+        "decision": "WATCH",
+        "gateStatus": "WARN",
+        "vetoed": false,
+        "summary": "CHIEF_DECISION_V1 decision=WATCH; compositeScore=69; compositeConfidence=81; MARKET_REGIME V1 is informational with score/confidence weight 0; research or manual review only; no executable action."
+      }
+    },
+    {
+      "name": "research_score_49",
+      "runs": [
+        {"agentCode": "DATA_QUALITY", "status": "COMPLETED", "gateStatus": "PASS", "decision": "PASS", "score": 0, "confidence": 100, "veto": false, "riskSeverity": "INFO"},
+        {"agentCode": "MARKET_REGIME", "status": "COMPLETED", "gateStatus": "PASS", "decision": "WARN", "score": 100, "confidence": 0, "veto": false, "riskSeverity": "INFO"},
+        {"agentCode": "TECHNICAL_ANALYSIS", "status": "COMPLETED", "gateStatus": "PASS", "decision": "WARN", "score": 40, "confidence": 100, "veto": false, "riskSeverity": "INFO"},
+        {"agentCode": "STRATEGY_BACKTEST", "status": "COMPLETED", "gateStatus": "PASS", "decision": "WARN", "score": 40, "confidence": 80, "veto": false, "riskSeverity": "INFO"},
+        {"agentCode": "ANNOUNCEMENT_RISK", "status": "COMPLETED", "gateStatus": "PASS", "decision": "PASS", "score": 50, "confidence": 40, "veto": false, "riskSeverity": "INFO"},
+        {"agentCode": "POSITION_RISK", "status": "COMPLETED", "gateStatus": "PASS", "decision": "PASS", "score": 75, "confidence": 100, "veto": false, "riskSeverity": "INFO"}
+      ],
+      "vetoIds": [],
+      "expected": {
+        "weightedScoreSum": 4900,
+        "score": 49,
+        "weightedConfidenceSum": 8100,
+        "confidence": 81,
+        "highestRiskSeverity": "INFO",
+        "decision": "RESEARCH_ONLY",
+        "gateStatus": "WARN",
+        "vetoed": false,
+        "summary": "CHIEF_DECISION_V1 decision=RESEARCH_ONLY; compositeScore=49; compositeConfidence=81; MARKET_REGIME V1 is informational with score/confidence weight 0; research or manual review only; no executable action."
+      }
+    },
+    {
+      "name": "research_dq_warn_cap",
+      "runs": [
+        {"agentCode": "DATA_QUALITY", "status": "COMPLETED", "gateStatus": "WARN", "decision": "WARN", "score": 50, "confidence": 100, "veto": false, "riskSeverity": "INFO"},
+        {"agentCode": "MARKET_REGIME", "status": "COMPLETED", "gateStatus": "WARN", "decision": "WARN", "score": 50, "confidence": 0, "veto": false, "riskSeverity": "INFO"},
+        {"agentCode": "TECHNICAL_ANALYSIS", "status": "COMPLETED", "gateStatus": "WARN", "decision": "WARN", "score": 80, "confidence": 50, "veto": false, "riskSeverity": "INFO"},
+        {"agentCode": "STRATEGY_BACKTEST", "status": "COMPLETED", "gateStatus": "WARN", "decision": "WARN", "score": 70, "confidence": 50, "veto": false, "riskSeverity": "INFO"},
+        {"agentCode": "ANNOUNCEMENT_RISK", "status": "COMPLETED", "gateStatus": "PASS", "decision": "PASS", "score": 100, "confidence": 40, "veto": false, "riskSeverity": "INFO"},
+        {"agentCode": "POSITION_RISK", "status": "COMPLETED", "gateStatus": "PASS", "decision": "PASS", "score": 100, "confidence": 100, "veto": false, "riskSeverity": "INFO"}
+      ],
+      "vetoIds": [],
+      "expected": {
+        "weightedScoreSum": 8450,
+        "score": 85,
+        "weightedConfidenceSum": 5800,
+        "confidence": 50,
+        "highestRiskSeverity": "INFO",
+        "decision": "RESEARCH_ONLY",
+        "gateStatus": "WARN",
+        "vetoed": false,
+        "summary": "CHIEF_DECISION_V1 decision=RESEARCH_ONLY; compositeScore=85; compositeConfidence=50; MARKET_REGIME V1 is informational with score/confidence weight 0; research or manual review only; no executable action."
+      }
+    },
+    {
+      "name": "insufficient_market_regime",
+      "runs": [
+        {"agentCode": "DATA_QUALITY", "status": "COMPLETED", "gateStatus": "PASS", "decision": "PASS", "score": 100, "confidence": 100, "veto": false, "riskSeverity": "INFO"},
+        {"agentCode": "MARKET_REGIME", "status": "INSUFFICIENT_DATA", "gateStatus": "NOT_APPLICABLE", "decision": "NOT_APPLICABLE", "score": 0, "confidence": 0, "veto": false, "riskSeverity": "INFO"},
+        {"agentCode": "TECHNICAL_ANALYSIS", "status": "COMPLETED", "gateStatus": "PASS", "decision": "WARN", "score": 80, "confidence": 100, "veto": false, "riskSeverity": "INFO"},
+        {"agentCode": "STRATEGY_BACKTEST", "status": "COMPLETED", "gateStatus": "PASS", "decision": "WARN", "score": 70, "confidence": 80, "veto": false, "riskSeverity": "INFO"},
+        {"agentCode": "ANNOUNCEMENT_RISK", "status": "COMPLETED", "gateStatus": "PASS", "decision": "PASS", "score": 100, "confidence": 40, "veto": false, "riskSeverity": "INFO"},
+        {"agentCode": "POSITION_RISK", "status": "COMPLETED", "gateStatus": "PASS", "decision": "PASS", "score": 100, "confidence": 100, "veto": false, "riskSeverity": "INFO"}
+      ],
+      "vetoIds": [],
+      "expected": {
+        "weightedScoreSum": null,
+        "score": 0,
+        "weightedConfidenceSum": null,
+        "confidence": 0,
+        "highestRiskSeverity": null,
+        "decision": "INSUFFICIENT_DATA",
+        "gateStatus": "NOT_APPLICABLE",
+        "vetoed": false,
+        "summary": "CHIEF_DECISION_V1 decision=INSUFFICIENT_DATA; compositeScore=0; compositeConfidence=0; MARKET_REGIME V1 is informational with score/confidence weight 0; research or manual review only; no executable action."
+      }
+    },
+    {
+      "name": "position_veto_precedes_dq_block",
+      "runs": [
+        {"agentCode": "DATA_QUALITY", "status": "COMPLETED", "gateStatus": "BLOCKED", "decision": "REJECT", "score": 0, "confidence": 100, "veto": false, "riskSeverity": "HIGH"},
+        {"agentCode": "MARKET_REGIME", "status": "INSUFFICIENT_DATA", "gateStatus": "NOT_APPLICABLE", "decision": "NOT_APPLICABLE", "score": 0, "confidence": 0, "veto": false, "riskSeverity": "INFO"},
+        {"agentCode": "TECHNICAL_ANALYSIS", "status": "INSUFFICIENT_DATA", "gateStatus": "NOT_APPLICABLE", "decision": "NOT_APPLICABLE", "score": 0, "confidence": 0, "veto": false, "riskSeverity": "INFO"},
+        {"agentCode": "STRATEGY_BACKTEST", "status": "INSUFFICIENT_DATA", "gateStatus": "BLOCKED", "decision": "NOT_APPLICABLE", "score": 0, "confidence": 0, "veto": false, "riskSeverity": "INFO"},
+        {"agentCode": "ANNOUNCEMENT_RISK", "status": "INSUFFICIENT_DATA", "gateStatus": "NOT_APPLICABLE", "decision": "NOT_APPLICABLE", "score": 0, "confidence": 0, "veto": false, "riskSeverity": "INFO"},
+        {"agentCode": "POSITION_RISK", "status": "COMPLETED", "gateStatus": "BLOCKED", "decision": "REJECT", "score": 0, "confidence": 80, "veto": true, "riskSeverity": "CRITICAL"}
+      ],
+      "vetoIds": ["position-risk-veto-01"],
+      "expected": {
+        "weightedScoreSum": null,
+        "score": 0,
+        "weightedConfidenceSum": null,
+        "confidence": 80,
+        "highestRiskSeverity": null,
+        "decision": "REJECTED_BY_VETO",
+        "gateStatus": "BLOCKED",
+        "vetoed": true,
+        "summary": "CHIEF_DECISION_V1 decision=REJECTED_BY_VETO; compositeScore=0; compositeConfidence=80; MARKET_REGIME V1 is informational with score/confidence weight 0; research or manual review only; no executable action."
+      }
+    },
+    {
+      "name": "data_quality_blocked",
+      "runs": [
+        {"agentCode": "DATA_QUALITY", "status": "COMPLETED", "gateStatus": "BLOCKED", "decision": "REJECT", "score": 0, "confidence": 100, "veto": false, "riskSeverity": "HIGH"},
+        {"agentCode": "MARKET_REGIME", "status": "INSUFFICIENT_DATA", "gateStatus": "NOT_APPLICABLE", "decision": "NOT_APPLICABLE", "score": 0, "confidence": 0, "veto": false, "riskSeverity": "INFO"},
+        {"agentCode": "TECHNICAL_ANALYSIS", "status": "INSUFFICIENT_DATA", "gateStatus": "NOT_APPLICABLE", "decision": "NOT_APPLICABLE", "score": 0, "confidence": 0, "veto": false, "riskSeverity": "INFO"},
+        {"agentCode": "STRATEGY_BACKTEST", "status": "INSUFFICIENT_DATA", "gateStatus": "BLOCKED", "decision": "NOT_APPLICABLE", "score": 0, "confidence": 0, "veto": false, "riskSeverity": "INFO"},
+        {"agentCode": "ANNOUNCEMENT_RISK", "status": "INSUFFICIENT_DATA", "gateStatus": "NOT_APPLICABLE", "decision": "NOT_APPLICABLE", "score": 0, "confidence": 0, "veto": false, "riskSeverity": "INFO"},
+        {"agentCode": "POSITION_RISK", "status": "COMPLETED", "gateStatus": "PASS", "decision": "PASS", "score": 100, "confidence": 100, "veto": false, "riskSeverity": "INFO"}
+      ],
+      "vetoIds": [],
+      "expected": {
+        "weightedScoreSum": null,
+        "score": 0,
+        "weightedConfidenceSum": null,
+        "confidence": 100,
+        "highestRiskSeverity": null,
+        "decision": "BLOCKED_BY_DATA_QUALITY",
+        "gateStatus": "BLOCKED",
+        "vetoed": false,
+        "summary": "CHIEF_DECISION_V1 decision=BLOCKED_BY_DATA_QUALITY; compositeScore=0; compositeConfidence=100; MARKET_REGIME V1 is informational with score/confidence weight 0; research or manual review only; no executable action."
+      }
+    }
+  ]
+}

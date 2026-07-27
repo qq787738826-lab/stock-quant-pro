@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.stockquant.server.agent.model.AgentModels.ContextSnapshot;
 import com.stockquant.server.agent.backtest.AgentBacktestContextService;
 import com.stockquant.server.agent.backtest.BacktestContracts;
+import com.stockquant.server.agent.chief.ChiefDecisionContracts;
 import com.stockquant.server.agent.announcement.AgentSecurityEventsContextService;
 import com.stockquant.server.agent.announcement.AnnouncementContracts;
 import com.stockquant.server.agent.portfolio.AgentPortfolioContextService;
@@ -184,10 +185,13 @@ public class AgentContextSnapshotService {
                 tradeDate,
                 BacktestContracts.RULE_VERSION.equals(ruleVersion)
                         || PortfolioContracts.RULE_VERSION.equals(ruleVersion)
-                        || AnnouncementContracts.RULE_VERSION.equals(ruleVersion),
+                        || AnnouncementContracts.RULE_VERSION.equals(ruleVersion)
+                        || ChiefDecisionContracts.RULE_VERSION.equals(ruleVersion),
                 PortfolioContracts.RULE_VERSION.equals(ruleVersion)
-                        || AnnouncementContracts.RULE_VERSION.equals(ruleVersion),
-                AnnouncementContracts.RULE_VERSION.equals(ruleVersion));
+                        || AnnouncementContracts.RULE_VERSION.equals(ruleVersion)
+                        || ChiefDecisionContracts.RULE_VERSION.equals(ruleVersion),
+                AnnouncementContracts.RULE_VERSION.equals(ruleVersion)
+                        || ChiefDecisionContracts.RULE_VERSION.equals(ruleVersion));
     }
 
     private ContextSnapshot createInternal(

@@ -176,19 +176,19 @@
 - 禁止范围：外部行情、旧结果权威化、参数寻优、投资建议、收益承诺、自动交易、正式 veto 或总控升级。POSITION_RISK 仍是唯一正式否决权。
 - 阶段边界：2F 已完成并合入不自动批准或开始 2G、2H、2I 或其他阶段。
 
-## 2G：AKShare/CNINFO 公告事实基础与 ANNOUNCEMENT_RISK 确定性规则 V1（任务分支待验收）
+## 2G：AKShare/CNINFO 公告事实基础与 ANNOUNCEMENT_RISK 确定性规则 V1（已完成并合入）
 
-- 当前状态：任务分支 `codex/1.4.0-stage-2g-announcement-risk-v1` 已完成实现与 Codex 本地验证；尚待 ChatGPT 基于实际 Git commit 验收，尚未合入集成分支。本状态不等于验收 PASS、用户 merge 批准或正式来源资格。
+- 当前状态：实现提交 `9213507785323ab286d2cae147cf1d893dc102b6`、混合标题与 CNINFO 域名门禁修复及最终提交 `681fee989f08c4c1e4edaa8cf787c97a95a27784` 已通过 ChatGPT 对实际 Git 提交的验收；用户已批准 merge，集成分支已纯 fast-forward 至最终提交。精确验收和批准时间无仓库证据，记为 `UNKNOWN`。该状态不等于来源取得正式资格。
 - 交付文档：[完整 2G 任务书](tasks/2g-akshare-announcement-risk-v1.md)和[阶段实现与本地验证记录](stage-2g-announcement-risk-v1.md)。
 - 来源边界：固定 `akshare==1.18.64`，通过公开 `stock_zh_a_disclosure_report_cninfo` 函数提供 `AKSHARE_CNINFO_RESEARCH_V1/AKSHARE_CNINFO_PROVIDER_V1`。公告 URL 只允许 `cninfo.com.cn` 或其真实子域及默认端口；Provider、Java、Python 和 V10 共同拒绝相似域名、userinfo 与非默认端口。来源资格固定为 `RESEARCH`、`formalEligible=false`、`pitVerified=false`、`revisionRelationshipGuaranteed=false`、`DATE_ONLY`；不得宣称正式授权、历史绝对完整或自动交易资格。
 - Provider 边界：FastAPI Provider Bridge 与 Agent Rule Engine 严格分离；只有手动、默认关闭的 Java 摄取入口能够调用 Provider。Agent 任务创建和分析不访问 AKShare、数据库外部网络或 PDF。
 - 事实模型：V10 新增 append-only `announcement_capture_batches` 与 `announcement_observations`；完整空批次是有效覆盖，部分批次不能证明无风险公告。Java 冻结 `firstObservedAt` 和 `knownAt`，生成 `ANNOUNCEMENT_CANONICAL_V1` Hash 与观察版本；同内容幂等，变化和 A→B→A 保留新版本，不回填历史 knowledge-time。
 - 兼容 profile：只有规则版本 `1.4.0-stage-2g-announcement-risk-v1` 选择 `AGENT_CONTEXT_2G_V1/SECURITY_EVENTS_CONTEXT_V1`，同时复用 2F backtestContext 与 2H portfolioContext；旧 2B、2D-1、2E-1、2F、2H profile/contextHash 保持兼容。
 - 规则输出：Python 只解释 Java 冻结的公告标题和元数据，按退市/监管、财务债务诉讼、股东减持质押担保经营、更正澄清等冻结关键词、短语级排除和最高 severity 运行确定性规则。明确安全短语只从对应规则匹配副本中移除，混合标题中的继续或新增风险仍被保留。每公告只扣分一次，四档 recency 使用 `HALF_UP`，confidence 固定 40，生成五类 finding、coverage/event evidence，永不生成正式 veto。
-- 总控边界：POSITION_RISK 正式 veto 继续最高优先，其次 DATA_QUALITY 阻断；两者均不存在时六个专业 run 已执行，但因 2I 未实现仍为 `INSUFFICIENT_DATA/0/0`。2G 不实现综合评分、投资结论或交易指令。
+- 总控边界：2G 本身保持 POSITION_RISK 正式 veto 最高优先，其次 DATA_QUALITY 阻断；两者均不存在时六个专业 run 已执行，但 2G 规则版本仍为 `INSUFFICIENT_DATA/0/0`。2G 不实现综合评分、投资结论或交易指令。
 - 本地验收：真实 AKShare 安全门和 Live Gate 使用 `000001` 受控历史范围返回 38 行，新增 CNINFO 域名门禁未拒绝真实链接；2G Java 定向 `42/0/0/0`、Python unittest `112/0/0/0`、真实 V1 至 V10 PostgreSQL/跨语言/Live Gate 均 `Skipped=0`；`quant-core` `4/0/0/0`、安全非数据库 `quant-server` `334/0/0/56`、2D/2E/2F/2H 真实兼容 `35/0/0/0`。这些是 Codex 本地证据，不是 GitHub Actions CI；56 项为环境门禁跳过。
-- 禁止范围：正式来源资格、FORMAL/PIT、隐藏接口或反爬绕过、PDF 批量下载、定时或全市场抓取、LLM 事实生成、非 POSITION_RISK 正式 veto、投资建议、自动交易和 2I。
-- 阶段边界：Codex 完成单次 commit 和普通 push 后停止，由 ChatGPT 检查实际提交；验收通过后仍须用户批准 merge，不得自行合并或开始 2I。
+- 禁止范围：正式来源资格、FORMAL/PIT、隐藏接口或反爬绕过、PDF 批量下载、定时或全市场抓取、LLM 事实生成、非 POSITION_RISK 正式 veto、投资建议和自动交易。
+- 阶段边界：2G 已完成并合入；该事实本身不曾自动批准 2I，2I 的当前授权、实现与验收状态单独记录。
 
 ## 2H：可靠模拟持仓上下文与 POSITION_RISK 正式否决 V1（已完成并合入）
 
@@ -203,14 +203,18 @@
 - 禁止范围：真实账户、券商控制、自动下单、交易执行指令、业务表写入、外部数据源或历史持仓 PIT。
 - 阶段边界：2H 已完成并合入不自动批准或开始 2G、2I 或其他阶段。
 
-## 2I：总控综合决策（未开始）
+## 2I：确定性总控综合决策 V1（任务分支待验收）
 
-- 目标：基于六个权威 run 和证据形成确定性综合决策。
-- 输入：六智能体结构化结果、正式 veto、数据质量门禁。
-- 输出：一致的 finalDecision，不创建第七个 run。
-- 依赖：2B 至 2H 达到验收条件。
-- 禁止范围：脱离证据的自然语言裁决、LLM 权威决策。
-- 验收条件：sourceRunIds/vetoIds 完整，门禁、否决和评分规则可复现。
+- 当前状态：任务分支 `codex/1.4.0-stage-2i-chief-decision-v1` 已完成实现与 Codex 本地验证，待 ChatGPT 基于实际 Git 提交验收，未合入集成分支。
+- 交付文档：[完整 2I 任务书](tasks/2i-deterministic-chief-decision-v1.md)和[阶段实现与本地验证记录](stage-2i-chief-decision-v1.md)。
+- 版本与兼容：规则 `1.4.0-stage-2i-chief-decision-v1`、总控契约 `CHIEF_DECISION_V1`、权重契约 `CHIEF_SCORE_WEIGHTS_V1`；精确 2I 规则版本复用与 2G 完全相同的 `AGENT_CONTEXT_2G_V1` 组合上下文，不增加外层字段、子 Context Schema、Flyway 或第七个 run，也不改变旧规则版本结果和 contextHash。
+- 输入角色：DATA_QUALITY 只作门禁和 confidence 上限；MARKET_REGIME V1 的 score/confidence 权重均为 0，但必须处于合法终态；正常综合只使用 TECHNICAL_ANALYSIS 25、STRATEGY_BACKTEST 35、ANNOUNCEMENT_RISK 20、POSITION_RISK 20。
+- 优先级：合法 POSITION_RISK 正式 veto 最高，其次 DATA_QUALITY 阻断，再次为必要 run 不足；只有完整输入才按固定 `HALF_UP` 公式形成 `RESEARCH_ONLY`、`WATCH` 或 `PASS_TO_MANUAL_REVIEW`。
+- 输出：`sourceRunIds` 精确包含固定六 run，`vetoIds` 只引用 POSITION_RISK；顶层 findings/evidence 继续按六 run 顺序拼接，不创建总控 finding/evidence。Java 在持久化前独立复算决策、权重、边界、风险 severity、summary 和顺序，非法响应原子失败。
+- 工作台：只增加六类 finalDecision 的中文展示标签；`PASS_TO_MANUAL_REVIEW` 仅表示进入人工研究复核，不增加买卖、下单、仓位调整或收益预测能力。
+- 本地验收：2I Java 纯规则与 context `20/0/0/0`、Python unittest `123/0/0/0`、真实 Java/Python HTTP `12/0/0/0`、旧阶段真实 HTTP 兼容 `17/0/0/0`、V1 至 V10 真实 PostgreSQL/Python/任务持久化 `2/0/0/0`、随机隔离 Schema PostgreSQL 兼容 `26/0/0/0`、Java AKShare Live Gate `1/0/0/0`，真实组均 `Skipped=0`；`quant-core` `4/0/0/0`、安全非数据库 `quant-server` `357/0/0/69`、Vue build 通过。这些均为 Codex 本地证据，不是 GitHub Actions CI；69 项是环境门禁跳过，不能冒充真实闭环。随机 Schema 已精确清理，public 基线不变。
+- 禁止范围：LLM 权威裁决、专业规则阈值漂移、外部访问、事实写入、真实账户、自动交易、投资建议、新迁移和 3A。
+- 阶段边界：Codex 完成单次 commit 和普通 push 后停止，由 ChatGPT 基于实际提交验收；不得自行 merge 或开始 3A。
 
 ## 3A：影子运行（未开始）
 
