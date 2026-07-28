@@ -261,28 +261,79 @@
 - 来源路线：Tushare 是 raw daily、`adj_factor`、`trade_cal` 的优先技术候选，但书面许可、样例和版本语义未通过前不批准；AKShare-Tencent 仅保留 current projection 与交叉校验角色；Wind 等企业来源需取得 revision、旧版本、发布时间、许可和合同附件证据。
 - 事实模型：候选 `PIT_MARKET_FACTS_V2` 把 raw daily、复权因子、交易日历和公司行动保存为四类独立 append-only 观察，严格区分 `PROVIDER_PIT_VERIFIED` 与首次捕获之后才可用的 `SYSTEM_KNOWLEDGE_PIT`。
 - 兼容边界：2F V1、V9、旧 profile、contextHash 和缓存键完全不变；未来 V2 使用独立规则版本/profile。设计合入不表示 Provider 已批准、生产实现或迁移已完成，也没有批准 Day 002 或 3B。
-- 后续入口：按 [3A-R3B iFinD 试用里程碑启动规划](tasks/3ar3b-ifind-trial-activation-plan.md)依次完成离线闭环、启动门、有限试用取证和资格判定；任务书和路线图本身不构成自动实施授权。
+- 后续入口：按 [3A-R3B 免费优先 Provider 验证规划](tasks/3ar3b-free-first-provider-validation-plan.md)，先用免费数据验证产品形态、系统价值和数据瓶颈，再决定是否把 iFinD 或其他付费 Provider 作为专业化升级；任务书和路线图本身不构成自动实施授权。
 
-### 3A-R3B：iFinD 试用里程碑门禁与资格取证（规划已合入）
+### 3A-R3B：免费优先验证、付费 Provider 后置升级与资格取证（规划更新中）
 
-- 规划文档：[完整 3A-R3B 任务书](tasks/3ar3b-ifind-trial-activation-plan.md)和[阶段规划记录](stage-3ar3b-ifind-trial-activation-plan.md)。
-- 规划状态：提交 `23baf11ed3a236800b5f3feba8681d261a71d9f9` 已通过 ChatGPT 对实际 Git 提交的验收，并经用户批准纯 fast-forward 合入；当前集成分支 HEAD 即该提交。精确验收和批准时间无仓库证据，记为 `UNKNOWN`。
+- 规划文档：[免费优先完整任务书](tasks/3ar3b-free-first-provider-validation-plan.md)、[免费优先阶段记录](stage-3ar3b-free-first-provider-validation-plan.md)、[iFinD 里程碑任务书](tasks/3ar3b-ifind-trial-activation-plan.md)和[iFinD 阶段规划记录](stage-3ar3b-ifind-trial-activation-plan.md)。
+- 既有规划状态：iFinD 里程碑规划提交 `23baf11ed3a236800b5f3feba8681d261a71d9f9` 已通过 ChatGPT 对实际 Git 提交的验收，并经用户批准纯 fast-forward 合入。精确验收和批准时间无仓库证据，记为 `UNKNOWN`。
+- 免费优先更新：系统先用免费数据验证产品形态和效果；只有系统显示可重复使用价值、数据成为可量化主要瓶颈，且同范围免费/付费 A/B 方案和成本意愿均明确后，才考虑 iFinD 或其他付费 Provider。该治理更新当前只在任务分支待验收，不授权 F0 实施。
 - 日期边界：iFinD 试用不得绑定 `2026-08-31`、2026 年 8 月 31 日或任何其他固定日期。日历日期只能作为非权威临时估算，不属于路线图依赖，不得因预计日期临近而降低验收标准。
-- 当前门禁：`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`。真实 Provider 尚未接入，试用尚未启动，真实 iFinD 调用数为 0；Day 002 未创建，3B 未开始。
+- 当前状态：`FREE_PROVIDER_VALIDATION_GATE=BLOCKED`、`PAID_PROVIDER_UPGRADE_DECISION=PENDING`、`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`。真实 Provider 尚未接入，试用尚未启动，真实 iFinD 调用数为 0；Day 002 未创建，scheduler 关闭，3B 未开始。
 
-#### 3A-R3B-0：Provider 中立离线闭环与试用准备（第二次实际 Git 复验 findings 已在任务分支增量修复并完成 Codex 本地验证，待复验、未合入）
+#### 3A-R3B-0：Provider 中立离线闭环与试用准备（已完成并合入）
 
-- 目标：在不调用 iFinD 的情况下，使用 TEST/DEMO 固定夹具、Mock Provider 和允许的 AKShare 研究级能力完成 Provider 中立链路。
+- 当前状态：最终提交 `f0b87e1ecf51d2e94d5eff43d18f5fc3b6abe819` 已通过 ChatGPT 对实际 Git 提交的最终复验；用户已批准纯 fast-forward 合入，当前本地和远程集成分支均到达该提交，ahead/behind 为 `0/0`。
 - 任务证据：[3A-R3B-0 任务书](tasks/3ar3b0-provider-neutral-pit-offline-v2.md)、[阶段记录](stage-3ar3b0-provider-neutral-pit-offline-v2.md)和[iFinD 试用调用矩阵](ifind-trial-call-matrix.md)。
-- 任务分支实现：V13 独立建立 raw daily/factor/calendar/corporate action 四类 PIT 事实和 append-only lineage；Java 建立 Provider 中立 DTO/capability、canonical、as-of Repository 和 `DAILY_EXACT` QFQ 引擎；精确 V2 ruleVersion 建立 2F V2、六智能体和 EXPLICIT Mock Shadow；同时建立默认禁用且网络前失败的 iFinD 骨架、脱敏和离线夹具工具。
+- 实现：V13 独立建立 raw daily/factor/calendar/corporate action 四类 PIT 事实和 append-only lineage；Java 建立 Provider 中立 DTO/capability、canonical、as-of Repository 和 `DAILY_EXACT` QFQ 引擎；精确 V2 ruleVersion 建立 2F V2、六智能体和 EXPLICIT Mock Shadow；同时建立默认禁用且网络前失败的 iFinD 骨架、脱敏和离线夹具工具。
 - 增量修复：资格感知 knowledge-time 明确区分 Provider published time 与系统首次捕获；幂等改为完整 semantic content hash；四类事实使用独立来源身份；raw 非价格字段具有可空值、单位、语义和资格；公司行动必须精确匹配因子日期与身份；18 个黄金场景改为 Java 实际执行的固定输入/输出/lineage/hash 向量。
 - 第二次增量修复：四类 as-of 查询先按资格、knownAt、chainSequence 和 id 选定唯一语义版本，再检查用途和许可；许可撤销固定返回 `PIT_USAGE_NOT_ALLOWED`，禁止回退旧允许版本。V13 batch 同步拒绝非 `PROVIDER_VERIFIED` 资格携带 `providerDatasetVersion`。
-- 验证状态：18 个 QFQ 可执行黄金向量、随机 Schema V1→V13、真实 Java/Python/PostgreSQL Mock Shadow 及相关回归已完成 Codex 本地验证；最终完整矩阵以本任务分支阶段记录中的实际命令和结果为准。
-- 边界：上述实现和两轮增量修复目前只在任务分支，尚待 ChatGPT 基于新的实际 Git 提交复验且尚未 merge。Mock/TEST/DEMO 不取得真实 Provider 资格；真实 iFinD 调用数保持 0，不创建 Day 002。
+- 验证状态：18 个 QFQ 可执行黄金向量、随机 Schema V1→V13、真实 Java/Python/PostgreSQL Mock Shadow 及相关回归已通过最终提交验收。
+- 部署边界：V13 代码已经进入集成分支，但正常业务库尚未执行 V13。Mock/TEST/DEMO 不取得真实 Provider 资格；真实 iFinD 调用数保持 0，不创建 Day 002。
 
-#### 3A-R3B-1：iFinD 试用启动门（未开始）
+#### 3A-R3B-F0：免费 Provider 资格审计（下一规划阶段，未授权实施）
 
-这是只读验收阶段，不开发功能、不调用 iFinD。只有以下条件全部满足才能 PASS：
+- 性质：只读调查、最小受控探针与证据规划，不实现 Adapter。
+- 候选角色：BaoStock 作为免费主 Provider 技术候选；AKShare/Tencent 作为研究级当前投影、辅助与交叉校验候选；巨潮资讯、上交所、深交所公开信息作为公告、公司行动、交易日历和规则的官方证据候选。其他免费来源必须先形成独立审计证据。所有角色均为候选，不是批准。
+- 审计范围：未复权 raw daily、独立复权因子、`DAILY_EXACT`、交易所日历、公司行动、四类稳定来源身份、单位/精度/空值/明确 0、时效与静默修正、限流与结构变化、本地持久化/历史回放/回测/Agent/商业化权利、revision/snapshot/published/update time、旧版本查询、来源差异和维护风险。
+- 禁止推断：开源客户端不证明底层数据商业许可；不得从 QFQ 价格反推因子；不得跨 Provider 拼成伪造同源 PIT lineage。
+- 当前状态：只完成路线规划，未获得业务实现授权，未调用任何免费 Provider。
+
+#### 3A-R3B-F1：免费 Provider Adapter 与 V13 接入（未开始）
+
+- 启动条件：F0 实际证据通过单独验收，至少一条免费路线的研究用途和本地保存授权边界明确。
+- 历史用途：`RESEARCH_HISTORICAL_UNVERIFIED` 仅用于产品、演示、探索性历史回测、覆盖研究和交叉校验；不声明 Provider PIT、历史无前视、正式商业资格或历史修订版本。
+- 前向用途：只有真实首次捕获之后，满足 append-only、`firstObservedAt`、`knownAt`、cutoff 和许可门禁的事实才能成为 `SYSTEM_KNOWLEDGE_PIT`；它不证明首次捕获前 Provider 的发布时间或修订。
+- 边界：不得把免费 Provider 升级为 `PROVIDER_PIT_VERIFIED`，不得绕过 V13 用途许可、跨 Provider 拼接 QFQ、自动全市场抓取、开启 scheduler、创建 Day 002 或自动交易。
+
+#### 3A-R3B-F2：免费版真实产品闭环（未开始）
+
+- 目标：在不购买专业数据时，让用户看到股票候选池、单股票完整分析、固定六智能体、总控结论、数据质量、技术、市场环境、回测、公告和持仓风险、evidence/lineage/reasonCode、历史查询、结果对比及可理解报告。
+- 资格展示：必须清楚区分研究历史数据、`SYSTEM_KNOWLEDGE_PIT` 和不可用数据。
+- 验证问题：产品形态、日常使用意愿、信息价值、可理解/可追溯性、数据缺口影响及各智能体增量价值。
+- 禁止结论：页面或交互完成不等于选股、策略或收益有效。
+
+#### 3A-R3B-F3：免费 Shadow 与效果评估（未开始）
+
+- 输入：通过 F1/F2 形成的免费 Provider 数据和 `SYSTEM_KNOWLEDGE_PIT`。
+- 最低门槛：不少于 20 个有效观察日、200 个 Shadow item，主要 reasonCode 正式人工复核，持续业务表只读证明和正式观察报告；观察时间由实际开发和市场日历决定，不绑定固定日期。
+- 指标冻结：Shadow 开始前必须冻结 `FREE_VALIDATION_METRICS_V1`，覆盖 5/10/20 日命中、相对基准命中和平均/中位超额、MFE/MAE、最大回撤、盈亏比、换手、交易成本、市场环境、confidence 区分度、阻断率、各 Agent 边际贡献、重放/Hash、随机选择和固定基准。
+- 反选择偏差：冻结后不得移动阈值、周期、基准或样本选择；不得只以推荐上涨比例作为准确率、只报告盈利样本，或删除失败、阻断和无信号样本。
+
+#### 免费验证与付费升级门禁
+
+`FREE_PROVIDER_VALIDATION_GATE` 只允许 `PASS/BLOCKED`，当前为
+`FREE_PROVIDER_VALIDATION_GATE=BLOCKED`。PASS 只表示至少一套免费路线能在明确用途边界内
+稳定驱动产品闭环和 `SYSTEM_KNOWLEDGE_PIT` 前向 Shadow，不表示商业正式许可、
+`PROVIDER_PIT_VERIFIED`、盈利证明、iFinD 可开启或 Day 002 自动批准。
+
+`PAID_PROVIDER_UPGRADE_DECISION` 只允许 `PENDING/DEFER/PROCEED`，当前为
+`PAID_PROVIDER_UPGRADE_DECISION=PENDING`。只有产品形态获用户认可、免费数据稳定驱动闭环、
+Shadow 显示不只是大盘或随机波动的初步可重复价值、数据成为量化主要瓶颈、付费改善指标
+和同股票/日期/策略/参数 A/B 已设计、无重大重构且用户愿意承担成本时才能 `PROCEED`。
+产品、规则或免费效果尚未证明，免费数据已足够，预期增量不能覆盖成本或用户暂不投入时可
+`DEFER`；DEFER 不等于项目失败。
+
+#### 3A-R3B-1：iFinD 试用启动门（未开始，非直接下一阶段）
+
+这是只读验收阶段，不开发功能、不调用 iFinD。进入本阶段前必须先满足：
+
+1. F0 至 F3 已完成相应验收；
+2. `PAID_PROVIDER_UPGRADE_DECISION=PROCEED`；
+3. 用户能够安排连续 15 天集中联调；
+4. 用户亲自批准申请和激活。
+
+在此前提下，原有 12 项准备条件仍须全部满足才能 PASS：
 
 1. Provider 中立接口和 DTO 冻结；
 2. 四类 PIT 事实实现及随机隔离 PostgreSQL 测试通过；
