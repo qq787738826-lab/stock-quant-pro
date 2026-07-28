@@ -59,6 +59,14 @@ public class QfqAsOfEngine {
                     symbol, sourceCode, sourceIdentities,
                     requestTradeDate, knowledgeCutoff);
         }
+        if (!usageAllowed(effective.orElseThrow().envelope())) {
+            return unavailable(
+                    PitMarketFactsContracts.USAGE_NOT_ALLOWED,
+                    "Selected calendar observation is not qualified "
+                            + "for PIT replay, backtest, and Agent use",
+                    symbol, sourceCode, sourceIdentities,
+                    requestTradeDate, knowledgeCutoff);
+        }
         if (!validEnvelope(
                 effective.orElseThrow().envelope(),
                 sourceCode,
@@ -84,6 +92,15 @@ public class QfqAsOfEngine {
                     symbol, sourceCode, sourceIdentities,
                     requestTradeDate, knowledgeCutoff);
         }
+        if (raw.stream().anyMatch(
+                value -> !usageAllowed(value.envelope()))) {
+            return unavailable(
+                    PitMarketFactsContracts.USAGE_NOT_ALLOWED,
+                    "A selected raw observation is not qualified "
+                            + "for PIT replay, backtest, and Agent use",
+                    symbol, sourceCode, sourceIdentities,
+                    requestTradeDate, knowledgeCutoff);
+        }
         if (raw.stream().anyMatch(value -> !validEnvelope(
                 value.envelope(), sourceCode,
                 sourceIdentities.rawSourceIdentity(), knowledgeCutoff))) {
@@ -102,6 +119,15 @@ public class QfqAsOfEngine {
                         start, effectiveDate, knowledgeCutoff);
         Set<LocalDate> openDates = new HashSet<>();
         calendar.forEach(item -> openDates.add(item.calendarDate()));
+        if (calendar.stream().anyMatch(
+                value -> !usageAllowed(value.envelope()))) {
+            return unavailable(
+                    PitMarketFactsContracts.USAGE_NOT_ALLOWED,
+                    "A selected calendar lineage observation is not qualified "
+                            + "for PIT replay, backtest, and Agent use",
+                    symbol, sourceCode, sourceIdentities,
+                    requestTradeDate, knowledgeCutoff);
+        }
         if (calendar.stream().anyMatch(value -> !validEnvelope(
                 value.envelope(), sourceCode,
                 sourceIdentities.calendarSourceIdentity(),
@@ -138,6 +164,15 @@ public class QfqAsOfEngine {
         Map<LocalDate, AdjustmentFactorObservation> factorByDate = new HashMap<>();
         factors.forEach(value -> factorByDate.put(
                 value.factorEffectiveTradeDate(), value));
+        if (factors.stream().anyMatch(
+                value -> !usageAllowed(value.envelope()))) {
+            return unavailable(
+                    PitMarketFactsContracts.USAGE_NOT_ALLOWED,
+                    "A selected factor observation is not qualified "
+                            + "for PIT replay, backtest, and Agent use",
+                    symbol, sourceCode, sourceIdentities,
+                    requestTradeDate, knowledgeCutoff);
+        }
         if (factors.stream().anyMatch(value -> !validEnvelope(
                 value.envelope(), sourceCode,
                 sourceIdentities.factorSourceIdentity(),
@@ -171,6 +206,15 @@ public class QfqAsOfEngine {
                 sourceIdentities.corporateActionSourceIdentity(),
                 symbol,
                 start, effectiveDate, knowledgeCutoff);
+        if (actions.stream().anyMatch(
+                value -> !usageAllowed(value.envelope()))) {
+            return unavailable(
+                    PitMarketFactsContracts.USAGE_NOT_ALLOWED,
+                    "A selected corporate-action observation is not qualified "
+                            + "for PIT replay, backtest, and Agent use",
+                    symbol, sourceCode, sourceIdentities,
+                    requestTradeDate, knowledgeCutoff);
+        }
         if (actions.stream().anyMatch(value -> !validEnvelope(
                 value.envelope(), sourceCode,
                 sourceIdentities.corporateActionSourceIdentity(),
@@ -399,10 +443,7 @@ public class QfqAsOfEngine {
                 || !sourceIdentity.equals(envelope.sourceInstrumentId())
                 || envelope.recordedAt().isBefore(
                 envelope.firstObservedAt())
-                || envelope.knownAt().isAfter(cutoff)
-                || !envelope.historicalReplayAllowed()
-                || !envelope.backtestAllowed()
-                || !envelope.agentUseAllowed()) {
+                || envelope.knownAt().isAfter(cutoff)) {
             return false;
         }
         if (envelope.revisionQualification()
@@ -430,5 +471,15 @@ public class QfqAsOfEngine {
                 && envelope.providerUpdatedAt() == null
                 && envelope.knownAt().equals(
                 envelope.firstObservedAt());
+    }
+
+    private static boolean usageAllowed(
+            PitMarketFactModels.FactEnvelope envelope
+    ) {
+        return envelope.usageQualification() != null
+                && envelope.localPersistenceAllowed()
+                && envelope.historicalReplayAllowed()
+                && envelope.backtestAllowed()
+                && envelope.agentUseAllowed();
     }
 }

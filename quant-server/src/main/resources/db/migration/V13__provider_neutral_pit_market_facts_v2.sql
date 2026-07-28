@@ -68,6 +68,10 @@ CREATE TABLE pit_market_fact_batches (
             'PROVIDER_UNAVAILABLE',
             'SYSTEM_KNOWLEDGE_ONLY'
         )),
+    CONSTRAINT ck_pit_market_fact_batches_provider_dataset CHECK (
+        revision_qualification = 'PROVIDER_VERIFIED'
+        OR provider_dataset_version IS NULL
+    ),
     CONSTRAINT ck_pit_market_fact_batches_assurance
         CHECK (assurance_level IN (
             'PROVIDER_PIT_VERIFIED', 'SYSTEM_KNOWLEDGE_PIT'

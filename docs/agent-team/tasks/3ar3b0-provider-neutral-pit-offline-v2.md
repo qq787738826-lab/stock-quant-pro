@@ -4,7 +4,7 @@
 
 - 冻结集成基线：`23baf11ed3a236800b5f3feba8681d261a71d9f9`
 - 任务分支：`codex/1.4.0-stage-3ar3b0-provider-neutral-pit-offline-v2`
-- 状态：**首次验收 findings 的增量修复和 Codex 本地验证完成，待 ChatGPT 基于新的实际 Git 提交复验，尚未 merge。**
+- 状态：**第二次实际 Git 复验 findings 的增量修复和 Codex 本地验证完成，待 ChatGPT 基于新的实际 Git 提交复验，尚未 merge。**
 - iFinD 真实调用数：`0`
 - `IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`
 - Day 002 未创建，scheduler 未开启，3B 未开始。
@@ -49,7 +49,7 @@ V13 是基线之后第一个未占用版本；V1 至 V12 均未修改。
 ## 4. V13 事实模型
 
 迁移：`V13__provider_neutral_pit_market_facts_v2.sql`，Flyway checksum
-`1903740866`。
+`-408572418`。
 
 ### 4.1 表
 
@@ -88,6 +88,9 @@ UPDATE/DELETE/TRUNCATE 不可变保护触发器，并只扩展 V11 Shadow 的允
 - `SYSTEM_KNOWLEDGE_ONLY`、`PROVIDER_UNVERIFIED` 与
   `PROVIDER_UNAVAILABLE` 不得携带已限定的 provider dataset/revision/snapshot/
   publish/update 字段；
+- batch 的 `providerDatasetVersion` 只有在
+  `revisionQualification=PROVIDER_VERIFIED` 时才允许有值；其他资格必须为 null，
+  Java 和 PostgreSQL 使用相同门禁；
 - 非价格字段的 PRESENT 状态必须有值，MISSING 必须为 null；禁止把缺失补零；
 - predecessor 必须属于同 source、同 instrument、同事实类型和同自然键；
 - chainSequence、predecessor 和 observationVersion 唯一；
@@ -168,6 +171,14 @@ as-of Repository 显式接收 sourceCode、对应事实的 source identity 和 k
 链序稳定选择，避免较晚捕获的低资格版本遮蔽可用的合格 Provider 版本。它返回完整
 observationVersion/contentHash/predecessor lineage，不跨 Provider 拼接，不以当前最新
 事实回填历史，也不返回半可靠窗口。
+
+calendar、raw、factor 和 corporate action 四类查询必须先在全部 cutoff 可见版本中，
+按 revision qualification 优先级、`knownAt`、`chainSequence`、数据库 `id` 的冻结顺序
+选出唯一语义版本，随后才检查 usage qualification、local persistence、historical
+replay、backtest 和 Agent use 许可。选中版本任一必要许可为 false 时固定返回
+`PIT_USAGE_NOT_ALLOWED`；不得在选版前过滤该版本，不得回退到旧的允许版本，也不得把
+许可撤销伪装成事实不存在。允许→禁止→重新允许必须保留三个 semantic 版本，并分别在
+对应 cutoff 区间表现为可用、`PIT_USAGE_NOT_ALLOWED`、使用第三版恢复可用。
 
 ## 9. QFQ_AS_OF_ENGINE_V1
 
@@ -269,11 +280,11 @@ Java `OfflineFixtureSanitizer` 和 Python `offline_fixture.py`/命令行工具�
 | Java V2 定向 | Maven：Provider/QFQ 黄金向量/persistence/Shadow 定向 | 34/0/0/0，其中 QFQ 可执行黄金向量 18/18 |
 | Python | `compileall`；`unittest discover -s tests -v` | compileall PASS；130/0/0/0 |
 | quant-core | Maven `-pl quant-core test` | 4/0/0/0 |
-| quant-server 安全全量 | Maven `-pl quant-server -am test` | quant-server 426/0/0/87；87 项为环境门禁，关键真实组另行 Skipped=0 |
-| V13 PostgreSQL | `AgentStage3AR3B0PitV2PostgresIntegrationTest` | 14/0/0/0，Skipped=0 |
+| quant-server 安全全量 | Maven `-pl quant-server -am test` | quant-server 428/0/0/89；89 项为环境门禁，关键真实组另行 Skipped=0 |
+| V13 PostgreSQL | `AgentStage3AR3B0PitV2PostgresIntegrationTest` | 16/0/0/0，Skipped=0 |
 | V6→V13 双血统 | `AgentStage3AR1FlywayLineagePostgresIntegrationTest` | 1/0/0/0，Skipped=0，fresh/legacy 指纹收敛 |
 | V2 Java/Python/Shadow | `AgentStage3AR3B0PostgresPythonShadowIntegrationTest` | 1/0/0/0，Skipped=0 |
-| 旧阶段真实兼容矩阵 | 2D/2E/2F/2G/2H/2I PostgreSQL/Python/跨语言组 | 66/0/0/0，Skipped=0；旧测试的迁移集合断言同步验证 V1–V13 |
+| 旧阶段真实兼容矩阵 | 2D/2E/2F/2G/2H/2I PostgreSQL/Python/跨语言组 | 72/0/0/0，Skipped=0；旧测试的迁移集合断言同步验证 V1–V13 |
 | AKShare 回归 | `AgentStage2GAkshareLiveGateTest` | 1/0/0/0，Skipped=0；仅验证既有研究级公告源 |
 
 随机测试 Schema 最终残留为 0；public 仍停留 V12，只读 validate/结构与数据基线未

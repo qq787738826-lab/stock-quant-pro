@@ -197,6 +197,8 @@ class ProviderNeutralMarketFactsV2Test {
                         java.time.Instant.parse("2026-07-27T07:10:00Z"),
                         java.time.Instant.parse("2026-07-27T07:09:59Z"),
                         RevisionQualification.PROVIDER_VERIFIED));
+        assertTrue(PitMarketFactsContracts.UNAVAILABLE_REASON_CODES.contains(
+                PitMarketFactsContracts.USAGE_NOT_ALLOWED));
     }
 
     @Test

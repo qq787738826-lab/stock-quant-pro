@@ -306,10 +306,7 @@ public class PitMarketFactRepository {
                       AND c.exchange=?
                       AND c.calendar_date<=?
                       AND o.known_at<=?
-                      AND o.historical_replay_allowed
-                      AND o.backtest_allowed
-                      AND o.agent_use_allowed
-                )
+            )
                 SELECT * FROM visible
                 WHERE selected_version=1 AND is_open
                 ORDER BY calendar_date DESC LIMIT 1
@@ -356,10 +353,7 @@ public class PitMarketFactRepository {
                       AND c.exchange=?
                       AND c.calendar_date BETWEEN ? AND ?
                       AND o.known_at<=?
-                      AND o.historical_replay_allowed
-                      AND o.backtest_allowed
-                      AND o.agent_use_allowed
-                )
+            )
                 SELECT * FROM visible
                 WHERE selected_version=1 AND is_open
                 ORDER BY calendar_date
@@ -414,10 +408,7 @@ public class PitMarketFactRepository {
                       AND b.exchange=?
                       AND b.trade_date<=?
                       AND o.known_at<=?
-                      AND o.historical_replay_allowed
-                      AND o.backtest_allowed
-                      AND o.agent_use_allowed
-                )
+            )
                 SELECT * FROM (
                     SELECT * FROM visible
                     WHERE selected_version=1
@@ -472,10 +463,7 @@ public class PitMarketFactRepository {
                       AND f.coverage_mode=?
                       AND f.factor_effective_trade_date BETWEEN ? AND ?
                       AND o.known_at<=?
-                      AND o.historical_replay_allowed
-                      AND o.backtest_allowed
-                      AND o.agent_use_allowed
-                )
+            )
                 SELECT * FROM visible
                 WHERE selected_version=1
                 ORDER BY factor_effective_trade_date
@@ -525,10 +513,7 @@ public class PitMarketFactRepository {
                       AND a.symbol=?
                       AND a.effective_trade_date BETWEEN ? AND ?
                       AND o.known_at<=?
-                      AND o.historical_replay_allowed
-                      AND o.backtest_allowed
-                      AND o.agent_use_allowed
-                )
+            )
                 SELECT * FROM visible
                 WHERE selected_version=1
                 ORDER BY effective_trade_date, source_action_id

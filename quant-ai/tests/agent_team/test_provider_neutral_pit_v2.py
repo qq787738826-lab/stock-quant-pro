@@ -364,33 +364,40 @@ class ProviderNeutralPitV2Test(unittest.TestCase):
             "backtestContext"]["qfqContract"]["forwardFillAllowed"])
 
     def test_factor_missing_and_tampered_hash_fail_safely(self):
-        unavailable = stage_3ar3b0_payload()
-        context = unavailable["contextSnapshot"]["backtestContext"]
-        keys = set(context)
-        for key in keys - {
-            "available", "queriedAt", "queryScope", "producer",
-            "producerVersion", "contextProfile", "schemaVersion",
-            "canonicalContractVersion", "pitModelVersion", "symbol",
-            "requestTradeDate", "decisionTime", "knowledgeCutoff",
-            "marketTimezone", "adjustType", "sourceType", "sourceTables",
-            "sourceStatus", "pointInTimeGuaranteed",
-            "readSelectionFutureExcluded",
-            "producerInputCutoffGuaranteed", "futureDataExcluded",
-        }:
-            context.pop(key)
-        context["available"] = False
-        context["pointInTimeGuaranteed"] = False
-        context["readSelectionFutureExcluded"] = False
-        context["producerInputCutoffGuaranteed"] = False
-        context["futureDataExcluded"] = False
-        context["reasonCode"] = "PIT_FACTOR_UNAVAILABLE"
-        context["reason"] = "exact DAILY_EXACT factor is absent"
-        result = StrategyBacktestRuleEngineV2().evaluate(
-            AgentTeamRequest.model_validate(unavailable),
-            GateStatus.PASS,
-        )
-        self.assertEqual("INSUFFICIENT_DATA", result.status.value)
-        self.assertEqual("PIT_FACTOR_UNAVAILABLE", result.errors[0].code)
+        for reason_code in (
+            "PIT_FACTOR_UNAVAILABLE",
+            "PIT_USAGE_NOT_ALLOWED",
+        ):
+            with self.subTest(reason_code=reason_code):
+                unavailable = stage_3ar3b0_payload()
+                context = unavailable["contextSnapshot"]["backtestContext"]
+                keys = set(context)
+                for key in keys - {
+                    "available", "queriedAt", "queryScope", "producer",
+                    "producerVersion", "contextProfile", "schemaVersion",
+                    "canonicalContractVersion", "pitModelVersion", "symbol",
+                    "requestTradeDate", "decisionTime", "knowledgeCutoff",
+                    "marketTimezone", "adjustType", "sourceType",
+                    "sourceTables", "sourceStatus",
+                    "pointInTimeGuaranteed",
+                    "readSelectionFutureExcluded",
+                    "producerInputCutoffGuaranteed", "futureDataExcluded",
+                }:
+                    context.pop(key)
+                context["available"] = False
+                context["pointInTimeGuaranteed"] = False
+                context["readSelectionFutureExcluded"] = False
+                context["producerInputCutoffGuaranteed"] = False
+                context["futureDataExcluded"] = False
+                context["reasonCode"] = reason_code
+                context["reason"] = "selected PIT fact is unavailable"
+                result = StrategyBacktestRuleEngineV2().evaluate(
+                    AgentTeamRequest.model_validate(unavailable),
+                    GateStatus.PASS,
+                )
+                self.assertEqual(
+                    "INSUFFICIENT_DATA", result.status.value)
+                self.assertEqual(reason_code, result.errors[0].code)
 
         tampered = stage_3ar3b0_payload()
         tampered["contextSnapshot"]["backtestContext"][

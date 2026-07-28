@@ -69,6 +69,8 @@ class AgentStage3AR3B0PitV2PostgresIntegrationTest {
             Instant.parse("2026-07-27T08:00:00.000000Z");
     private static final Instant CUTOFF =
             Instant.parse("2026-07-27T15:59:59.999999Z");
+    private static final String PERMISSION_SOURCE =
+            "MOCK_PERMISSION_TIMELINE_V1";
     private static AgentPostgresTestEnvironment.IsolatedSchema isolated;
 
     @Autowired ObjectMapper mapper;
@@ -112,7 +114,7 @@ class AgentStage3AR3B0PitV2PostgresIntegrationTest {
                 SELECT count(*) FROM flyway_schema_history
                 WHERE NOT success
                 """));
-        assertEquals(1903740866, jdbc.queryForObject("""
+        assertEquals(-408572418, jdbc.queryForObject("""
                 SELECT checksum FROM flyway_schema_history
                 WHERE version='13' AND success
                 """, Integer.class));
@@ -157,19 +159,21 @@ class AgentStage3AR3B0PitV2PostgresIntegrationTest {
                 original, OBSERVED.plusSeconds(60));
         assertEquals(0, repeated.appendedCount());
         assertEquals(original.recordCount(), repeated.idempotentCount());
-        BigDecimal originalClose = calculate(
+        var originalResult = calculate(
                 "000001", "SZSE",
-                OBSERVED.plusSeconds(90))
-                .bars().get(0).close();
+                OBSERVED.plusSeconds(90));
+        assertTrue(originalResult.available(), originalResult.reasonCode());
+        BigDecimal originalClose = originalResult.bars().get(0).close();
 
         MarketFactResponse changed = changedFirstClose(original);
         var second = captureService.capture(
                 changed, OBSERVED.plusSeconds(120));
         assertEquals(1, second.appendedCount());
-        BigDecimal changedClose = calculate(
+        var changedResult = calculate(
                 "000001", "SZSE",
-                OBSERVED.plusSeconds(150))
-                .bars().get(0).close();
+                OBSERVED.plusSeconds(150));
+        assertTrue(changedResult.available(), changedResult.reasonCode());
+        BigDecimal changedClose = changedResult.bars().get(0).close();
         assertNotEquals(originalClose, changedClose);
         var third = captureService.capture(
                 original, OBSERVED.plusSeconds(180));
@@ -802,6 +806,123 @@ class AgentStage3AR3B0PitV2PostgresIntegrationTest {
     }
 
     @Test
+    void selectsEveryFactVersionBeforeCheckingUsagePermissions() {
+        assertRawPermissionTimeline(
+                "000017", true, false, true, true);
+        assertRawPermissionTimeline(
+                "000018", true, true, false, false);
+        assertRawPermissionTimeline(
+                "000019", false, true, true, false);
+
+        String symbol = "000020";
+        MarketFactResponse base = withSource(response(
+                symbol, "SZSE", MockMarketFactProvider.Scenario.NORMAL),
+                PERMISSION_SOURCE);
+        Instant baseAt = OBSERVED.plusSeconds(1200);
+        captureService.capture(base, baseAt);
+        assertTrue(calculate(
+                symbol, "SZSE", PERMISSION_SOURCE,
+                baseAt.plusSeconds(30)).available());
+
+        MarketFactResponse calendarOnly = copy(
+                base, List.of(), List.of(),
+                base.tradingCalendar(), List.of());
+        captureService.capture(
+                withUsagePermissions(
+                        calendarOnly, true, false, true),
+                baseAt.plusSeconds(60));
+        assertUnavailable(
+                calculate(
+                        symbol, "SZSE", PERMISSION_SOURCE,
+                        baseAt.plusSeconds(90)),
+                PitMarketFactsContracts.USAGE_NOT_ALLOWED);
+        captureService.capture(
+                calendarOnly, baseAt.plusSeconds(120));
+        assertTrue(calculate(
+                symbol, "SZSE", PERMISSION_SOURCE,
+                baseAt.plusSeconds(150)).available());
+
+        MarketFactResponse factorOnly = copy(
+                base, List.of(), base.adjustmentFactors(),
+                List.of(), List.of());
+        captureService.capture(
+                withUsagePermissions(
+                        factorOnly, true, false, true),
+                baseAt.plusSeconds(180));
+        assertUnavailable(
+                calculate(
+                        symbol, "SZSE", PERMISSION_SOURCE,
+                        baseAt.plusSeconds(210)),
+                PitMarketFactsContracts.USAGE_NOT_ALLOWED);
+        captureService.capture(
+                factorOnly, baseAt.plusSeconds(240));
+        assertTrue(calculate(
+                symbol, "SZSE", PERMISSION_SOURCE,
+                baseAt.plusSeconds(270)).available());
+
+        MarketFactResponse actionOnly = copy(
+                base, List.of(), List.of(),
+                List.of(), base.corporateActions());
+        captureService.capture(
+                withUsagePermissions(
+                        actionOnly, true, false, true),
+                baseAt.plusSeconds(300));
+        assertUnavailable(
+                calculate(
+                        symbol, "SZSE", PERMISSION_SOURCE,
+                        baseAt.plusSeconds(330)),
+                PitMarketFactsContracts.USAGE_NOT_ALLOWED);
+
+        assertEquals(
+                List.of(true, false, true),
+                jdbc.queryForList("""
+                        SELECT backtest_allowed
+                        FROM pit_market_fact_observations
+                        WHERE source_code=?
+                          AND source_instrument_id='CALENDAR:SZSE'
+                          AND natural_key=?
+                        ORDER BY chain_sequence DESC
+                        LIMIT 3
+                        """, Boolean.class,
+                        PERMISSION_SOURCE,
+                        "TRADING_CALENDAR|SZSE|" + END));
+        assertFalse(jdbc.queryForObject("""
+                SELECT backtest_allowed
+                FROM pit_market_fact_observations
+                WHERE source_code=?
+                  AND source_instrument_id=?
+                  AND natural_key=?
+                ORDER BY
+                  CASE revision_qualification
+                    WHEN 'PROVIDER_VERIFIED' THEN 4
+                    WHEN 'SYSTEM_KNOWLEDGE_ONLY' THEN 3
+                    WHEN 'PROVIDER_UNVERIFIED' THEN 2
+                    WHEN 'PROVIDER_UNAVAILABLE' THEN 1
+                    ELSE 0
+                  END DESC,
+                  known_at DESC, chain_sequence DESC, id DESC
+                LIMIT 1
+                """, Boolean.class,
+                PERMISSION_SOURCE,
+                MockMarketFactProvider.corporateActionSourceIdentity(
+                        symbol, "SZSE"),
+                "CORPORATE_ACTION|" + symbol + "|MOCK-ACTION-001"));
+    }
+
+    @Test
+    void databaseRejectsUnqualifiedProviderDatasetVersionOnBatches() {
+        long batchId = captureService.capture(
+                response(
+                        "000021", "SZSE",
+                        MockMarketFactProvider.Scenario.NORMAL),
+                OBSERVED).batchId();
+        assertUnqualifiedBatchDatasetRejected(
+                batchId, "SYSTEM_KNOWLEDGE_ONLY", "d");
+        assertUnqualifiedBatchDatasetRejected(
+                batchId, "PROVIDER_UNVERIFIED", "e");
+    }
+
+    @Test
     void usesFactSpecificSourceIdentitiesAndReusableExchangeCalendar() {
         String calendarCountSql = """
                 SELECT count(*)
@@ -1310,6 +1431,19 @@ class AgentStage3AR3B0PitV2PostgresIntegrationTest {
             ProviderCapability value,
             boolean agentUseAllowed
     ) {
+        return withUsagePermissions(
+                value,
+                value.historicalReplayAllowed(),
+                value.backtestAllowed(),
+                agentUseAllowed);
+    }
+
+    private static ProviderCapability withUsagePermissions(
+            ProviderCapability value,
+            boolean historicalReplayAllowed,
+            boolean backtestAllowed,
+            boolean agentUseAllowed
+    ) {
         return new ProviderCapability(
                 value.providerContractVersion(),
                 value.providerCode(),
@@ -1321,8 +1455,8 @@ class AgentStage3AR3B0PitV2PostgresIntegrationTest {
                 value.providerUpdatedAtAvailable(),
                 value.historicalVersionsQueryable(),
                 value.localPersistenceAllowed(),
-                value.historicalReplayAllowed(),
-                value.backtestAllowed(),
+                historicalReplayAllowed,
+                backtestAllowed,
                 agentUseAllowed,
                 value.maximumSymbolsPerRequest(),
                 value.maximumNaturalDaysPerRequest(),
@@ -1332,6 +1466,35 @@ class AgentStage3AR3B0PitV2PostgresIntegrationTest {
                 value.coverage(),
                 value.licensing(),
                 value.rateLimit());
+    }
+
+    private static MarketFactResponse withUsagePermissions(
+            MarketFactResponse value,
+            boolean historicalReplayAllowed,
+            boolean backtestAllowed,
+            boolean agentUseAllowed
+    ) {
+        return new MarketFactResponse(
+                value.providerContractVersion(),
+                value.providerCode(),
+                value.adapterVersion(),
+                value.runNamespace(),
+                value.sourceCode(),
+                value.sourceInstrumentId(),
+                value.requestedStart(),
+                value.requestedEnd(),
+                value.complete(),
+                withUsagePermissions(
+                        value.capability(),
+                        historicalReplayAllowed,
+                        backtestAllowed,
+                        agentUseAllowed),
+                value.rawDailyBars(),
+                value.adjustmentFactors(),
+                value.tradingCalendar(),
+                value.corporateActions(),
+                value.errors(),
+                value.providerMetadata());
     }
 
     private static MarketFactResponse withSource(
@@ -1427,14 +1590,121 @@ class AgentStage3AR3B0PitV2PostgresIntegrationTest {
             String exchange,
             Instant cutoff
     ) {
+        return calculate(
+                symbol, exchange,
+                MockMarketFactProvider.PROVIDER_CODE, cutoff);
+    }
+
+    private PitMarketFactModels.QfqAsOfResult calculate(
+            String symbol,
+            String exchange,
+            String sourceCode,
+            Instant cutoff
+    ) {
         return qfqEngine.calculate(
                 symbol,
                 exchange,
-                MockMarketFactProvider.PROVIDER_CODE,
+                sourceCode,
                 MockMarketFactProvider.qfqSourceIdentities(
                         symbol, exchange),
                 END,
                 cutoff);
+    }
+
+    private void assertRawPermissionTimeline(
+            String symbol,
+            boolean historicalReplayAllowed,
+            boolean backtestAllowed,
+            boolean agentUseAllowed,
+            boolean restore
+    ) {
+        MarketFactResponse base = withSource(response(
+                symbol, "SZSE", MockMarketFactProvider.Scenario.NORMAL),
+                PERMISSION_SOURCE);
+        Instant baseAt = OBSERVED.plusSeconds(600);
+        captureService.capture(base, baseAt);
+        assertTrue(calculate(
+                symbol, "SZSE", PERMISSION_SOURCE,
+                baseAt.plusSeconds(30)).available());
+
+        MarketFactResponse rawOnly = copy(
+                base, base.rawDailyBars(),
+                List.of(), List.of(), List.of());
+        captureService.capture(
+                withUsagePermissions(
+                        rawOnly,
+                        historicalReplayAllowed,
+                        backtestAllowed,
+                        agentUseAllowed),
+                baseAt.plusSeconds(60));
+        assertUnavailable(
+                calculate(
+                        symbol, "SZSE", PERMISSION_SOURCE,
+                        baseAt.plusSeconds(90)),
+                PitMarketFactsContracts.USAGE_NOT_ALLOWED);
+
+        if (restore) {
+            captureService.capture(
+                    rawOnly, baseAt.plusSeconds(120));
+            assertTrue(calculate(
+                    symbol, "SZSE", PERMISSION_SOURCE,
+                    baseAt.plusSeconds(150)).available());
+        }
+        assertEquals(restore ? 3 : 2, count("""
+                SELECT count(*)
+                FROM pit_market_fact_observations
+                WHERE fact_type='RAW_DAILY_BAR'
+                  AND source_code=?
+                  AND source_instrument_id=?
+                  AND natural_key=?
+                """,
+                PERMISSION_SOURCE,
+                MockMarketFactProvider.rawSourceIdentity(
+                        symbol, "SZSE"),
+                "RAW_DAILY_BAR|" + symbol + "|" + START));
+    }
+
+    private void assertUnqualifiedBatchDatasetRejected(
+            long sourceBatchId,
+            String revisionQualification,
+            String hashCharacter
+    ) {
+        assertThrows(DataAccessException.class, () -> jdbc.update("""
+                INSERT INTO pit_market_fact_batches(
+                    batch_version, dataset_version_id, dataset_version,
+                    provider_contract_version,
+                    market_facts_contract_version,
+                    run_namespace, capture_mode, source_code,
+                    source_instrument_id, provider_dataset_version,
+                    revision_qualification, assurance_level,
+                    usage_qualification, formal_eligible,
+                    local_persistence_allowed,
+                    historical_replay_allowed,
+                    backtest_allowed, agent_use_allowed,
+                    range_start, range_end, observed_at, recorded_at,
+                    response_complete, record_count,
+                    fact_contracts_json,
+                    provider_capabilities_json,
+                    provider_metadata_json
+                )
+                SELECT repeat(?, 64), dataset_version_id, dataset_version,
+                       provider_contract_version,
+                       market_facts_contract_version,
+                       run_namespace, capture_mode, source_code,
+                       source_instrument_id, 'FORGED-PROVIDER-DATASET',
+                       ?, 'SYSTEM_KNOWLEDGE_PIT',
+                       usage_qualification, formal_eligible,
+                       local_persistence_allowed,
+                       historical_replay_allowed,
+                       backtest_allowed, agent_use_allowed,
+                       range_start, range_end, observed_at, recorded_at,
+                       response_complete, record_count,
+                       fact_contracts_json,
+                       provider_capabilities_json,
+                       provider_metadata_json
+                FROM pit_market_fact_batches
+                WHERE id=?
+                """, hashCharacter, revisionQualification, sourceBatchId));
     }
 
     private long insertEnvelope(

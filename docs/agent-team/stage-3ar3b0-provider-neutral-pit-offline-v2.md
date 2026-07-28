@@ -4,7 +4,7 @@
 
 - 冻结基线：`23baf11ed3a236800b5f3feba8681d261a71d9f9`
 - 任务分支：`codex/1.4.0-stage-3ar3b0-provider-neutral-pit-offline-v2`
-- 状态：**首次验收 findings 的增量修复和 Codex 本地验证完成，待 ChatGPT 基于新的实际 Git 提交复验，尚未 merge。**
+- 状态：**第二次实际 Git 复验 findings 的增量修复和 Codex 本地验证完成，待 ChatGPT 基于新的实际 Git 提交复验，尚未 merge。**
 - iFinD 真实调用数：`0`
 - `IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`
 - Day 002 未创建，scheduler 仍关闭，3B 未开始。
@@ -35,8 +35,12 @@
 - `corporate_action_facts_v1`
 
 迁移包含 9 个索引、5 个跨表校验触发器、12 个不可变/禁止 truncate 触发器，以及
-V2 TEST/DEMO Shadow ruleVersion 的约束扩展；Flyway checksum 为 `1903740866`。V1 至
+V2 TEST/DEMO Shadow ruleVersion 的约束扩展；Flyway checksum 为 `-408572418`。V1 至
 V12 未修改，迁移未回填任何业务数据。
+
+batch 级数据库门禁规定：只有 `PROVIDER_VERIFIED` 可以携带
+`providerDatasetVersion`；`SYSTEM_KNOWLEDGE_ONLY`、`PROVIDER_UNVERIFIED` 和
+`PROVIDER_UNAVAILABLE` 必须为 null，且 Java DTO 门禁保持一致。
 
 ### Provider 与资格
 
@@ -58,6 +62,14 @@ Java 以 `PIT_MARKET_FACTS_CANONICAL_V2` 生成生产 Hash，Python 只交叉验
 时间和随机身份不进入该 Hash。完全相同语义幂等，资格、许可或 Provider metadata 变化
 追加，资格 A→B→A 保留三版。Repository 只选择同 source/事实身份且
 `knownAt<=knowledgeCutoff` 的资格优先、时间稳定版本。
+
+第二次复验修复把四类 as-of 路径统一为“先选语义版本、后验许可”：calendar、raw、
+factor、corporate action 均先按 revision qualification、knownAt、chainSequence、id
+选出唯一版本，再校验 usage qualification 与 local persistence/historical replay/
+backtest/Agent use。选中版本的任一必要许可为 false 时固定返回
+`PIT_USAGE_NOT_ALLOWED`，禁止回退旧允许版本。真实 PostgreSQL 已覆盖 raw 的
+backtest、Agent use、historical replay 三类撤销和 allow→deny→allow，并以相同路径证明
+calendar、factor、corporate action 均不回退。
 
 knowledge-time 按资格分流：SYSTEM_KNOWLEDGE 必须
 `knownAt=firstObservedAt<=recordedAt`；PROVIDER_PIT_VERIFIED 必须具备 revision 和
@@ -107,11 +119,11 @@ Java/Python 离线工具支持递归脱敏、字段白名单、canonical Hash �
 | Java Provider/QFQ 黄金向量/persistence/Shadow 定向 | 34/0/0/0，其中 QFQ 可执行黄金向量 18/18 |
 | Python compileall / 完整 unittest | PASS；130/0/0/0 |
 | quant-core | 4/0/0/0 |
-| quant-server 安全全量 | 426/0/0/87；真实环境组单独 Skipped=0 |
-| V1→V13 随机 Schema PostgreSQL | 14/0/0/0，Skipped=0 |
+| quant-server 安全全量 | 428/0/0/89；真实环境组单独 Skipped=0 |
+| V1→V13 随机 Schema PostgreSQL | 16/0/0/0，Skipped=0 |
 | V6 旧血统→V13 与 fresh V1→V13 收敛 | 1/0/0/0，Skipped=0 |
 | 真实 Java/Python/PostgreSQL Mock Shadow | 1/0/0/0，Skipped=0 |
-| 2D/2E/2F/2G/2H/2I 真实兼容矩阵 | 66/0/0/0，Skipped=0 |
+| 2D/2E/2F/2G/2H/2I 真实兼容矩阵 | 72/0/0/0，Skipped=0 |
 | 2G AKShare Live Gate 回归 | 1/0/0/0，Skipped=0 |
 
 随机 Schema 残留为 0；public 保持 V12，结构和数据指纹不变；未迁移正常业务库。
