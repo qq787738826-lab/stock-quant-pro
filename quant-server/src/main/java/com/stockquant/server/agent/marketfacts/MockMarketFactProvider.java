@@ -7,16 +7,21 @@ import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.Assuranc
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.CorporateAction;
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.CorporateActionType;
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.FactType;
+import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.FieldQualification;
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.MarketFactRequest;
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.MarketFactResponse;
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.ProviderCapability;
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.ProviderError;
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.ProviderErrorType;
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.ProviderVersion;
+import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.QualifiedMarketField;
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.RawDailyBar;
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.RevisionQualification;
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.RunNamespace;
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.TradingCalendar;
+import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.MarketFieldSemantic;
+import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.MarketFieldUnit;
+import com.stockquant.server.agent.marketfacts.PitMarketFactModels.QfqSourceIdentities;
 
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -134,7 +139,7 @@ public final class MockMarketFactProvider implements MarketFactProvider {
         }
 
         ProviderVersion version = new ProviderVersion(
-                FIXTURE_VERSION,
+                null,
                 null,
                 null,
                 null,
@@ -150,6 +155,7 @@ public final class MockMarketFactProvider implements MarketFactProvider {
         while (!date.isAfter(request.rangeEnd())) {
             boolean open = date.getDayOfWeek().getValue() <= 5;
             calendar.add(new TradingCalendar(
+                    calendarSourceIdentity(request.exchange()),
                     request.exchange(),
                     date,
                     open,
@@ -163,6 +169,8 @@ public final class MockMarketFactProvider implements MarketFactProvider {
                         new BigDecimal(openIndex % 7 - 3)
                                 .multiply(new BigDecimal("0.01")));
                 bars.add(new RawDailyBar(
+                        rawSourceIdentity(
+                                request.symbol(), request.exchange()),
                         request.symbol(),
                         request.exchange(),
                         date,
@@ -170,17 +178,28 @@ public final class MockMarketFactProvider implements MarketFactProvider {
                         base.add(new BigDecimal("0.20")),
                         base.subtract(new BigDecimal("0.20")),
                         close,
-                        new BigDecimal("1000000").add(
-                                new BigDecimal(openIndex * 1000L)),
-                        new BigDecimal("10000000").add(
-                                new BigDecimal(openIndex * 10000L)),
-                        new BigDecimal("0.01"),
+                        verifiedField(
+                                new BigDecimal("1000000").add(
+                                        new BigDecimal(openIndex * 1000L)),
+                                MarketFieldUnit.SHARES,
+                                MarketFieldSemantic.TRADED_VOLUME),
+                        verifiedField(
+                                new BigDecimal("10000000").add(
+                                        new BigDecimal(openIndex * 10000L)),
+                                MarketFieldUnit.CNY,
+                                MarketFieldSemantic.TRADED_AMOUNT),
+                        verifiedField(
+                                new BigDecimal("0.01"),
+                                MarketFieldUnit.RATIO,
+                                MarketFieldSemantic.TURNOVER_RATE),
                         version,
                         object("fixtureVersion", FIXTURE_VERSION)));
                 BigDecimal factor = openIndex < 80
                         ? BigDecimal.ONE : new BigDecimal("1.10");
                 if (!(scenario == Scenario.FACTOR_MISSING && openIndex == 60)) {
                     factors.add(new AdjustmentFactor(
+                            factorSourceIdentity(
+                                    request.symbol(), request.exchange()),
                             request.symbol(),
                             date,
                             PitMarketFactsContracts.FACTOR_TYPE,
@@ -201,6 +220,8 @@ public final class MockMarketFactProvider implements MarketFactProvider {
             ObjectNode terms = objectMapper.createObjectNode();
             terms.put("fixtureExplanation", "TEN_PERCENT_STOCK_DIVIDEND");
             actions.add(new CorporateAction(
+                    corporateActionSourceIdentity(
+                            request.symbol(), request.exchange()),
                     "MOCK-ACTION-001",
                     request.symbol(),
                     CorporateActionType.STOCK_DIVIDEND,
@@ -224,6 +245,42 @@ public final class MockMarketFactProvider implements MarketFactProvider {
 
     public int fetchCount() {
         return fetchCount;
+    }
+
+    public static String rawSourceIdentity(
+            String symbol,
+            String exchange
+    ) {
+        return "SECURITY:" + symbol + "." + exchange;
+    }
+
+    public static String factorSourceIdentity(
+            String symbol,
+            String exchange
+    ) {
+        return "FACTOR:QFQ:" + symbol + "." + exchange;
+    }
+
+    public static String calendarSourceIdentity(String exchange) {
+        return "CALENDAR:" + exchange;
+    }
+
+    public static String corporateActionSourceIdentity(
+            String symbol,
+            String exchange
+    ) {
+        return "CORPORATE_ACTION:" + symbol + "." + exchange;
+    }
+
+    public static QfqSourceIdentities qfqSourceIdentities(
+            String symbol,
+            String exchange
+    ) {
+        return new QfqSourceIdentities(
+                rawSourceIdentity(symbol, exchange),
+                factorSourceIdentity(symbol, exchange),
+                calendarSourceIdentity(exchange),
+                corporateActionSourceIdentity(symbol, exchange));
     }
 
     private MarketFactResponse failed(
@@ -275,5 +332,14 @@ public final class MockMarketFactProvider implements MarketFactProvider {
         ObjectNode result = objectMapper.createObjectNode();
         result.put(field, value);
         return result;
+    }
+
+    private static QualifiedMarketField verifiedField(
+            BigDecimal value,
+            MarketFieldUnit unit,
+            MarketFieldSemantic semantic
+    ) {
+        return new QualifiedMarketField(
+                value, FieldQualification.PRESENT_VERIFIED, unit, semantic);
     }
 }

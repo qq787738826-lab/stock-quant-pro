@@ -1,11 +1,13 @@
 package com.stockquant.server.agent.marketfacts;
 
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.RevisionQualification;
+import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.AssuranceLevel;
 import com.stockquant.server.agent.marketfacts.PitMarketFactModels.AdjustmentFactorObservation;
 import com.stockquant.server.agent.marketfacts.PitMarketFactModels.CorporateActionObservation;
 import com.stockquant.server.agent.marketfacts.PitMarketFactModels.FactorPredecessor;
 import com.stockquant.server.agent.marketfacts.PitMarketFactModels.QfqAsOfResult;
 import com.stockquant.server.agent.marketfacts.PitMarketFactModels.QfqBar;
+import com.stockquant.server.agent.marketfacts.PitMarketFactModels.QfqSourceIdentities;
 import com.stockquant.server.agent.marketfacts.PitMarketFactModels.RawDailyBarObservation;
 import com.stockquant.server.agent.marketfacts.PitMarketFactModels.TradingCalendarObservation;
 
@@ -43,23 +45,35 @@ public class QfqAsOfEngine {
             String symbol,
             String exchange,
             String sourceCode,
-            String sourceInstrumentId,
+            QfqSourceIdentities sourceIdentities,
             LocalDate requestTradeDate,
             Instant knowledgeCutoff
     ) {
         var effective = repository.findEffectiveTradeDate(
-                sourceCode, sourceInstrumentId, exchange,
+                sourceCode, sourceIdentities.calendarSourceIdentity(), exchange,
                 requestTradeDate, knowledgeCutoff);
         if (effective.isEmpty()) {
             return unavailable(
                     PitMarketFactsContracts.CALENDAR_UNAVAILABLE,
                     "No cutoff-visible open calendar date exists",
-                    symbol, sourceCode, sourceInstrumentId,
+                    symbol, sourceCode, sourceIdentities,
+                    requestTradeDate, knowledgeCutoff);
+        }
+        if (!validEnvelope(
+                effective.orElseThrow().envelope(),
+                sourceCode,
+                sourceIdentities.calendarSourceIdentity(),
+                knowledgeCutoff)) {
+            return unavailable(
+                    PitMarketFactsContracts.FACT_INVALID,
+                    "Calendar observation qualification is invalid",
+                    symbol, sourceCode, sourceIdentities,
                     requestTradeDate, knowledgeCutoff);
         }
         LocalDate effectiveDate = effective.orElseThrow().calendarDate();
         List<RawDailyBarObservation> raw = repository.findRawBarsAsOf(
-                sourceCode, sourceInstrumentId, symbol, exchange,
+                sourceCode, sourceIdentities.rawSourceIdentity(),
+                symbol, exchange,
                 effectiveDate,
                 knowledgeCutoff, MAXIMUM_BARS);
         if (raw.isEmpty()
@@ -67,21 +81,42 @@ public class QfqAsOfEngine {
             return unavailable(
                     PitMarketFactsContracts.RAW_BAR_UNAVAILABLE,
                     "Raw window does not end on requestEffectiveTradeDate",
-                    symbol, sourceCode, sourceInstrumentId,
+                    symbol, sourceCode, sourceIdentities,
+                    requestTradeDate, knowledgeCutoff);
+        }
+        if (raw.stream().anyMatch(value -> !validEnvelope(
+                value.envelope(), sourceCode,
+                sourceIdentities.rawSourceIdentity(), knowledgeCutoff))) {
+            return unavailable(
+                    PitMarketFactsContracts.FACT_INVALID,
+                    "Raw observation qualification is invalid",
+                    symbol, sourceCode, sourceIdentities,
                     requestTradeDate, knowledgeCutoff);
         }
         LocalDate start = raw.get(0).tradeDate();
         List<TradingCalendarObservation> calendar =
                 repository.findOpenCalendarAsOf(
-                        sourceCode, sourceInstrumentId, exchange,
+                        sourceCode,
+                        sourceIdentities.calendarSourceIdentity(),
+                        exchange,
                         start, effectiveDate, knowledgeCutoff);
         Set<LocalDate> openDates = new HashSet<>();
         calendar.forEach(item -> openDates.add(item.calendarDate()));
+        if (calendar.stream().anyMatch(value -> !validEnvelope(
+                value.envelope(), sourceCode,
+                sourceIdentities.calendarSourceIdentity(),
+                knowledgeCutoff))) {
+            return unavailable(
+                    PitMarketFactsContracts.FACT_INVALID,
+                    "Calendar lineage qualification is invalid",
+                    symbol, sourceCode, sourceIdentities,
+                    requestTradeDate, knowledgeCutoff);
+        }
         if (raw.stream().anyMatch(item -> !openDates.contains(item.tradeDate()))) {
             return unavailable(
                     PitMarketFactsContracts.CALENDAR_UNAVAILABLE,
                     "A raw bar lacks an exact cutoff-visible open-calendar fact",
-                    symbol, sourceCode, sourceInstrumentId,
+                    symbol, sourceCode, sourceIdentities,
                     requestTradeDate, knowledgeCutoff);
         }
         if (calendar.size() != raw.size()
@@ -90,23 +125,35 @@ public class QfqAsOfEngine {
                     PitMarketFactsContracts.RAW_BAR_UNAVAILABLE,
                     "The cutoff-visible raw window does not cover every "
                             + "open calendar date",
-                    symbol, sourceCode, sourceInstrumentId,
+                    symbol, sourceCode, sourceIdentities,
                     requestTradeDate, knowledgeCutoff);
         }
 
         List<AdjustmentFactorObservation> factors =
                 repository.findFactorsAsOf(
-                        sourceCode, sourceInstrumentId, symbol,
+                        sourceCode,
+                        sourceIdentities.factorSourceIdentity(),
+                        symbol,
                         start, effectiveDate, knowledgeCutoff);
         Map<LocalDate, AdjustmentFactorObservation> factorByDate = new HashMap<>();
         factors.forEach(value -> factorByDate.put(
                 value.factorEffectiveTradeDate(), value));
+        if (factors.stream().anyMatch(value -> !validEnvelope(
+                value.envelope(), sourceCode,
+                sourceIdentities.factorSourceIdentity(),
+                knowledgeCutoff))) {
+            return unavailable(
+                    PitMarketFactsContracts.FACT_INVALID,
+                    "Factor observation qualification is invalid",
+                    symbol, sourceCode, sourceIdentities,
+                    requestTradeDate, knowledgeCutoff);
+        }
         if (raw.stream().anyMatch(
                 item -> !factorByDate.containsKey(item.tradeDate()))) {
             return unavailable(
                     PitMarketFactsContracts.FACTOR_UNAVAILABLE,
                     "DAILY_EXACT factor is absent at the cutoff",
-                    symbol, sourceCode, sourceInstrumentId,
+                    symbol, sourceCode, sourceIdentities,
                     requestTradeDate, knowledgeCutoff);
         }
         AdjustmentFactorObservation anchorFactor =
@@ -115,13 +162,25 @@ public class QfqAsOfEngine {
             return unavailable(
                     PitMarketFactsContracts.FACTOR_UNAVAILABLE,
                     "Anchor date lacks an exact factor",
-                    symbol, sourceCode, sourceInstrumentId,
+                    symbol, sourceCode, sourceIdentities,
                     requestTradeDate, knowledgeCutoff);
         }
 
         List<CorporateActionObservation> actions = repository.findActionsAsOf(
-                sourceCode, sourceInstrumentId, symbol,
+                sourceCode,
+                sourceIdentities.corporateActionSourceIdentity(),
+                symbol,
                 start, effectiveDate, knowledgeCutoff);
+        if (actions.stream().anyMatch(value -> !validEnvelope(
+                value.envelope(), sourceCode,
+                sourceIdentities.corporateActionSourceIdentity(),
+                knowledgeCutoff))) {
+            return unavailable(
+                    PitMarketFactsContracts.FACT_INVALID,
+                    "Corporate-action observation qualification is invalid",
+                    symbol, sourceCode, sourceIdentities,
+                    requestTradeDate, knowledgeCutoff);
+        }
         List<Long> revisedFactorIds = factors.stream()
                 .filter(value -> value.envelope().chainSequence() > 1)
                 .map(value -> value.envelope().id())
@@ -133,7 +192,7 @@ public class QfqAsOfEngine {
             return unavailable(
                     PitMarketFactsContracts.FACT_INVALID,
                     "Revised factor predecessor lineage is incomplete",
-                    symbol, sourceCode, sourceInstrumentId,
+                    symbol, sourceCode, sourceIdentities,
                     requestTradeDate, knowledgeCutoff);
         }
         for (AdjustmentFactorObservation factor : factors) {
@@ -147,21 +206,19 @@ public class QfqAsOfEngine {
             if (predecessor != null
                     && factor.factor().compareTo(predecessor.factor()) != 0
                     && actions.stream().noneMatch(action ->
-                    action.envelope().knownAt().isAfter(
-                            predecessor.knownAt())
-                            && !action.envelope().knownAt().isAfter(
-                            factor.envelope().knownAt()))) {
+                    explainsFactorRevision(
+                            action, factor, predecessor,
+                            sourceCode, sourceIdentities,
+                            knowledgeCutoff))) {
                 return unavailable(
                         PitMarketFactsContracts
                                 .CORPORATE_ACTION_LINEAGE_UNAVAILABLE,
                         "Revised factor lacks cutoff-visible "
                                 + "corporate-action lineage",
-                        symbol, sourceCode, sourceInstrumentId,
+                        symbol, sourceCode, sourceIdentities,
                         requestTradeDate, knowledgeCutoff);
             }
         }
-        Set<LocalDate> explainedDates = new HashSet<>();
-        actions.forEach(value -> explainedDates.add(value.effectiveTradeDate()));
         AdjustmentFactorObservation previous = null;
         for (RawDailyBarObservation item : raw) {
             AdjustmentFactorObservation current = factorByDate.get(item.tradeDate());
@@ -169,11 +226,14 @@ public class QfqAsOfEngine {
                     && current.factor().compareTo(previous.factor()) != 0
                     && current.envelope().revisionQualification()
                     != RevisionQualification.PROVIDER_VERIFIED
-                    && !explainedDates.contains(item.tradeDate())) {
+                    && actions.stream().noneMatch(action ->
+                    explainsFactorDateChange(
+                            action, current, sourceCode,
+                            sourceIdentities, knowledgeCutoff))) {
                 return unavailable(
                         PitMarketFactsContracts.CORPORATE_ACTION_LINEAGE_UNAVAILABLE,
                         "Factor change lacks cutoff-visible corporate-action lineage",
-                        symbol, sourceCode, sourceInstrumentId,
+                        symbol, sourceCode, sourceIdentities,
                         requestTradeDate, knowledgeCutoff);
             }
             previous = current;
@@ -194,16 +254,18 @@ public class QfqAsOfEngine {
                 return unavailable(
                         PitMarketFactsContracts.FACT_INVALID,
                         "Rounded QFQ OHLC relationship is invalid",
-                        symbol, sourceCode, sourceInstrumentId,
+                        symbol, sourceCode, sourceIdentities,
                         requestTradeDate, knowledgeCutoff);
             }
             qfq.add(new QfqBar(
                     symbol, value.tradeDate(), open, high, low, close,
                     value.volume(), value.amount(), value.turnoverRate(),
                     value.envelope().id(),
+                    value.envelope().sourceInstrumentId(),
                     value.envelope().observationVersion(),
                     value.envelope().canonicalContentHash(),
                     factor.envelope().id(),
+                    factor.envelope().sourceInstrumentId(),
                     factor.envelope().observationVersion(),
                     factor.envelope().canonicalContentHash()));
         }
@@ -220,22 +282,20 @@ public class QfqAsOfEngine {
         if (batchLineage.size() != batchIds.size()
                 || batchLineage.stream().anyMatch(
                 batch -> !batch.responseComplete()
-                        || !sourceCode.equals(batch.sourceCode())
-                        || !sourceInstrumentId.equals(
-                        batch.sourceInstrumentId()))) {
+                        || !sourceCode.equals(batch.sourceCode()))) {
             return unavailable(
                     PitMarketFactsContracts.FACT_INVALID,
                     "Stable capture batch lineage is incomplete or mismatched",
-                    symbol, sourceCode, sourceInstrumentId,
+                    symbol, sourceCode, sourceIdentities,
                     requestTradeDate, knowledgeCutoff);
         }
         return new QfqAsOfResult(
-                true, null, null, sourceCode, sourceInstrumentId, symbol,
+                true, null, null, sourceCode, sourceIdentities, symbol,
                 requestTradeDate, effectiveDate, effectiveDate, knowledgeCutoff,
                 PitMarketFactsContracts.FACTOR_TYPE,
                 PitMarketFactsContracts.FACTOR_COVERAGE_MODE,
                 PitMarketFactsContracts.QFQ_ENGINE_VERSION,
-                qfq, calendar, actions, batchLineage);
+                qfq, raw, factors, calendar, actions, batchLineage);
     }
 
     private static BigDecimal price(
@@ -269,12 +329,106 @@ public class QfqAsOfEngine {
             String reason,
             String symbol,
             String sourceCode,
-            String sourceInstrumentId,
+            QfqSourceIdentities sourceIdentities,
             LocalDate requestTradeDate,
             Instant cutoff
     ) {
         return QfqAsOfResult.unavailable(
-                code, reason, sourceCode, sourceInstrumentId,
+                code, reason, sourceCode, sourceIdentities,
                 symbol, requestTradeDate, cutoff);
+    }
+
+    private static boolean explainsFactorRevision(
+            CorporateActionObservation action,
+            AdjustmentFactorObservation factor,
+            FactorPredecessor predecessor,
+            String sourceCode,
+            QfqSourceIdentities identities,
+            Instant cutoff
+    ) {
+        return actionMatches(
+                action, factor, sourceCode, identities, cutoff)
+                && predecessor.sourceCode().equals(sourceCode)
+                && predecessor.sourceIdentity().equals(
+                factor.envelope().sourceInstrumentId())
+                && predecessor.symbol().equals(factor.symbol())
+                && predecessor.factorEffectiveTradeDate().equals(
+                factor.factorEffectiveTradeDate())
+                && !action.envelope().knownAt().isAfter(
+                factor.envelope().knownAt());
+    }
+
+    private static boolean explainsFactorDateChange(
+            CorporateActionObservation action,
+            AdjustmentFactorObservation factor,
+            String sourceCode,
+            QfqSourceIdentities identities,
+            Instant cutoff
+    ) {
+        return actionMatches(
+                action, factor, sourceCode, identities, cutoff)
+                && !action.envelope().knownAt().isAfter(
+                factor.envelope().knownAt());
+    }
+
+    private static boolean actionMatches(
+            CorporateActionObservation action,
+            AdjustmentFactorObservation factor,
+            String sourceCode,
+            QfqSourceIdentities identities,
+            Instant cutoff
+    ) {
+        return action.symbol().equals(factor.symbol())
+                && action.envelope().sourceCode().equals(sourceCode)
+                && action.envelope().sourceInstrumentId().equals(
+                identities.corporateActionSourceIdentity())
+                && factor.envelope().sourceInstrumentId().equals(
+                identities.factorSourceIdentity())
+                && action.effectiveTradeDate().equals(
+                factor.factorEffectiveTradeDate())
+                && !action.envelope().knownAt().isAfter(cutoff);
+    }
+
+    private static boolean validEnvelope(
+            PitMarketFactModels.FactEnvelope envelope,
+            String sourceCode,
+            String sourceIdentity,
+            Instant cutoff
+    ) {
+        if (!sourceCode.equals(envelope.sourceCode())
+                || !sourceIdentity.equals(envelope.sourceInstrumentId())
+                || envelope.recordedAt().isBefore(
+                envelope.firstObservedAt())
+                || envelope.knownAt().isAfter(cutoff)
+                || !envelope.historicalReplayAllowed()
+                || !envelope.backtestAllowed()
+                || !envelope.agentUseAllowed()) {
+            return false;
+        }
+        if (envelope.revisionQualification()
+                == RevisionQualification.PROVIDER_VERIFIED) {
+            return envelope.assuranceLevel()
+                    == AssuranceLevel.PROVIDER_PIT_VERIFIED
+                    && envelope.providerRevision() != null
+                    && envelope.providerPublishedAt() != null
+                    && envelope.knownAt().equals(
+                    envelope.providerPublishedAt())
+                    && !envelope.providerPublishedAt().isAfter(
+                    envelope.firstObservedAt())
+                    && (envelope.providerUpdatedAt() == null
+                    || !envelope.providerUpdatedAt().isBefore(
+                    envelope.providerPublishedAt())
+                    && !envelope.providerUpdatedAt().isAfter(
+                    envelope.firstObservedAt()));
+        }
+        return envelope.assuranceLevel()
+                == AssuranceLevel.SYSTEM_KNOWLEDGE_PIT
+                && envelope.providerDatasetVersion() == null
+                && envelope.providerRevision() == null
+                && envelope.providerSnapshotId() == null
+                && envelope.providerPublishedAt() == null
+                && envelope.providerUpdatedAt() == null
+                && envelope.knownAt().equals(
+                envelope.firstObservedAt());
     }
 }

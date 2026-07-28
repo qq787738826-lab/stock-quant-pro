@@ -4,7 +4,7 @@
 
 - 冻结基线：`23baf11ed3a236800b5f3feba8681d261a71d9f9`
 - 任务分支：`codex/1.4.0-stage-3ar3b0-provider-neutral-pit-offline-v2`
-- 状态：**实现和 Codex 本地验证完成，待 ChatGPT 基于实际 Git 提交验收，尚未 merge。**
+- 状态：**首次验收 findings 的增量修复和 Codex 本地验证完成，待 ChatGPT 基于新的实际 Git 提交复验，尚未 merge。**
 - iFinD 真实调用数：`0`
 - `IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`
 - Day 002 未创建，scheduler 仍关闭，3B 未开始。
@@ -35,14 +35,16 @@
 - `corporate_action_facts_v1`
 
 迁移包含 9 个索引、5 个跨表校验触发器、12 个不可变/禁止 truncate 触发器，以及
-V2 TEST/DEMO Shadow ruleVersion 的约束扩展；Flyway checksum 为 `-763324992`。V1 至
+V2 TEST/DEMO Shadow ruleVersion 的约束扩展；Flyway checksum 为 `1903740866`。V1 至
 V12 未修改，迁移未回填任何业务数据。
 
 ### Provider 与资格
 
-`MARKET_FACT_PROVIDER_CONTRACT_V1` 类型化覆盖四类事实、capability、source/instrument
-identity、revision/snapshot/time、许可、单位、完整性、错误和限流。Provider 不生成
-本地时间、datasetVersion、observationVersion 或 Hash。
+`MARKET_FACT_PROVIDER_CONTRACT_V1` 类型化覆盖四类事实、capability、各事实独立
+source identity、revision/snapshot/time、许可、单位、字段资格、完整性、错误和限流。
+raw、factor、calendar、corporate action 分别使用证券、证券/因子、交易所日历和
+证券/事件来源身份；同 Provider 内可复用 SZSE 日历，但禁止交易所、证券或 Provider
+身份错配。Provider 不生成本地时间、datasetVersion、observationVersion 或 Hash。
 
 Mock Provider 仅使用合成 fixture，固定 TEST/DEMO、`formalEligible=false`、无网络。
 iFinD Adapter 只保留默认禁用骨架，误开启也在网络前以
@@ -51,14 +53,29 @@ iFinD Adapter 只保留默认禁用骨架，误开启也在网络前以
 ### Canonical、as-of 与 QFQ
 
 Java 以 `PIT_MARKET_FACTS_CANONICAL_V2` 生成生产 Hash，Python 只交叉验证固定黄金
-向量。Repository 只选择同 source/instrument 且 `knownAt<=knowledgeCutoff` 的最新
-可见版本。
+向量。semantic content hash 覆盖业务值、字段资格、revision/assurance/usage、
+许可标志及全部合格 Provider dataset/revision/snapshot/publish/update 元数据；本地
+时间和随机身份不进入该 Hash。完全相同语义幂等，资格、许可或 Provider metadata 变化
+追加，资格 A→B→A 保留三版。Repository 只选择同 source/事实身份且
+`knownAt<=knowledgeCutoff` 的资格优先、时间稳定版本。
 
-`QFQ_AS_OF_ENGINE_V1` 使用 `DAILY_EXACT`：每根 raw bar 和锚点必须取得同日、同
-source/instrument/factorType、cutoff 前可见的精确 factor。禁止 forward-fill、最近
-factor 替代、当前 factor 补历史、跨 Provider 拼接及缺失日期后重新归一化。缺任一
-精确 factor 返回 `PIT_FACTOR_UNAVAILABLE`，不产生部分窗口。共享黄金清单的 18 个
-场景全部通过。
+knowledge-time 按资格分流：SYSTEM_KNOWLEDGE 必须
+`knownAt=firstObservedAt<=recordedAt`；PROVIDER_PIT_VERIFIED 必须具备 revision 和
+providerPublishedAt，且 `knownAt=providerPublishedAt<=firstObservedAt<=recordedAt`，
+providerUpdatedAt 如存在必须位于 published 与首次接收之间。因此合格 Provider 版本
+可在 providerPublishedAt 之后、首次本地接收之前的历史 cutoff 被选择，系统首次捕获
+版本在同一 cutoff 不可见。
+
+`QFQ_AS_OF_ENGINE_V1` 使用 `DAILY_EXACT`：输入显式冻结 raw、factor、calendar 和
+corporate-action 四类来源身份；每根 raw bar 和锚点必须取得同日、同 Provider、
+正确事实身份/factorType、cutoff 前可见的精确 factor。禁止 forward-fill、最近 factor
+替代、当前 factor 补历史、跨 Provider 拼接及缺失日期后重新归一化。非 Provider
+verified 的 factor 修订仅能由同 symbol/source/identity、相同 effectiveTradeDate 且在
+当前 factor 可见前已可见的 action 解释。缺任一精确 factor 返回
+`PIT_FACTOR_UNAVAILABLE`，不产生部分窗口。
+
+共享夹具的 18 个场景均包含固定事实输入、时间、资格、预期输出、lineage 和 Hash；
+Java 参数化测试实际逐一运行引擎 18/18，Python 只验证固定结果向量和 Hash。
 
 ### 2F V2、六智能体与 Shadow
 
@@ -66,6 +83,11 @@ factor 替代、当前 factor 补历史、跨 Provider 拼接及缺失日期后�
 `AGENT_CONTEXT_3AR3B0_V2/BACKTEST_CONTEXT_V2/BACKTEST_CANONICAL_V2`。2F V2
 沿用既有回测引擎、策略和七项参数；Java 运行 QFQ/回测并生成 Hash，Python 只解释
 冻结结果。
+
+raw OHLC 必填；volume、amount、turnoverRate 分别携带
+`PRESENT_VERIFIED/PRESENT_UNVERIFIED/MISSING`、冻结单位和语义代码，明确 0 与缺失
+不等价。QFQ 可保留缺失非价格字段；2F V2 要求 volume 为 PRESENT_VERIFIED，否则返回
+`PIT_REQUIRED_MARKET_FIELD_UNAVAILABLE`，amount/turnoverRate 的缺失按资格保留。
 
 六 run 顺序、POSITION_RISK 唯一正式 veto、2I 总控优先级和缓存终态均不变。真实
 PostgreSQL/Python EXPLICIT Mock Shadow 通过既有 Java 任务系统形成确定结果、缓存
@@ -82,14 +104,14 @@ Java/Python 离线工具支持递归脱敏、字段白名单、canonical Hash �
 
 | 测试组 | 结果 |
 | --- | --- |
-| Java Provider/V2 validator/persistence/Shadow 定向 | 42/0/0/0 |
-| Python compileall / 完整 unittest | PASS；129/0/0/0 |
+| Java Provider/QFQ 黄金向量/persistence/Shadow 定向 | 34/0/0/0，其中 QFQ 可执行黄金向量 18/18 |
+| Python compileall / 完整 unittest | PASS；130/0/0/0 |
 | quant-core | 4/0/0/0 |
-| quant-server 安全全量 | 403/0/0/83；真实环境组单独 Skipped=0 |
-| V1→V13 随机 Schema PostgreSQL | 10/0/0/0，Skipped=0 |
+| quant-server 安全全量 | 426/0/0/87；真实环境组单独 Skipped=0 |
+| V1→V13 随机 Schema PostgreSQL | 14/0/0/0，Skipped=0 |
 | V6 旧血统→V13 与 fresh V1→V13 收敛 | 1/0/0/0，Skipped=0 |
 | 真实 Java/Python/PostgreSQL Mock Shadow | 1/0/0/0，Skipped=0 |
-| 2D/2E/2F/2G/2H/2I 真实兼容矩阵 | 50/0/0/0，Skipped=0 |
+| 2D/2E/2F/2G/2H/2I 真实兼容矩阵 | 66/0/0/0，Skipped=0 |
 | 2G AKShare Live Gate 回归 | 1/0/0/0，Skipped=0 |
 
 随机 Schema 残留为 0；public 保持 V12，结构和数据指纹不变；未迁移正常业务库。

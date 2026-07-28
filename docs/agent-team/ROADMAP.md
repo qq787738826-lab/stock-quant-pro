@@ -270,13 +270,14 @@
 - 日期边界：iFinD 试用不得绑定 `2026-08-31`、2026 年 8 月 31 日或任何其他固定日期。日历日期只能作为非权威临时估算，不属于路线图依赖，不得因预计日期临近而降低验收标准。
 - 当前门禁：`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`。真实 Provider 尚未接入，试用尚未启动，真实 iFinD 调用数为 0；Day 002 未创建，3B 未开始。
 
-#### 3A-R3B-0：Provider 中立离线闭环与试用准备（任务分支实现和 Codex 本地验证完成，待验收、未合入）
+#### 3A-R3B-0：Provider 中立离线闭环与试用准备（首次验收 findings 已在任务分支增量修复并完成 Codex 本地验证，待复验、未合入）
 
 - 目标：在不调用 iFinD 的情况下，使用 TEST/DEMO 固定夹具、Mock Provider 和允许的 AKShare 研究级能力完成 Provider 中立链路。
 - 任务证据：[3A-R3B-0 任务书](tasks/3ar3b0-provider-neutral-pit-offline-v2.md)、[阶段记录](stage-3ar3b0-provider-neutral-pit-offline-v2.md)和[iFinD 试用调用矩阵](ifind-trial-call-matrix.md)。
 - 任务分支实现：V13 独立建立 raw daily/factor/calendar/corporate action 四类 PIT 事实和 append-only lineage；Java 建立 Provider 中立 DTO/capability、canonical、as-of Repository 和 `DAILY_EXACT` QFQ 引擎；精确 V2 ruleVersion 建立 2F V2、六智能体和 EXPLICIT Mock Shadow；同时建立默认禁用且网络前失败的 iFinD 骨架、脱敏和离线夹具工具。
-- 验证状态：18 个 QFQ 黄金场景、随机 Schema V1→V13、V6 旧血统→V13、真实 Java/Python/PostgreSQL Mock Shadow、旧阶段兼容矩阵和 AKShare 研究源回归均完成 Codex 本地验证；关键真实组 `Skipped=0`，随机 Schema 残留为 0，public 保持 V12。
-- 边界：上述实现目前只在任务分支，尚待 ChatGPT 基于实际 Git 提交验收且尚未 merge。Mock/TEST/DEMO 不取得真实 Provider 资格；真实 iFinD 调用数保持 0，不创建 Day 002。
+- 增量修复：资格感知 knowledge-time 明确区分 Provider published time 与系统首次捕获；幂等改为完整 semantic content hash；四类事实使用独立来源身份；raw 非价格字段具有可空值、单位、语义和资格；公司行动必须精确匹配因子日期与身份；18 个黄金场景改为 Java 实际执行的固定输入/输出/lineage/hash 向量。
+- 验证状态：18 个 QFQ 可执行黄金向量、随机 Schema V1→V13、真实 Java/Python/PostgreSQL Mock Shadow 及相关回归已完成 Codex 本地验证；最终完整矩阵以本任务分支阶段记录中的实际命令和结果为准。
+- 边界：上述实现和修复目前只在任务分支，尚待 ChatGPT 基于新的实际 Git 提交复验且尚未 merge。Mock/TEST/DEMO 不取得真实 Provider 资格；真实 iFinD 调用数保持 0，不创建 Day 002。
 
 #### 3A-R3B-1：iFinD 试用启动门（未开始）
 

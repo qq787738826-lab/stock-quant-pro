@@ -55,6 +55,24 @@ public final class MarketFactProviderModels {
         LICENSED_INTERNAL
     }
 
+    public enum FieldQualification {
+        PRESENT_VERIFIED,
+        PRESENT_UNVERIFIED,
+        MISSING
+    }
+
+    public enum MarketFieldUnit {
+        SHARES,
+        CNY,
+        RATIO
+    }
+
+    public enum MarketFieldSemantic {
+        TRADED_VOLUME,
+        TRADED_AMOUNT,
+        TURNOVER_RATE
+    }
+
     public enum ProviderErrorType {
         INVALID_REQUEST,
         EMPTY,
@@ -177,14 +195,46 @@ public final class MarketFactProviderModels {
             if (revisionQualification == RevisionQualification.PROVIDER_VERIFIED) {
                 require(providerRevision != null, "verified providerRevision");
                 require(providerPublishedAt != null, "verified providerPublishedAt");
+                require(providerUpdatedAt == null
+                                || !providerUpdatedAt.isBefore(
+                                providerPublishedAt),
+                        "verified providerUpdatedAt");
             } else {
+                require(providerDatasetVersion == null,
+                        "unqualified providerDatasetVersion must be absent");
                 require(providerRevision == null,
                         "unqualified providerRevision must be absent");
+                require(providerSnapshotId == null,
+                        "unqualified providerSnapshotId must be absent");
+                require(providerPublishedAt == null,
+                        "unqualified providerPublishedAt must be absent");
+                require(providerUpdatedAt == null,
+                        "unqualified providerUpdatedAt must be absent");
+            }
+        }
+    }
+
+    public record QualifiedMarketField(
+            BigDecimal value,
+            FieldQualification qualification,
+            MarketFieldUnit unitCode,
+            MarketFieldSemantic semanticCode
+    ) {
+        public QualifiedMarketField {
+            qualification = required(qualification, "field qualification");
+            unitCode = required(unitCode, "field unitCode");
+            semanticCode = required(semanticCode, "field semanticCode");
+            if (qualification == FieldQualification.MISSING) {
+                require(value == null, "missing field value");
+            } else {
+                require(value != null && value.signum() >= 0,
+                        "present field value");
             }
         }
     }
 
     public record RawDailyBar(
+            String sourceIdentity,
             String symbol,
             String exchange,
             LocalDate tradeDate,
@@ -192,13 +242,14 @@ public final class MarketFactProviderModels {
             BigDecimal high,
             BigDecimal low,
             BigDecimal close,
-            BigDecimal volume,
-            BigDecimal amount,
-            BigDecimal turnoverRate,
+            QualifiedMarketField volume,
+            QualifiedMarketField amount,
+            QualifiedMarketField turnoverRate,
             ProviderVersion version,
             JsonNode rawFields
     ) {
         public RawDailyBar {
+            sourceIdentity = text(sourceIdentity, "sourceIdentity");
             symbol = MarketFactProviderModels.symbol(symbol);
             exchange = MarketFactProviderModels.exchange(exchange);
             tradeDate = required(tradeDate, "tradeDate");
@@ -210,16 +261,34 @@ public final class MarketFactProviderModels {
                     && high.compareTo(close) >= 0, "high");
             require(low.compareTo(open) <= 0 && low.compareTo(high) <= 0
                     && low.compareTo(close) <= 0, "low");
-            volume = nonNegative(volume, 22, 8, "volume");
-            amount = nullableNonNegative(amount, 22, 8, "amount");
-            turnoverRate = nullableNonNegative(
-                    turnoverRate, 8, 12, "turnoverRate");
+            volume = qualifiedField(
+                    volume,
+                    MarketFieldUnit.SHARES,
+                    MarketFieldSemantic.TRADED_VOLUME,
+                    22,
+                    8,
+                    "volume");
+            amount = qualifiedField(
+                    amount,
+                    MarketFieldUnit.CNY,
+                    MarketFieldSemantic.TRADED_AMOUNT,
+                    22,
+                    8,
+                    "amount");
+            turnoverRate = qualifiedField(
+                    turnoverRate,
+                    MarketFieldUnit.RATIO,
+                    MarketFieldSemantic.TURNOVER_RATE,
+                    8,
+                    12,
+                    "turnoverRate");
             version = required(version, "version");
             rawFields = object(rawFields, "rawFields");
         }
     }
 
     public record AdjustmentFactor(
+            String sourceIdentity,
             String symbol,
             LocalDate factorEffectiveTradeDate,
             String factorType,
@@ -229,6 +298,7 @@ public final class MarketFactProviderModels {
             JsonNode rawFields
     ) {
         public AdjustmentFactor {
+            sourceIdentity = text(sourceIdentity, "sourceIdentity");
             symbol = MarketFactProviderModels.symbol(symbol);
             factorEffectiveTradeDate = required(factorEffectiveTradeDate,
                     "factorEffectiveTradeDate");
@@ -243,6 +313,7 @@ public final class MarketFactProviderModels {
     }
 
     public record TradingCalendar(
+            String sourceIdentity,
             String exchange,
             LocalDate calendarDate,
             boolean open,
@@ -251,6 +322,7 @@ public final class MarketFactProviderModels {
             JsonNode rawFields
     ) {
         public TradingCalendar {
+            sourceIdentity = text(sourceIdentity, "sourceIdentity");
             exchange = MarketFactProviderModels.exchange(exchange);
             calendarDate = required(calendarDate, "calendarDate");
             require(open ? "REGULAR".equals(sessionCode) : "CLOSED".equals(sessionCode),
@@ -261,6 +333,7 @@ public final class MarketFactProviderModels {
     }
 
     public record CorporateAction(
+            String sourceIdentity,
             String sourceActionId,
             String symbol,
             CorporateActionType actionType,
@@ -271,6 +344,7 @@ public final class MarketFactProviderModels {
             JsonNode rawFields
     ) {
         public CorporateAction {
+            sourceIdentity = text(sourceIdentity, "sourceIdentity");
             sourceActionId = text(sourceActionId, "sourceActionId");
             symbol = MarketFactProviderModels.symbol(symbol);
             actionType = required(actionType, "actionType");
@@ -384,6 +458,14 @@ public final class MarketFactProviderModels {
         throw new IllegalArgumentException("unsupported market fact");
     }
 
+    static String sourceIdentity(Object fact) {
+        if (fact instanceof RawDailyBar value) return value.sourceIdentity();
+        if (fact instanceof AdjustmentFactor value) return value.sourceIdentity();
+        if (fact instanceof TradingCalendar value) return value.sourceIdentity();
+        if (fact instanceof CorporateAction value) return value.sourceIdentity();
+        throw new IllegalArgumentException("unsupported market fact");
+    }
+
     private static String symbol(String value) {
         require(value != null && value.matches("[0-9]{6}"), "symbol");
         return value;
@@ -415,26 +497,23 @@ public final class MarketFactProviderModels {
                 value, maximumIntegerDigits, maximumScale, field);
     }
 
-    private static BigDecimal nonNegative(
-            BigDecimal value,
+    private static QualifiedMarketField qualifiedField(
+            QualifiedMarketField value,
+            MarketFieldUnit expectedUnit,
+            MarketFieldSemantic expectedSemantic,
             int maximumIntegerDigits,
             int maximumScale,
             String field
     ) {
-        require(value != null && value.signum() >= 0, field);
-        return representable(
-                value, maximumIntegerDigits, maximumScale, field);
-    }
-
-    private static BigDecimal nullableNonNegative(
-            BigDecimal value,
-            int maximumIntegerDigits,
-            int maximumScale,
-            String field
-    ) {
-        require(value == null || value.signum() >= 0, field);
-        return value == null ? null : representable(
-                value, maximumIntegerDigits, maximumScale, field);
+        value = required(value, field);
+        require(value.unitCode() == expectedUnit, field + " unitCode");
+        require(value.semanticCode() == expectedSemantic,
+                field + " semanticCode");
+        if (value.value() != null) {
+            representable(
+                    value.value(), maximumIntegerDigits, maximumScale, field);
+        }
+        return value;
     }
 
     private static BigDecimal representable(

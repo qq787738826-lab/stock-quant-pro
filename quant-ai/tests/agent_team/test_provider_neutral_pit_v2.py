@@ -40,6 +40,39 @@ def stage_3ar3b0_payload() -> dict:
     bars = []
     raw_versions = []
     factor_versions = []
+    raw_lineage = []
+    factor_lineage = []
+    source_identities = {
+        "rawSourceIdentity": f"SECURITY:{payload['symbol']}.SZSE",
+        "factorSourceIdentity": f"FACTOR:QFQ:{payload['symbol']}.SZSE",
+        "calendarSourceIdentity": "CALENDAR:SZSE",
+        "corporateActionSourceIdentity": (
+            f"CORPORATE_ACTION:{payload['symbol']}.SZSE"
+        ),
+    }
+
+    def observation_lineage(
+        version: str,
+        content_hash: str,
+        natural_key: str,
+        source_identity: str,
+    ) -> dict:
+        return {
+            "observationVersion": version,
+            "canonicalContentHash": content_hash,
+            "naturalKey": natural_key,
+            "sourceIdentity": source_identity,
+            "knownAt": old["knowledgeCutoff"],
+            "revisionQualification": "SYSTEM_KNOWLEDGE_ONLY",
+            "assuranceLevel": "SYSTEM_KNOWLEDGE_PIT",
+            "usageQualification": "TEST_DEMO_ONLY",
+            "formalEligible": False,
+            "localPersistenceAllowed": True,
+            "historicalReplayAllowed": True,
+            "backtestAllowed": True,
+            "agentUseAllowed": True,
+        }
+
     for index, old_bar in enumerate(old["bars"]):
         raw_version = canonical_hash({
             "fixture": "raw", "sequence": index + 1,
@@ -49,6 +82,12 @@ def stage_3ar3b0_payload() -> dict:
         })
         raw_versions.append(raw_version)
         factor_versions.append(factor_version)
+        raw_content_hash = canonical_hash({
+            "fixture": "raw-content", "sequence": index + 1,
+        })
+        factor_content_hash = canonical_hash({
+            "fixture": "factor-content", "sequence": index + 1,
+        })
         bars.append({
             "symbol": old_bar["symbol"],
             "tradeDate": old_bar["tradeDate"],
@@ -57,17 +96,45 @@ def stage_3ar3b0_payload() -> dict:
             "low": old_bar["low"],
             "close": old_bar["close"],
             "volume": old_bar["volume"],
+            "volumeQualification": "PRESENT_VERIFIED",
+            "volumeUnitCode": "SHARES",
+            "volumeSemanticCode": "TRADED_VOLUME",
             "amount": old_bar["amount"],
+            "amountQualification": (
+                "MISSING"
+                if old_bar["amount"] is None
+                else "PRESENT_VERIFIED"
+            ),
+            "amountUnitCode": "CNY",
+            "amountSemanticCode": "TRADED_AMOUNT",
             "turnoverRate": old_bar["turnoverRate"],
+            "turnoverRateQualification": (
+                "MISSING"
+                if old_bar["turnoverRate"] is None
+                else "PRESENT_VERIFIED"
+            ),
+            "turnoverRateUnitCode": "RATIO",
+            "turnoverRateSemanticCode": "TURNOVER_RATE",
             "rawObservationVersion": raw_version,
-            "rawContentHash": canonical_hash({
-                "fixture": "raw-content", "sequence": index + 1,
-            }),
+            "rawContentHash": raw_content_hash,
             "factorObservationVersion": factor_version,
-            "factorContentHash": canonical_hash({
-                "fixture": "factor-content", "sequence": index + 1,
-            }),
+            "factorContentHash": factor_content_hash,
         })
+        raw_lineage.append(observation_lineage(
+            raw_version,
+            raw_content_hash,
+            f"RAW_DAILY_BAR|{payload['symbol']}|{old_bar['tradeDate']}",
+            source_identities["rawSourceIdentity"],
+        ))
+        factor_lineage.append(observation_lineage(
+            factor_version,
+            factor_content_hash,
+            (
+                f"ADJUSTMENT_FACTOR|{payload['symbol']}|QFQ|"
+                f"{old_bar['tradeDate']}"
+            ),
+            source_identities["factorSourceIdentity"],
+        ))
     qfq = {
         "engineVersion": "QFQ_AS_OF_ENGINE_V1",
         "factorType": "QFQ",
@@ -80,7 +147,6 @@ def stage_3ar3b0_payload() -> dict:
         "forwardFillAllowed": False,
         "crossProviderAllowed": False,
     }
-    source_instrument_id = f"{payload['symbol']}.SZSE"
     calendar_version = canonical_hash({"fixture": "calendar"})
     calendar_content_hash = canonical_hash({"fixture": "calendar-content"})
     action_version = canonical_hash({"fixture": "action"})
@@ -97,16 +163,16 @@ def stage_3ar3b0_payload() -> dict:
     data_version = {
         "pitModelVersion": "PIT_MARKET_FACTS_V2",
         "sourceCode": "MOCK_PIT_MARKET_FACTS_V2",
-        "sourceInstrumentId": source_instrument_id,
+        "sourceIdentities": source_identities,
         "qualification": "SYSTEM_KNOWLEDGE_PIT",
         "testDemoOnly": True,
         "batchLineage": [{
             "batchVersion": batch_version,
             "datasetVersion": f"LOCAL_PIT_DATASET_V2-{dataset_hash}",
-            "providerDatasetVersion": "MOCK_FIXTURE_V2",
+            "providerDatasetVersion": None,
             "runNamespace": "TEST",
             "sourceCode": "MOCK_PIT_MARKET_FACTS_V2",
-            "sourceInstrumentId": source_instrument_id,
+            "requestSourceIdentity": f"{payload['symbol']}.SZSE",
             "revisionQualification": "SYSTEM_KNOWLEDGE_ONLY",
             "assuranceLevel": "SYSTEM_KNOWLEDGE_PIT",
             "usageQualification": "TEST_DEMO_ONLY",
@@ -115,28 +181,25 @@ def stage_3ar3b0_payload() -> dict:
         }],
         "rawObservationVersions": raw_versions,
         "factorObservationVersions": factor_versions,
+        "rawLineage": raw_lineage,
+        "factorLineage": factor_lineage,
         "calendarObservationVersions": [calendar_version],
-        "calendarLineage": [{
-            "observationVersion": calendar_version,
-            "canonicalContentHash": calendar_content_hash,
-            "naturalKey": (
-                "MOCK_PIT_MARKET_FACTS_V2|CALENDAR|SZSE|"
-                f"{old['effectiveTradeDate']}"
-            ),
-            "knownAt": old["knowledgeCutoff"],
-            "revisionQualification": "SYSTEM_KNOWLEDGE_ONLY",
-        }],
+        "calendarLineage": [observation_lineage(
+            calendar_version,
+            calendar_content_hash,
+            f"TRADING_CALENDAR|SZSE|{old['effectiveTradeDate']}",
+            source_identities["calendarSourceIdentity"],
+        )],
         "corporateActionObservationVersions": [action_version],
-        "corporateActionLineage": [{
-            "observationVersion": action_version,
-            "canonicalContentHash": action_content_hash,
-            "naturalKey": (
-                "MOCK_PIT_MARKET_FACTS_V2|ACTION|"
-                f"{payload['symbol']}|MOCK-ACTION-001"
+        "corporateActionLineage": [observation_lineage(
+            action_version,
+            action_content_hash,
+            (
+                f"CORPORATE_ACTION|{payload['symbol']}|"
+                "MOCK-ACTION-001"
             ),
-            "knownAt": old["knowledgeCutoff"],
-            "revisionQualification": "SYSTEM_KNOWLEDGE_ONLY",
-        }],
+            source_identities["corporateActionSourceIdentity"],
+        )],
     }
     strategy = copy.deepcopy(old["strategy"])
     strategy["canonicalContractVersion"] = "BACKTEST_CANONICAL_V2"
@@ -222,6 +285,33 @@ def stage_3ar3b0_payload() -> dict:
     return payload
 
 
+def refresh_v2_context_hashes(payload: dict) -> None:
+    context = payload["contextSnapshot"]["backtestContext"]
+    input_hash = canonical_hash({
+        "canonicalContractVersion": context["canonicalContractVersion"],
+        "contextProfile": context["contextProfile"],
+        "contextSchemaVersion": context["schemaVersion"],
+        "symbol": context["symbol"],
+        "requestTradeDate": context["requestTradeDate"],
+        "requestEffectiveTradeDate": context["effectiveTradeDate"],
+        "anchorTradeDate": context["inputEndDate"],
+        "decisionTime": context["decisionTime"],
+        "knowledgeCutoff": context["knowledgeCutoff"],
+        "qfqContract": context["qfqContract"],
+        "dataVersion": context["dataVersion"],
+        "bars": context["bars"],
+    })
+    context["inputDataHash"] = input_hash
+    context["backtestResultHash"] = canonical_hash({
+        "canonicalContractVersion": context["canonicalContractVersion"],
+        "inputDataHash": input_hash,
+        "strategyDefinitionHash": context["strategyDefinitionHash"],
+        "result": context["result"],
+        "subperiods": context["subperiods"],
+        "stability": context["stability"],
+    })
+
+
 class ProviderNeutralPitV2Test(unittest.TestCase):
 
     def test_cross_language_market_fact_golden_vector(self):
@@ -250,10 +340,16 @@ class ProviderNeutralPitV2Test(unittest.TestCase):
         self.assertEqual(18, len({
             item["name"] for item in fixture["scenarios"]
         }))
-        self.assertEqual(
-            "9.2798",
-            fixture["representativeCalculation"]["outputPrice"],
-        )
+        for item in fixture["scenarios"]:
+            expected = item["expectedCanonicalResult"]
+            expected_hash = item["expectedCanonicalHash"]
+            self.assertRegex(expected_hash, r"^[0-9a-f]{64}$")
+            self.assertEqual(expected_hash, canonical_hash(expected))
+            self.assertIn("rawObservations", item["input"])
+            self.assertIn("factorObservations", item["input"])
+            self.assertIn("calendarObservations", item["input"])
+            self.assertIn("corporateActionObservations", item["input"])
+            self.assertIn("factorPredecessors", item["input"])
 
     def test_v2_backtest_is_validated_without_recomputing_qfq_or_strategy(self):
         request = AgentTeamRequest.model_validate(stage_3ar3b0_payload())
@@ -305,6 +401,56 @@ class ProviderNeutralPitV2Test(unittest.TestCase):
         )
         self.assertEqual("STRATEGY_BACKTEST_INPUT_INVALID",
                          invalid.errors[0].code)
+
+    def test_optional_field_qualification_distinguishes_missing_and_zero(self):
+        for field, unit, semantic in (
+            ("amount", "CNY", "TRADED_AMOUNT"),
+            ("turnoverRate", "RATIO", "TURNOVER_RATE"),
+        ):
+            with self.subTest(field=field):
+                payload = stage_3ar3b0_payload()
+                bar = payload["contextSnapshot"]["backtestContext"]["bars"][0]
+                bar[field] = None
+                bar[f"{field}Qualification"] = "MISSING"
+                bar[f"{field}UnitCode"] = unit
+                bar[f"{field}SemanticCode"] = semantic
+                refresh_v2_context_hashes(payload)
+                result = StrategyBacktestRuleEngineV2().evaluate(
+                    AgentTeamRequest.model_validate(payload),
+                    GateStatus.PASS,
+                )
+                self.assertEqual("COMPLETED", result.status.value)
+
+        explicit_zero = stage_3ar3b0_payload()
+        bar = explicit_zero["contextSnapshot"]["backtestContext"]["bars"][0]
+        bar["volume"] = "0"
+        bar["volumeQualification"] = "PRESENT_VERIFIED"
+        refresh_v2_context_hashes(explicit_zero)
+        result = StrategyBacktestRuleEngineV2().evaluate(
+            AgentTeamRequest.model_validate(explicit_zero),
+            GateStatus.PASS,
+        )
+        self.assertEqual("COMPLETED", result.status.value)
+
+        for value, qualification in (
+            (None, "MISSING"),
+            ("0", "MISSING"),
+            (None, "PRESENT_VERIFIED"),
+        ):
+            with self.subTest(volume=value, qualification=qualification):
+                invalid = stage_3ar3b0_payload()
+                bar = invalid["contextSnapshot"]["backtestContext"]["bars"][0]
+                bar["volume"] = value
+                bar["volumeQualification"] = qualification
+                refresh_v2_context_hashes(invalid)
+                result = StrategyBacktestRuleEngineV2().evaluate(
+                    AgentTeamRequest.model_validate(invalid),
+                    GateStatus.PASS,
+                )
+                self.assertEqual(
+                    "STRATEGY_BACKTEST_INPUT_INVALID",
+                    result.errors[0].code,
+                )
 
     def test_new_rule_keeps_exactly_six_runs_and_safe_chief_result(self):
         response = AgentTeamOrchestrator().analyze(

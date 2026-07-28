@@ -199,15 +199,31 @@ CREATE TABLE pit_market_fact_observations (
         )
     ),
     CONSTRAINT ck_pit_market_fact_observations_time CHECK (
-        first_observed_at <= known_at
-        AND known_at <= recorded_at
+        recorded_at >= first_observed_at
         AND (
-            provider_published_at IS NULL
-            OR provider_published_at <= first_observed_at
-        )
-        AND (
-            provider_updated_at IS NULL
-            OR provider_updated_at <= first_observed_at
+            (
+                revision_qualification = 'PROVIDER_VERIFIED'
+                AND provider_revision IS NOT NULL
+                AND provider_published_at IS NOT NULL
+                AND known_at = provider_published_at
+                AND provider_published_at <= first_observed_at
+                AND (
+                    provider_updated_at IS NULL
+                    OR (
+                        provider_updated_at >= provider_published_at
+                        AND provider_updated_at <= first_observed_at
+                    )
+                )
+            )
+            OR (
+                revision_qualification <> 'PROVIDER_VERIFIED'
+                AND known_at = first_observed_at
+                AND provider_dataset_version IS NULL
+                AND provider_revision IS NULL
+                AND provider_snapshot_id IS NULL
+                AND provider_published_at IS NULL
+                AND provider_updated_at IS NULL
+            )
         )
     ),
     CONSTRAINT ck_pit_market_fact_observations_hashes CHECK (
@@ -229,7 +245,11 @@ CREATE TABLE pit_market_fact_observations (
         )
         OR (
             revision_qualification <> 'PROVIDER_VERIFIED'
+            AND provider_dataset_version IS NULL
             AND provider_revision IS NULL
+            AND provider_snapshot_id IS NULL
+            AND provider_published_at IS NULL
+            AND provider_updated_at IS NULL
         )
     ),
     CONSTRAINT ck_pit_market_fact_observations_assurance CHECK (
@@ -259,9 +279,18 @@ CREATE TABLE raw_daily_bar_facts_v2 (
     high NUMERIC(30,12) NOT NULL,
     low NUMERIC(30,12) NOT NULL,
     close NUMERIC(30,12) NOT NULL,
-    volume NUMERIC(30,8) NOT NULL,
+    volume NUMERIC(30,8),
+    volume_qualification VARCHAR(32) NOT NULL,
+    volume_unit_code VARCHAR(32) NOT NULL,
+    volume_semantic_code VARCHAR(64) NOT NULL,
     amount NUMERIC(30,8),
+    amount_qualification VARCHAR(32) NOT NULL,
+    amount_unit_code VARCHAR(32) NOT NULL,
+    amount_semantic_code VARCHAR(64) NOT NULL,
     turnover_rate NUMERIC(20,12),
+    turnover_rate_qualification VARCHAR(32) NOT NULL,
+    turnover_rate_unit_code VARCHAR(32) NOT NULL,
+    turnover_rate_semantic_code VARCHAR(64) NOT NULL,
     CONSTRAINT fk_raw_daily_bar_facts_v2_observation
         FOREIGN KEY (observation_id)
         REFERENCES pit_market_fact_observations(id)
@@ -277,7 +306,8 @@ CREATE TABLE raw_daily_bar_facts_v2 (
         AND high::TEXT NOT IN ('NaN', 'Infinity', '-Infinity')
         AND low::TEXT NOT IN ('NaN', 'Infinity', '-Infinity')
         AND close::TEXT NOT IN ('NaN', 'Infinity', '-Infinity')
-        AND volume::TEXT NOT IN ('NaN', 'Infinity', '-Infinity')
+        AND (volume IS NULL
+             OR volume::TEXT NOT IN ('NaN', 'Infinity', '-Infinity'))
         AND (amount IS NULL
              OR amount::TEXT NOT IN ('NaN', 'Infinity', '-Infinity'))
         AND (turnover_rate IS NULL
@@ -288,11 +318,48 @@ CREATE TABLE raw_daily_bar_facts_v2 (
         AND high >= open AND high >= low AND high >= close
         AND low <= open AND low <= high AND low <= close
     ),
-    CONSTRAINT ck_raw_daily_bar_facts_v2_volume CHECK (volume >= 0),
+    CONSTRAINT ck_raw_daily_bar_facts_v2_volume
+        CHECK (volume IS NULL OR volume >= 0),
     CONSTRAINT ck_raw_daily_bar_facts_v2_amount
         CHECK (amount IS NULL OR amount >= 0),
     CONSTRAINT ck_raw_daily_bar_facts_v2_turnover
-        CHECK (turnover_rate IS NULL OR turnover_rate >= 0)
+        CHECK (turnover_rate IS NULL OR turnover_rate >= 0),
+    CONSTRAINT ck_raw_daily_bar_facts_v2_field_qualification CHECK (
+        volume_qualification IN (
+            'PRESENT_VERIFIED', 'PRESENT_UNVERIFIED', 'MISSING'
+        )
+        AND amount_qualification IN (
+            'PRESENT_VERIFIED', 'PRESENT_UNVERIFIED', 'MISSING'
+        )
+        AND turnover_rate_qualification IN (
+            'PRESENT_VERIFIED', 'PRESENT_UNVERIFIED', 'MISSING'
+        )
+        AND (
+            (volume_qualification = 'MISSING' AND volume IS NULL)
+            OR
+            (volume_qualification <> 'MISSING' AND volume IS NOT NULL)
+        )
+        AND (
+            (amount_qualification = 'MISSING' AND amount IS NULL)
+            OR
+            (amount_qualification <> 'MISSING' AND amount IS NOT NULL)
+        )
+        AND (
+            (turnover_rate_qualification = 'MISSING'
+             AND turnover_rate IS NULL)
+            OR
+            (turnover_rate_qualification <> 'MISSING'
+             AND turnover_rate IS NOT NULL)
+        )
+    ),
+    CONSTRAINT ck_raw_daily_bar_facts_v2_field_identity CHECK (
+        volume_unit_code = 'SHARES'
+        AND volume_semantic_code = 'TRADED_VOLUME'
+        AND amount_unit_code = 'CNY'
+        AND amount_semantic_code = 'TRADED_AMOUNT'
+        AND turnover_rate_unit_code = 'RATIO'
+        AND turnover_rate_semantic_code = 'TURNOVER_RATE'
+    )
 );
 
 CREATE TABLE adjustment_factor_facts_v1 (
@@ -439,7 +506,6 @@ BEGIN
     USING NEW.batch_id;
 
     IF NEW.source_code <> batch_record.source_code
-       OR NEW.source_instrument_id <> batch_record.source_instrument_id
        OR NEW.revision_qualification <> batch_record.revision_qualification
        OR NEW.assurance_level <> batch_record.assurance_level
        OR NEW.usage_qualification <> batch_record.usage_qualification
@@ -458,8 +524,7 @@ BEGIN
     END IF;
 
     EXECUTE format(
-        'SELECT id, chain_sequence, canonical_content_hash, '
-        || 'provider_revision '
+        'SELECT id, chain_sequence, canonical_content_hash '
         || 'FROM %I.pit_market_fact_observations '
         || 'WHERE fact_type = $1 AND source_code = $2 '
         || 'AND source_instrument_id = $3 AND natural_key = $4 '
@@ -479,8 +544,7 @@ BEGIN
     ELSE
         EXECUTE format(
             'SELECT id, fact_type, source_code, source_instrument_id, '
-            || 'natural_key, chain_sequence, canonical_content_hash, '
-            || 'provider_revision '
+            || 'natural_key, chain_sequence, canonical_content_hash '
             || 'FROM %I.pit_market_fact_observations WHERE id = $1',
             TG_TABLE_SCHEMA
         )
@@ -500,9 +564,7 @@ BEGIN
                 USING ERRCODE = '23514';
         END IF;
         IF predecessor_record.canonical_content_hash
-           = NEW.canonical_content_hash
-           AND predecessor_record.provider_revision
-               IS NOT DISTINCT FROM NEW.provider_revision THEN
+           = NEW.canonical_content_hash THEN
             RAISE EXCEPTION
                 'consecutive identical PIT fact is idempotent'
                 USING ERRCODE = '23505';

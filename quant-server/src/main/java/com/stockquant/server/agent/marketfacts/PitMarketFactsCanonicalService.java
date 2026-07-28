@@ -9,6 +9,7 @@ import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.Corporat
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.FactType;
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.RawDailyBar;
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.TradingCalendar;
+import com.stockquant.server.agent.marketfacts.PitMarketFactModels.ContentQualification;
 
 import org.springframework.stereotype.Service;
 
@@ -46,16 +47,20 @@ public class PitMarketFactsCanonicalService {
     public String contentHash(
             FactType type,
             String sourceCode,
-            String sourceInstrumentId,
-            Object fact
+            String sourceIdentity,
+            String naturalKey,
+            Object fact,
+            ContentQualification qualification
     ) {
-        return hash(contentPayload(type, sourceCode, sourceInstrumentId, fact));
+        return hash(contentPayload(
+                type, sourceCode, sourceIdentity, naturalKey,
+                fact, qualification));
     }
 
     public String observationVersion(
             FactType type,
             String sourceCode,
-            String sourceInstrumentId,
+            String sourceIdentity,
             String naturalKey,
             int chainSequence,
             String predecessorObservationVersion,
@@ -71,7 +76,7 @@ public class PitMarketFactsCanonicalService {
         node.put("factContractVersion", type.contractVersion());
         node.put("factType", type.name());
         node.put("sourceCode", sourceCode);
-        node.put("sourceInstrumentId", sourceInstrumentId);
+        node.put("sourceIdentity", sourceIdentity);
         node.put("naturalKey", naturalKey);
         node.put("chainSequence", chainSequence);
         if (predecessorObservationVersion == null) {
@@ -102,8 +107,10 @@ public class PitMarketFactsCanonicalService {
     public ObjectNode contentPayload(
             FactType type,
             String sourceCode,
-            String sourceInstrumentId,
-            Object fact
+            String sourceIdentity,
+            String naturalKey,
+            Object fact,
+            ContentQualification qualification
     ) {
         ObjectNode node = objectMapper.createObjectNode();
         node.put("canonicalContractVersion",
@@ -111,13 +118,37 @@ public class PitMarketFactsCanonicalService {
         node.put("factContractVersion", type.contractVersion());
         node.put("factType", type.name());
         node.put("sourceCode", sourceCode);
-        node.put("sourceInstrumentId", sourceInstrumentId);
+        node.put("sourceIdentity", sourceIdentity);
+        node.put("naturalKey", naturalKey);
         switch (type) {
             case RAW_DAILY_BAR -> raw(node, (RawDailyBar) fact);
             case ADJUSTMENT_FACTOR -> factor(node, (AdjustmentFactor) fact);
             case TRADING_CALENDAR -> calendar(node, (TradingCalendar) fact);
             case CORPORATE_ACTION -> action(node, (CorporateAction) fact);
         }
+        var version = MarketFactProviderModels.version(fact);
+        node.put("revisionQualification",
+                version.revisionQualification().name());
+        node.put("assuranceLevel",
+                qualification.assuranceLevel().name());
+        node.put("usageQualification",
+                qualification.usageQualification().name());
+        node.put("formalEligible", qualification.formalEligible());
+        node.put("localPersistenceAllowed",
+                qualification.localPersistenceAllowed());
+        node.put("historicalReplayAllowed",
+                qualification.historicalReplayAllowed());
+        node.put("backtestAllowed", qualification.backtestAllowed());
+        node.put("agentUseAllowed", qualification.agentUseAllowed());
+        putNullable(node, "providerDatasetVersion",
+                version.providerDatasetVersion());
+        putNullable(node, "providerRevision", version.providerRevision());
+        putNullable(node, "providerSnapshotId",
+                version.providerSnapshotId());
+        putNullableInstant(node, "providerPublishedAt",
+                version.providerPublishedAt());
+        putNullableInstant(node, "providerUpdatedAt",
+                version.providerUpdatedAt());
         return node;
     }
 
@@ -129,9 +160,9 @@ public class PitMarketFactsCanonicalService {
         decimal(node, "high", value.high());
         decimal(node, "low", value.low());
         decimal(node, "close", value.close());
-        decimal(node, "volume", value.volume());
-        decimal(node, "amount", value.amount());
-        decimal(node, "turnoverRate", value.turnoverRate());
+        qualifiedField(node, "volume", value.volume());
+        qualifiedField(node, "amount", value.amount());
+        qualifiedField(node, "turnoverRate", value.turnoverRate());
     }
 
     private static void factor(ObjectNode node, AdjustmentFactor value) {
@@ -169,6 +200,18 @@ public class PitMarketFactsCanonicalService {
         } else {
             node.put(field, value);
         }
+    }
+
+    private static void qualifiedField(
+            ObjectNode node,
+            String field,
+            MarketFactProviderModels.QualifiedMarketField value
+    ) {
+        ObjectNode result = node.putObject(field);
+        decimal(result, "value", value.value());
+        result.put("qualification", value.qualification().name());
+        result.put("unitCode", value.unitCode().name());
+        result.put("semanticCode", value.semanticCode().name());
     }
 
     private static void putNullable(ObjectNode node, String field, String value) {

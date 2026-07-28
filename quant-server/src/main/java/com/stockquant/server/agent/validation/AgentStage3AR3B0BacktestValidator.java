@@ -46,20 +46,33 @@ final class AgentStage3AR3B0BacktestValidator {
             "strategyDefinitionHash", "backtestResultHash", "testDemoOnly",
             "limitations");
     private static final Set<String> DATA_VERSION_FIELDS = Set.of(
-            "pitModelVersion", "sourceCode", "sourceInstrumentId",
+            "pitModelVersion", "sourceCode", "sourceIdentities",
             "qualification", "testDemoOnly", "batchLineage",
             "rawObservationVersions", "factorObservationVersions",
+            "rawLineage", "factorLineage",
             "calendarObservationVersions", "calendarLineage",
             "corporateActionObservationVersions",
             "corporateActionLineage");
     private static final Set<String> BATCH_LINEAGE_FIELDS = Set.of(
             "batchVersion", "datasetVersion", "providerDatasetVersion",
-            "runNamespace", "sourceCode", "sourceInstrumentId",
+            "runNamespace", "sourceCode", "requestSourceIdentity",
             "revisionQualification", "assuranceLevel",
             "usageQualification", "observedAt", "responseComplete");
     private static final Set<String> OBSERVATION_LINEAGE_FIELDS = Set.of(
             "observationVersion", "canonicalContentHash", "naturalKey",
-            "knownAt", "revisionQualification");
+            "sourceIdentity", "knownAt", "revisionQualification",
+            "assuranceLevel", "usageQualification", "formalEligible",
+            "localPersistenceAllowed", "historicalReplayAllowed",
+            "backtestAllowed", "agentUseAllowed");
+    private static final Set<String> BAR_FIELDS = Set.of(
+            "symbol", "tradeDate", "open", "high", "low", "close",
+            "volume", "volumeQualification", "volumeUnitCode",
+            "volumeSemanticCode", "amount", "amountQualification",
+            "amountUnitCode", "amountSemanticCode", "turnoverRate",
+            "turnoverRateQualification", "turnoverRateUnitCode",
+            "turnoverRateSemanticCode", "rawObservationVersion",
+            "rawContentHash", "factorObservationVersion",
+            "factorContentHash");
     private static final List<String> FINDING_CODES = List.of(
             "STRATEGY_BACKTEST_SAMPLE_SUFFICIENT",
             "STRATEGY_BACKTEST_TOTAL_RETURN_ASSESSED",
@@ -227,7 +240,9 @@ final class AgentStage3AR3B0BacktestValidator {
                 "V2 bar window size mismatch");
         LocalDate previous = null;
         for (JsonNode bar : bars) {
-            require(request.symbol().equals(text(bar, "symbol")),
+            require(bar.isObject()
+                            && exactFields(bar, BAR_FIELDS)
+                            && request.symbol().equals(text(bar, "symbol")),
                     "V2 bar symbol mismatch");
             LocalDate current = LocalDate.parse(text(bar, "tradeDate"));
             require(!current.isAfter(request.tradeDate())
@@ -243,6 +258,19 @@ final class AgentStage3AR3B0BacktestValidator {
                             && high.compareTo(open.max(low).max(close)) >= 0
                             && low.compareTo(open.min(high).min(close)) <= 0,
                     "V2 bar OHLC mismatch");
+            require("PRESENT_VERIFIED".equals(
+                            text(bar, "volumeQualification"))
+                            && "SHARES".equals(text(bar, "volumeUnitCode"))
+                            && "TRADED_VOLUME".equals(
+                            text(bar, "volumeSemanticCode"))
+                            && decimal(bar, "volume").signum() >= 0
+                            && decimal(bar, "volume").stripTrailingZeros()
+                            .scale() <= 0,
+                    "V2 required volume qualification mismatch");
+            validateOptionalField(
+                    bar, "amount", "CNY", "TRADED_AMOUNT");
+            validateOptionalField(
+                    bar, "turnoverRate", "RATIO", "TURNOVER_RATE");
             sha(text(bar, "rawObservationVersion"));
             sha(text(bar, "factorObservationVersion"));
             sha(text(bar, "rawContentHash"));
@@ -301,12 +329,24 @@ final class AgentStage3AR3B0BacktestValidator {
                         .equals(text(value, "pitModelVersion"))
                         && "MOCK_PIT_MARKET_FACTS_V2"
                         .equals(text(value, "sourceCode"))
-                        && !text(value, "sourceInstrumentId").isBlank()
                         && "SYSTEM_KNOWLEDGE_PIT"
                         .equals(text(value, "qualification"))
                         && value.path("testDemoOnly").isBoolean()
                         && value.path("testDemoOnly").asBoolean(),
                 "V2 dataVersion qualification mismatch");
+        JsonNode identities = value.get("sourceIdentities");
+        require(identities != null && identities.isObject()
+                        && exactFields(identities, Set.of(
+                        "rawSourceIdentity", "factorSourceIdentity",
+                        "calendarSourceIdentity",
+                        "corporateActionSourceIdentity")),
+                "V2 source identities missing");
+        String rawIdentity = text(identities, "rawSourceIdentity");
+        String factorIdentity = text(identities, "factorSourceIdentity");
+        String calendarIdentity = text(
+                identities, "calendarSourceIdentity");
+        String actionIdentity = text(
+                identities, "corporateActionSourceIdentity");
 
         JsonNode rawVersions = value.get("rawObservationVersions");
         JsonNode factorVersions = value.get("factorObservationVersions");
@@ -328,7 +368,6 @@ final class AgentStage3AR3B0BacktestValidator {
         JsonNode batches = value.get("batchLineage");
         require(batches != null && batches.isArray() && !batches.isEmpty(),
                 "V2 batch lineage missing");
-        String sourceInstrumentId = text(value, "sourceInstrumentId");
         String previousBatchVersion = null;
         for (JsonNode batch : batches) {
             require(batch.isObject()
@@ -347,8 +386,7 @@ final class AgentStage3AR3B0BacktestValidator {
                             || "DEMO".equals(runNamespace))
                             && "MOCK_PIT_MARKET_FACTS_V2"
                             .equals(text(batch, "sourceCode"))
-                            && sourceInstrumentId.equals(
-                            text(batch, "sourceInstrumentId"))
+                            && !text(batch, "requestSourceIdentity").isBlank()
                             && "SYSTEM_KNOWLEDGE_ONLY".equals(
                             text(batch, "revisionQualification"))
                             && "SYSTEM_KNOWLEDGE_PIT".equals(
@@ -370,19 +408,29 @@ final class AgentStage3AR3B0BacktestValidator {
         }
 
         validateObservationLineage(
+                value.get("rawObservationVersions"),
+                value.get("rawLineage"), knowledgeCutoff,
+                "raw", rawIdentity);
+        validateObservationLineage(
+                value.get("factorObservationVersions"),
+                value.get("factorLineage"), knowledgeCutoff,
+                "factor", factorIdentity);
+        validateObservationLineage(
                 value.get("calendarObservationVersions"),
-                value.get("calendarLineage"), knowledgeCutoff, "calendar");
+                value.get("calendarLineage"), knowledgeCutoff,
+                "calendar", calendarIdentity);
         validateObservationLineage(
                 value.get("corporateActionObservationVersions"),
                 value.get("corporateActionLineage"), knowledgeCutoff,
-                "corporate action");
+                "corporate action", actionIdentity);
     }
 
     private static void validateObservationLineage(
             JsonNode versions,
             JsonNode lineage,
             Instant knowledgeCutoff,
-            String label
+            String label,
+            String expectedSourceIdentity
     ) {
         require(versions != null && versions.isArray()
                         && lineage != null && lineage.isArray()
@@ -401,8 +449,21 @@ final class AgentStage3AR3B0BacktestValidator {
                             sha(versions.get(index).asText()))
                             && sha(text(item, "canonicalContentHash"))
                             .length() == 64
+                            && expectedSourceIdentity.equals(
+                            text(item, "sourceIdentity"))
                             && "SYSTEM_KNOWLEDGE_ONLY".equals(
                             text(item, "revisionQualification"))
+                            && "SYSTEM_KNOWLEDGE_PIT".equals(
+                            text(item, "assuranceLevel"))
+                            && "TEST_DEMO_ONLY".equals(
+                            text(item, "usageQualification"))
+                            && !item.path("formalEligible").asBoolean(true)
+                            && item.path("localPersistenceAllowed")
+                            .asBoolean(false)
+                            && item.path("historicalReplayAllowed")
+                            .asBoolean(false)
+                            && item.path("backtestAllowed").asBoolean(false)
+                            && item.path("agentUseAllowed").asBoolean(false)
                             && !Instant.parse(text(item, "knownAt"))
                             .isAfter(knowledgeCutoff),
                     "V2 " + label + " lineage value mismatch");
@@ -418,6 +479,32 @@ final class AgentStage3AR3B0BacktestValidator {
         Set<String> actual = new java.util.HashSet<>();
         value.fieldNames().forEachRemaining(actual::add);
         return actual.equals(expected);
+    }
+
+    private static void validateOptionalField(
+            JsonNode bar,
+            String field,
+            String unit,
+            String semantic
+    ) {
+        String qualification = text(bar, field + "Qualification");
+        require(Set.of(
+                        "PRESENT_VERIFIED",
+                        "PRESENT_UNVERIFIED",
+                        "MISSING").contains(qualification)
+                        && unit.equals(text(bar, field + "UnitCode"))
+                        && semantic.equals(
+                        text(bar, field + "SemanticCode")),
+                "V2 optional field qualification mismatch: " + field);
+        JsonNode value = bar.get(field);
+        if ("MISSING".equals(qualification)) {
+            require(value != null && value.isNull(),
+                    "V2 missing field must remain null: " + field);
+        } else {
+            require(value != null && value.isNumber()
+                            && value.decimalValue().signum() >= 0,
+                    "V2 present field value invalid: " + field);
+        }
     }
 
     private static void validateStrategy(JsonNode strategy) {

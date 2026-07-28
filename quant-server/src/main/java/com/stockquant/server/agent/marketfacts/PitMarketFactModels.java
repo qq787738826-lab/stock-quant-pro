@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.AssuranceLevel;
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.CorporateActionType;
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.FactType;
+import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.QualifiedMarketField;
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.RevisionQualification;
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.RunNamespace;
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.UsageQualification;
@@ -60,9 +61,9 @@ public final class PitMarketFactModels {
             BigDecimal high,
             BigDecimal low,
             BigDecimal close,
-            BigDecimal volume,
-            BigDecimal amount,
-            BigDecimal turnoverRate
+            QualifiedMarketField volume,
+            QualifiedMarketField amount,
+            QualifiedMarketField turnoverRate
     ) {
     }
 
@@ -78,8 +79,13 @@ public final class PitMarketFactModels {
 
     public record FactorPredecessor(
             long observationId,
+            String sourceCode,
+            String sourceIdentity,
+            String symbol,
+            LocalDate factorEffectiveTradeDate,
             BigDecimal factor,
-            Instant knownAt
+            Instant knownAt,
+            RevisionQualification revisionQualification
     ) {
     }
 
@@ -137,16 +143,44 @@ public final class PitMarketFactModels {
             BigDecimal high,
             BigDecimal low,
             BigDecimal close,
-            BigDecimal volume,
-            BigDecimal amount,
-            BigDecimal turnoverRate,
+            QualifiedMarketField volume,
+            QualifiedMarketField amount,
+            QualifiedMarketField turnoverRate,
             long rawObservationId,
+            String rawSourceIdentity,
             String rawObservationVersion,
             String rawContentHash,
             long factorObservationId,
+            String factorSourceIdentity,
             String factorObservationVersion,
             String factorContentHash
     ) {
+    }
+
+    public record QfqSourceIdentities(
+            String rawSourceIdentity,
+            String factorSourceIdentity,
+            String calendarSourceIdentity,
+            String corporateActionSourceIdentity
+    ) {
+        public QfqSourceIdentities {
+            rawSourceIdentity = requiredIdentity(
+                    rawSourceIdentity, "rawSourceIdentity");
+            factorSourceIdentity = requiredIdentity(
+                    factorSourceIdentity, "factorSourceIdentity");
+            calendarSourceIdentity = requiredIdentity(
+                    calendarSourceIdentity, "calendarSourceIdentity");
+            corporateActionSourceIdentity = requiredIdentity(
+                    corporateActionSourceIdentity,
+                    "corporateActionSourceIdentity");
+        }
+
+        private static String requiredIdentity(String value, String field) {
+            if (value == null || value.isBlank()) {
+                throw new IllegalArgumentException("invalid " + field);
+            }
+            return value;
+        }
     }
 
     public record QfqAsOfResult(
@@ -154,7 +188,7 @@ public final class PitMarketFactModels {
             String reasonCode,
             String reason,
             String sourceCode,
-            String sourceInstrumentId,
+            QfqSourceIdentities sourceIdentities,
             String symbol,
             LocalDate requestTradeDate,
             LocalDate requestEffectiveTradeDate,
@@ -164,12 +198,16 @@ public final class PitMarketFactModels {
             String coverageMode,
             String engineVersion,
             List<QfqBar> bars,
+            List<RawDailyBarObservation> rawLineage,
+            List<AdjustmentFactorObservation> factorLineage,
             List<TradingCalendarObservation> calendarLineage,
             List<CorporateActionObservation> corporateActionLineage,
             List<BatchLineage> batchLineage
     ) {
         public QfqAsOfResult {
             bars = List.copyOf(bars);
+            rawLineage = List.copyOf(rawLineage);
+            factorLineage = List.copyOf(factorLineage);
             calendarLineage = List.copyOf(calendarLineage);
             corporateActionLineage = List.copyOf(corporateActionLineage);
             batchLineage = List.copyOf(batchLineage);
@@ -179,18 +217,19 @@ public final class PitMarketFactModels {
                 String reasonCode,
                 String reason,
                 String sourceCode,
-                String sourceInstrumentId,
+                QfqSourceIdentities sourceIdentities,
                 String symbol,
                 LocalDate requestTradeDate,
                 Instant knowledgeCutoff
         ) {
             return new QfqAsOfResult(
-                    false, reasonCode, reason, sourceCode, sourceInstrumentId,
+                    false, reasonCode, reason, sourceCode, sourceIdentities,
                     symbol, requestTradeDate, null, null, knowledgeCutoff,
                     PitMarketFactsContracts.FACTOR_TYPE,
                     PitMarketFactsContracts.FACTOR_COVERAGE_MODE,
                     PitMarketFactsContracts.QFQ_ENGINE_VERSION,
-                    List.of(), List.of(), List.of(), List.of());
+                    List.of(), List.of(), List.of(),
+                    List.of(), List.of(), List.of());
         }
     }
 
@@ -202,6 +241,27 @@ public final class PitMarketFactModels {
             String sourceCode,
             String sourceInstrumentId,
             RevisionQualification revisionQualification,
+            AssuranceLevel assuranceLevel,
+            UsageQualification usageQualification,
+            boolean formalEligible,
+            boolean localPersistenceAllowed,
+            boolean historicalReplayAllowed,
+            boolean backtestAllowed,
+            boolean agentUseAllowed
+    ) {
+        public ContentQualification contentQualification() {
+            return new ContentQualification(
+                    assuranceLevel,
+                    usageQualification,
+                    formalEligible,
+                    localPersistenceAllowed,
+                    historicalReplayAllowed,
+                    backtestAllowed,
+                    agentUseAllowed);
+        }
+    }
+
+    public record ContentQualification(
             AssuranceLevel assuranceLevel,
             UsageQualification usageQualification,
             boolean formalEligible,

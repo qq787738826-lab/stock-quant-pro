@@ -10,6 +10,7 @@ import com.stockquant.server.agent.backtest.BacktestCanonicalHashService;
 import com.stockquant.server.agent.backtest.BacktestContracts;
 import com.stockquant.server.agent.marketfacts.PitMarketFactModels.QfqAsOfResult;
 import com.stockquant.server.agent.marketfacts.PitMarketFactModels.QfqBar;
+import com.stockquant.server.agent.marketfacts.PitMarketFactModels.QfqSourceIdentities;
 
 import org.springframework.stereotype.Service;
 
@@ -78,10 +79,11 @@ public class AgentBacktestContextV2Service {
                     "Daily close decision time has not been reached");
         }
         String exchange = exchange(symbol);
-        String sourceInstrumentId = symbol + "." + exchange;
+        QfqSourceIdentities sourceIdentities =
+                MockMarketFactProvider.qfqSourceIdentities(symbol, exchange);
         QfqAsOfResult qfq = qfqEngine.calculate(
                 symbol, exchange, MockMarketFactProvider.PROVIDER_CODE,
-                sourceInstrumentId, requestTradeDate, decisionTime);
+                sourceIdentities, requestTradeDate, decisionTime);
         if (!qfq.available()) {
             return unavailable(context, qfq.reasonCode(), qfq.reason());
         }
@@ -90,6 +92,16 @@ public class AgentBacktestContextV2Service {
             context.put("requiredBars", BacktestContracts.MINIMUM_CONTEXT_BARS);
             return unavailable(context, PitMarketFactsContracts.SAMPLE_INSUFFICIENT,
                     "V2 QFQ window contains fewer than 120 bars");
+        }
+        if (qfq.bars().stream().anyMatch(bar ->
+                bar.volume().qualification()
+                        != MarketFactProviderModels.FieldQualification
+                        .PRESENT_VERIFIED
+                        || bar.volume().value() == null)) {
+            return unavailable(
+                    context,
+                    PitMarketFactsContracts.REQUIRED_MARKET_FIELD_UNAVAILABLE,
+                    "V2 backtest requires PRESENT_VERIFIED volume for every bar");
         }
         List<Bar> bars;
         try {
@@ -237,8 +249,9 @@ public class AgentBacktestContextV2Service {
     private Bar bar(QfqBar value) {
         return new Bar(
                 value.symbol(), value.tradeDate(), value.open(), value.high(),
-                value.low(), value.close(), value.volume().longValueExact(),
-                value.amount(), value.turnoverRate());
+                value.low(), value.close(),
+                value.volume().value().longValueExact(),
+                value.amount().value(), value.turnoverRate().value());
     }
 
     private ObjectNode qfqContract() {
@@ -263,7 +276,8 @@ public class AgentBacktestContextV2Service {
         result.put("pitModelVersion",
                 PitMarketFactsContracts.MARKET_FACTS_VERSION);
         result.put("sourceCode", value.sourceCode());
-        result.put("sourceInstrumentId", value.sourceInstrumentId());
+        result.set("sourceIdentities",
+                objectMapper.valueToTree(value.sourceIdentities()));
         String qualification = value.batchLineage().stream().allMatch(
                 batch -> batch.assuranceLevel()
                         == com.stockquant.server.agent.marketfacts
@@ -296,7 +310,7 @@ public class AgentBacktestContextV2Service {
                     }
                     node.put("runNamespace", batch.runNamespace().name());
                     node.put("sourceCode", batch.sourceCode());
-                    node.put("sourceInstrumentId",
+                    node.put("requestSourceIdentity",
                             batch.sourceInstrumentId());
                     node.put("revisionQualification",
                             batch.revisionQualification().name());
@@ -316,6 +330,21 @@ public class AgentBacktestContextV2Service {
             raw.add(bar.rawObservationVersion());
             factor.add(bar.factorObservationVersion());
         });
+        ArrayNode rawLineage = result.putArray("rawLineage");
+        value.rawLineage().stream()
+                .sorted(Comparator.comparing(
+                        PitMarketFactModels.RawDailyBarObservation::tradeDate))
+                .forEach(item ->
+                        appendObservationLineage(
+                                rawLineage, item.envelope()));
+        ArrayNode factorLineage = result.putArray("factorLineage");
+        value.factorLineage().stream()
+                .sorted(Comparator.comparing(
+                        PitMarketFactModels.AdjustmentFactorObservation
+                                ::factorEffectiveTradeDate))
+                .forEach(item ->
+                        appendObservationLineage(
+                                factorLineage, item.envelope()));
         List<PitMarketFactModels.TradingCalendarObservation> calendarFacts =
                 value.calendarLineage().stream()
                         .sorted(Comparator.comparing(item ->
@@ -350,11 +379,22 @@ public class AgentBacktestContextV2Service {
         node.put("canonicalContentHash",
                 envelope.canonicalContentHash());
         node.put("naturalKey", envelope.naturalKey());
+        node.put("sourceIdentity", envelope.sourceInstrumentId());
         node.put("knownAt",
                 BacktestCanonicalHashService.formatInstant(
                         envelope.knownAt()));
         node.put("revisionQualification",
                 envelope.revisionQualification().name());
+        node.put("assuranceLevel", envelope.assuranceLevel().name());
+        node.put("usageQualification",
+                envelope.usageQualification().name());
+        node.put("formalEligible", envelope.formalEligible());
+        node.put("localPersistenceAllowed",
+                envelope.localPersistenceAllowed());
+        node.put("historicalReplayAllowed",
+                envelope.historicalReplayAllowed());
+        node.put("backtestAllowed", envelope.backtestAllowed());
+        node.put("agentUseAllowed", envelope.agentUseAllowed());
     }
 
     private ArrayNode contextBars(List<QfqBar> bars) {
@@ -367,9 +407,9 @@ public class AgentBacktestContextV2Service {
             decimal(node, "high", value.high());
             decimal(node, "low", value.low());
             decimal(node, "close", value.close());
-            decimal(node, "volume", value.volume());
-            decimal(node, "amount", value.amount());
-            decimal(node, "turnoverRate", value.turnoverRate());
+            qualifiedField(node, "volume", value.volume());
+            qualifiedField(node, "amount", value.amount());
+            qualifiedField(node, "turnoverRate", value.turnoverRate());
             node.put("rawObservationVersion", value.rawObservationVersion());
             node.put("rawContentHash", value.rawContentHash());
             node.put("factorObservationVersion",
@@ -518,6 +558,17 @@ public class AgentBacktestContextV2Service {
     ) {
         if (value == null) node.putNull(field);
         else node.put(field, value);
+    }
+
+    private static void qualifiedField(
+            ObjectNode node,
+            String field,
+            MarketFactProviderModels.QualifiedMarketField value
+    ) {
+        decimal(node, field, value.value());
+        node.put(field + "Qualification", value.qualification().name());
+        node.put(field + "UnitCode", value.unitCode().name());
+        node.put(field + "SemanticCode", value.semanticCode().name());
     }
 
     private record Subperiod(

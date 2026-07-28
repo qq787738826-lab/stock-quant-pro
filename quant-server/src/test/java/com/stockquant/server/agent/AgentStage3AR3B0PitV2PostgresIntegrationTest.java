@@ -5,6 +5,9 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.stockquant.server.QuantServerApplication;
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels;
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.FactType;
+import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.FieldQualification;
+import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.MarketFieldSemantic;
+import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.MarketFieldUnit;
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.AdjustmentFactor;
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.CorporateAction;
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.CorporateActionType;
@@ -12,6 +15,8 @@ import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.MarketFa
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.MarketFactResponse;
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.RawDailyBar;
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.ProviderVersion;
+import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.ProviderCapability;
+import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.QualifiedMarketField;
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.RevisionQualification;
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.RunNamespace;
 import com.stockquant.server.agent.marketfacts.MockMarketFactProvider;
@@ -19,6 +24,7 @@ import com.stockquant.server.agent.marketfacts.PitMarketFactCaptureService;
 import com.stockquant.server.agent.marketfacts.PitMarketFactModels;
 import com.stockquant.server.agent.marketfacts.PitMarketFactsContracts;
 import com.stockquant.server.agent.marketfacts.QfqAsOfEngine;
+import com.stockquant.server.agent.marketfacts.AgentBacktestContextV2Service;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
@@ -69,6 +75,7 @@ class AgentStage3AR3B0PitV2PostgresIntegrationTest {
     @Autowired JdbcTemplate jdbc;
     @Autowired PitMarketFactCaptureService captureService;
     @Autowired QfqAsOfEngine qfqEngine;
+    @Autowired AgentBacktestContextV2Service backtestContextV2Service;
     @Autowired PlatformTransactionManager transactionManager;
 
     @DynamicPropertySource
@@ -80,6 +87,9 @@ class AgentStage3AR3B0PitV2PostgresIntegrationTest {
         registry.add("stockquant.agent-team.shadow.scheduler-enabled",
                 () -> false);
         registry.add("stockquant.announcement.akshare.enabled", () -> false);
+        registry.add(
+                "stockquant.market-facts.v2.test-demo-enabled",
+                () -> true);
     }
 
     @AfterAll
@@ -102,7 +112,7 @@ class AgentStage3AR3B0PitV2PostgresIntegrationTest {
                 SELECT count(*) FROM flyway_schema_history
                 WHERE NOT success
                 """));
-        assertEquals(-763324992, jdbc.queryForObject("""
+        assertEquals(1903740866, jdbc.queryForObject("""
                 SELECT checksum FROM flyway_schema_history
                 WHERE version='13' AND success
                 """, Integer.class));
@@ -228,7 +238,19 @@ class AgentStage3AR3B0PitV2PostgresIntegrationTest {
                 MockMarketFactProvider.Scenario.NORMAL));
         captureService.capture(noCalendar, OBSERVED);
         assertUnavailable(
-                calculate("000004", "SZSE", CUTOFF),
+                qfqEngine.calculate(
+                        "000004", "SZSE",
+                        MockMarketFactProvider.PROVIDER_CODE,
+                        new PitMarketFactModels.QfqSourceIdentities(
+                                MockMarketFactProvider.rawSourceIdentity(
+                                        "000004", "SZSE"),
+                                MockMarketFactProvider.factorSourceIdentity(
+                                        "000004", "SZSE"),
+                                "CALENDAR:UNAVAILABLE",
+                                MockMarketFactProvider
+                                        .corporateActionSourceIdentity(
+                                                "000004", "SZSE")),
+                        END, CUTOFF),
                 PitMarketFactsContracts.CALENDAR_UNAVAILABLE);
 
         MarketFactResponse complete = response(
@@ -260,11 +282,13 @@ class AgentStage3AR3B0PitV2PostgresIntegrationTest {
                 calculate(
                         "000005", "SZSE",
                         OBSERVED.minusSeconds(1)),
-                PitMarketFactsContracts.CALENDAR_UNAVAILABLE);
+                PitMarketFactsContracts.RAW_BAR_UNAVAILABLE);
         assertUnavailable(
                 qfqEngine.calculate(
                         "000005", "SZSE", "ANOTHER_PROVIDER",
-                        "000005.SZSE", END, CUTOFF),
+                        MockMarketFactProvider.qfqSourceIdentities(
+                                "000005", "SZSE"),
+                        END, CUTOFF),
                 PitMarketFactsContracts.CALENDAR_UNAVAILABLE);
     }
 
@@ -291,11 +315,15 @@ class AgentStage3AR3B0PitV2PostgresIntegrationTest {
                 originalAsOf.bars().get(0).close(),
                 oldReplay.bars().get(0).close());
         assertEquals(
-                originalAsOf.bars().get(0).close(),
+                originalAsOf.bars().get(0).close()
+                        .divide(new BigDecimal("2"))
+                        .setScale(4),
                 revisedAsOf.bars().get(0).close());
         assertNotEquals(
-                oldReplay.bars().get(0).factorObservationVersion(),
-                revisedAsOf.bars().get(0).factorObservationVersion());
+                oldReplay.bars().get(oldReplay.bars().size() - 1)
+                        .factorObservationVersion(),
+                revisedAsOf.bars().get(revisedAsOf.bars().size() - 1)
+                        .factorObservationVersion());
         assertTrue(revisedAsOf.corporateActionLineage().stream()
                 .anyMatch(action ->
                         "MOCK-ACTION-002".equals(action.sourceActionId())));
@@ -304,7 +332,9 @@ class AgentStage3AR3B0PitV2PostgresIntegrationTest {
                 "600005", "SSE", MockMarketFactProvider.Scenario.NORMAL);
         captureService.capture(unexplainedOriginal, OBSERVED);
         captureService.capture(
-                scaledFactors(unexplainedOriginal, false),
+                withUnrelatedAction(
+                        scaledFactors(unexplainedOriginal, false),
+                        END.minusDays(3)),
                 OBSERVED.plusSeconds(600));
         assertUnavailable(
                 calculate("600005", "SSE", OBSERVED.plusSeconds(700)),
@@ -317,28 +347,44 @@ class AgentStage3AR3B0PitV2PostgresIntegrationTest {
         MarketFactResponse response = response(
                 "000006", "SZSE",
                 MockMarketFactProvider.Scenario.NORMAL);
+        long before = count("""
+                SELECT count(*) FROM pit_market_fact_observations
+                """);
         var executor = Executors.newFixedThreadPool(2);
+        int appended;
         try {
             var first = executor.submit(() -> captureService.capture(
                     response, OBSERVED.plusSeconds(300)));
             var second = executor.submit(() -> captureService.capture(
                     response, OBSERVED.plusSeconds(301)));
-            int appended = first.get().appendedCount()
+            appended = first.get().appendedCount()
                     + second.get().appendedCount();
-            assertEquals(response.recordCount(), appended);
         } finally {
             executor.shutdownNow();
         }
         assertEquals(
                 count("""
+                        SELECT count(*) FROM pit_market_fact_observations
+                        """) - before,
+                appended);
+        assertEquals(
+                count("""
                         SELECT count(DISTINCT natural_key)
                         FROM pit_market_fact_observations
-                        WHERE source_instrument_id='000006.SZSE'
+                        WHERE source_instrument_id IN (
+                          'SECURITY:000006.SZSE',
+                          'FACTOR:QFQ:000006.SZSE',
+                          'CORPORATE_ACTION:000006.SZSE'
+                        )
                         """),
                 count("""
                         SELECT count(*)
                         FROM pit_market_fact_observations
-                        WHERE source_instrument_id='000006.SZSE'
+                        WHERE source_instrument_id IN (
+                          'SECURITY:000006.SZSE',
+                          'FACTOR:QFQ:000006.SZSE',
+                          'CORPORATE_ACTION:000006.SZSE'
+                        )
                         """));
     }
 
@@ -381,8 +427,8 @@ class AgentStage3AR3B0PitV2PostgresIntegrationTest {
         assertEquals(0, count("""
                 SELECT count(*)
                 FROM pit_market_fact_observations
-                WHERE source_instrument_id='600002.SSE'
-                """));
+                WHERE batch_id=?
+                """, incomplete.batchId()));
         assertEquals("MOCK_PARTIAL_RESPONSE",
                 jdbc.queryForObject("""
                         SELECT provider_metadata_json
@@ -394,10 +440,17 @@ class AgentStage3AR3B0PitV2PostgresIntegrationTest {
         MarketFactResponse complete = response(
                 "600002", "SSE",
                 MockMarketFactProvider.Scenario.NORMAL);
+        long observationsBefore = count("""
+                SELECT count(*) FROM pit_market_fact_observations
+                """);
         var completed = captureService.capture(
                 complete, OBSERVED.plusSeconds(60));
         assertTrue(completed.complete());
-        assertEquals(complete.recordCount(), completed.appendedCount());
+        assertEquals(
+                count("""
+                        SELECT count(*) FROM pit_market_fact_observations
+                        """) - observationsBefore,
+                completed.appendedCount());
     }
 
     @Test
@@ -458,10 +511,22 @@ class AgentStage3AR3B0PitV2PostgresIntegrationTest {
                 )
                 INSERT INTO raw_daily_bar_facts_v2(
                     observation_id, symbol, exchange, trade_date,
-                    open, high, low, close, volume, amount, turnover_rate
+                    open, high, low, close,
+                    volume, volume_qualification, volume_unit_code,
+                    volume_semantic_code,
+                    amount, amount_qualification, amount_unit_code,
+                    amount_semantic_code,
+                    turnover_rate, turnover_rate_qualification,
+                    turnover_rate_unit_code, turnover_rate_semantic_code
                 )
                 SELECT id, '600003', 'SSE', DATE '2026-07-28',
-                       10, 11, 9, 10, 100, 1000, 0.01
+                       10, 11, 9, 10,
+                       100, 'PRESENT_VERIFIED', 'SHARES',
+                       'TRADED_VOLUME',
+                       1000, 'PRESENT_VERIFIED', 'CNY',
+                       'TRADED_AMOUNT',
+                       0.01, 'PRESENT_VERIFIED', 'RATIO',
+                       'TURNOVER_RATE'
                 FROM observation
                 """, beforeClose, beforeClose, beforeClose, batchId));
 
@@ -516,10 +581,24 @@ class AgentStage3AR3B0PitV2PostgresIntegrationTest {
                     jdbc.update("""
                             INSERT INTO raw_daily_bar_facts_v2(
                                 observation_id, symbol, exchange, trade_date,
-                                open, high, low, close, volume, amount,
-                                turnover_rate
-                            ) VALUES (?, '699998', 'SSE', ?, 10, 9, 8, 10,
-                                      100, 1000, 0.01)
+                                open, high, low, close,
+                                volume, volume_qualification,
+                                volume_unit_code, volume_semantic_code,
+                                amount, amount_qualification,
+                                amount_unit_code, amount_semantic_code,
+                                turnover_rate,
+                                turnover_rate_qualification,
+                                turnover_rate_unit_code,
+                                turnover_rate_semantic_code
+                            ) VALUES (
+                                ?, '699998', 'SSE', ?, 10, 9, 8, 10,
+                                100, 'PRESENT_VERIFIED', 'SHARES',
+                                'TRADED_VOLUME',
+                                1000, 'PRESENT_VERIFIED', 'CNY',
+                                'TRADED_AMOUNT',
+                                0.01, 'PRESENT_VERIFIED', 'RATIO',
+                                'TURNOVER_RATE'
+                            )
                             """, observationId, START);
                 }));
         assertEquals(0, count("""
@@ -593,6 +672,419 @@ class AgentStage3AR3B0PitV2PostgresIntegrationTest {
                 OBSERVED.plusSeconds(61), otherCapture.batchId()));
     }
 
+    @Test
+    void appliesQualificationAwareKnowledgeTimeInJavaDatabaseAndAsOfQueries() {
+        Instant providerPublishedAt =
+                Instant.parse("2026-07-27T07:05:00.000000Z");
+        Instant providerUpdatedAt =
+                Instant.parse("2026-07-27T07:10:00.000000Z");
+        Instant historicalCutoff =
+                Instant.parse("2026-07-27T07:30:00.000000Z");
+
+        MarketFactResponse system = response(
+                "000008", "SZSE", MockMarketFactProvider.Scenario.NORMAL);
+        captureService.capture(system, OBSERVED);
+        assertUnavailable(
+                calculate("000008", "SZSE", historicalCutoff),
+                PitMarketFactsContracts.CALENDAR_UNAVAILABLE);
+
+        MarketFactResponse verified = withProviderVersion(
+                response(
+                        "000009", "SZSE",
+                        MockMarketFactProvider.Scenario.NORMAL),
+                verifiedVersion(
+                        "REVISION-1", "SNAPSHOT-1",
+                        providerPublishedAt, providerUpdatedAt),
+                verifiedCapability(
+                        response(
+                                "000009", "SZSE",
+                                MockMarketFactProvider.Scenario.NORMAL)
+                                .capability()));
+        long verifiedBatch = captureService.capture(
+                verified, OBSERVED).batchId();
+        var historical = calculate(
+                "000009", "SZSE", historicalCutoff);
+        assertTrue(historical.available(), historical.reasonCode());
+        assertEquals(0, count("""
+                SELECT count(*)
+                FROM pit_market_fact_observations
+                WHERE batch_id=?
+                  AND (
+                    known_at IS DISTINCT FROM provider_published_at
+                    OR provider_published_at >= first_observed_at
+                    OR recorded_at < first_observed_at
+                  )
+                """, verifiedBatch));
+
+        assertThrows(IllegalArgumentException.class, () ->
+                captureService.capture(
+                        withProviderVersion(
+                                response(
+                                        "000010", "SZSE",
+                                        MockMarketFactProvider.Scenario.NORMAL),
+                                verifiedVersion(
+                                        "REVISION-LATE", "SNAPSHOT-LATE",
+                                        OBSERVED.plusSeconds(1),
+                                        OBSERVED.plusSeconds(2)),
+                                verifiedCapability(
+                                        response(
+                                                "000010", "SZSE",
+                                                MockMarketFactProvider.Scenario
+                                                        .NORMAL)
+                                                .capability())),
+                        OBSERVED));
+
+        long systemBatch = captureService.capture(
+                response(
+                        "000011", "SZSE",
+                        MockMarketFactProvider.Scenario.NORMAL),
+                OBSERVED.plusSeconds(60)).batchId();
+        assertThrows(DataAccessException.class, () -> jdbc.update("""
+                INSERT INTO pit_market_fact_observations(
+                    batch_id, fact_type, fact_contract_version, natural_key,
+                    chain_sequence, predecessor_observation_id, source_code,
+                    source_instrument_id, provider_dataset_version,
+                    provider_revision, provider_snapshot_id,
+                    provider_published_at, provider_updated_at,
+                    first_observed_at, known_at, recorded_at,
+                    canonical_content_hash, observation_version,
+                    revision_qualification, assurance_level,
+                    usage_qualification, formal_eligible,
+                    local_persistence_allowed, historical_replay_allowed,
+                    backtest_allowed, agent_use_allowed, raw_payload_json
+                )
+                SELECT id, 'TRADING_CALENDAR',
+                       'TRADING_CALENDAR_OBSERVATION_V1',
+                       'TRADING_CALENDAR|SZSE|2026-07-28',
+                       1, NULL, source_code, 'CALENDAR:SZSE',
+                       NULL, NULL, NULL, NULL, NULL,
+                       observed_at, observed_at + INTERVAL '1 second',
+                       recorded_at + INTERVAL '2 seconds',
+                       repeat('7', 64), repeat('8', 64),
+                       revision_qualification, assurance_level,
+                       usage_qualification, formal_eligible,
+                       local_persistence_allowed,
+                       historical_replay_allowed, backtest_allowed,
+                       agent_use_allowed, '{}'::jsonb
+                FROM pit_market_fact_batches WHERE id=?
+                """, systemBatch));
+
+        assertThrows(DataAccessException.class, () -> jdbc.update("""
+                INSERT INTO pit_market_fact_observations(
+                    batch_id, fact_type, fact_contract_version, natural_key,
+                    chain_sequence, predecessor_observation_id, source_code,
+                    source_instrument_id, provider_dataset_version,
+                    provider_revision, provider_snapshot_id,
+                    provider_published_at, provider_updated_at,
+                    first_observed_at, known_at, recorded_at,
+                    canonical_content_hash, observation_version,
+                    revision_qualification, assurance_level,
+                    usage_qualification, formal_eligible,
+                    local_persistence_allowed, historical_replay_allowed,
+                    backtest_allowed, agent_use_allowed, raw_payload_json
+                )
+                SELECT id, 'TRADING_CALENDAR',
+                       'TRADING_CALENDAR_OBSERVATION_V1',
+                       'TRADING_CALENDAR|SZSE|2026-07-28',
+                       1, NULL, source_code, 'CALENDAR:SZSE',
+                       provider_dataset_version, provider_revision,
+                       provider_snapshot_id, provider_published_at,
+                       provider_updated_at, first_observed_at,
+                       provider_published_at + INTERVAL '1 second',
+                       recorded_at, repeat('9', 64), repeat('a', 64),
+                       revision_qualification, assurance_level,
+                       usage_qualification, formal_eligible,
+                       local_persistence_allowed,
+                       historical_replay_allowed, backtest_allowed,
+                       agent_use_allowed, '{}'::jsonb
+                FROM pit_market_fact_batches WHERE id=?
+                """, verifiedBatch));
+    }
+
+    @Test
+    void usesFactSpecificSourceIdentitiesAndReusableExchangeCalendar() {
+        String calendarCountSql = """
+                SELECT count(*)
+                FROM pit_market_fact_observations
+                WHERE fact_type='TRADING_CALENDAR'
+                  AND source_instrument_id='CALENDAR:SZSE'
+                  AND natural_key='TRADING_CALENDAR|SZSE|2026-07-27'
+                """;
+        captureService.capture(
+                response(
+                        "000012", "SZSE",
+                        MockMarketFactProvider.Scenario.NORMAL),
+                OBSERVED);
+        long afterFirst = count(calendarCountSql);
+        captureService.capture(
+                response(
+                        "000013", "SZSE",
+                        MockMarketFactProvider.Scenario.NORMAL),
+                OBSERVED.plusSeconds(60));
+        assertTrue(afterFirst >= 1);
+        assertEquals(afterFirst, count(calendarCountSql));
+        assertTrue(calculate(
+                "000012", "SZSE", CUTOFF).available());
+        assertTrue(calculate(
+                "000013", "SZSE", CUTOFF).available());
+        assertUnavailable(
+                qfqEngine.calculate(
+                        "000012", "SZSE",
+                        MockMarketFactProvider.PROVIDER_CODE,
+                        new PitMarketFactModels.QfqSourceIdentities(
+                                MockMarketFactProvider.rawSourceIdentity(
+                                        "000012", "SZSE"),
+                                MockMarketFactProvider.factorSourceIdentity(
+                                        "000012", "SZSE"),
+                                MockMarketFactProvider.calendarSourceIdentity(
+                                        "SSE"),
+                                MockMarketFactProvider
+                                        .corporateActionSourceIdentity(
+                                                "000012", "SZSE")),
+                        END, CUTOFF),
+                PitMarketFactsContracts.CALENDAR_UNAVAILABLE);
+        assertUnavailable(
+                qfqEngine.calculate(
+                        "000012", "SZSE",
+                        MockMarketFactProvider.PROVIDER_CODE,
+                        MockMarketFactProvider.qfqSourceIdentities(
+                                "000013", "SZSE"),
+                        END, CUTOFF),
+                PitMarketFactsContracts.RAW_BAR_UNAVAILABLE);
+        var lineage = calculate("000012", "SZSE", CUTOFF);
+        assertEquals(
+                MockMarketFactProvider.rawSourceIdentity(
+                        "000012", "SZSE"),
+                lineage.sourceIdentities().rawSourceIdentity());
+        assertEquals(
+                MockMarketFactProvider.calendarSourceIdentity("SZSE"),
+                lineage.calendarLineage().get(0).envelope()
+                        .sourceInstrumentId());
+    }
+
+    @Test
+    void appendsEverySemanticQualificationAndProviderMetadataChange() {
+        String symbol = "600008";
+        MarketFactResponse base = response(
+                symbol, "SSE", MockMarketFactProvider.Scenario.NORMAL);
+        captureService.capture(base, OBSERVED);
+        ProviderCapability verified = verifiedCapability(base.capability());
+        ProviderVersion revisionOne = verifiedVersion(
+                "REVISION-1", "SNAPSHOT-1",
+                Instant.parse("2026-07-27T07:05:00Z"),
+                Instant.parse("2026-07-27T07:06:00Z"));
+        captureService.capture(
+                withProviderVersion(base, revisionOne, verified),
+                OBSERVED.plusSeconds(60));
+        ProviderVersion snapshotChanged = verifiedVersion(
+                "REVISION-1", "SNAPSHOT-2",
+                Instant.parse("2026-07-27T07:05:00Z"),
+                Instant.parse("2026-07-27T07:06:00Z"));
+        captureService.capture(
+                withProviderVersion(base, snapshotChanged, verified),
+                OBSERVED.plusSeconds(120));
+        ProviderVersion publishedChanged = verifiedVersion(
+                "REVISION-2", "SNAPSHOT-2",
+                Instant.parse("2026-07-27T07:15:00Z"),
+                Instant.parse("2026-07-27T07:16:00Z"));
+        captureService.capture(
+                withProviderVersion(base, publishedChanged, verified),
+                OBSERVED.plusSeconds(180));
+        Instant oldCutoff = Instant.parse("2026-07-27T07:10:00Z");
+        Instant newCutoff = Instant.parse("2026-07-27T07:30:00Z");
+        var oldResult = calculate(symbol, "SSE", oldCutoff);
+        var newResult = calculate(symbol, "SSE", newCutoff);
+        assertTrue(oldResult.available(), oldResult.reasonCode());
+        assertTrue(newResult.available(), newResult.reasonCode());
+        assertEquals(
+                RevisionQualification.PROVIDER_VERIFIED,
+                newResult.rawLineage().get(0).envelope()
+                        .revisionQualification(),
+                "a later lower qualification must not obscure verified facts");
+        assertNotEquals(
+                oldResult.rawLineage().get(0).envelope()
+                        .canonicalContentHash(),
+                newResult.rawLineage().get(0).envelope()
+                        .canonicalContentHash());
+
+        captureService.capture(
+                withProviderVersion(
+                        base, publishedChanged,
+                        withAgentUseAllowed(verified, false)),
+                OBSERVED.plusSeconds(240));
+        captureService.capture(base, OBSERVED.plusSeconds(300));
+
+        List<String> hashes = jdbc.queryForList("""
+                SELECT canonical_content_hash
+                FROM pit_market_fact_observations
+                WHERE fact_type='RAW_DAILY_BAR'
+                  AND source_code=?
+                  AND source_instrument_id=?
+                  AND natural_key=?
+                ORDER BY chain_sequence
+                """, String.class,
+                MockMarketFactProvider.PROVIDER_CODE,
+                MockMarketFactProvider.rawSourceIdentity(symbol, "SSE"),
+                "RAW_DAILY_BAR|" + symbol + "|" + START);
+        assertEquals(6, hashes.size());
+        assertEquals(hashes.get(0), hashes.get(5),
+                "qualification A→B→A must preserve three replayable versions");
+        assertEquals(5, hashes.subList(0, 5).stream().distinct().count());
+
+    }
+
+    @Test
+    void preservesOptionalFieldQualificationAndRejectsForgedZero() {
+        MarketFactResponse original = response(
+                "000014", "SZSE", MockMarketFactProvider.Scenario.NORMAL);
+        List<RawDailyBar> bars = new ArrayList<>(original.rawDailyBars());
+        RawDailyBar first = bars.get(0);
+        bars.set(0, new RawDailyBar(
+                first.sourceIdentity(), first.symbol(), first.exchange(),
+                first.tradeDate(), first.open(), first.high(), first.low(),
+                first.close(),
+                missing(
+                        MarketFieldUnit.SHARES,
+                        MarketFieldSemantic.TRADED_VOLUME),
+                missing(
+                        MarketFieldUnit.CNY,
+                        MarketFieldSemantic.TRADED_AMOUNT),
+                missing(
+                        MarketFieldUnit.RATIO,
+                        MarketFieldSemantic.TURNOVER_RATE),
+                first.version(), first.rawFields()));
+        captureService.capture(
+                copy(
+                        original, bars, original.adjustmentFactors(),
+                        original.tradingCalendar(),
+                        original.corporateActions()),
+                OBSERVED);
+        var qfq = calculate("000014", "SZSE", CUTOFF);
+        assertTrue(qfq.available(), qfq.reasonCode());
+        assertEquals(FieldQualification.MISSING,
+                qfq.bars().get(0).volume().qualification());
+        assertEquals(FieldQualification.MISSING,
+                qfq.bars().get(0).amount().qualification());
+        assertEquals(FieldQualification.MISSING,
+                qfq.bars().get(0).turnoverRate().qualification());
+        assertEquals(0, count("""
+                SELECT count(*)
+                FROM raw_daily_bar_facts_v2
+                WHERE symbol='000014'
+                  AND trade_date=?
+                  AND (
+                    volume IS NOT NULL
+                    OR amount IS NOT NULL
+                    OR turnover_rate IS NOT NULL
+                    OR volume_qualification <> 'MISSING'
+                    OR amount_qualification <> 'MISSING'
+                    OR turnover_rate_qualification <> 'MISSING'
+                  )
+                """, START));
+        assertEquals(
+                PitMarketFactsContracts.REQUIRED_MARKET_FIELD_UNAVAILABLE,
+                backtestContextV2Service.create(
+                                "000014", END, CUTOFF)
+                        .path("reasonCode").asText());
+
+        assertThrows(IllegalArgumentException.class, () ->
+                new QualifiedMarketField(
+                        BigDecimal.ZERO,
+                        FieldQualification.MISSING,
+                        MarketFieldUnit.SHARES,
+                        MarketFieldSemantic.TRADED_VOLUME));
+
+        RawDailyBar zero = new RawDailyBar(
+                first.sourceIdentity(), first.symbol(), first.exchange(),
+                first.tradeDate(), first.open(), first.high(), first.low(),
+                first.close(),
+                field(
+                        BigDecimal.ZERO,
+                        FieldQualification.PRESENT_VERIFIED,
+                        MarketFieldUnit.SHARES,
+                        MarketFieldSemantic.TRADED_VOLUME),
+                first.amount(), first.turnoverRate(),
+                first.version(), first.rawFields());
+        assertEquals(BigDecimal.ZERO, zero.volume().value());
+
+        MarketFactResponse zeroResponse = response(
+                "000016", "SZSE", MockMarketFactProvider.Scenario.NORMAL);
+        List<RawDailyBar> zeroBars =
+                new ArrayList<>(zeroResponse.rawDailyBars());
+        RawDailyBar zeroFirst = zeroBars.get(0);
+        zeroBars.set(0, new RawDailyBar(
+                zeroFirst.sourceIdentity(), zeroFirst.symbol(),
+                zeroFirst.exchange(), zeroFirst.tradeDate(),
+                zeroFirst.open(), zeroFirst.high(), zeroFirst.low(),
+                zeroFirst.close(),
+                field(
+                        BigDecimal.ZERO,
+                        FieldQualification.PRESENT_VERIFIED,
+                        MarketFieldUnit.SHARES,
+                        MarketFieldSemantic.TRADED_VOLUME),
+                zeroFirst.amount(), zeroFirst.turnoverRate(),
+                zeroFirst.version(), zeroFirst.rawFields()));
+        captureService.capture(
+                copy(
+                        zeroResponse, zeroBars,
+                        zeroResponse.adjustmentFactors(),
+                        zeroResponse.tradingCalendar(),
+                        zeroResponse.corporateActions()),
+                OBSERVED.plusSeconds(120));
+        assertEquals(1, count("""
+                SELECT count(*)
+                FROM raw_daily_bar_facts_v2 b
+                JOIN pit_market_fact_observations o
+                  ON o.id=b.observation_id
+                WHERE b.symbol='000016'
+                  AND b.trade_date=?
+                  AND b.volume=0
+                  AND b.volume_qualification='PRESENT_VERIFIED'
+                """, START));
+
+        long batchId = captureService.capture(
+                response(
+                        "000015", "SZSE",
+                        MockMarketFactProvider.Scenario.NORMAL),
+                OBSERVED.plusSeconds(60)).batchId();
+        assertThrows(DataAccessException.class, () ->
+                new TransactionTemplate(transactionManager)
+                        .executeWithoutResult(status -> {
+                            long observationId = insertEnvelope(
+                                    batchId,
+                                    "RAW_DAILY_BAR",
+                                    PitMarketFactsContracts
+                                            .RAW_DAILY_BAR_CONTRACT,
+                                    "RAW_DAILY_BAR|099999|" + START,
+                                    "b", "c");
+                            jdbc.update("""
+                                    INSERT INTO raw_daily_bar_facts_v2(
+                                        observation_id, symbol, exchange,
+                                        trade_date, open, high, low, close,
+                                        volume, volume_qualification,
+                                        volume_unit_code,
+                                        volume_semantic_code,
+                                        amount, amount_qualification,
+                                        amount_unit_code,
+                                        amount_semantic_code,
+                                        turnover_rate,
+                                        turnover_rate_qualification,
+                                        turnover_rate_unit_code,
+                                        turnover_rate_semantic_code
+                                    ) VALUES (
+                                        ?, '099999', 'SZSE', ?,
+                                        10, 11, 9, 10,
+                                        0, 'MISSING', 'SHARES',
+                                        'TRADED_VOLUME',
+                                        NULL, 'MISSING', 'CNY',
+                                        'TRADED_AMOUNT',
+                                        NULL, 'MISSING', 'RATIO',
+                                        'TURNOVER_RATE'
+                                    )
+                                    """, observationId, START);
+                        }));
+    }
+
     private MarketFactResponse response(
             String symbol,
             String exchange,
@@ -625,6 +1117,7 @@ class AgentStage3AR3B0PitV2PostgresIntegrationTest {
                 new ArrayList<>(original.rawDailyBars());
         RawDailyBar first = values.get(0);
         values.set(0, new RawDailyBar(
+                first.sourceIdentity(),
                 first.symbol(),
                 first.exchange(),
                 first.tradeDate(),
@@ -651,11 +1144,15 @@ class AgentStage3AR3B0PitV2PostgresIntegrationTest {
     ) {
         List<AdjustmentFactor> factors = original.adjustmentFactors().stream()
                 .map(value -> new AdjustmentFactor(
+                        value.sourceIdentity(),
                         value.symbol(),
                         value.factorEffectiveTradeDate(),
                         value.factorType(),
                         value.coverageMode(),
-                        value.factor().multiply(new BigDecimal("2")),
+                        value.factorEffectiveTradeDate().equals(END)
+                                ? value.factor().multiply(
+                                new BigDecimal("2"))
+                                : value.factor(),
                         value.version(),
                         value.rawFields()))
                 .toList();
@@ -665,6 +1162,8 @@ class AgentStage3AR3B0PitV2PostgresIntegrationTest {
             ObjectNode terms = mapper.createObjectNode();
             terms.put("fixtureExplanation", "NEW_STOCK_DIVIDEND");
             actions.add(new CorporateAction(
+                    MockMarketFactProvider.corporateActionSourceIdentity(
+                            original.rawDailyBars().get(0).symbol(), "SSE"),
                     "MOCK-ACTION-002",
                     original.rawDailyBars().get(0).symbol(),
                     CorporateActionType.STOCK_DIVIDEND,
@@ -680,6 +1179,159 @@ class AgentStage3AR3B0PitV2PostgresIntegrationTest {
                 factors,
                 original.tradingCalendar(),
                 actions);
+    }
+
+    private MarketFactResponse withProviderVersion(
+            MarketFactResponse original,
+            ProviderVersion version,
+            ProviderCapability capability
+    ) {
+        List<RawDailyBar> bars = original.rawDailyBars().stream()
+                .map(value -> new RawDailyBar(
+                        value.sourceIdentity(), value.symbol(),
+                        value.exchange(), value.tradeDate(),
+                        value.open(), value.high(), value.low(), value.close(),
+                        value.volume(), value.amount(), value.turnoverRate(),
+                        version, value.rawFields()))
+                .toList();
+        List<AdjustmentFactor> factors =
+                original.adjustmentFactors().stream()
+                        .map(value -> new AdjustmentFactor(
+                                value.sourceIdentity(), value.symbol(),
+                                value.factorEffectiveTradeDate(),
+                                value.factorType(), value.coverageMode(),
+                                value.factor(), version, value.rawFields()))
+                        .toList();
+        var calendar = original.tradingCalendar().stream()
+                .map(value ->
+                        new MarketFactProviderModels.TradingCalendar(
+                                value.sourceIdentity(), value.exchange(),
+                                value.calendarDate(), value.open(),
+                                value.sessionCode(), version,
+                                value.rawFields()))
+                .toList();
+        List<CorporateAction> actions = original.corporateActions().stream()
+                .map(value -> new CorporateAction(
+                        value.sourceIdentity(), value.sourceActionId(),
+                        value.symbol(), value.actionType(),
+                        value.announcementDate(),
+                        value.effectiveTradeDate(), value.terms(),
+                        version, value.rawFields()))
+                .toList();
+        return new MarketFactResponse(
+                original.providerContractVersion(),
+                original.providerCode(),
+                original.adapterVersion(),
+                original.runNamespace(),
+                original.sourceCode(),
+                original.sourceInstrumentId(),
+                original.requestedStart(),
+                original.requestedEnd(),
+                original.complete(),
+                capability,
+                bars,
+                factors,
+                calendar,
+                actions,
+                original.errors(),
+                original.providerMetadata());
+    }
+
+    private MarketFactResponse withUnrelatedAction(
+            MarketFactResponse value,
+            LocalDate effectiveDate
+    ) {
+        List<CorporateAction> actions =
+                new ArrayList<>(value.corporateActions());
+        ObjectNode terms = mapper.createObjectNode();
+        terms.put("fixtureExplanation", "UNRELATED_ACTION");
+        actions.add(new CorporateAction(
+                MockMarketFactProvider.corporateActionSourceIdentity(
+                        value.rawDailyBars().get(0).symbol(), "SSE"),
+                "MOCK-UNRELATED-ACTION",
+                value.rawDailyBars().get(0).symbol(),
+                CorporateActionType.OTHER,
+                effectiveDate.minusDays(1),
+                effectiveDate,
+                terms,
+                value.adjustmentFactors().get(0).version(),
+                terms.deepCopy()));
+        return copy(
+                value,
+                value.rawDailyBars(),
+                value.adjustmentFactors(),
+                value.tradingCalendar(),
+                actions);
+    }
+
+    private static ProviderVersion verifiedVersion(
+            String revision,
+            String snapshot,
+            Instant publishedAt,
+            Instant updatedAt
+    ) {
+        return new ProviderVersion(
+                "PROVIDER-DATASET-1",
+                revision,
+                snapshot,
+                publishedAt,
+                updatedAt,
+                RevisionQualification.PROVIDER_VERIFIED);
+    }
+
+    private static ProviderCapability verifiedCapability(
+            ProviderCapability value
+    ) {
+        return new ProviderCapability(
+                value.providerContractVersion(),
+                value.providerCode(),
+                value.adapterVersion(),
+                value.supportedFactTypes(),
+                true,
+                true,
+                true,
+                true,
+                value.historicalVersionsQueryable(),
+                value.localPersistenceAllowed(),
+                value.historicalReplayAllowed(),
+                value.backtestAllowed(),
+                value.agentUseAllowed(),
+                value.maximumSymbolsPerRequest(),
+                value.maximumNaturalDaysPerRequest(),
+                value.minimumRequestInterval(),
+                value.fieldUnits(),
+                value.decimalScales(),
+                value.coverage(),
+                value.licensing(),
+                value.rateLimit());
+    }
+
+    private static ProviderCapability withAgentUseAllowed(
+            ProviderCapability value,
+            boolean agentUseAllowed
+    ) {
+        return new ProviderCapability(
+                value.providerContractVersion(),
+                value.providerCode(),
+                value.adapterVersion(),
+                value.supportedFactTypes(),
+                value.revisionIdAvailable(),
+                value.snapshotIdAvailable(),
+                value.providerPublishedAtAvailable(),
+                value.providerUpdatedAtAvailable(),
+                value.historicalVersionsQueryable(),
+                value.localPersistenceAllowed(),
+                value.historicalReplayAllowed(),
+                value.backtestAllowed(),
+                agentUseAllowed,
+                value.maximumSymbolsPerRequest(),
+                value.maximumNaturalDaysPerRequest(),
+                value.minimumRequestInterval(),
+                value.fieldUnits(),
+                value.decimalScales(),
+                value.coverage(),
+                value.licensing(),
+                value.rateLimit());
     }
 
     private static MarketFactResponse withSource(
@@ -779,7 +1431,8 @@ class AgentStage3AR3B0PitV2PostgresIntegrationTest {
                 symbol,
                 exchange,
                 MockMarketFactProvider.PROVIDER_CODE,
-                symbol + "." + exchange,
+                MockMarketFactProvider.qfqSourceIdentities(
+                        symbol, exchange),
                 END,
                 cutoff);
     }
@@ -836,5 +1489,28 @@ class AgentStage3AR3B0PitV2PostgresIntegrationTest {
     private long count(String sql) {
         Long value = jdbc.queryForObject(sql, Long.class);
         return value == null ? 0L : value;
+    }
+
+    private long count(String sql, Object... arguments) {
+        Long value = jdbc.queryForObject(sql, Long.class, arguments);
+        return value == null ? 0L : value;
+    }
+
+    private static QualifiedMarketField field(
+            BigDecimal value,
+            FieldQualification qualification,
+            MarketFieldUnit unit,
+            MarketFieldSemantic semantic
+    ) {
+        return new QualifiedMarketField(
+                value, qualification, unit, semantic);
+    }
+
+    private static QualifiedMarketField missing(
+            MarketFieldUnit unit,
+            MarketFieldSemantic semantic
+    ) {
+        return new QualifiedMarketField(
+                null, FieldQualification.MISSING, unit, semantic);
     }
 }

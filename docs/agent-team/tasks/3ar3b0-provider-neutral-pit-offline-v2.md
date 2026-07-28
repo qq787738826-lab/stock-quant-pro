@@ -4,7 +4,7 @@
 
 - 冻结集成基线：`23baf11ed3a236800b5f3feba8681d261a71d9f9`
 - 任务分支：`codex/1.4.0-stage-3ar3b0-provider-neutral-pit-offline-v2`
-- 状态：**实现和 Codex 本地验证完成，待 ChatGPT 基于实际 Git 提交验收，尚未 merge。**
+- 状态：**首次验收 findings 的增量修复和 Codex 本地验证完成，待 ChatGPT 基于新的实际 Git 提交复验，尚未 merge。**
 - iFinD 真实调用数：`0`
 - `IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`
 - Day 002 未创建，scheduler 未开启，3B 未开始。
@@ -49,7 +49,7 @@ V13 是基线之后第一个未占用版本；V1 至 V12 均未修改。
 ## 4. V13 事实模型
 
 迁移：`V13__provider_neutral_pit_market_facts_v2.sql`，Flyway checksum
-`-763324992`。
+`1903740866`。
 
 ### 4.1 表
 
@@ -62,7 +62,9 @@ V13 是基线之后第一个未占用版本；V1 至 V12 均未修改。
    - 保存自然键、predecessor、chainSequence、observationVersion、
      canonicalContentHash、provider metadata 和三类时间。
 3. `raw_daily_bar_facts_v2`
-   - 未复权 OHLCV、amount、turnoverRate。
+   - 未复权 OHLC 必填；volume、amount、turnoverRate 可空；
+   - 三个非价格字段分别保存 `PRESENT_VERIFIED/PRESENT_UNVERIFIED/MISSING`
+     资格、冻结单位和语义代码，明确的 0 与缺失不等价。
 4. `adjustment_factor_facts_v1`
    - `DAILY_EXACT` 因子及 `factorEffectiveTradeDate`。
 5. `trading_calendar_facts_v1`
@@ -76,13 +78,23 @@ UPDATE/DELETE/TRUNCATE 不可变保护触发器，并只扩展 V11 Shadow 的允
 ### 4.2 数据库硬门禁
 
 - 禁止 UPDATE、DELETE 和 TRUNCATE；
-- 拒绝非法时间顺序、周末 raw bar、上海时间 15:00 前的完整日线知识时间；
-- 拒绝 NaN/Infinity 语义、非法 OHLC、负 volume/amount/turnover 和非正因子；
-- `SYSTEM_KNOWLEDGE_ONLY` 不得携带 providerRevision；
-- providerRevision 只有与 qualification 一致时才允许写入；
+- 按资格校验时间：`SYSTEM_KNOWLEDGE_ONLY` 必须
+  `knownAt=firstObservedAt<=recordedAt`；`PROVIDER_VERIFIED` 必须同时具备
+  providerRevision/providerPublishedAt，且
+  `knownAt=providerPublishedAt<=firstObservedAt<=recordedAt`；
+  providerUpdatedAt 如存在，必须位于 providerPublishedAt 与 firstObservedAt 之间；
+- 拒绝周末 raw bar、上海时间 15:00 前的完整日线知识时间；
+- 拒绝 NaN/Infinity 语义、非法 OHLC、负数非价格字段和非正因子；
+- `SYSTEM_KNOWLEDGE_ONLY`、`PROVIDER_UNVERIFIED` 与
+  `PROVIDER_UNAVAILABLE` 不得携带已限定的 provider dataset/revision/snapshot/
+  publish/update 字段；
+- 非价格字段的 PRESENT 状态必须有值，MISSING 必须为 null；禁止把缺失补零；
 - predecessor 必须属于同 source、同 instrument、同事实类型和同自然键；
 - chainSequence、predecessor 和 observationVersion 唯一；
-- 同内容连续重复捕获幂等；A→B→A 必须保留第三个物理版本；
+- observation 的来源身份不再被强制等于批次请求身份；raw、factor、calendar 和
+  corporate action 各自使用稳定来源身份；
+- 幂等只比较完整 semantic content hash；业务值、资格、许可或合格 Provider
+  metadata 任一变化都追加版本；A→B→A 必须保留第三个物理版本；
 - 并发相同捕获只能形成一个合法链尾。
 
 迁移不回填 `daily_bars`、V9 或任何业务数据，也不把迁移时间伪装成历史 knownAt。
@@ -101,6 +113,12 @@ Java `MarketFactProvider` 和类型化 DTO 覆盖：
 Provider 只返回上游事实。`firstObservedAt`、`knownAt`、`recordedAt`、本地
 datasetVersion、observationVersion 和 canonical Hash 只能由 Java 权威生成或验证。
 公共契约不暴露数据库 Entity、旧 Bar 模型或 AKShare 专有结构。
+
+每条 Provider 事实必须携带自己的稳定来源身份：raw 使用证券来源身份，factor 使用
+证券/因子来源身份，corporate action 使用证券/事件来源身份，calendar 使用 Provider
+交易所日历身份。批次仍保存请求范围身份，但不要求事实身份与批次证券身份相同。同一
+Provider 的一个 SZSE 日历身份可以服务多只深市证券；SSE/SZSE、不同 Provider 或错误
+证券身份禁止混用。
 
 ## 6. TEST/DEMO Mock Provider
 
@@ -138,14 +156,24 @@ iFinD 依赖，也不读取凭据。即使误设 enabled，仍在任何网络动
 
 Java 是生产 canonical/Hash 唯一权威；Python 只验证仓库固定黄金向量。
 
-as-of Repository 显式接收 sourceCode、sourceInstrumentId 和 knowledgeCutoff，
-只选择 `knownAt<=knowledgeCutoff` 的同 source 最新可见版本，返回完整
-observationVersion/contentHash/predecessor lineage。它不跨 Provider 拼接，不以当前
-最新事实回填历史，也不返回半可靠窗口。
+每条 observation 的 semantic content payload 至少覆盖事实契约/类型、sourceCode、
+该事实来源身份、自然键、业务字段及字段资格、revision/assurance/usage qualification、
+四项许可标志，以及所有合格的 providerDatasetVersion/revision/snapshot/publishedAt/
+updatedAt。未验证的候选 revision/snapshot 不得进入这些字段或可靠 Hash。完全相同
+semantic hash 的连续捕获幂等；资格、许可或任一合格 Provider metadata 变化必须追加，
+资格 A→B→A 保留三个可回放版本。
+
+as-of Repository 显式接收 sourceCode、对应事实的 source identity 和 knowledgeCutoff，
+只选择 `knownAt<=knowledgeCutoff` 的同 source 可见版本，并先按可靠资格、再按时间和
+链序稳定选择，避免较晚捕获的低资格版本遮蔽可用的合格 Provider 版本。它返回完整
+observationVersion/contentHash/predecessor lineage，不跨 Provider 拼接，不以当前最新
+事实回填历史，也不返回半可靠窗口。
 
 ## 9. QFQ_AS_OF_ENGINE_V1
 
-输入为 `(symbol, sourceCode, requestTradeDate, knowledgeCutoff)`。
+输入为 `(symbol, sourceCode, rawSourceIdentity, factorSourceIdentity,
+calendarSourceIdentity, corporateActionSourceIdentity, requestTradeDate,
+knowledgeCutoff)`。
 
 1. 以 cutoff 前可见日历确定 `requestEffectiveTradeDate`；
 2. raw window 只包含不晚于该日期的同 source/instrument 最新可见观察；
@@ -157,7 +185,10 @@ observationVersion/contentHash/predecessor lineage。它不跨 Provider 拼接�
    拼接和删除缺失日期后重新归一化；
 7. 缺少精确因子返回 `PIT_FACTOR_UNAVAILABLE`，不产生部分窗口；
 8. calendar/raw/corporate-action lineage 不足时安全不可用；
-9. factor 变化必须由 cutoff 前可见公司行动或合格 Provider revision 解释。
+9. factor 变化必须由 cutoff 前可见公司行动或合格 Provider revision 解释；
+10. 非 Provider verified 的 factor 修订只能由同 symbol/source、合格 action identity、
+    `action.effectiveTradeDate==factorEffectiveTradeDate`，且在当前 factor 版本可见前
+    已可见的公司行动解释；时间相邻但日期或身份不匹配的 action 无效。
 
 公式：
 
@@ -172,10 +203,13 @@ qfqPrice(P,t,cutoff)
 最终 OHLC scale=4、HALF_UP。volume、amount、turnoverRate 不复权，结果重新验证
 OHLC。
 
-共享黄金清单固定 18 个场景，包括首次捕获边界、D+1 不回填、公司行动重写、
-幂等、A→B→A、空 revision 的 SYSTEM_KNOWLEDGE_PIT、伪造 revision、calendar/factor
-缺失、cutoff 排除、Java/Python 权威边界，以及“只有更早 factor”和“精确 factor
-晚于 cutoff”均不得替代。
+共享黄金夹具固定 18 个可执行场景；每个场景包含 raw/factor/calendar/action 观察、
+Provider/资格元数据、firstObservedAt、knownAt、请求日期、cutoff、预期可用性、
+reasonCode、QFQ 输出、lineage 和固定 canonical/hash。Java 参数化测试逐项实际运行
+`QFQ_AS_OF_ENGINE_V1` 并断言 18/18；Python 只验证已提交结果向量和 Hash，不建立第二套
+QFQ 计算。场景覆盖首次捕获边界、D+1 不回填、公司行动重写、幂等、A→B→A、空 revision
+的 SYSTEM_KNOWLEDGE_PIT、伪造 revision、calendar/factor 缺失、cutoff 排除、Java/Python
+权威边界，以及“只有更早 factor”和“精确 factor 晚于 cutoff”均不得替代。
 
 ## 10. 2F V2 与六智能体
 
@@ -183,6 +217,11 @@ OHLC。
 Hash lineage；`BACKTEST_CANONICAL_V2` 覆盖 cutoff、锚点、QFQ/舍入规则和回测结果。
 它继续使用既有 SMA20、`BACKTEST_ENGINE_V1` 和七项完整参数，最多 500、最少
 120 条，Java 权威运行回测，Python 只解释冻结结果。
+
+QFQ 允许保留缺失的非价格字段；2F V2 的回测输入要求 volume 为
+`PRESENT_VERIFIED`。volume 缺失或资格不合格时稳定返回
+`PIT_REQUIRED_MARKET_FIELD_UNAVAILABLE`，不在转换为 Backtest Bar 时退化为泛化错误；
+amount 和 turnoverRate 缺失仍按其字段资格和 null 原样进入 lineage。
 
 精确 V2 ruleVersion 固定六个 run：
 
@@ -227,14 +266,14 @@ Java `OfflineFixtureSanitizer` 和 Python `offline_fixture.py`/命令行工具�
 
 | 测试组 | 命令摘要 | 结果 |
 | --- | --- | --- |
-| Java V2 定向 | Maven：Provider/validator/persistence/Shadow 定向 | 42/0/0/0 |
-| Python | `compileall`；`unittest discover -s tests -v` | compileall PASS；129/0/0/0 |
+| Java V2 定向 | Maven：Provider/QFQ 黄金向量/persistence/Shadow 定向 | 34/0/0/0，其中 QFQ 可执行黄金向量 18/18 |
+| Python | `compileall`；`unittest discover -s tests -v` | compileall PASS；130/0/0/0 |
 | quant-core | Maven `-pl quant-core test` | 4/0/0/0 |
-| quant-server 安全全量 | Maven `-pl quant-server -am test` | quant-server 403/0/0/83；83 项为环境门禁，关键真实组另行 Skipped=0 |
-| V13 PostgreSQL | `AgentStage3AR3B0PitV2PostgresIntegrationTest` | 10/0/0/0，Skipped=0 |
+| quant-server 安全全量 | Maven `-pl quant-server -am test` | quant-server 426/0/0/87；87 项为环境门禁，关键真实组另行 Skipped=0 |
+| V13 PostgreSQL | `AgentStage3AR3B0PitV2PostgresIntegrationTest` | 14/0/0/0，Skipped=0 |
 | V6→V13 双血统 | `AgentStage3AR1FlywayLineagePostgresIntegrationTest` | 1/0/0/0，Skipped=0，fresh/legacy 指纹收敛 |
 | V2 Java/Python/Shadow | `AgentStage3AR3B0PostgresPythonShadowIntegrationTest` | 1/0/0/0，Skipped=0 |
-| 旧阶段真实兼容矩阵 | 2D/2E/2F/2G/2H/2I PostgreSQL/Python 组 | 50/0/0/0，Skipped=0 |
+| 旧阶段真实兼容矩阵 | 2D/2E/2F/2G/2H/2I PostgreSQL/Python/跨语言组 | 66/0/0/0，Skipped=0；旧测试的迁移集合断言同步验证 V1–V13 |
 | AKShare 回归 | `AgentStage2GAkshareLiveGateTest` | 1/0/0/0，Skipped=0；仅验证既有研究级公告源 |
 
 随机测试 Schema 最终残留为 0；public 仍停留 V12，只读 validate/结构与数据基线未

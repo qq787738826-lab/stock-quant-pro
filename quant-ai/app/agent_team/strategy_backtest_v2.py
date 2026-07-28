@@ -56,6 +56,7 @@ UNAVAILABLE = {
     "PIT_CORPORATE_ACTION_LINEAGE_UNAVAILABLE",
     "PIT_CROSS_PROVIDER_FORBIDDEN",
     "PIT_MARKET_FACT_INVALID",
+    "PIT_REQUIRED_MARKET_FIELD_UNAVAILABLE",
     "PIT_FUTURE_REQUEST_DATE",
     "PIT_DECISION_TIME_NOT_REACHED",
     "PIT_TEST_DEMO_PROFILE_DISABLED",
@@ -80,21 +81,24 @@ AVAILABLE_FIELDS = BASE_FIELDS | {
     "limitations",
 }
 DATA_VERSION_FIELDS = {
-    "pitModelVersion", "sourceCode", "sourceInstrumentId", "qualification",
+    "pitModelVersion", "sourceCode", "sourceIdentities", "qualification",
     "testDemoOnly", "batchLineage", "rawObservationVersions",
-    "factorObservationVersions", "calendarObservationVersions",
+    "factorObservationVersions", "rawLineage", "factorLineage",
+    "calendarObservationVersions",
     "calendarLineage", "corporateActionObservationVersions",
     "corporateActionLineage",
 }
 BATCH_LINEAGE_FIELDS = {
     "batchVersion", "datasetVersion", "providerDatasetVersion",
-    "runNamespace", "sourceCode", "sourceInstrumentId",
+    "runNamespace", "sourceCode", "requestSourceIdentity",
     "revisionQualification", "assuranceLevel", "usageQualification",
     "observedAt", "responseComplete",
 }
 OBSERVATION_LINEAGE_FIELDS = {
     "observationVersion", "canonicalContentHash", "naturalKey", "knownAt",
-    "revisionQualification",
+    "sourceIdentity", "revisionQualification", "assuranceLevel",
+    "usageQualification", "formalEligible", "localPersistenceAllowed",
+    "historicalReplayAllowed", "backtestAllowed", "agentUseAllowed",
 }
 
 
@@ -198,6 +202,11 @@ class StrategyBacktestRuleEngineV2(StrategyBacktestRuleEngine):
             if not isinstance(item, dict) or set(item) != {
                 "symbol", "tradeDate", "open", "high", "low", "close",
                 "volume", "amount", "turnoverRate",
+                "volumeQualification", "volumeUnitCode",
+                "volumeSemanticCode", "amountQualification",
+                "amountUnitCode", "amountSemanticCode",
+                "turnoverRateQualification", "turnoverRateUnitCode",
+                "turnoverRateSemanticCode",
                 "rawObservationVersion", "rawContentHash",
                 "factorObservationVersion", "factorContentHash",
             } or item.get("symbol") != request.symbol:
@@ -216,11 +225,15 @@ class StrategyBacktestRuleEngineV2(StrategyBacktestRuleEngine):
                     or low > min(open_value, high, close)):
                 raise ValueError("V2 OHLC invalid")
             volume = decimal_value(item["volume"])
-            if volume < 0 or volume != volume.to_integral_value():
+            if (volume < 0 or volume != volume.to_integral_value()
+                    or item.get("volumeQualification") != "PRESENT_VERIFIED"
+                    or item.get("volumeUnitCode") != "SHARES"
+                    or item.get("volumeSemanticCode") != "TRADED_VOLUME"):
                 raise ValueError("V2 volume invalid")
-            for field in ("amount", "turnoverRate"):
-                if item[field] is not None and decimal_value(item[field]) < 0:
-                    raise ValueError("V2 optional market value invalid")
+            self._validate_optional_market_field(
+                item, "amount", "CNY", "TRADED_AMOUNT")
+            self._validate_optional_market_field(
+                item, "turnoverRate", "RATIO", "TURNOVER_RATE")
             raw_versions.append(_sha(item["rawObservationVersion"]))
             factor_versions.append(_sha(item["factorObservationVersion"]))
             _sha(item["rawContentHash"])
@@ -241,27 +254,52 @@ class StrategyBacktestRuleEngineV2(StrategyBacktestRuleEngine):
                 or data_version.get("qualification") != "SYSTEM_KNOWLEDGE_PIT"
                 or data_version.get("testDemoOnly") is not True
                 or data_version.get("sourceCode") != "MOCK_PIT_MARKET_FACTS_V2"
-                or not isinstance(data_version.get("sourceInstrumentId"), str)
-                or not data_version.get("sourceInstrumentId")
                 or data_version.get("rawObservationVersions") != raw_versions
                 or data_version.get("factorObservationVersions") != factor_versions):
             raise ValueError("V2 dataVersion mismatch")
+        identities = data_version.get("sourceIdentities")
+        if (not isinstance(identities, dict)
+                or set(identities) != {
+                    "rawSourceIdentity", "factorSourceIdentity",
+                    "calendarSourceIdentity",
+                    "corporateActionSourceIdentity",
+                }
+                or any(
+                    not isinstance(value, str) or not value
+                    for value in identities.values()
+                )):
+            raise ValueError("V2 source identities invalid")
         self._validate_batch_lineage(
             data_version["batchLineage"],
-            data_version["sourceInstrumentId"],
             _instant(raw["knowledgeCutoff"]),
+        )
+        self._validate_observation_lineage(
+            data_version["rawObservationVersions"],
+            data_version["rawLineage"],
+            _instant(raw["knowledgeCutoff"]),
+            "raw",
+            identities["rawSourceIdentity"],
+        )
+        self._validate_observation_lineage(
+            data_version["factorObservationVersions"],
+            data_version["factorLineage"],
+            _instant(raw["knowledgeCutoff"]),
+            "factor",
+            identities["factorSourceIdentity"],
         )
         self._validate_observation_lineage(
             data_version["calendarObservationVersions"],
             data_version["calendarLineage"],
             _instant(raw["knowledgeCutoff"]),
             "calendar",
+            identities["calendarSourceIdentity"],
         )
         self._validate_observation_lineage(
             data_version["corporateActionObservationVersions"],
             data_version["corporateActionLineage"],
             _instant(raw["knowledgeCutoff"]),
             "corporate action",
+            identities["corporateActionSourceIdentity"],
         )
 
         strategy = raw.get("strategy")
@@ -332,7 +370,6 @@ class StrategyBacktestRuleEngineV2(StrategyBacktestRuleEngine):
     @staticmethod
     def _validate_batch_lineage(
         batches: Any,
-        source_instrument_id: str,
         knowledge_cutoff: Any,
     ) -> None:
         if not isinstance(batches, list) or not batches:
@@ -359,7 +396,9 @@ class StrategyBacktestRuleEngineV2(StrategyBacktestRuleEngine):
                          or not provider_dataset_version)
                     or batch.get("runNamespace") not in {"TEST", "DEMO"}
                     or batch.get("sourceCode") != "MOCK_PIT_MARKET_FACTS_V2"
-                    or batch.get("sourceInstrumentId") != source_instrument_id
+                    or not isinstance(
+                        batch.get("requestSourceIdentity"), str)
+                    or not batch.get("requestSourceIdentity")
                     or batch.get("revisionQualification")
                     != "SYSTEM_KNOWLEDGE_ONLY"
                     or batch.get("assuranceLevel") != "SYSTEM_KNOWLEDGE_PIT"
@@ -374,6 +413,7 @@ class StrategyBacktestRuleEngineV2(StrategyBacktestRuleEngine):
         lineage: Any,
         knowledge_cutoff: Any,
         label: str,
+        expected_source_identity: str,
     ) -> None:
         if (not isinstance(versions, list)
                 or not isinstance(lineage, list)
@@ -388,14 +428,45 @@ class StrategyBacktestRuleEngineV2(StrategyBacktestRuleEngine):
                     != item.get("canonicalContentHash")
                     or not isinstance(item.get("naturalKey"), str)
                     or not item.get("naturalKey")
+                    or item.get("sourceIdentity")
+                    != expected_source_identity
                     or item.get("revisionQualification")
                     != "SYSTEM_KNOWLEDGE_ONLY"
+                    or item.get("assuranceLevel")
+                    != "SYSTEM_KNOWLEDGE_PIT"
+                    or item.get("usageQualification")
+                    != "TEST_DEMO_ONLY"
+                    or item.get("formalEligible") is not False
+                    or item.get("localPersistenceAllowed") is not True
+                    or item.get("historicalReplayAllowed") is not True
+                    or item.get("backtestAllowed") is not True
+                    or item.get("agentUseAllowed") is not True
                     or _instant(item.get("knownAt")) > knowledge_cutoff):
                 raise ValueError(f"V2 {label} lineage invalid")
             natural_key = item["naturalKey"]
             if previous_key is not None and natural_key <= previous_key:
                 raise ValueError(f"V2 {label} lineage order invalid")
             previous_key = natural_key
+
+    @staticmethod
+    def _validate_optional_market_field(
+        item: dict[str, Any],
+        field: str,
+        unit: str,
+        semantic: str,
+    ) -> None:
+        qualification = item.get(f"{field}Qualification")
+        if (qualification not in {
+                "PRESENT_VERIFIED", "PRESENT_UNVERIFIED", "MISSING"
+        } or item.get(f"{field}UnitCode") != unit
+                or item.get(f"{field}SemanticCode") != semantic):
+            raise ValueError(f"V2 {field} qualification invalid")
+        value = item.get(field)
+        if qualification == "MISSING":
+            if value is not None:
+                raise ValueError(f"V2 {field} missing value must be null")
+        elif value is None or decimal_value(value) < 0:
+            raise ValueError(f"V2 {field} present value invalid")
 
     @staticmethod
     def _validate_strategy_v2(strategy: Any) -> None:

@@ -89,7 +89,7 @@
 - 阶段 3A-R3B iFinD 试用启动规划当前状态：已通过 ChatGPT 对实际 Git 提交的验收；用户已批准纯 fast-forward 合入，集成分支已前进至最终提交。精确验收和批准时间无仓库证据，记为 `UNKNOWN`。
 - 阶段 3A-R3B-0 冻结集成基线：`23baf11ed3a236800b5f3feba8681d261a71d9f9`
 - 阶段 3A-R3B-0 任务分支：`codex/1.4.0-stage-3ar3b0-provider-neutral-pit-offline-v2`
-- 阶段 3A-R3B-0 当前状态：Provider 中立 PIT 市场事实 V2、V13、TEST/DEMO Mock Provider、`DAILY_EXACT` QFQ、2F V2、六智能体和 EXPLICIT Mock Shadow 的实现与 Codex 本地验证已完成，待 ChatGPT 基于实际 Git 提交验收，尚未 merge。真实 Provider 仍未接入，iFinD 真实调用数为 0，`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`。
+- 阶段 3A-R3B-0 当前状态：Provider 中立 PIT 市场事实 V2、V13、TEST/DEMO Mock Provider、`DAILY_EXACT` QFQ、2F V2、六智能体和 EXPLICIT Mock Shadow 的实现已经完成；针对首次实际 Git 验收发现的 qualification/knowledge-time、semantic hash、事实来源身份、字段缺失资格、公司行动关联和可执行黄金向量问题已在同一任务分支完成增量修复及 Codex 本地验证，待 ChatGPT 基于新的实际 Git 提交复验，尚未 merge。真实 Provider 仍未接入，iFinD 真实调用数为 0，`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`。
 - `master`：`27d9099 chore: checkpoint Stock Quant Pro 1.3.1 and remove tracked cache`
 - 版本号仍保持 `1.3.1`；尚未发布 `1.4.0`。
 
@@ -147,8 +147,8 @@ Tencent `version=18` 虽一致，但没有正式字段语义、修订关系或�
 Provider 中立离线实现：V13 建立四类独立 append-only 市场事实，Java 建立类型化 Provider
 契约、canonical/as-of Repository 和 `QFQ_AS_OF_ENGINE_V1`，精确 V2 ruleVersion 提供
 `BACKTEST_CONTEXT_V2`、六智能体和 TEST/DEMO EXPLICIT Mock Shadow 闭环。该能力目前只在
-任务分支完成 Codex 本地验证，尚未经 ChatGPT 对实际提交验收，尚未 merge，因此不得写成
-集成分支已具备。完整实现边界和证据见
+任务分支完成首次验收 findings 的增量修复和 Codex 本地验证，尚未经 ChatGPT 对修复提交
+复验，尚未 merge，因此不得写成集成分支已具备。完整实现边界和证据见
 [stage-3ar3b0-provider-neutral-pit-offline-v2.md](stage-3ar3b0-provider-neutral-pit-offline-v2.md)。
 
 Mock Provider 只使用合成固定夹具，不取得真实 Provider、FORMAL 或

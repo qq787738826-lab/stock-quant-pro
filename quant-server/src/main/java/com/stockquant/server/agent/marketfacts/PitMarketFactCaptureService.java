@@ -15,6 +15,7 @@ import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.RunNames
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.UsageQualification;
 import com.stockquant.server.agent.marketfacts.PitMarketFactModels.BatchIdentity;
 import com.stockquant.server.agent.marketfacts.PitMarketFactModels.CaptureResult;
+import com.stockquant.server.agent.marketfacts.PitMarketFactModels.ContentQualification;
 import com.stockquant.server.agent.marketfacts.PitMarketFactModels.FactEnvelope;
 import com.stockquant.server.agent.temporal.TemporalMarketFoundationService;
 import com.stockquant.server.agent.temporal.TemporalModels.DatasetVersion;
@@ -95,7 +96,10 @@ public class PitMarketFactCaptureService {
         List<TypedFact> facts = sortedFacts(response);
         validateObservationTime(facts, stableObservedAt);
 
-        ObjectNode responsePayload = responsePayload(response, facts);
+        ContentQualification contentQualification =
+                qualification.contentQualification(response);
+        ObjectNode responsePayload = responsePayload(
+                response, facts, contentQualification);
         String responseHash = canonical.hash(responsePayload);
         String observedText =
                 BacktestCanonicalHashService.formatInstant(stableObservedAt);
@@ -172,34 +176,36 @@ public class PitMarketFactCaptureService {
         for (TypedFact typed : persistableFacts) {
             String naturalKey = MarketFactProviderModels.naturalKey(
                     typed.type(), typed.value());
+            String sourceIdentity =
+                    MarketFactProviderModels.sourceIdentity(typed.value());
             repository.lockChain(
                     typed.type(), response.sourceCode(),
-                    response.sourceInstrumentId(), naturalKey);
+                    sourceIdentity, naturalKey);
             FactEnvelope tail = repository.findTail(
                     typed.type(), response.sourceCode(),
-                    response.sourceInstrumentId(), naturalKey).orElse(null);
+                    sourceIdentity, naturalKey).orElse(null);
             String contentHash = canonical.contentHash(
                     typed.type(), response.sourceCode(),
-                    response.sourceInstrumentId(), typed.value());
+                    sourceIdentity, naturalKey, typed.value(),
+                    contentQualification);
             ProviderVersion version = MarketFactProviderModels.version(typed.value());
             if (tail != null
-                    && tail.canonicalContentHash().equals(contentHash)
-                    && Objects.equals(tail.providerRevision(),
-                    version.providerRevision())) {
+                    && tail.canonicalContentHash().equals(contentHash)) {
                 idempotent++;
                 continue;
             }
             int sequence = tail == null ? 1 : tail.chainSequence() + 1;
+            Instant knownAt = knownAt(version, stableObservedAt);
             String observationVersion = canonical.observationVersion(
                     typed.type(), response.sourceCode(),
-                    response.sourceInstrumentId(), naturalKey, sequence,
+                    sourceIdentity, naturalKey, sequence,
                     tail == null ? null : tail.observationVersion(),
-                    batchVersion, stableObservedAt, stableObservedAt,
+                    batchVersion, stableObservedAt, knownAt,
                     contentHash, typed.value());
             FactEnvelope inserted = repository.insertObservation(
                     batchId, identity, typed.type(), naturalKey, sequence,
-                    tail == null ? null : tail.id(), version,
-                    stableObservedAt, stableObservedAt, stableObservedAt,
+                    tail == null ? null : tail.id(), sourceIdentity, version,
+                    stableObservedAt, knownAt, stableObservedAt,
                     contentHash, observationVersion,
                     rawPayload(typed.value()));
             repository.insertTyped(inserted, typed.value());
@@ -235,12 +241,9 @@ public class PitMarketFactCaptureService {
             throw new IllegalArgumentException(
                     "stage 3A-R3B-0 forbids FORMAL provider capture");
         }
-        if (!response.capability().localPersistenceAllowed()
-                || !response.capability().historicalReplayAllowed()
-                || !response.capability().backtestAllowed()
-                || !response.capability().agentUseAllowed()) {
+        if (!response.capability().localPersistenceAllowed()) {
             throw new IllegalArgumentException(
-                    "provider capability does not permit offline V2 use");
+                    "provider capability does not permit local persistence");
         }
         if (response.recordCount() > 0 && sortedFacts(response).stream()
                 .anyMatch(fact -> !response.capability().supportedFactTypes()
@@ -251,6 +254,8 @@ public class PitMarketFactCaptureService {
         Set<String> keys = new HashSet<>();
         for (TypedFact fact : facts) {
             String key = fact.type().name() + "|"
+                    + MarketFactProviderModels.sourceIdentity(fact.value())
+                    + "|"
                     + MarketFactProviderModels.naturalKey(
                     fact.type(), fact.value());
             if (!keys.add(key)) {
@@ -262,7 +267,29 @@ public class PitMarketFactCaptureService {
                 throw new IllegalArgumentException(
                         "provider returned an unrequested fact type");
             }
+            validateProviderVersionCapability(
+                    response,
+                    MarketFactProviderModels.version(fact.value()));
             validateFactScope(response, request, fact);
+        }
+    }
+
+    private static void validateProviderVersionCapability(
+            MarketFactResponse response,
+            ProviderVersion version
+    ) {
+        if (version.revisionQualification()
+                != RevisionQualification.PROVIDER_VERIFIED) {
+            return;
+        }
+        if (!response.capability().revisionIdAvailable()
+                || !response.capability().providerPublishedAtAvailable()
+                || version.providerSnapshotId() != null
+                && !response.capability().snapshotIdAvailable()
+                || version.providerUpdatedAt() != null
+                && !response.capability().providerUpdatedAtAvailable()) {
+            throw new IllegalArgumentException(
+                    "verified provider metadata exceeds frozen capability");
         }
     }
 
@@ -362,7 +389,8 @@ public class PitMarketFactCaptureService {
 
     private ObjectNode responsePayload(
             MarketFactResponse response,
-            List<TypedFact> facts
+            List<TypedFact> facts,
+            ContentQualification qualification
     ) {
         ObjectNode result = objectMapper.createObjectNode();
         result.put("canonicalContractVersion",
@@ -382,7 +410,10 @@ public class PitMarketFactCaptureService {
         ArrayNode content = result.putArray("facts");
         facts.forEach(fact -> content.add(canonical.contentPayload(
                 fact.type(), response.sourceCode(),
-                response.sourceInstrumentId(), fact.value())));
+                MarketFactProviderModels.sourceIdentity(fact.value()),
+                MarketFactProviderModels.naturalKey(
+                        fact.type(), fact.value()),
+                fact.value(), qualification)));
         return result;
     }
 
@@ -400,6 +431,18 @@ public class PitMarketFactCaptureService {
             Instant observedAt
     ) {
         for (TypedFact fact : facts) {
+            ProviderVersion version =
+                    MarketFactProviderModels.version(fact.value());
+            Instant knownAt = knownAt(version, observedAt);
+            if (version.revisionQualification()
+                    == RevisionQualification.PROVIDER_VERIFIED) {
+                if (version.providerPublishedAt().isAfter(observedAt)
+                        || version.providerUpdatedAt() != null
+                        && version.providerUpdatedAt().isAfter(observedAt)) {
+                    throw new IllegalArgumentException(
+                            "verified provider time exceeds first observation");
+                }
+            }
             if (!(fact.value()
                     instanceof MarketFactProviderModels.RawDailyBar bar)) {
                 continue;
@@ -408,7 +451,8 @@ public class PitMarketFactCaptureService {
                     .atTime(LocalTime.of(15, 0))
                     .atZone(PitMarketFactsContracts.MARKET_ZONE)
                     .toInstant();
-            if (observedAt.isBefore(earliestKnownAt)) {
+            if (observedAt.isBefore(earliestKnownAt)
+                    || knownAt.isBefore(earliestKnownAt)) {
                 throw new IllegalArgumentException(
                         "complete daily bar cannot be observed before "
                                 + "15:00 Asia/Shanghai on its trade date");
@@ -450,5 +494,27 @@ public class PitMarketFactCaptureService {
             UsageQualification usageQualification,
             boolean formalEligible
     ) {
+        private ContentQualification contentQualification(
+                MarketFactResponse response
+        ) {
+            return new ContentQualification(
+                    assuranceLevel,
+                    usageQualification,
+                    formalEligible,
+                    response.capability().localPersistenceAllowed(),
+                    response.capability().historicalReplayAllowed(),
+                    response.capability().backtestAllowed(),
+                    response.capability().agentUseAllowed());
+        }
+    }
+
+    private static Instant knownAt(
+            ProviderVersion version,
+            Instant firstObservedAt
+    ) {
+        return version.revisionQualification()
+                == RevisionQualification.PROVIDER_VERIFIED
+                ? version.providerPublishedAt()
+                : firstObservedAt;
     }
 }

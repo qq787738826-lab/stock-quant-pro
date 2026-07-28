@@ -8,7 +8,11 @@ import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.Assuranc
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.CorporateAction;
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.CorporateActionType;
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.FactType;
+import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.FieldQualification;
+import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.MarketFieldSemantic;
+import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.MarketFieldUnit;
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.ProviderVersion;
+import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.QualifiedMarketField;
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.RawDailyBar;
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.RevisionQualification;
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.RunNamespace;
@@ -155,6 +159,7 @@ public class PitMarketFactRepository {
             String naturalKey,
             int sequence,
             Long predecessorId,
+            String sourceIdentity,
             ProviderVersion providerVersion,
             Instant firstObservedAt,
             Instant knownAt,
@@ -184,7 +189,7 @@ public class PitMarketFactRepository {
                 this::mapEnvelope,
                 batchId, type.name(), type.contractVersion(), naturalKey,
                 sequence, predecessorId, identity.sourceCode(),
-                identity.sourceInstrumentId(),
+                sourceIdentity,
                 providerVersion.providerDatasetVersion(),
                 providerVersion.providerRevision(),
                 providerVersion.providerSnapshotId(),
@@ -206,12 +211,34 @@ public class PitMarketFactRepository {
             jdbcTemplate.update("""
                     INSERT INTO raw_daily_bar_facts_v2(
                         observation_id, symbol, exchange, trade_date,
-                        open, high, low, close, volume, amount, turnover_rate
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        open, high, low, close,
+                        volume, volume_qualification, volume_unit_code,
+                        volume_semantic_code,
+                        amount, amount_qualification, amount_unit_code,
+                        amount_semantic_code,
+                        turnover_rate, turnover_rate_qualification,
+                        turnover_rate_unit_code, turnover_rate_semantic_code
+                    ) VALUES (
+                        ?, ?, ?, ?, ?, ?, ?, ?,
+                        ?, ?, ?, ?,
+                        ?, ?, ?, ?,
+                        ?, ?, ?, ?
+                    )
                     """, envelope.id(), value.symbol(), value.exchange(),
                     value.tradeDate(), value.open(), value.high(), value.low(),
-                    value.close(), value.volume(), value.amount(),
-                    value.turnoverRate());
+                    value.close(),
+                    fieldValue(value.volume()),
+                    value.volume().qualification().name(),
+                    value.volume().unitCode().name(),
+                    value.volume().semanticCode().name(),
+                    fieldValue(value.amount()),
+                    value.amount().qualification().name(),
+                    value.amount().unitCode().name(),
+                    value.amount().semanticCode().name(),
+                    fieldValue(value.turnoverRate()),
+                    value.turnoverRate().qualification().name(),
+                    value.turnoverRate().unitCode().name(),
+                    value.turnoverRate().semanticCode().name());
         } else if (fact instanceof AdjustmentFactor value) {
             jdbcTemplate.update("""
                     INSERT INTO adjustment_factor_facts_v1(
@@ -256,7 +283,15 @@ public class PitMarketFactRepository {
                            c.session_code,
                            row_number() OVER (
                                PARTITION BY c.exchange, c.calendar_date
-                               ORDER BY o.known_at DESC,
+                               ORDER BY
+                                        CASE o.revision_qualification
+                                          WHEN 'PROVIDER_VERIFIED' THEN 4
+                                          WHEN 'SYSTEM_KNOWLEDGE_ONLY' THEN 3
+                                          WHEN 'PROVIDER_UNVERIFIED' THEN 2
+                                          WHEN 'PROVIDER_UNAVAILABLE' THEN 1
+                                          ELSE 0
+                                        END DESC,
+                                        o.known_at DESC,
                                         o.chain_sequence DESC, o.id DESC
                            ) AS selected_version
                     FROM pit_market_fact_observations o
@@ -298,7 +333,15 @@ public class PitMarketFactRepository {
                            c.session_code,
                            row_number() OVER (
                                PARTITION BY c.exchange, c.calendar_date
-                               ORDER BY o.known_at DESC,
+                               ORDER BY
+                                        CASE o.revision_qualification
+                                          WHEN 'PROVIDER_VERIFIED' THEN 4
+                                          WHEN 'SYSTEM_KNOWLEDGE_ONLY' THEN 3
+                                          WHEN 'PROVIDER_UNVERIFIED' THEN 2
+                                          WHEN 'PROVIDER_UNAVAILABLE' THEN 1
+                                          ELSE 0
+                                        END DESC,
+                                        o.known_at DESC,
                                         o.chain_sequence DESC, o.id DESC
                            ) AS selected_version
                     FROM pit_market_fact_observations o
@@ -339,10 +382,24 @@ public class PitMarketFactRepository {
                 WITH visible AS (
                     SELECT %s, b.symbol, b.exchange, b.trade_date,
                            b.open, b.high, b.low, b.close, b.volume,
-                           b.amount, b.turnover_rate,
+                           b.volume_qualification, b.volume_unit_code,
+                           b.volume_semantic_code,
+                           b.amount, b.amount_qualification,
+                           b.amount_unit_code, b.amount_semantic_code,
+                           b.turnover_rate, b.turnover_rate_qualification,
+                           b.turnover_rate_unit_code,
+                           b.turnover_rate_semantic_code,
                            row_number() OVER (
                                PARTITION BY b.symbol, b.exchange, b.trade_date
-                               ORDER BY o.known_at DESC,
+                               ORDER BY
+                                        CASE o.revision_qualification
+                                          WHEN 'PROVIDER_VERIFIED' THEN 4
+                                          WHEN 'SYSTEM_KNOWLEDGE_ONLY' THEN 3
+                                          WHEN 'PROVIDER_UNVERIFIED' THEN 2
+                                          WHEN 'PROVIDER_UNAVAILABLE' THEN 1
+                                          ELSE 0
+                                        END DESC,
+                                        o.known_at DESC,
                                         o.chain_sequence DESC, o.id DESC
                            ) AS selected_version
                     FROM pit_market_fact_observations o
@@ -390,7 +447,15 @@ public class PitMarketFactRepository {
                            row_number() OVER (
                                PARTITION BY f.symbol, f.factor_type,
                                             f.factor_effective_trade_date
-                               ORDER BY o.known_at DESC,
+                               ORDER BY
+                                        CASE o.revision_qualification
+                                          WHEN 'PROVIDER_VERIFIED' THEN 4
+                                          WHEN 'SYSTEM_KNOWLEDGE_ONLY' THEN 3
+                                          WHEN 'PROVIDER_UNVERIFIED' THEN 2
+                                          WHEN 'PROVIDER_UNAVAILABLE' THEN 1
+                                          ELSE 0
+                                        END DESC,
+                                        o.known_at DESC,
                                         o.chain_sequence DESC, o.id DESC
                            ) AS selected_version
                     FROM pit_market_fact_observations o
@@ -437,7 +502,15 @@ public class PitMarketFactRepository {
                            a.terms_json::text AS terms_json,
                            row_number() OVER (
                                PARTITION BY a.symbol, a.source_action_id
-                               ORDER BY o.known_at DESC,
+                               ORDER BY
+                                        CASE o.revision_qualification
+                                          WHEN 'PROVIDER_VERIFIED' THEN 4
+                                          WHEN 'SYSTEM_KNOWLEDGE_ONLY' THEN 3
+                                          WHEN 'PROVIDER_UNVERIFIED' THEN 2
+                                          WHEN 'PROVIDER_UNAVAILABLE' THEN 1
+                                          ELSE 0
+                                        END DESC,
+                                        o.known_at DESC,
                                         o.chain_sequence DESC, o.id DESC
                            ) AS selected_version
                     FROM pit_market_fact_observations o
@@ -507,8 +580,13 @@ public class PitMarketFactRepository {
                 ",", Collections.nCopies(ids.size(), "?"));
         return jdbcTemplate.query("""
                 SELECT current_observation.id AS observation_id,
+                       predecessor_observation.source_code,
+                       predecessor_observation.source_instrument_id,
+                       predecessor_factor.symbol,
+                       predecessor_factor.factor_effective_trade_date,
                        predecessor_factor.factor AS predecessor_factor,
-                       predecessor_observation.known_at AS predecessor_known_at
+                       predecessor_observation.known_at AS predecessor_known_at,
+                       predecessor_observation.revision_qualification
                 FROM pit_market_fact_observations current_observation
                 JOIN pit_market_fact_observations predecessor_observation
                   ON predecessor_observation.id =
@@ -523,8 +601,16 @@ public class PitMarketFactRepository {
                 """.formatted(placeholders),
                 (rs, row) -> new FactorPredecessor(
                         rs.getLong("observation_id"),
+                        rs.getString("source_code"),
+                        rs.getString("source_instrument_id"),
+                        rs.getString("symbol"),
+                        rs.getObject(
+                                "factor_effective_trade_date",
+                                LocalDate.class),
                         rs.getBigDecimal("predecessor_factor"),
-                        instant(rs.getObject("predecessor_known_at"))),
+                        instant(rs.getObject("predecessor_known_at")),
+                        RevisionQualification.valueOf(
+                                rs.getString("revision_qualification"))),
                 ids.toArray());
     }
 
@@ -571,9 +657,9 @@ public class PitMarketFactRepository {
                 rs.getBigDecimal("high"),
                 rs.getBigDecimal("low"),
                 rs.getBigDecimal("close"),
-                rs.getBigDecimal("volume"),
-                rs.getBigDecimal("amount"),
-                rs.getBigDecimal("turnover_rate"));
+                qualifiedField(rs, "volume"),
+                qualifiedField(rs, "amount"),
+                qualifiedField(rs, "turnover_rate"));
     }
 
     private AdjustmentFactorObservation mapFactor(
@@ -645,5 +731,25 @@ public class PitMarketFactRepository {
     private static Long nullableLong(ResultSet rs, String column) throws SQLException {
         long value = rs.getLong(column);
         return rs.wasNull() ? null : value;
+    }
+
+    private static java.math.BigDecimal fieldValue(
+            QualifiedMarketField value
+    ) {
+        return value.value();
+    }
+
+    private static QualifiedMarketField qualifiedField(
+            ResultSet rs,
+            String prefix
+    ) throws SQLException {
+        return new QualifiedMarketField(
+                rs.getBigDecimal(prefix),
+                FieldQualification.valueOf(
+                        rs.getString(prefix + "_qualification")),
+                MarketFieldUnit.valueOf(
+                        rs.getString(prefix + "_unit_code")),
+                MarketFieldSemantic.valueOf(
+                        rs.getString(prefix + "_semantic_code")));
     }
 }

@@ -40,6 +40,8 @@ public final class PitMarketFactsContracts {
     public static final String CROSS_PROVIDER_FORBIDDEN =
             "PIT_CROSS_PROVIDER_FORBIDDEN";
     public static final String FACT_INVALID = "PIT_MARKET_FACT_INVALID";
+    public static final String REQUIRED_MARKET_FIELD_UNAVAILABLE =
+            "PIT_REQUIRED_MARKET_FIELD_UNAVAILABLE";
     public static final String FUTURE_REQUEST_DATE = "PIT_FUTURE_REQUEST_DATE";
     public static final String DECISION_TIME_NOT_REACHED =
             "PIT_DECISION_TIME_NOT_REACHED";
@@ -57,6 +59,7 @@ public final class PitMarketFactsContracts {
             CORPORATE_ACTION_LINEAGE_UNAVAILABLE,
             CROSS_PROVIDER_FORBIDDEN,
             FACT_INVALID,
+            REQUIRED_MARKET_FIELD_UNAVAILABLE,
             FUTURE_REQUEST_DATE,
             DECISION_TIME_NOT_REACHED,
             TEST_DEMO_PROFILE_DISABLED,

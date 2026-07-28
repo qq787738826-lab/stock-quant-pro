@@ -1,5 +1,5 @@
 {
-  "fixtureSchemaVersion": "QFQ_AS_OF_ENGINE_V1_GOLDEN_SCENARIOS_V1",
+  "fixtureSchemaVersion": "QFQ_AS_OF_ENGINE_V1_GOLDEN_SCENARIOS_V2",
   "engineVersion": "QFQ_AS_OF_ENGINE_V1",
   "factorCoverageMode": "DAILY_EXACT",
   "formula": "rawPrice(t)*factor(t)/factor(anchorTradeDate)",
@@ -7,121 +7,455 @@
   "divisionRoundingMode": "HALF_UP",
   "outputPriceScale": 4,
   "outputRoundingMode": "HALF_UP",
-  "representativeCalculation": {
-    "rawPrice": "10.12345",
-    "factor": "1.10",
-    "anchorFactor": "1.20",
-    "divisionResult": "9.2798291666666667",
-    "outputPrice": "9.2798"
+  "defaults": {
+    "sourceCode": "MOCK_PIT_MARKET_FACTS_V2",
+    "symbol": "000001",
+    "exchange": "SZSE",
+    "sourceIdentities": {
+      "rawSourceIdentity": "SECURITY:000001.SZSE",
+      "factorSourceIdentity": "FACTOR:QFQ:000001.SZSE",
+      "calendarSourceIdentity": "CALENDAR:SZSE",
+      "corporateActionSourceIdentity": "CORPORATE_ACTION:000001.SZSE"
+    },
+    "requestTradeDate": "2026-07-27",
+    "firstObservedAt": "2026-07-27T07:30:00.000000Z",
+    "knownAt": "2026-07-27T07:30:00.000000Z",
+    "recordedAt": "2026-07-27T07:31:00.000000Z",
+    "providerDatasetVersion": null,
+    "providerRevision": null,
+    "providerSnapshotId": null,
+    "providerPublishedAt": null,
+    "providerUpdatedAt": null,
+    "revisionQualification": "SYSTEM_KNOWLEDGE_ONLY",
+    "assuranceLevel": "SYSTEM_KNOWLEDGE_PIT",
+    "usageQualification": "TEST_DEMO_ONLY",
+    "formalEligible": false,
+    "localPersistenceAllowed": true,
+    "historicalReplayAllowed": true,
+    "backtestAllowed": true,
+    "agentUseAllowed": true,
+    "batchLineage": {
+      "batchId": 1,
+      "batchVersion": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "datasetVersion": "LOCAL_PIT_DATASET_V2-eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "providerDatasetVersion": null,
+      "runNamespace": "TEST",
+      "requestSourceIdentity": "000001.SZSE",
+      "revisionQualification": "SYSTEM_KNOWLEDGE_ONLY",
+      "assuranceLevel": "SYSTEM_KNOWLEDGE_PIT",
+      "usageQualification": "TEST_DEMO_ONLY",
+      "observedAt": "2026-07-27T07:30:00.000000Z",
+      "responseComplete": true
+    },
+    "verifiedVolume": {
+      "value": "100",
+      "qualification": "PRESENT_VERIFIED",
+      "unitCode": "SHARES",
+      "semanticCode": "TRADED_VOLUME"
+    },
+    "verifiedAmount": {
+      "value": "1000",
+      "qualification": "PRESENT_VERIFIED",
+      "unitCode": "CNY",
+      "semanticCode": "TRADED_AMOUNT"
+    },
+    "verifiedTurnoverRate": {
+      "value": "0.01",
+      "qualification": "PRESENT_VERIFIED",
+      "unitCode": "RATIO",
+      "semanticCode": "TURNOVER_RATE"
+    }
   },
   "scenarios": [
     {
       "id": 1,
       "name": "POST_CLOSE_RAW_AND_FACTOR_CAPTURE",
-      "expectedAvailable": true,
-      "expectedReasonCode": null
+      "input": {
+        "knowledgeCutoff": "2026-07-27T08:00:00.000000Z",
+        "rawObservations": [
+          {"id": 1, "tradeDate": "2026-07-27", "open": "10", "high": "11", "low": "9", "close": "10.5", "observationVersion": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "canonicalContentHash": "1111111111111111111111111111111111111111111111111111111111111111"}
+        ],
+        "factorObservations": [
+          {"id": 2, "factorEffectiveTradeDate": "2026-07-27", "factor": "1", "chainSequence": 1, "observationVersion": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "canonicalContentHash": "2222222222222222222222222222222222222222222222222222222222222222"}
+        ],
+        "calendarObservations": [
+          {"id": 3, "calendarDate": "2026-07-27", "open": true, "observationVersion": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "canonicalContentHash": "3333333333333333333333333333333333333333333333333333333333333333"}
+        ],
+        "corporateActionObservations": [],
+        "factorPredecessors": []
+      },
+      "expectedCanonicalResult": {"available": true, "reasonCode": null, "requestEffectiveTradeDate": "2026-07-27", "anchorTradeDate": "2026-07-27", "bars": [{"tradeDate": "2026-07-27", "open": "10.0000", "high": "11.0000", "low": "9.0000", "close": "10.5000", "rawObservationVersion": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "factorObservationVersion": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}], "lineage": {"raw": ["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"], "factor": ["bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"], "calendar": ["cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"], "corporateAction": []}},
+      "expectedCanonicalHash": "734b7cb8fceea854769d768ac04c5d656dd1db4e53913ce33be3c2ce1d9fce7f"
     },
     {
       "id": 2,
       "name": "NO_CAPTURE_BEFORE_D_CUTOFF",
-      "expectedAvailable": false,
-      "expectedReasonCode": "PIT_CALENDAR_UNAVAILABLE"
+      "input": {
+        "knowledgeCutoff": "2026-07-27T07:00:00.000000Z",
+        "rawObservations": [
+          {"id": 1, "tradeDate": "2026-07-27", "open": "10", "high": "11", "low": "9", "close": "10", "observationVersion": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "canonicalContentHash": "1111111111111111111111111111111111111111111111111111111111111111"}
+        ],
+        "factorObservations": [
+          {"id": 2, "factorEffectiveTradeDate": "2026-07-27", "factor": "1", "observationVersion": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "canonicalContentHash": "2222222222222222222222222222222222222222222222222222222222222222"}
+        ],
+        "calendarObservations": [
+          {"id": 3, "calendarDate": "2026-07-27", "open": true, "observationVersion": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "canonicalContentHash": "3333333333333333333333333333333333333333333333333333333333333333"}
+        ],
+        "corporateActionObservations": [],
+        "factorPredecessors": []
+      },
+      "expectedCanonicalResult": {"available": false, "reasonCode": "PIT_CALENDAR_UNAVAILABLE", "requestEffectiveTradeDate": null, "anchorTradeDate": null, "bars": [], "lineage": {"raw": [], "factor": [], "calendar": [], "corporateAction": []}},
+      "expectedCanonicalHash": "7b4dd985cd7db82a582fd0696f5b2906893bf1ac9d6ed792fdcbd27f5d9371dd"
     },
     {
       "id": 3,
       "name": "D_PLUS_1_CAPTURE_CANNOT_BACKFILL_D",
-      "expectedAvailable": false,
-      "expectedReasonCode": "PIT_CALENDAR_UNAVAILABLE"
+      "input": {
+        "knowledgeCutoff": "2026-07-27T08:00:00.000000Z",
+        "firstObservedAt": "2026-07-28T07:30:00.000000Z",
+        "knownAt": "2026-07-28T07:30:00.000000Z",
+        "recordedAt": "2026-07-28T07:31:00.000000Z",
+        "rawObservations": [
+          {"id": 1, "tradeDate": "2026-07-27", "open": "10", "high": "11", "low": "9", "close": "10", "observationVersion": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "canonicalContentHash": "1111111111111111111111111111111111111111111111111111111111111111"}
+        ],
+        "factorObservations": [
+          {"id": 2, "factorEffectiveTradeDate": "2026-07-27", "factor": "1", "observationVersion": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "canonicalContentHash": "2222222222222222222222222222222222222222222222222222222222222222"}
+        ],
+        "calendarObservations": [
+          {"id": 3, "calendarDate": "2026-07-27", "open": true, "observationVersion": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "canonicalContentHash": "3333333333333333333333333333333333333333333333333333333333333333"}
+        ],
+        "corporateActionObservations": [],
+        "factorPredecessors": []
+      },
+      "expectedCanonicalResult": {"available": false, "reasonCode": "PIT_CALENDAR_UNAVAILABLE", "requestEffectiveTradeDate": null, "anchorTradeDate": null, "bars": [], "lineage": {"raw": [], "factor": [], "calendar": [], "corporateAction": []}},
+      "expectedCanonicalHash": "7b4dd985cd7db82a582fd0696f5b2906893bf1ac9d6ed792fdcbd27f5d9371dd"
     },
     {
       "id": 4,
       "name": "CORPORATE_ACTION_REWRITES_CURRENT_FACTORS",
-      "expectedAvailable": true,
-      "expectedReasonCode": null
+      "input": {
+        "knowledgeCutoff": "2026-07-27T08:00:00.000000Z",
+        "rawObservations": [
+          {"id": 1, "tradeDate": "2026-07-24", "open": "10", "high": "11", "low": "9", "close": "10", "observationVersion": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "canonicalContentHash": "1111111111111111111111111111111111111111111111111111111111111111"},
+          {"id": 2, "tradeDate": "2026-07-27", "open": "11", "high": "12", "low": "10", "close": "11", "observationVersion": "abababababababababababababababababababababababababababababababab", "canonicalContentHash": "1212121212121212121212121212121212121212121212121212121212121212"}
+        ],
+        "factorObservations": [
+          {"id": 3, "factorEffectiveTradeDate": "2026-07-24", "factor": "1", "observationVersion": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "canonicalContentHash": "2222222222222222222222222222222222222222222222222222222222222222"},
+          {"id": 4, "factorEffectiveTradeDate": "2026-07-27", "factor": "2", "observationVersion": "bcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbc", "canonicalContentHash": "2323232323232323232323232323232323232323232323232323232323232323"}
+        ],
+        "calendarObservations": [
+          {"id": 5, "calendarDate": "2026-07-24", "open": true, "observationVersion": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "canonicalContentHash": "3333333333333333333333333333333333333333333333333333333333333333"},
+          {"id": 6, "calendarDate": "2026-07-27", "open": true, "observationVersion": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd", "canonicalContentHash": "3434343434343434343434343434343434343434343434343434343434343434"}
+        ],
+        "corporateActionObservations": [
+          {"id": 7, "sourceActionId": "ACTION-27", "effectiveTradeDate": "2026-07-27", "announcementDate": "2026-07-20", "knownAt": "2026-07-27T07:20:00.000000Z", "firstObservedAt": "2026-07-27T07:20:00.000000Z", "recordedAt": "2026-07-27T07:21:00.000000Z", "observationVersion": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd", "canonicalContentHash": "4444444444444444444444444444444444444444444444444444444444444444"}
+        ],
+        "factorPredecessors": []
+      },
+      "expectedCanonicalResult": {"available": true, "reasonCode": null, "requestEffectiveTradeDate": "2026-07-27", "anchorTradeDate": "2026-07-27", "bars": [{"tradeDate": "2026-07-24", "open": "5.0000", "high": "5.5000", "low": "4.5000", "close": "5.0000", "rawObservationVersion": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "factorObservationVersion": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}, {"tradeDate": "2026-07-27", "open": "11.0000", "high": "12.0000", "low": "10.0000", "close": "11.0000", "rawObservationVersion": "abababababababababababababababababababababababababababababababab", "factorObservationVersion": "bcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbc"}], "lineage": {"raw": ["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "abababababababababababababababababababababababababababababababab"], "factor": ["bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "bcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbc"], "calendar": ["cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"], "corporateAction": ["dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"]}},
+      "expectedCanonicalHash": "44ebed98e4cfd59f2aea9ee5300e096fd3784fc315814a8ead6c962f91c68494"
     },
     {
       "id": 5,
       "name": "OLD_CUTOFF_REPLAYS_OLD_FACTOR_VERSION",
-      "expectedAvailable": true,
-      "expectedReasonCode": null
+      "input": {
+        "knowledgeCutoff": "2026-07-27T07:30:00.000000Z",
+        "firstObservedAt": "2026-07-27T07:10:00.000000Z",
+        "knownAt": "2026-07-27T07:10:00.000000Z",
+        "recordedAt": "2026-07-27T07:11:00.000000Z",
+        "rawObservations": [
+          {"id": 1, "tradeDate": "2026-07-27", "open": "10", "high": "11", "low": "9", "close": "10", "observationVersion": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "canonicalContentHash": "1111111111111111111111111111111111111111111111111111111111111111"}
+        ],
+        "factorObservations": [
+          {"id": 2, "factorEffectiveTradeDate": "2026-07-27", "factor": "1", "chainSequence": 1, "observationVersion": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "canonicalContentHash": "2222222222222222222222222222222222222222222222222222222222222222"},
+          {"id": 3, "factorEffectiveTradeDate": "2026-07-27", "factor": "2", "chainSequence": 2, "predecessorObservationId": 2, "firstObservedAt": "2026-07-27T07:40:00.000000Z", "knownAt": "2026-07-27T07:40:00.000000Z", "recordedAt": "2026-07-27T07:41:00.000000Z", "observationVersion": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "canonicalContentHash": "5555555555555555555555555555555555555555555555555555555555555555"}
+        ],
+        "calendarObservations": [
+          {"id": 4, "calendarDate": "2026-07-27", "open": true, "observationVersion": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "canonicalContentHash": "3333333333333333333333333333333333333333333333333333333333333333"}
+        ],
+        "corporateActionObservations": [],
+        "factorPredecessors": [{"observationId": 3, "sourceIdentity": "FACTOR:QFQ:000001.SZSE", "factorEffectiveTradeDate": "2026-07-27", "factor": "1", "knownAt": "2026-07-27T07:10:00.000000Z", "revisionQualification": "SYSTEM_KNOWLEDGE_ONLY"}]
+      },
+      "expectedCanonicalResult": {"available": true, "reasonCode": null, "requestEffectiveTradeDate": "2026-07-27", "anchorTradeDate": "2026-07-27", "bars": [{"tradeDate": "2026-07-27", "open": "10.0000", "high": "11.0000", "low": "9.0000", "close": "10.0000", "rawObservationVersion": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "factorObservationVersion": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}], "lineage": {"raw": ["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"], "factor": ["bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"], "calendar": ["cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"], "corporateAction": []}},
+      "expectedCanonicalHash": "a11b938976a4668a0abb83e6a54df6b58a472890918d76a968d944292d379cfe"
     },
     {
       "id": 6,
       "name": "NEW_CUTOFF_USES_NEW_FACTOR_LINEAGE",
-      "expectedAvailable": true,
-      "expectedReasonCode": null
+      "input": {
+        "knowledgeCutoff": "2026-07-27T08:00:00.000000Z",
+        "firstObservedAt": "2026-07-27T07:10:00.000000Z",
+        "knownAt": "2026-07-27T07:10:00.000000Z",
+        "recordedAt": "2026-07-27T07:11:00.000000Z",
+        "rawObservations": [
+          {"id": 1, "tradeDate": "2026-07-27", "open": "10", "high": "11", "low": "9", "close": "10", "observationVersion": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "canonicalContentHash": "1111111111111111111111111111111111111111111111111111111111111111"}
+        ],
+        "factorObservations": [
+          {"id": 2, "factorEffectiveTradeDate": "2026-07-27", "factor": "1", "chainSequence": 1, "observationVersion": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "canonicalContentHash": "2222222222222222222222222222222222222222222222222222222222222222"},
+          {"id": 3, "factorEffectiveTradeDate": "2026-07-27", "factor": "2", "chainSequence": 2, "predecessorObservationId": 2, "firstObservedAt": "2026-07-27T07:40:00.000000Z", "knownAt": "2026-07-27T07:40:00.000000Z", "recordedAt": "2026-07-27T07:41:00.000000Z", "observationVersion": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "canonicalContentHash": "5555555555555555555555555555555555555555555555555555555555555555"}
+        ],
+        "calendarObservations": [
+          {"id": 4, "calendarDate": "2026-07-27", "open": true, "observationVersion": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "canonicalContentHash": "3333333333333333333333333333333333333333333333333333333333333333"}
+        ],
+        "corporateActionObservations": [
+          {"id": 5, "sourceActionId": "ACTION-27", "effectiveTradeDate": "2026-07-27", "announcementDate": "2026-07-20", "firstObservedAt": "2026-07-27T07:35:00.000000Z", "knownAt": "2026-07-27T07:35:00.000000Z", "recordedAt": "2026-07-27T07:36:00.000000Z", "observationVersion": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd", "canonicalContentHash": "4444444444444444444444444444444444444444444444444444444444444444"}
+        ],
+        "factorPredecessors": [{"observationId": 3, "sourceIdentity": "FACTOR:QFQ:000001.SZSE", "factorEffectiveTradeDate": "2026-07-27", "factor": "1", "knownAt": "2026-07-27T07:10:00.000000Z", "revisionQualification": "SYSTEM_KNOWLEDGE_ONLY"}]
+      },
+      "expectedCanonicalResult": {"available": true, "reasonCode": null, "requestEffectiveTradeDate": "2026-07-27", "anchorTradeDate": "2026-07-27", "bars": [{"tradeDate": "2026-07-27", "open": "10.0000", "high": "11.0000", "low": "9.0000", "close": "10.0000", "rawObservationVersion": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "factorObservationVersion": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"}], "lineage": {"raw": ["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"], "factor": ["eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"], "calendar": ["cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"], "corporateAction": ["dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"]}},
+      "expectedCanonicalHash": "ff42b3680eb44b0fa47d54489aca5470170376228f9dcce77c1a657286d2e78a"
     },
     {
       "id": 7,
       "name": "IDENTICAL_CAPTURE_IS_IDEMPOTENT",
-      "expectedAvailable": true,
-      "expectedReasonCode": null
+      "input": {
+        "knowledgeCutoff": "2026-07-27T08:00:00.000000Z",
+        "captureExpectation": {"appendedVersions": 1, "idempotentCaptures": 1},
+        "rawObservations": [
+          {"id": 1, "tradeDate": "2026-07-27", "open": "10", "high": "11", "low": "9", "close": "10", "observationVersion": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "canonicalContentHash": "1111111111111111111111111111111111111111111111111111111111111111"}
+        ],
+        "factorObservations": [
+          {"id": 2, "factorEffectiveTradeDate": "2026-07-27", "factor": "1", "observationVersion": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "canonicalContentHash": "2222222222222222222222222222222222222222222222222222222222222222"}
+        ],
+        "calendarObservations": [
+          {"id": 3, "calendarDate": "2026-07-27", "open": true, "observationVersion": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "canonicalContentHash": "3333333333333333333333333333333333333333333333333333333333333333"}
+        ],
+        "corporateActionObservations": [],
+        "factorPredecessors": []
+      },
+      "expectedCanonicalResult": {"available": true, "reasonCode": null, "requestEffectiveTradeDate": "2026-07-27", "anchorTradeDate": "2026-07-27", "bars": [{"tradeDate": "2026-07-27", "open": "10.0000", "high": "11.0000", "low": "9.0000", "close": "10.0000", "rawObservationVersion": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "factorObservationVersion": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}], "lineage": {"raw": ["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"], "factor": ["bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"], "calendar": ["cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"], "corporateAction": []}},
+      "expectedCanonicalHash": "a11b938976a4668a0abb83e6a54df6b58a472890918d76a968d944292d379cfe"
     },
     {
       "id": 8,
       "name": "CHANGED_CONTENT_APPENDS_VERSION",
-      "expectedAvailable": true,
-      "expectedReasonCode": null
+      "input": {
+        "knowledgeCutoff": "2026-07-27T08:00:00.000000Z",
+        "rawObservations": [
+          {"id": 1, "tradeDate": "2026-07-27", "open": "10", "high": "11", "low": "9", "close": "10", "chainSequence": 1, "firstObservedAt": "2026-07-27T07:10:00.000000Z", "knownAt": "2026-07-27T07:10:00.000000Z", "recordedAt": "2026-07-27T07:11:00.000000Z", "observationVersion": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "canonicalContentHash": "1111111111111111111111111111111111111111111111111111111111111111"},
+          {"id": 4, "tradeDate": "2026-07-27", "open": "10", "high": "11", "low": "9", "close": "10.5", "chainSequence": 2, "predecessorObservationId": 1, "firstObservedAt": "2026-07-27T07:20:00.000000Z", "knownAt": "2026-07-27T07:20:00.000000Z", "recordedAt": "2026-07-27T07:21:00.000000Z", "observationVersion": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "canonicalContentHash": "5555555555555555555555555555555555555555555555555555555555555555"}
+        ],
+        "factorObservations": [
+          {"id": 2, "factorEffectiveTradeDate": "2026-07-27", "factor": "1", "observationVersion": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "canonicalContentHash": "2222222222222222222222222222222222222222222222222222222222222222"}
+        ],
+        "calendarObservations": [
+          {"id": 3, "calendarDate": "2026-07-27", "open": true, "observationVersion": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "canonicalContentHash": "3333333333333333333333333333333333333333333333333333333333333333"}
+        ],
+        "corporateActionObservations": [],
+        "factorPredecessors": []
+      },
+      "expectedCanonicalResult": {"available": true, "reasonCode": null, "requestEffectiveTradeDate": "2026-07-27", "anchorTradeDate": "2026-07-27", "bars": [{"tradeDate": "2026-07-27", "open": "10.0000", "high": "11.0000", "low": "9.0000", "close": "10.5000", "rawObservationVersion": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "factorObservationVersion": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}], "lineage": {"raw": ["eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"], "factor": ["bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"], "calendar": ["cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"], "corporateAction": []}},
+      "expectedCanonicalHash": "aef50b5017750690bf6d74f6d2d17767f716e1c243800a56df0c827f0892cf52"
     },
     {
       "id": 9,
       "name": "NULL_PROVIDER_REVISION_SYSTEM_KNOWLEDGE",
-      "expectedAvailable": true,
-      "expectedReasonCode": null
+      "input": {
+        "knowledgeCutoff": "2026-07-27T08:00:00.000000Z",
+        "rawObservations": [
+          {"id": 1, "tradeDate": "2026-07-27", "open": "10", "high": "11", "low": "9", "close": "10", "observationVersion": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "canonicalContentHash": "1111111111111111111111111111111111111111111111111111111111111111"}
+        ],
+        "factorObservations": [
+          {"id": 2, "factorEffectiveTradeDate": "2026-07-27", "factor": "1", "observationVersion": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "canonicalContentHash": "2222222222222222222222222222222222222222222222222222222222222222"}
+        ],
+        "calendarObservations": [
+          {"id": 3, "calendarDate": "2026-07-27", "open": true, "observationVersion": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "canonicalContentHash": "3333333333333333333333333333333333333333333333333333333333333333"}
+        ],
+        "corporateActionObservations": [],
+        "factorPredecessors": []
+      },
+      "expectedCanonicalResult": {"available": true, "reasonCode": null, "requestEffectiveTradeDate": "2026-07-27", "anchorTradeDate": "2026-07-27", "bars": [{"tradeDate": "2026-07-27", "open": "10.0000", "high": "11.0000", "low": "9.0000", "close": "10.0000", "rawObservationVersion": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "factorObservationVersion": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}], "lineage": {"raw": ["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"], "factor": ["bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"], "calendar": ["cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"], "corporateAction": []}},
+      "expectedCanonicalHash": "a11b938976a4668a0abb83e6a54df6b58a472890918d76a968d944292d379cfe"
     },
     {
       "id": 10,
       "name": "INVENTED_PROVIDER_REVISION_REJECTED",
-      "expectedAvailable": false,
-      "expectedReasonCode": "PIT_MARKET_FACT_INVALID"
+      "input": {
+        "knowledgeCutoff": "2026-07-27T08:00:00.000000Z",
+        "rawObservations": [
+          {"id": 1, "tradeDate": "2026-07-27", "open": "10", "high": "11", "low": "9", "close": "10", "providerRevision": "INVENTED", "observationVersion": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "canonicalContentHash": "1111111111111111111111111111111111111111111111111111111111111111"}
+        ],
+        "factorObservations": [
+          {"id": 2, "factorEffectiveTradeDate": "2026-07-27", "factor": "1", "observationVersion": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "canonicalContentHash": "2222222222222222222222222222222222222222222222222222222222222222"}
+        ],
+        "calendarObservations": [
+          {"id": 3, "calendarDate": "2026-07-27", "open": true, "observationVersion": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "canonicalContentHash": "3333333333333333333333333333333333333333333333333333333333333333"}
+        ],
+        "corporateActionObservations": [],
+        "factorPredecessors": []
+      },
+      "expectedCanonicalResult": {"available": false, "reasonCode": "PIT_MARKET_FACT_INVALID", "requestEffectiveTradeDate": null, "anchorTradeDate": null, "bars": [], "lineage": {"raw": [], "factor": [], "calendar": [], "corporateAction": []}},
+      "expectedCanonicalHash": "9641fd4f6deac3f3fb642e9103e0ad9e72b918a32f42a7090e1f761aadedf01e"
     },
     {
       "id": 11,
       "name": "EXACT_FACTOR_MISSING",
-      "expectedAvailable": false,
-      "expectedReasonCode": "PIT_FACTOR_UNAVAILABLE"
+      "input": {
+        "knowledgeCutoff": "2026-07-27T08:00:00.000000Z",
+        "rawObservations": [
+          {"id": 1, "tradeDate": "2026-07-27", "open": "10", "high": "11", "low": "9", "close": "10", "observationVersion": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "canonicalContentHash": "1111111111111111111111111111111111111111111111111111111111111111"}
+        ],
+        "factorObservations": [],
+        "calendarObservations": [
+          {"id": 3, "calendarDate": "2026-07-27", "open": true, "observationVersion": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "canonicalContentHash": "3333333333333333333333333333333333333333333333333333333333333333"}
+        ],
+        "corporateActionObservations": [],
+        "factorPredecessors": []
+      },
+      "expectedCanonicalResult": {"available": false, "reasonCode": "PIT_FACTOR_UNAVAILABLE", "requestEffectiveTradeDate": null, "anchorTradeDate": null, "bars": [], "lineage": {"raw": [], "factor": [], "calendar": [], "corporateAction": []}},
+      "expectedCanonicalHash": "f3afcdd4fe3b268938bfbfd7b3f5275eadaf1f60122bac3abd43737e9075a552"
     },
     {
       "id": 12,
       "name": "TRADING_CALENDAR_MISSING",
-      "expectedAvailable": false,
-      "expectedReasonCode": "PIT_CALENDAR_UNAVAILABLE"
+      "input": {
+        "knowledgeCutoff": "2026-07-27T08:00:00.000000Z",
+        "rawObservations": [
+          {"id": 1, "tradeDate": "2026-07-27", "open": "10", "high": "11", "low": "9", "close": "10", "observationVersion": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "canonicalContentHash": "1111111111111111111111111111111111111111111111111111111111111111"}
+        ],
+        "factorObservations": [
+          {"id": 2, "factorEffectiveTradeDate": "2026-07-27", "factor": "1", "observationVersion": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "canonicalContentHash": "2222222222222222222222222222222222222222222222222222222222222222"}
+        ],
+        "calendarObservations": [],
+        "corporateActionObservations": [],
+        "factorPredecessors": []
+      },
+      "expectedCanonicalResult": {"available": false, "reasonCode": "PIT_CALENDAR_UNAVAILABLE", "requestEffectiveTradeDate": null, "anchorTradeDate": null, "bars": [], "lineage": {"raw": [], "factor": [], "calendar": [], "corporateAction": []}},
+      "expectedCanonicalHash": "7b4dd985cd7db82a582fd0696f5b2906893bf1ac9d6ed792fdcbd27f5d9371dd"
     },
     {
       "id": 13,
       "name": "CUTOFF_EXCLUDES_LATE_OBSERVATION",
-      "expectedAvailable": false,
-      "expectedReasonCode": "PIT_FACTOR_UNAVAILABLE"
+      "input": {
+        "knowledgeCutoff": "2026-07-27T08:00:00.000000Z",
+        "rawObservations": [
+          {"id": 1, "tradeDate": "2026-07-27", "open": "10", "high": "11", "low": "9", "close": "10", "observationVersion": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "canonicalContentHash": "1111111111111111111111111111111111111111111111111111111111111111"}
+        ],
+        "factorObservations": [
+          {"id": 2, "factorEffectiveTradeDate": "2026-07-27", "factor": "1", "firstObservedAt": "2026-07-27T08:30:00.000000Z", "knownAt": "2026-07-27T08:30:00.000000Z", "recordedAt": "2026-07-27T08:31:00.000000Z", "observationVersion": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "canonicalContentHash": "2222222222222222222222222222222222222222222222222222222222222222"}
+        ],
+        "calendarObservations": [
+          {"id": 3, "calendarDate": "2026-07-27", "open": true, "observationVersion": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "canonicalContentHash": "3333333333333333333333333333333333333333333333333333333333333333"}
+        ],
+        "corporateActionObservations": [],
+        "factorPredecessors": []
+      },
+      "expectedCanonicalResult": {"available": false, "reasonCode": "PIT_FACTOR_UNAVAILABLE", "requestEffectiveTradeDate": null, "anchorTradeDate": null, "bars": [], "lineage": {"raw": [], "factor": [], "calendar": [], "corporateAction": []}},
+      "expectedCanonicalHash": "f3afcdd4fe3b268938bfbfd7b3f5275eadaf1f60122bac3abd43737e9075a552"
     },
     {
       "id": 14,
       "name": "JAVA_AUTHORITY_PYTHON_VALIDATION_ONLY",
-      "expectedAvailable": true,
-      "expectedReasonCode": null
+      "input": {
+        "knowledgeCutoff": "2026-07-27T08:00:00.000000Z",
+        "authority": {"producer": "JAVA", "pythonMode": "FIXED_RESULT_VALIDATION_ONLY"},
+        "rawObservations": [
+          {"id": 1, "tradeDate": "2026-07-27", "open": "10.12345", "high": "11", "low": "9", "close": "10", "observationVersion": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "canonicalContentHash": "1111111111111111111111111111111111111111111111111111111111111111"}
+        ],
+        "factorObservations": [
+          {"id": 2, "factorEffectiveTradeDate": "2026-07-27", "factor": "1.10", "observationVersion": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "canonicalContentHash": "2222222222222222222222222222222222222222222222222222222222222222"}
+        ],
+        "calendarObservations": [
+          {"id": 3, "calendarDate": "2026-07-27", "open": true, "observationVersion": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "canonicalContentHash": "3333333333333333333333333333333333333333333333333333333333333333"}
+        ],
+        "corporateActionObservations": [],
+        "factorPredecessors": []
+      },
+      "expectedCanonicalResult": {"available": true, "reasonCode": null, "requestEffectiveTradeDate": "2026-07-27", "anchorTradeDate": "2026-07-27", "bars": [{"tradeDate": "2026-07-27", "open": "10.1235", "high": "11.0000", "low": "9.0000", "close": "10.0000", "rawObservationVersion": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "factorObservationVersion": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}], "lineage": {"raw": ["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"], "factor": ["bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"], "calendar": ["cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"], "corporateAction": []}},
+      "expectedCanonicalHash": "a7cfe6f547893397394b1664f8ce1803904c97f49b988a7208cd1e716e8754ea"
     },
     {
       "id": 15,
       "name": "FACTOR_CHANGE_WITHOUT_ACTION_OR_VERIFIED_REVISION",
-      "expectedAvailable": false,
-      "expectedReasonCode": "PIT_CORPORATE_ACTION_LINEAGE_UNAVAILABLE"
+      "input": {
+        "knowledgeCutoff": "2026-07-27T08:00:00.000000Z",
+        "rawObservations": [
+          {"id": 1, "tradeDate": "2026-07-24", "open": "10", "high": "11", "low": "9", "close": "10", "observationVersion": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "canonicalContentHash": "1111111111111111111111111111111111111111111111111111111111111111"},
+          {"id": 2, "tradeDate": "2026-07-27", "open": "11", "high": "12", "low": "10", "close": "11", "observationVersion": "abababababababababababababababababababababababababababababababab", "canonicalContentHash": "1212121212121212121212121212121212121212121212121212121212121212"}
+        ],
+        "factorObservations": [
+          {"id": 3, "factorEffectiveTradeDate": "2026-07-24", "factor": "1", "observationVersion": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "canonicalContentHash": "2222222222222222222222222222222222222222222222222222222222222222"},
+          {"id": 4, "factorEffectiveTradeDate": "2026-07-27", "factor": "2", "observationVersion": "bcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbc", "canonicalContentHash": "2323232323232323232323232323232323232323232323232323232323232323"}
+        ],
+        "calendarObservations": [
+          {"id": 5, "calendarDate": "2026-07-24", "open": true, "observationVersion": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "canonicalContentHash": "3333333333333333333333333333333333333333333333333333333333333333"},
+          {"id": 6, "calendarDate": "2026-07-27", "open": true, "observationVersion": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd", "canonicalContentHash": "3434343434343434343434343434343434343434343434343434343434343434"}
+        ],
+        "corporateActionObservations": [
+          {"id": 7, "sourceActionId": "UNRELATED-24", "effectiveTradeDate": "2026-07-24", "announcementDate": "2026-07-20", "knownAt": "2026-07-27T07:20:00.000000Z", "firstObservedAt": "2026-07-27T07:20:00.000000Z", "recordedAt": "2026-07-27T07:21:00.000000Z", "observationVersion": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd", "canonicalContentHash": "4444444444444444444444444444444444444444444444444444444444444444"}
+        ],
+        "factorPredecessors": []
+      },
+      "expectedCanonicalResult": {"available": false, "reasonCode": "PIT_CORPORATE_ACTION_LINEAGE_UNAVAILABLE", "requestEffectiveTradeDate": null, "anchorTradeDate": null, "bars": [], "lineage": {"raw": [], "factor": [], "calendar": [], "corporateAction": []}},
+      "expectedCanonicalHash": "c6d65528bcaae131aecc3b79b0a2609d5c5d9a6dfca0a0a39a95a8c239b303f3"
     },
     {
       "id": 16,
       "name": "A_TO_B_TO_A_ALL_VERSIONS_REPLAYABLE",
-      "expectedAvailable": true,
-      "expectedReasonCode": null
+      "input": {
+        "knowledgeCutoff": "2026-07-27T08:00:00.000000Z",
+        "firstObservedAt": "2026-07-27T07:10:00.000000Z",
+        "knownAt": "2026-07-27T07:10:00.000000Z",
+        "recordedAt": "2026-07-27T07:11:00.000000Z",
+        "rawObservations": [
+          {"id": 1, "tradeDate": "2026-07-27", "open": "10", "high": "11", "low": "9", "close": "10", "observationVersion": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "canonicalContentHash": "1111111111111111111111111111111111111111111111111111111111111111"}
+        ],
+        "factorObservations": [
+          {"id": 2, "factorEffectiveTradeDate": "2026-07-27", "factor": "1", "chainSequence": 1, "observationVersion": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "canonicalContentHash": "2222222222222222222222222222222222222222222222222222222222222222"},
+          {"id": 3, "factorEffectiveTradeDate": "2026-07-27", "factor": "1.1", "chainSequence": 2, "predecessorObservationId": 2, "firstObservedAt": "2026-07-27T07:20:00.000000Z", "knownAt": "2026-07-27T07:20:00.000000Z", "recordedAt": "2026-07-27T07:21:00.000000Z", "observationVersion": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "canonicalContentHash": "5555555555555555555555555555555555555555555555555555555555555555"},
+          {"id": 4, "factorEffectiveTradeDate": "2026-07-27", "factor": "1", "chainSequence": 3, "predecessorObservationId": 3, "firstObservedAt": "2026-07-27T07:30:00.000000Z", "knownAt": "2026-07-27T07:30:00.000000Z", "recordedAt": "2026-07-27T07:31:00.000000Z", "observationVersion": "fefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefe", "canonicalContentHash": "5656565656565656565656565656565656565656565656565656565656565656"}
+        ],
+        "calendarObservations": [
+          {"id": 5, "calendarDate": "2026-07-27", "open": true, "observationVersion": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "canonicalContentHash": "3333333333333333333333333333333333333333333333333333333333333333"}
+        ],
+        "corporateActionObservations": [
+          {"id": 6, "sourceActionId": "ACTION-27", "effectiveTradeDate": "2026-07-27", "announcementDate": "2026-07-20", "firstObservedAt": "2026-07-27T07:25:00.000000Z", "knownAt": "2026-07-27T07:25:00.000000Z", "recordedAt": "2026-07-27T07:26:00.000000Z", "observationVersion": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd", "canonicalContentHash": "4444444444444444444444444444444444444444444444444444444444444444"}
+        ],
+        "factorPredecessors": [{"observationId": 4, "sourceIdentity": "FACTOR:QFQ:000001.SZSE", "factorEffectiveTradeDate": "2026-07-27", "factor": "1.1", "knownAt": "2026-07-27T07:20:00.000000Z", "revisionQualification": "SYSTEM_KNOWLEDGE_ONLY"}]
+      },
+      "expectedCanonicalResult": {"available": true, "reasonCode": null, "requestEffectiveTradeDate": "2026-07-27", "anchorTradeDate": "2026-07-27", "bars": [{"tradeDate": "2026-07-27", "open": "10.0000", "high": "11.0000", "low": "9.0000", "close": "10.0000", "rawObservationVersion": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "factorObservationVersion": "fefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefe"}], "lineage": {"raw": ["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"], "factor": ["fefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefe"], "calendar": ["cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"], "corporateAction": ["dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"]}},
+      "expectedCanonicalHash": "b20a68d24702c37aa935b29952f8520073a930fe9384dd75282fe9be4231076d"
     },
     {
       "id": 17,
       "name": "ONLY_EARLIER_DATE_FACTOR_EXISTS",
-      "expectedAvailable": false,
-      "expectedReasonCode": "PIT_FACTOR_UNAVAILABLE"
+      "input": {
+        "knowledgeCutoff": "2026-07-27T08:00:00.000000Z",
+        "rawObservations": [
+          {"id": 1, "tradeDate": "2026-07-27", "open": "10", "high": "11", "low": "9", "close": "10", "observationVersion": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "canonicalContentHash": "1111111111111111111111111111111111111111111111111111111111111111"}
+        ],
+        "factorObservations": [
+          {"id": 2, "factorEffectiveTradeDate": "2026-07-24", "factor": "1", "observationVersion": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "canonicalContentHash": "2222222222222222222222222222222222222222222222222222222222222222"}
+        ],
+        "calendarObservations": [
+          {"id": 3, "calendarDate": "2026-07-27", "open": true, "observationVersion": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "canonicalContentHash": "3333333333333333333333333333333333333333333333333333333333333333"}
+        ],
+        "corporateActionObservations": [],
+        "factorPredecessors": []
+      },
+      "expectedCanonicalResult": {"available": false, "reasonCode": "PIT_FACTOR_UNAVAILABLE", "requestEffectiveTradeDate": null, "anchorTradeDate": null, "bars": [], "lineage": {"raw": [], "factor": [], "calendar": [], "corporateAction": []}},
+      "expectedCanonicalHash": "f3afcdd4fe3b268938bfbfd7b3f5275eadaf1f60122bac3abd43737e9075a552"
     },
     {
       "id": 18,
       "name": "EXACT_FACTOR_KNOWN_AFTER_CUTOFF",
-      "expectedAvailable": false,
-      "expectedReasonCode": "PIT_FACTOR_UNAVAILABLE"
+      "input": {
+        "knowledgeCutoff": "2026-07-27T08:00:00.000000Z",
+        "rawObservations": [
+          {"id": 1, "tradeDate": "2026-07-27", "open": "10", "high": "11", "low": "9", "close": "10", "observationVersion": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "canonicalContentHash": "1111111111111111111111111111111111111111111111111111111111111111"}
+        ],
+        "factorObservations": [
+          {"id": 2, "factorEffectiveTradeDate": "2026-07-24", "factor": "1", "observationVersion": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "canonicalContentHash": "5555555555555555555555555555555555555555555555555555555555555555"},
+          {"id": 3, "factorEffectiveTradeDate": "2026-07-27", "factor": "1", "firstObservedAt": "2026-07-27T08:30:00.000000Z", "knownAt": "2026-07-27T08:30:00.000000Z", "recordedAt": "2026-07-27T08:31:00.000000Z", "observationVersion": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "canonicalContentHash": "2222222222222222222222222222222222222222222222222222222222222222"}
+        ],
+        "calendarObservations": [
+          {"id": 4, "calendarDate": "2026-07-27", "open": true, "observationVersion": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "canonicalContentHash": "3333333333333333333333333333333333333333333333333333333333333333"}
+        ],
+        "corporateActionObservations": [],
+        "factorPredecessors": []
+      },
+      "expectedCanonicalResult": {"available": false, "reasonCode": "PIT_FACTOR_UNAVAILABLE", "requestEffectiveTradeDate": null, "anchorTradeDate": null, "bars": [], "lineage": {"raw": [], "factor": [], "calendar": [], "corporateAction": []}},
+      "expectedCanonicalHash": "f3afcdd4fe3b268938bfbfd7b3f5275eadaf1f60122bac3abd43737e9075a552"
     }
   ]
 }
