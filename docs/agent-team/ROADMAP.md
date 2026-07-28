@@ -225,6 +225,7 @@
 - 依赖：已完成并合入的 2I。
 - 禁止范围：自动交易、账户或市场事实写入、自动外部摄取、全市场遍历、收益统计或宣传。
 - 完整验收条件：不少于 20 个有效观察日、200 个 shadow item，覆盖确定、不足、阻断、veto 和失败；主要 reasonCode 完成人工复核；持续验证业务表只读；形成正式观察报告，再由 ChatGPT 和用户决定是否进入 3B。
+- 当前真实观察：Day 001 已创建 1 个 EXPLICIT 受控批次和 3 个 item，均以 `BLOCKED_BY_DATA_QUALITY` 安全终结并完成正式 `DATA_ISSUE` 人工复核。对三个 symbol 的受控行情更新已消除 `MARKET_DATA_TOO_STALE`，但新增 780 条 V9 观察全部 `sourceRevision=NULL`；Day 002 未创建，scheduler 仍关闭。该 1 日/3 item 记录不满足完整 3A 门槛。
 
 ### 3A-1：受控影子运行与就绪度观测基础 V1（已完成并合入）
 
@@ -237,15 +238,30 @@
 - 本地验收：3A-1 Java 定向 `15/0/0/0`、Python unittest `123/0/0/0`、V1 至 V11 真实 PostgreSQL/Java/Python 受控试运行 `1/0/0/0`、V1 至 V11 旧阶段真实兼容 `29/0/0/0`、AKShare Live Gate `1/0/0/0`，真实组均 `Skipped=0`；`quant-core` `4/0/0/0`、安全 `quant-server` `376/0/0/41`、Vue build 通过。这些是 Codex 本地证据，不是 GitHub Actions CI；41 项为外部 PostgreSQL/AKShare 环境门禁跳过。
 - 阶段边界：3A-1 只建立技术基础，不伪造长期观察历史，不完成 3A，不启动 3B。
 
-### 3A-R1：Flyway V6 迁移血统恢复（任务分支待验收）
+### 3A-R1：Flyway V6 迁移血统恢复（已完成并合入）
 
-- 当前状态：任务分支 `codex/1.4.0-stage-3ar1-flyway-v6-lineage-recovery` 已完成 V6 血统恢复、V12 前向承接、数据库测试隔离修复与 Codex 本地验证，待 ChatGPT 基于实际 Git 提交验收，未合入。
+- 当前状态：实现及最终提交 `4fea1e210e683fea8490685879529f1d27e6448b` 已通过 ChatGPT 对实际 Git 提交的验收；用户已批准 merge，集成分支已纯 fast-forward 至该提交。精确验收和批准时间无仓库证据，记为 `UNKNOWN`。
 - 交付文档：[完整 3A-R1 任务书](tasks/3ar1-flyway-v6-lineage-recovery.md)和[阶段实现与本地验证记录](stage-3ar1-flyway-v6-lineage-recovery.md)。
 - 血统：V6 恢复为提交 `39f929aadebf9e1df6c392d38b97d7058b17dfff` 的已应用内容，checksum `-981595186`；首个改写提交为 `3a3eebd2ef580d31a6b02aab1a7204ea02fdba58`。V7 至 V11 不依赖后来 delta 在 V7 前存在，因此 V12 前向承接不可变、knowledge-close 和旧日历导航列删除。
 - public 事件：第一次全量回归中，既有 `AgentEvidenceVetoPostgresIntegrationTest` 的隔离缺陷把专用测试库 public 通过合法链从 V6 前向迁移到 V12。没有 repair、clean、回滚、恢复备份、删除对象、修改历史或手工 checksum；这不是生产迁移。迁移前完整业务表指纹没有证据，无法验证的比较记为 `UNKNOWN`。
 - 隔离：所有执行 Flyway migrate 的 PostgreSQL 测试必须创建随机 Schema，显式设置 datasource `currentSchema`、Hikari schema、Flyway default-schema/schemas 和 `create-schemas=false`；目标为 public 时立即失败。当前 public 只做只读 validate 和完整指纹保护。
 - 本地验收：V6/V12 静态与隔离安全门 `16/0/0/0`、原触发类隔离复测 `2/0/0/0`、双血统迁移/指纹/public validate `1/0/0/0`、旧血统克隆 Java/Python 单证券 `1/0/0/0`、全部真实 PostgreSQL 兼容矩阵 `47/0/0/0`、AKShare Live Gate `1/0/0/0`，真实组均 `Skipped=0`；`quant-server` `388/0/0/0`、`quant-core` `4/0/0/0`、Python `123/0/0/0` 与 compileall、Vue build 均通过。随机 Schema 残留为 0，接受后的 public V12 基线前后不变。
 - 阶段边界：3A-R1 只恢复迁移血统和测试隔离，不修改 Shadow 功能或 Agent 规则，不创建 public 真实 Shadow 批次，不开启 scheduler，不积累长期观察日，也不启动 3B。
+
+### 3A-R2：可靠行情来源 revision 资格审计（只读审计已完成）
+
+- 当前结论：现有 `POST /api/data/history/sync` 链路从 Java 到 Python AKShare/Tencent，再回到 Java `List<Bar>` 和 V9，只传递 symbol、来源名、交易日与行情数值；普通持久化入口固定使用 `sourceRevision=null`，本地 `LOCAL_DATASET_V1-<UUID>` 只表示本地捕获批次。
+- 受控证据：`000001` 两次公开 Provider 请求的行数、内容、原始 body 和 Tencent `version=18` 均一致，但没有正式字段语义、修订关系、历史版本或发布时间证据。结论为 `PROVIDER_REVISION_UNVERIFIED`；`version=18`、HTTP Date、UUID、本地 dataset/observation version、内容 Hash 和抓取时间均不得冒充 source revision。
+- 阶段边界：该审计没有修改代码或数据库，没有接入来源、改变 2F V1、创建 Day 002 或开始 3B。
+
+### 3A-R3A：可验证 PIT 市场原始事实 V2 设计冻结（任务分支待验收）
+
+- 当前状态：任务分支 `codex/1.4.0-stage-3ar3a-pit-market-facts-design-v2` 已完成来源资格研究、PIT V2 事实模型、QFQ as-of、黄金场景与后续实施门禁的设计冻结和 Codex 本地文档检查，待 ChatGPT 基于实际 Git 提交验收，尚未合入。
+- 交付文档：[完整 3A-R3A 任务书](tasks/3ar3a-pit-market-facts-v2-design.md)和[阶段设计记录](stage-3ar3a-pit-market-facts-v2-design.md)。
+- 来源路线：Tushare 是 raw daily、`adj_factor`、`trade_cal` 的优先技术候选，但书面许可、样例和版本语义未通过前不批准；AKShare-Tencent 仅保留 current projection 与交叉校验角色；Wind 等企业来源需取得 revision、旧版本、发布时间、许可和合同附件证据。
+- 事实模型：候选 `PIT_MARKET_FACTS_V2` 把 raw daily、复权因子、交易日历和公司行动保存为四类独立 append-only 观察，严格区分 `PROVIDER_PIT_VERIFIED` 与首次捕获之后才可用的 `SYSTEM_KNOWLEDGE_PIT`。
+- 兼容边界：2F V1、V9、旧 profile、contextHash 和缓存键完全不变；未来 V2 使用独立规则版本/profile。当前没有批准 Provider、生产实现、迁移、数据库写入、Day 002 或 3B。
+- 后续入口：先完成 3A-R3B 来源、许可与样例批准门，再由用户独立授权 PIT_MARKET_FACTS_V2 实现和 2F V2；任务书和路线图本身不构成自动实施授权。
 
 ## 3B：评测集、版本管理和长期复盘（未开始）
 
