@@ -43,6 +43,7 @@ stockquant:
     shadow:
       enabled: ${AGENT_SHADOW_ENABLED:false}
       scheduler-enabled: ${AGENT_SHADOW_SCHEDULER_ENABLED:false}
+      test-demo-pit-v2-enabled: ${AGENT_SHADOW_TEST_DEMO_PIT_V2_ENABLED:false}
       rule-version: 1.4.0-stage-2i-chief-decision-v1
       cron: "0 50 16 * * MON-FRI"
       zone: Asia/Shanghai
@@ -59,6 +60,12 @@ stockquant:
       connect-timeout: 5s
       # One logical request may contain 13 serialized 30-day AKShare chunks.
       read-timeout: 25m
+  market-facts:
+    v2:
+      test-demo-enabled: false
+    ifind:
+      enabled: false
+      activation-gate: BLOCKED
 logging:
   file:
     name: logs/quant-server.log

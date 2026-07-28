@@ -95,6 +95,7 @@ public class AgentShadowBatchService {
                 BatchStatus.FAILED,
                 TriggerMode.SCHEDULED,
                 tradeDate,
+                properties.getRuleVersion(),
                 SelectionMode.AUTO,
                 selection.selectionHash(),
                 properties.getMaxSymbols(),
@@ -243,6 +244,7 @@ public class AgentShadowBatchService {
                 BatchStatus.QUEUED,
                 triggerMode,
                 tradeDate,
+                properties.getRuleVersion(),
                 selectionMode,
                 selection.selectionHash(),
                 maxSymbols,
@@ -279,6 +281,7 @@ public class AgentShadowBatchService {
                 BatchStatus.FAILED,
                 triggerMode,
                 tradeDate,
+                properties.getRuleVersion(),
                 selectionMode,
                 empty.selectionHash(),
                 maxSymbols,
@@ -311,7 +314,7 @@ public class AgentShadowBatchService {
                 AgentShadowContracts.SELECTION_VERSION);
         node.put("outcomeSnapshotContractVersion",
                 AgentShadowContracts.OUTCOME_SNAPSHOT_VERSION);
-        node.put("ruleVersion", AgentShadowContracts.RULE_VERSION);
+        node.put("ruleVersion", properties.getRuleVersion());
         node.put("triggerMode", triggerMode.name());
         node.put("tradeDate", tradeDate.toString());
         node.put("selectionMode", selectionMode.name());

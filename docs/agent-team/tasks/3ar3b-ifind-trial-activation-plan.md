@@ -2,12 +2,14 @@
 
 ## 1. 文档状态与范围
 
-状态：**整体规划已在任务分支完成，待 ChatGPT 基于实际 Git 提交验收，尚未合入；**
-**3A-R3B-0 至 3A-R3B-3 均未开始实施。**
+状态：**整体规划已通过 ChatGPT 对实际 Git 提交的验收，并经用户批准纯 fast-forward 合入；**
+**3A-R3B-0 已在独立任务分支完成实现和 Codex 本地验证，待验收、未合入；3A-R3B-1 至
+3A-R3B-3 未开始。**
 
 - 冻结集成基线：`94d442fa5fcad874462c54ca83b4ba21dcf7d3b4`
 - 任务分支：`codex/1.4.0-stage-3ar3b-ifind-trial-activation-plan`
 - 目标提交：`docs(agent): plan milestone-gated ifind trial activation`
+- 实现及最终提交：`23baf11ed3a236800b5f3feba8681d261a71d9f9`
 - 阶段记录：
   [stage-3ar3b-ifind-trial-activation-plan.md](../stage-3ar3b-ifind-trial-activation-plan.md)
 - 当前事实唯一权威：[CURRENT_STATE.md](../CURRENT_STATE.md)
@@ -36,6 +38,10 @@ IFIND_TRIAL_ACTIVATION_GATE=BLOCKED
 
 - Day 002 尚未创建，scheduler 仍关闭；
 - 完整 3A 尚未达到长期观察门槛，3B 尚未开始。
+- 3A-R3B-0 任务分支已完成 V13、四类事实、TEST/DEMO Mock、QFQ、2F V2、六智能体、
+  EXPLICIT Mock Shadow 和试用准备工具的 Codex 本地验证；见
+  [3A-R3B-0 任务书](3ar3b0-provider-neutral-pit-offline-v2.md)。该实现尚待 ChatGPT
+  实际 Git 提交验收且尚未 merge。
 
 ## 3. 日期触发正式撤销
 
@@ -81,7 +87,8 @@ AKShare 研究级能力，完成 Provider 中立的离线技术闭环，为有�
 - 不取得或宣称任何真实 Provider 资格；
 - 不创建 Day 002；
 - 不开启 scheduler、全市场遍历或自动交易；
-- 新生产迁移、公共 DTO 和实现只能在该未来大阶段获得独立授权后实施，本规划不授权。
+- 本规划本身不授权生产修改；后续用户已独立授权 3A-R3B-0，并在独立任务分支实施。
+  该实现通过 ChatGPT 实际提交验收和用户 merge 批准前仍不是集成分支能力。
 
 ## 5. 3A-R3B-1：iFinD 试用启动门
 

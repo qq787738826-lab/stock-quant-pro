@@ -187,7 +187,7 @@ public class AgentShadowRunner {
                 symbol,
                 batch.tradeDate(),
                 ExecutionMode.LOCAL_RULES,
-                AgentShadowContracts.RULE_VERSION,
+                batch.ruleVersion(),
                 false,
                 TriggerType.SHADOW);
     }

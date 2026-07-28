@@ -165,6 +165,7 @@ public class AgentShadowRepository {
             BatchStatus status,
             TriggerMode triggerMode,
             LocalDate tradeDate,
+            String ruleVersion,
             SelectionMode selectionMode,
             String selectionHash,
             int configuredMaxSymbols,
@@ -195,7 +196,7 @@ public class AgentShadowRepository {
                 status.name(),
                 triggerMode.name(),
                 tradeDate,
-                AgentShadowContracts.RULE_VERSION,
+                ruleVersion,
                 selectionMode.name(),
                 selectionHash,
                 configuredMaxSymbols,
@@ -206,6 +207,36 @@ public class AgentShadowRepository {
                 timestamp(finishedAt),
                 createdBy
         );
+    }
+
+    public ShadowBatch insertBatch(
+            BatchStatus status,
+            TriggerMode triggerMode,
+            LocalDate tradeDate,
+            SelectionMode selectionMode,
+            String selectionHash,
+            int configuredMaxSymbols,
+            int selectedCount,
+            JsonNode configuration,
+            String errorMessage,
+            Instant startedAt,
+            Instant finishedAt,
+            String createdBy
+    ) {
+        return insertBatch(
+                status,
+                triggerMode,
+                tradeDate,
+                AgentShadowContracts.RULE_VERSION,
+                selectionMode,
+                selectionHash,
+                configuredMaxSymbols,
+                selectedCount,
+                configuration,
+                errorMessage,
+                startedAt,
+                finishedAt,
+                createdBy);
     }
 
     public void insertItems(long batchId, List<SelectionEntry> entries) {

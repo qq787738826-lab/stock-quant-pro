@@ -18,6 +18,7 @@ STAGE_2F_STRATEGY_BACKTEST_RULE_VERSION = "1.4.0-stage-2f-strategy-backtest-v1"
 STAGE_2H_POSITION_RISK_RULE_VERSION = "1.4.0-stage-2h-position-risk-v1"
 STAGE_2G_ANNOUNCEMENT_RISK_RULE_VERSION = "1.4.0-stage-2g-announcement-risk-v1"
 STAGE_2I_CHIEF_DECISION_RULE_VERSION = "1.4.0-stage-2i-chief-decision-v1"
+STAGE_3AR3B0_PIT_V2_RULE_VERSION = "1.4.0-stage-3ar3b0-agent-team-pit-v2"
 
 
 class StrictModel(BaseModel):
@@ -396,7 +397,10 @@ class AgentTeamResponse(StrictModel):
             self._validate_stage_2h_position_risk(runs_by_code)
         elif self.ruleVersion == STAGE_2G_ANNOUNCEMENT_RISK_RULE_VERSION:
             self._validate_stage_2g_announcement_risk(runs_by_code)
-        elif self.ruleVersion == STAGE_2I_CHIEF_DECISION_RULE_VERSION:
+        elif self.ruleVersion in {
+            STAGE_2I_CHIEF_DECISION_RULE_VERSION,
+            STAGE_3AR3B0_PIT_V2_RULE_VERSION,
+        }:
             self._validate_stage_2i_chief_decision(runs_by_code)
         return self
 

@@ -1,0 +1,17 @@
+{
+  "symbol": "000001",
+  "sourceInstrumentId": "000001.SZSE",
+  "sourceCode": "MOCK_PIT_MARKET_FACTS_V2",
+  "factType": "RAW_DAILY_BAR",
+  "factContractVersion": "RAW_DAILY_BAR_OBSERVATION_V2",
+  "canonicalContractVersion": "PIT_MARKET_FACTS_CANONICAL_V2",
+  "exchange": "SZSE",
+  "tradeDate": "2026-07-27",
+  "open": 10.0000,
+  "high": 10.2000,
+  "low": 9.8000,
+  "close": 10.1000,
+  "volume": 1000000.0000,
+  "amount": 10000000.00,
+  "turnoverRate": 0.010000
+}

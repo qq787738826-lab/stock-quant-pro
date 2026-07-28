@@ -1,6 +1,7 @@
 package com.stockquant.server.agent.service;
 
 import com.stockquant.server.agent.chief.ChiefDecisionContracts;
+import com.stockquant.server.agent.marketfacts.PitMarketFactsContracts;
 import com.stockquant.server.agent.model.AgentModels.AgentOutput;
 import com.stockquant.server.agent.model.AgentModels.AgentTeamResponse;
 import com.stockquant.server.agent.model.AgentModels.FinalDecision;
@@ -39,6 +40,22 @@ class AgentResultPersistenceServiceTest {
                 DecisionStatus.INSUFFICIENT_DATA,
                 AgentResultPersistenceService.decisionStatus(response(
                         ChiefDecisionContracts.RULE_VERSION,
+                        FinalDecisionCode.INSUFFICIENT_DATA,
+                        RunStatus.COMPLETED)));
+    }
+
+    @Test
+    void givesPitV2TheSameFinalDecisionAwareTerminalMapping() {
+        assertEquals(
+                DecisionStatus.COMPLETED,
+                AgentResultPersistenceService.decisionStatus(response(
+                        PitMarketFactsContracts.RULE_VERSION,
+                        FinalDecisionCode.WATCH,
+                        RunStatus.PARTIAL)));
+        assertEquals(
+                DecisionStatus.INSUFFICIENT_DATA,
+                AgentResultPersistenceService.decisionStatus(response(
+                        PitMarketFactsContracts.RULE_VERSION,
                         FinalDecisionCode.INSUFFICIENT_DATA,
                         RunStatus.COMPLETED)));
     }

@@ -36,6 +36,8 @@ class AgentStage3AR1FlywayLineagePostgresIntegrationTest {
     private static final String FRESH_SCHEMA = schema("fresh");
     private static final String LEGACY_SCHEMA = schema("legacy");
     private static final String GUARDED_SCHEMA = schema("guarded");
+    private static final String FRESH_V13_SCHEMA = schema("freshv13");
+    private static final String LEGACY_V13_SCHEMA = schema("legacyv13");
     private static final String MIGRATIONS = "classpath:db/migration";
     private static final int APPLIED_V6_CHECKSUM = -981595186;
     private static final int PUBLIC_V12_CHECKSUM = -178798261;
@@ -60,8 +62,10 @@ class AgentStage3AR1FlywayLineagePostgresIntegrationTest {
             createSchema(credentials, FRESH_SCHEMA);
             createSchema(credentials, LEGACY_SCHEMA);
             createSchema(credentials, GUARDED_SCHEMA);
+            createSchema(credentials, FRESH_V13_SCHEMA);
+            createSchema(credentials, LEGACY_V13_SCHEMA);
 
-            migrate(credentials, FRESH_SCHEMA, null);
+            migrate(credentials, FRESH_SCHEMA, "12");
             assertEquals("12", latestVersion(credentials, FRESH_SCHEMA));
 
             migrate(credentials, LEGACY_SCHEMA, "6");
@@ -76,7 +80,7 @@ class AgentStage3AR1FlywayLineagePostgresIntegrationTest {
                     credentials, LEGACY_SCHEMA, "6");
             assertTrue(legacyValidation.validationSuccessful,
                     legacyValidation.getAllErrorMessages());
-            migrate(credentials, LEGACY_SCHEMA, null);
+            migrate(credentials, LEGACY_SCHEMA, "12");
             assertEquals("12", latestVersion(credentials, LEGACY_SCHEMA));
 
             try (Connection connection = controlConnection(credentials);
@@ -106,7 +110,7 @@ class AgentStage3AR1FlywayLineagePostgresIntegrationTest {
             insertPopulatedLegacyCalendarNavigation(
                     credentials, GUARDED_SCHEMA);
             assertThrows(FlywayException.class,
-                    () -> migrate(credentials, GUARDED_SCHEMA, null));
+                    () -> migrate(credentials, GUARDED_SCHEMA, "12"));
             try (Connection connection = controlConnection(credentials);
                  Statement statement = connection.createStatement()) {
                 assertEquals(1, scalar(statement, """
@@ -128,10 +132,39 @@ class AgentStage3AR1FlywayLineagePostgresIntegrationTest {
             }
 
             ValidateResult publicValidation = validate(
-                    credentials, "public", null);
+                    credentials, "public", "12");
             assertTrue(publicValidation.validationSuccessful,
                     publicValidation.getAllErrorMessages());
+
+            migrate(credentials, FRESH_V13_SCHEMA, null);
+            assertEquals("13",
+                    latestVersion(credentials, FRESH_V13_SCHEMA));
+            migrate(credentials, LEGACY_V13_SCHEMA, "6");
+            assertEquals("6",
+                    latestVersion(credentials, LEGACY_V13_SCHEMA));
+            migrate(credentials, LEGACY_V13_SCHEMA, null);
+            assertEquals("13",
+                    latestVersion(credentials, LEGACY_V13_SCHEMA));
+            assertTrue(validate(
+                    credentials, FRESH_V13_SCHEMA, null)
+                    .validationSuccessful);
+            assertTrue(validate(
+                    credentials, LEGACY_V13_SCHEMA, null)
+                    .validationSuccessful);
+            try (Connection connection = controlConnection(credentials);
+                 Statement statement = connection.createStatement()) {
+                assertStructureEquals(
+                        schemaFingerprint(statement, FRESH_V13_SCHEMA),
+                        schemaFingerprint(statement, LEGACY_V13_SCHEMA),
+                        "fresh and applied-V6 V13 lineages must converge");
+                assertEquals(
+                        migrationHistory(statement, FRESH_V13_SCHEMA),
+                        migrationHistory(statement, LEGACY_V13_SCHEMA),
+                        "fresh and applied-V6 V13 histories must converge");
+            }
         } finally {
+            dropSchema(credentials, LEGACY_V13_SCHEMA);
+            dropSchema(credentials, FRESH_V13_SCHEMA);
             dropSchema(credentials, GUARDED_SCHEMA);
             dropSchema(credentials, LEGACY_SCHEMA);
             dropSchema(credentials, FRESH_SCHEMA);
@@ -143,7 +176,8 @@ class AgentStage3AR1FlywayLineagePostgresIntegrationTest {
             assertEquals(before, publicBaseline(statement),
                     "public must remain byte-for-byte and structure unchanged");
             for (String schema : List.of(
-                    FRESH_SCHEMA, LEGACY_SCHEMA, GUARDED_SCHEMA)) {
+                    FRESH_SCHEMA, LEGACY_SCHEMA, GUARDED_SCHEMA,
+                    FRESH_V13_SCHEMA, LEGACY_V13_SCHEMA)) {
                 assertEquals(0, scalar(statement, """
                         SELECT count(*)
                         FROM information_schema.schemata
@@ -760,7 +794,8 @@ class AgentStage3AR1FlywayLineagePostgresIntegrationTest {
 
     private static void requireSafeSchema(String schema) {
         if (!schema.matches(
-                "^stage_3ar1_lineage_(fresh|legacy|guarded)_[0-9a-f]{32}$")) {
+                "^stage_3ar1_lineage_(fresh|legacy|guarded|freshv13|legacyv13)"
+                        + "_[0-9a-f]{32}$")) {
             throw new IllegalStateException(
                     "unsafe 3A-R1 temporary schema name");
         }

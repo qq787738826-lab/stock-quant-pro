@@ -1,6 +1,7 @@
 package com.stockquant.server.agent.config;
 
 import com.stockquant.server.agent.shadow.AgentShadowContracts;
+import com.stockquant.server.agent.marketfacts.PitMarketFactsContracts;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -17,6 +18,7 @@ public class AgentShadowProperties {
 
     private boolean enabled;
     private boolean schedulerEnabled;
+    private boolean testDemoPitV2Enabled;
 
     @NotBlank
     private String ruleVersion = AgentShadowContracts.RULE_VERSION;
@@ -61,6 +63,14 @@ public class AgentShadowProperties {
 
     public void setSchedulerEnabled(boolean schedulerEnabled) {
         this.schedulerEnabled = schedulerEnabled;
+    }
+
+    public boolean isTestDemoPitV2Enabled() {
+        return testDemoPitV2Enabled;
+    }
+
+    public void setTestDemoPitV2Enabled(boolean testDemoPitV2Enabled) {
+        this.testDemoPitV2Enabled = testDemoPitV2Enabled;
     }
 
     public String getRuleVersion() {
@@ -136,10 +146,18 @@ public class AgentShadowProperties {
     }
 
     public void validateFrozenContract() {
-        if (!AgentShadowContracts.RULE_VERSION.equals(ruleVersion)) {
+        boolean productionRule = AgentShadowContracts.RULE_VERSION.equals(
+                ruleVersion);
+        boolean testDemoRule = PitMarketFactsContracts.RULE_VERSION.equals(
+                ruleVersion) && testDemoPitV2Enabled;
+        if (!productionRule && !testDemoRule) {
             throw new IllegalArgumentException(
-                    "shadow rule-version must be "
-                            + AgentShadowContracts.RULE_VERSION);
+                    "shadow rule-version is not enabled");
+        }
+        if (PitMarketFactsContracts.RULE_VERSION.equals(ruleVersion)
+                && schedulerEnabled) {
+            throw new IllegalArgumentException(
+                    "TEST/DEMO PIT V2 shadow cannot use the scheduler");
         }
         if (!AgentShadowContracts.MARKET_ZONE.getId().equals(zone)) {
             throw new IllegalArgumentException(

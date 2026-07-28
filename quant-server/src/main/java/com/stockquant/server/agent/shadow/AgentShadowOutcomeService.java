@@ -169,7 +169,11 @@ public class AgentShadowOutcomeService {
         var previous = shadowRepository.findPreviousComparable(
                 current.id(),
                 current.symbol(),
-                AgentShadowContracts.RULE_VERSION);
+                shadowRepository.findBatch(current.batchId())
+                        .orElseThrow(() -> new IllegalStateException(
+                                "shadow batch disappeared: "
+                                        + current.batchId()))
+                        .ruleVersion());
         if (previous.isEmpty()) {
             return new DriftResult(
                     null, null, null, null, null, null);

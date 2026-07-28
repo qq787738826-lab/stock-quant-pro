@@ -1,0 +1,1 @@
+{"amount":10000000,"canonicalContractVersion":"PIT_MARKET_FACTS_CANONICAL_V2","close":10.1,"exchange":"SZSE","factContractVersion":"RAW_DAILY_BAR_OBSERVATION_V2","factType":"RAW_DAILY_BAR","high":10.2,"low":9.8,"open":10,"sourceCode":"MOCK_PIT_MARKET_FACTS_V2","sourceInstrumentId":"000001.SZSE","symbol":"000001","tradeDate":"2026-07-27","turnoverRate":0.01,"volume":1000000}

@@ -7,6 +7,7 @@ from .data_quality import DataQualityRuleEngine
 from .market_regime import MarketRegimeRuleEngine
 from .technical_analysis import TechnicalAnalysisRuleEngine
 from .strategy_backtest import StrategyBacktestRuleEngine
+from .strategy_backtest_v2 import StrategyBacktestRuleEngineV2
 from .position_risk import PositionRiskRuleEngine
 from .announcement_risk import AnnouncementRiskRuleEngine
 from .models import (
@@ -24,6 +25,7 @@ from .models import (
     STAGE_2H_POSITION_RISK_RULE_VERSION,
     STAGE_2G_ANNOUNCEMENT_RISK_RULE_VERSION,
     STAGE_2I_CHIEF_DECISION_RULE_VERSION,
+    STAGE_3AR3B0_PIT_V2_RULE_VERSION,
     FormalVeto,
 )
 
@@ -36,6 +38,7 @@ _DATA_QUALITY_RULE_VERSIONS = frozenset({
     STAGE_2H_POSITION_RISK_RULE_VERSION,
     STAGE_2G_ANNOUNCEMENT_RISK_RULE_VERSION,
     STAGE_2I_CHIEF_DECISION_RULE_VERSION,
+    STAGE_3AR3B0_PIT_V2_RULE_VERSION,
 })
 _MARKET_REGIME_RULE_VERSIONS = frozenset({
     STAGE_2D_MARKET_REGIME_RULE_VERSION,
@@ -44,6 +47,7 @@ _MARKET_REGIME_RULE_VERSIONS = frozenset({
     STAGE_2H_POSITION_RISK_RULE_VERSION,
     STAGE_2G_ANNOUNCEMENT_RISK_RULE_VERSION,
     STAGE_2I_CHIEF_DECISION_RULE_VERSION,
+    STAGE_3AR3B0_PIT_V2_RULE_VERSION,
 })
 
 
@@ -197,6 +201,7 @@ class TechnicalAnalysisAgent(InsufficientDataAgent):
             STAGE_2H_POSITION_RISK_RULE_VERSION,
             STAGE_2G_ANNOUNCEMENT_RISK_RULE_VERSION,
             STAGE_2I_CHIEF_DECISION_RULE_VERSION,
+            STAGE_3AR3B0_PIT_V2_RULE_VERSION,
         }:
             return super().analyze(request, generated_at, data_quality_gate)
         evaluation = self._engine.evaluate(
@@ -232,6 +237,7 @@ class StrategyBacktestAgent(InsufficientDataAgent):
 
     def __init__(self) -> None:
         self._engine = StrategyBacktestRuleEngine()
+        self._engine_v2 = StrategyBacktestRuleEngineV2()
 
     def analyze(
         self,
@@ -244,9 +250,15 @@ class StrategyBacktestAgent(InsufficientDataAgent):
             STAGE_2H_POSITION_RISK_RULE_VERSION,
             STAGE_2G_ANNOUNCEMENT_RISK_RULE_VERSION,
             STAGE_2I_CHIEF_DECISION_RULE_VERSION,
+            STAGE_3AR3B0_PIT_V2_RULE_VERSION,
         }:
             return super().analyze(request, generated_at, data_quality_gate)
-        evaluation = self._engine.evaluate(
+        engine = (
+            self._engine_v2
+            if request.ruleVersion == STAGE_3AR3B0_PIT_V2_RULE_VERSION
+            else self._engine
+        )
+        evaluation = engine.evaluate(
             request,
             data_quality_gate if data_quality_gate is not None else GateStatus.BLOCKED,
         )
@@ -289,6 +301,7 @@ class AnnouncementRiskAgent(InsufficientDataAgent):
         if request.ruleVersion not in {
             STAGE_2G_ANNOUNCEMENT_RISK_RULE_VERSION,
             STAGE_2I_CHIEF_DECISION_RULE_VERSION,
+            STAGE_3AR3B0_PIT_V2_RULE_VERSION,
         }:
             return super().analyze(request, generated_at, data_quality_gate)
         evaluation = self._engine.evaluate(
@@ -336,6 +349,7 @@ class PositionRiskAgent(InsufficientDataAgent):
             STAGE_2H_POSITION_RISK_RULE_VERSION,
             STAGE_2G_ANNOUNCEMENT_RISK_RULE_VERSION,
             STAGE_2I_CHIEF_DECISION_RULE_VERSION,
+            STAGE_3AR3B0_PIT_V2_RULE_VERSION,
         }:
             return super().analyze(
                 request, generated_at, data_quality_gate

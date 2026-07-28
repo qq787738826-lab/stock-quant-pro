@@ -91,6 +91,7 @@ class AgentShadowBatchServiceTest {
                 eq(BatchStatus.FAILED),
                 eq(TriggerMode.MANUAL),
                 eq(tradeDate),
+                eq(AgentShadowContracts.RULE_VERSION),
                 eq(SelectionMode.AUTO),
                 anyString(),
                 eq(AgentShadowContracts.DEFAULT_MAX_SYMBOLS),

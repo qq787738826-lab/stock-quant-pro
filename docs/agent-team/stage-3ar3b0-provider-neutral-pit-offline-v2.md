@@ -1,0 +1,108 @@
+# 3A-R3B-0 Provider 中立 PIT 市场事实 V2 离线闭环阶段记录
+
+## 状态
+
+- 冻结基线：`23baf11ed3a236800b5f3feba8681d261a71d9f9`
+- 任务分支：`codex/1.4.0-stage-3ar3b0-provider-neutral-pit-offline-v2`
+- 状态：**实现和 Codex 本地验证完成，待 ChatGPT 基于实际 Git 提交验收，尚未 merge。**
+- iFinD 真实调用数：`0`
+- `IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`
+- Day 002 未创建，scheduler 仍关闭，3B 未开始。
+
+## 审计映射
+
+| 仓库事实 | 实施结果 |
+| --- | --- |
+| V6/V7 已有 dataset、source namespace、ingestion、assurance 和日历基础 | 复用 lineage 与资格结构，不建立同义摄取体系 |
+| V9 保存当前 QFQ 观察 | 保持 V9 不变；V2 不把它转换或回填成 raw/factor |
+| V10 已证明 append-only、A→B→A、不可变和并发模式 | V13 复用该模式建立四类市场事实链 |
+| 旧 Java/Python Bar 桥不携带已验证 revision | 新 Provider 公共 DTO 独立分层，不提升 AKShare/Tencent 资格 |
+| 2F/2I 按精确 ruleVersion/profile 分派 | 新 V2 版本独立接入，旧 contextHash/cache/result 保持兼容 |
+| Shadow 默认固定 2I | 默认不变；V2 仅允许显式 TEST/DEMO EXPLICIT 测试 |
+| PostgreSQL 已有随机 Schema 安全门 | V13、双血统和闭环全部使用随机 Schema，public 只读 |
+
+## 实现摘要
+
+### V13
+
+新增：
+
+- `pit_market_fact_batches`
+- `pit_market_fact_observations`
+- `raw_daily_bar_facts_v2`
+- `adjustment_factor_facts_v1`
+- `trading_calendar_facts_v1`
+- `corporate_action_facts_v1`
+
+迁移包含 9 个索引、5 个跨表校验触发器、12 个不可变/禁止 truncate 触发器，以及
+V2 TEST/DEMO Shadow ruleVersion 的约束扩展；Flyway checksum 为 `-763324992`。V1 至
+V12 未修改，迁移未回填任何业务数据。
+
+### Provider 与资格
+
+`MARKET_FACT_PROVIDER_CONTRACT_V1` 类型化覆盖四类事实、capability、source/instrument
+identity、revision/snapshot/time、许可、单位、完整性、错误和限流。Provider 不生成
+本地时间、datasetVersion、observationVersion 或 Hash。
+
+Mock Provider 仅使用合成 fixture，固定 TEST/DEMO、`formalEligible=false`、无网络。
+iFinD Adapter 只保留默认禁用骨架，误开启也在网络前以
+`IFIND_TRIAL_GATE_NOT_PASSED` 失败；没有 SDK、客户端或凭据。
+
+### Canonical、as-of 与 QFQ
+
+Java 以 `PIT_MARKET_FACTS_CANONICAL_V2` 生成生产 Hash，Python 只交叉验证固定黄金
+向量。Repository 只选择同 source/instrument 且 `knownAt<=knowledgeCutoff` 的最新
+可见版本。
+
+`QFQ_AS_OF_ENGINE_V1` 使用 `DAILY_EXACT`：每根 raw bar 和锚点必须取得同日、同
+source/instrument/factorType、cutoff 前可见的精确 factor。禁止 forward-fill、最近
+factor 替代、当前 factor 补历史、跨 Provider 拼接及缺失日期后重新归一化。缺任一
+精确 factor 返回 `PIT_FACTOR_UNAVAILABLE`，不产生部分窗口。共享黄金清单的 18 个
+场景全部通过。
+
+### 2F V2、六智能体与 Shadow
+
+新 ruleVersion `1.4.0-stage-3ar3b0-agent-team-pit-v2` 使用
+`AGENT_CONTEXT_3AR3B0_V2/BACKTEST_CONTEXT_V2/BACKTEST_CANONICAL_V2`。2F V2
+沿用既有回测引擎、策略和七项参数；Java 运行 QFQ/回测并生成 Hash，Python 只解释
+冻结结果。
+
+六 run 顺序、POSITION_RISK 唯一正式 veto、2I 总控优先级和缓存终态均不变。真实
+PostgreSQL/Python EXPLICIT Mock Shadow 通过既有 Java 任务系统形成确定结果、缓存
+复用和非法响应原子回滚。
+
+### 夹具安全
+
+Java/Python 离线工具支持递归脱敏、字段白名单、canonical Hash 和 fixture 版本，并
+拒绝残留凭据字段、URL userinfo、个人路径或机器路径。仓库只提交合成 fixture。
+
+## 本地验证
+
+以下为 Codex 本地执行证据，不是 GitHub Actions：
+
+| 测试组 | 结果 |
+| --- | --- |
+| Java Provider/V2 validator/persistence/Shadow 定向 | 42/0/0/0 |
+| Python compileall / 完整 unittest | PASS；129/0/0/0 |
+| quant-core | 4/0/0/0 |
+| quant-server 安全全量 | 403/0/0/83；真实环境组单独 Skipped=0 |
+| V1→V13 随机 Schema PostgreSQL | 10/0/0/0，Skipped=0 |
+| V6 旧血统→V13 与 fresh V1→V13 收敛 | 1/0/0/0，Skipped=0 |
+| 真实 Java/Python/PostgreSQL Mock Shadow | 1/0/0/0，Skipped=0 |
+| 2D/2E/2F/2G/2H/2I 真实兼容矩阵 | 50/0/0/0，Skipped=0 |
+| 2G AKShare Live Gate 回归 | 1/0/0/0，Skipped=0 |
+
+随机 Schema 残留为 0；public 保持 V12，结构和数据指纹不变；未迁移正常业务库。
+Vue 未修改。
+
+## 当前边界
+
+- 该实现仅在任务分支可用，尚未通过 ChatGPT 实际提交验收，尚未 merge；
+- Mock/TEST/DEMO 不授予真实 Provider、FORMAL 或 PROVIDER_PIT_VERIFIED 资格；
+- iFinD 函数、字段、权限、额度、许可和 revision 仍为 `UNVERIFIED`；
+- 3A-R3B-1 尚未执行，因此启动门必须保持 BLOCKED；
+- 未创建 Day 002，未开启 scheduler，未开始 3B。
+
+完整任务与证据见
+[3A-R3B-0 任务书](tasks/3ar3b0-provider-neutral-pit-offline-v2.md)，试用前最小调用预算见
+[iFinD 试用调用矩阵](ifind-trial-call-matrix.md)。

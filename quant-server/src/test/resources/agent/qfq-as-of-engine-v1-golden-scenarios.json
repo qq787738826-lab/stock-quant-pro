@@ -1,0 +1,127 @@
+{
+  "fixtureSchemaVersion": "QFQ_AS_OF_ENGINE_V1_GOLDEN_SCENARIOS_V1",
+  "engineVersion": "QFQ_AS_OF_ENGINE_V1",
+  "factorCoverageMode": "DAILY_EXACT",
+  "formula": "rawPrice(t)*factor(t)/factor(anchorTradeDate)",
+  "divisionScale": 16,
+  "divisionRoundingMode": "HALF_UP",
+  "outputPriceScale": 4,
+  "outputRoundingMode": "HALF_UP",
+  "representativeCalculation": {
+    "rawPrice": "10.12345",
+    "factor": "1.10",
+    "anchorFactor": "1.20",
+    "divisionResult": "9.2798291666666667",
+    "outputPrice": "9.2798"
+  },
+  "scenarios": [
+    {
+      "id": 1,
+      "name": "POST_CLOSE_RAW_AND_FACTOR_CAPTURE",
+      "expectedAvailable": true,
+      "expectedReasonCode": null
+    },
+    {
+      "id": 2,
+      "name": "NO_CAPTURE_BEFORE_D_CUTOFF",
+      "expectedAvailable": false,
+      "expectedReasonCode": "PIT_CALENDAR_UNAVAILABLE"
+    },
+    {
+      "id": 3,
+      "name": "D_PLUS_1_CAPTURE_CANNOT_BACKFILL_D",
+      "expectedAvailable": false,
+      "expectedReasonCode": "PIT_CALENDAR_UNAVAILABLE"
+    },
+    {
+      "id": 4,
+      "name": "CORPORATE_ACTION_REWRITES_CURRENT_FACTORS",
+      "expectedAvailable": true,
+      "expectedReasonCode": null
+    },
+    {
+      "id": 5,
+      "name": "OLD_CUTOFF_REPLAYS_OLD_FACTOR_VERSION",
+      "expectedAvailable": true,
+      "expectedReasonCode": null
+    },
+    {
+      "id": 6,
+      "name": "NEW_CUTOFF_USES_NEW_FACTOR_LINEAGE",
+      "expectedAvailable": true,
+      "expectedReasonCode": null
+    },
+    {
+      "id": 7,
+      "name": "IDENTICAL_CAPTURE_IS_IDEMPOTENT",
+      "expectedAvailable": true,
+      "expectedReasonCode": null
+    },
+    {
+      "id": 8,
+      "name": "CHANGED_CONTENT_APPENDS_VERSION",
+      "expectedAvailable": true,
+      "expectedReasonCode": null
+    },
+    {
+      "id": 9,
+      "name": "NULL_PROVIDER_REVISION_SYSTEM_KNOWLEDGE",
+      "expectedAvailable": true,
+      "expectedReasonCode": null
+    },
+    {
+      "id": 10,
+      "name": "INVENTED_PROVIDER_REVISION_REJECTED",
+      "expectedAvailable": false,
+      "expectedReasonCode": "PIT_MARKET_FACT_INVALID"
+    },
+    {
+      "id": 11,
+      "name": "EXACT_FACTOR_MISSING",
+      "expectedAvailable": false,
+      "expectedReasonCode": "PIT_FACTOR_UNAVAILABLE"
+    },
+    {
+      "id": 12,
+      "name": "TRADING_CALENDAR_MISSING",
+      "expectedAvailable": false,
+      "expectedReasonCode": "PIT_CALENDAR_UNAVAILABLE"
+    },
+    {
+      "id": 13,
+      "name": "CUTOFF_EXCLUDES_LATE_OBSERVATION",
+      "expectedAvailable": false,
+      "expectedReasonCode": "PIT_FACTOR_UNAVAILABLE"
+    },
+    {
+      "id": 14,
+      "name": "JAVA_AUTHORITY_PYTHON_VALIDATION_ONLY",
+      "expectedAvailable": true,
+      "expectedReasonCode": null
+    },
+    {
+      "id": 15,
+      "name": "FACTOR_CHANGE_WITHOUT_ACTION_OR_VERIFIED_REVISION",
+      "expectedAvailable": false,
+      "expectedReasonCode": "PIT_CORPORATE_ACTION_LINEAGE_UNAVAILABLE"
+    },
+    {
+      "id": 16,
+      "name": "A_TO_B_TO_A_ALL_VERSIONS_REPLAYABLE",
+      "expectedAvailable": true,
+      "expectedReasonCode": null
+    },
+    {
+      "id": 17,
+      "name": "ONLY_EARLIER_DATE_FACTOR_EXISTS",
+      "expectedAvailable": false,
+      "expectedReasonCode": "PIT_FACTOR_UNAVAILABLE"
+    },
+    {
+      "id": 18,
+      "name": "EXACT_FACTOR_KNOWN_AFTER_CUTOFF",
+      "expectedAvailable": false,
+      "expectedReasonCode": "PIT_FACTOR_UNAVAILABLE"
+    }
+  ]
+}

@@ -1,6 +1,8 @@
 package com.stockquant.server.agent.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.stockquant.server.agent.marketfacts.IFindTrialProperties;
+import com.stockquant.server.agent.marketfacts.PitMarketFactsV2Properties;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -14,7 +16,9 @@ import org.springframework.web.client.RestClient;
 @Configuration
 @EnableConfigurationProperties({
         AgentTeamProperties.class,
-        AgentShadowProperties.class
+        AgentShadowProperties.class,
+        IFindTrialProperties.class,
+        PitMarketFactsV2Properties.class
 })
 public class AgentTeamConfig {
 

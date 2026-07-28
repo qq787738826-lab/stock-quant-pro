@@ -2,12 +2,15 @@
 
 ## 1. 阶段状态
 
-状态：**治理规划已在任务分支完成，待 ChatGPT 基于实际 Git 提交验收，尚未合入；**
-**Provider 中立实现、iFinD 试用和真实接入均未开始。**
+状态：**治理规划已通过 ChatGPT 对实际 Git 提交的验收，并经用户批准纯 fast-forward
+合入。**
+**3A-R3B-0 已在独立任务分支完成实现和 Codex 本地验证，待验收、未合入；iFinD 试用和
+真实接入均未开始。**
 
 - 冻结集成基线：`94d442fa5fcad874462c54ca83b4ba21dcf7d3b4`
 - 任务分支：`codex/1.4.0-stage-3ar3b-ifind-trial-activation-plan`
 - 目标提交：`docs(agent): plan milestone-gated ifind trial activation`
+- 实现及最终提交：`23baf11ed3a236800b5f3feba8681d261a71d9f9`
 - 完整任务书：
   [tasks/3ar3b-ifind-trial-activation-plan.md](tasks/3ar3b-ifind-trial-activation-plan.md)
 
@@ -48,7 +51,7 @@ ChatGPT 在相关阶段验收时同步检查门禁；只有 PASS 后才建议用
 
 | 阶段 | 目标 | iFinD 调用 | 当前状态 |
 |---|---|---:|---|
-| 3A-R3B-0 | Provider 中立离线闭环、四类事实、QFQ、2F V2/六智能体/Shadow Mock 和试用工具 | 0 | 未开始 |
+| 3A-R3B-0 | Provider 中立离线闭环、四类事实、QFQ、2F V2/六智能体/Shadow Mock 和试用工具 | 0 | 任务分支实现和 Codex 本地验证完成；待验收、未合入 |
 | 3A-R3B-1 | 只读核验 12 项试用启动门 | 0 | 未开始；门禁 BLOCKED |
 | 3A-R3B-2 | 用户激活后的连续 15 天真实接入与取证 | 仅批准预算 | 未开始 |
 | 3A-R3B-3 | 基于真实证据和许可判定 Provider 资格 | 不新增无关调用 | 未开始 |
@@ -72,5 +75,5 @@ ChatGPT 在相关阶段验收时同步检查门禁；只有 PASS 后才建议用
 - 变更范围：仅 `CURRENT_STATE.md`、`ROADMAP.md`、`DECISIONS.md` 及本阶段两份文档；
   没有 Java、Python、Vue、SQL、Flyway、配置或 `PROGRESS_LOG.md` 变化。
 
-以上为 Codex 本地文档检查，不代表 ChatGPT 验收、用户 merge 批准、启动门 PASS 或
-iFinD 试用已经开始。
+上述规划提交已通过 ChatGPT 实际 Git 验收并经用户批准合入；这不代表 3A-R3B-0
+已验收或合入，也不代表启动门 PASS 或 iFinD 试用已经开始。

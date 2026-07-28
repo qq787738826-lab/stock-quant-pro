@@ -7,6 +7,8 @@ import com.stockquant.server.agent.model.AgentModels.ContextSnapshot;
 import com.stockquant.server.agent.backtest.AgentBacktestContextService;
 import com.stockquant.server.agent.backtest.BacktestContracts;
 import com.stockquant.server.agent.chief.ChiefDecisionContracts;
+import com.stockquant.server.agent.marketfacts.AgentBacktestContextV2Service;
+import com.stockquant.server.agent.marketfacts.PitMarketFactsContracts;
 import com.stockquant.server.agent.announcement.AgentSecurityEventsContextService;
 import com.stockquant.server.agent.announcement.AnnouncementContracts;
 import com.stockquant.server.agent.portfolio.AgentPortfolioContextService;
@@ -44,6 +46,7 @@ public class AgentContextSnapshotService {
     private final AgentMarketBreadthContextService marketBreadthContextService;
     private final AgentScanResultContextService scanResultContextService;
     private final AgentBacktestContextService backtestContextService;
+    private final AgentBacktestContextV2Service backtestContextV2Service;
     private final AgentPortfolioContextService portfolioContextService;
     private final AgentSecurityEventsContextService securityEventsContextService;
     private final Clock clock;
@@ -68,6 +71,7 @@ public class AgentContextSnapshotService {
                 null,
                 null,
                 null,
+                null,
                 Clock.systemUTC());
     }
 
@@ -81,6 +85,7 @@ public class AgentContextSnapshotService {
             AgentMarketBreadthContextService marketBreadthContextService,
             AgentScanResultContextService scanResultContextService,
             AgentBacktestContextService backtestContextService,
+            AgentBacktestContextV2Service backtestContextV2Service,
             AgentPortfolioContextService portfolioContextService,
             AgentSecurityEventsContextService securityEventsContextService,
             @Qualifier("agentTemporalClock") Clock clock
@@ -93,6 +98,7 @@ public class AgentContextSnapshotService {
         this.marketBreadthContextService = marketBreadthContextService;
         this.scanResultContextService = scanResultContextService;
         this.backtestContextService = backtestContextService;
+        this.backtestContextV2Service = backtestContextV2Service;
         this.portfolioContextService = portfolioContextService;
         this.securityEventsContextService = securityEventsContextService;
         this.clock = clock;
@@ -119,6 +125,35 @@ public class AgentContextSnapshotService {
                 null,
                 null,
                 null,
+                null,
+                clock);
+    }
+
+    AgentContextSnapshotService(
+            ObjectMapper objectMapper,
+            AgentContextHashService hashService,
+            AgentContextReadRepository readRepository,
+            AgentTechnicalMetricsService technicalMetricsService,
+            AgentDataQualityContextService dataQualityContextService,
+            AgentMarketBreadthContextService marketBreadthContextService,
+            AgentScanResultContextService scanResultContextService,
+            AgentBacktestContextService backtestContextService,
+            AgentPortfolioContextService portfolioContextService,
+            AgentSecurityEventsContextService securityEventsContextService,
+            Clock clock
+    ) {
+        this(
+                objectMapper,
+                hashService,
+                readRepository,
+                technicalMetricsService,
+                dataQualityContextService,
+                marketBreadthContextService,
+                scanResultContextService,
+                backtestContextService,
+                null,
+                portfolioContextService,
+                securityEventsContextService,
                 clock);
     }
 
@@ -143,6 +178,7 @@ public class AgentContextSnapshotService {
                 marketBreadthContextService,
                 scanResultContextService,
                 backtestContextService,
+                null,
                 portfolioContextService,
                 null,
                 clock);
@@ -170,12 +206,13 @@ public class AgentContextSnapshotService {
                 backtestContextService,
                 null,
                 null,
+                null,
                 clock);
     }
 
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public ContextSnapshot create(String symbol, LocalDate tradeDate) {
-        return createInternal(symbol, tradeDate, false, false, false);
+        return createInternal(symbol, tradeDate, false, false, false, false);
     }
 
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
@@ -187,17 +224,21 @@ public class AgentContextSnapshotService {
                         || PortfolioContracts.RULE_VERSION.equals(ruleVersion)
                         || AnnouncementContracts.RULE_VERSION.equals(ruleVersion)
                         || ChiefDecisionContracts.RULE_VERSION.equals(ruleVersion),
+                PitMarketFactsContracts.RULE_VERSION.equals(ruleVersion),
                 PortfolioContracts.RULE_VERSION.equals(ruleVersion)
                         || AnnouncementContracts.RULE_VERSION.equals(ruleVersion)
-                        || ChiefDecisionContracts.RULE_VERSION.equals(ruleVersion),
+                        || ChiefDecisionContracts.RULE_VERSION.equals(ruleVersion)
+                        || PitMarketFactsContracts.RULE_VERSION.equals(ruleVersion),
                 AnnouncementContracts.RULE_VERSION.equals(ruleVersion)
-                        || ChiefDecisionContracts.RULE_VERSION.equals(ruleVersion));
+                        || ChiefDecisionContracts.RULE_VERSION.equals(ruleVersion)
+                        || PitMarketFactsContracts.RULE_VERSION.equals(ruleVersion));
     }
 
     private ContextSnapshot createInternal(
             String symbol,
             LocalDate tradeDate,
             boolean reliableBacktestProfile,
+            boolean reliableBacktestV2Profile,
             boolean reliablePortfolioProfile,
             boolean stage2GProfile
     ) {
@@ -222,7 +263,10 @@ public class AgentContextSnapshotService {
         ));
         root.set(
                 "backtestContext",
-                reliableBacktestProfile
+                reliableBacktestV2Profile
+                        ? requiredBacktestContextV2Service().create(
+                        symbol, tradeDate, queriedAt)
+                        : reliableBacktestProfile
                         ? requiredBacktestContextService().create(symbol, tradeDate, queriedAt)
                         : backtestContext(symbol, tradeDate, queriedAt));
         root.set(
@@ -245,6 +289,14 @@ public class AgentContextSnapshotService {
             throw new IllegalStateException("阶段2F backtestContext服务不可用");
         }
         return backtestContextService;
+    }
+
+    private AgentBacktestContextV2Service requiredBacktestContextV2Service() {
+        if (backtestContextV2Service == null) {
+            throw new IllegalStateException(
+                    "stage 3A-R3B-0 backtestContext V2 service is unavailable");
+        }
+        return backtestContextV2Service;
     }
 
     private AgentPortfolioContextService requiredPortfolioContextService() {

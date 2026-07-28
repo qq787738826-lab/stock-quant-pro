@@ -1,5 +1,6 @@
 package com.stockquant.server.agent.shadow;
 
+import com.stockquant.server.agent.marketfacts.PitMarketFactsContracts;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.stockquant.server.agent.model.AgentTypes.AgentCode;
 import com.stockquant.server.agent.model.AgentTypes.FinalDecisionCode;
@@ -245,6 +246,8 @@ public class AgentShadowMetricsService {
         if (filter.ruleVersion() != null
                 && !filter.ruleVersion().isBlank()
                 && !AgentShadowContracts.RULE_VERSION.equals(
+                filter.ruleVersion())
+                && !PitMarketFactsContracts.RULE_VERSION.equals(
                 filter.ruleVersion())) {
             throw new IllegalArgumentException(
                     "unsupported shadow ruleVersion");

@@ -164,6 +164,7 @@ class ParsedBacktestContext:
 
 
 class StrategyBacktestRuleEngine:
+    unavailable_reason_codes = UNAVAILABLE_REASON_CODES
 
     def evaluate(
         self,
@@ -192,7 +193,7 @@ class StrategyBacktestRuleEngine:
             return self._invalid(data_quality_gate)
         if raw.get("available") is not True:
             reason_code = raw.get("reasonCode")
-            if reason_code not in UNAVAILABLE_REASON_CODES:
+            if reason_code not in self.unavailable_reason_codes:
                 return self._invalid(data_quality_gate)
             return StrategyBacktestEvaluation(
                 status=RunStatus.INSUFFICIENT_DATA,

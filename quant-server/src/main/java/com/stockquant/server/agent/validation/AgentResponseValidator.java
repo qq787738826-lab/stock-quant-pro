@@ -3,6 +3,7 @@ package com.stockquant.server.agent.validation;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.stockquant.server.agent.exception.AgentResponseValidationException;
 import com.stockquant.server.agent.chief.ChiefDecisionContracts;
+import com.stockquant.server.agent.marketfacts.PitMarketFactsContracts;
 import com.stockquant.server.agent.model.AgentModels.AgentError;
 import com.stockquant.server.agent.model.AgentModels.AgentOutput;
 import com.stockquant.server.agent.model.AgentModels.AgentTeamRequest;
@@ -316,6 +317,9 @@ public class AgentResponseValidator {
             validateStage2GAnnouncementRisk(request, response, runs, dataQuality);
         } else if (ChiefDecisionContracts.RULE_VERSION.equals(request.ruleVersion())) {
             validateStage2IChiefDecision(request, response, runs, dataQuality);
+        } else if (PitMarketFactsContracts.RULE_VERSION.equals(
+                request.ruleVersion())) {
+            validateStage3AR3B0(request, response, runs, dataQuality);
         }
     }
 
@@ -1299,6 +1303,51 @@ public class AgentResponseValidator {
                 request, response, positionRisk, dataQuality);
         AgentStage2IChiefDecisionValidator.validate(
                 request, response, runs);
+    }
+
+    private static void validateStage3AR3B0(
+            AgentTeamRequest request,
+            AgentTeamResponse response,
+            List<AgentOutput> runs,
+            AgentOutput dataQuality
+    ) {
+        validateStage2BDataQualityOutput(request, dataQuality);
+        AgentOutput marketRegime = runs.stream()
+                .filter(run -> run.agentCode() == AgentCode.MARKET_REGIME)
+                .findFirst().orElseThrow();
+        AgentOutput technicalAnalysis = runs.stream()
+                .filter(run -> run.agentCode() == AgentCode.TECHNICAL_ANALYSIS)
+                .findFirst().orElseThrow();
+        AgentOutput strategyBacktest = runs.stream()
+                .filter(run -> run.agentCode() == AgentCode.STRATEGY_BACKTEST)
+                .findFirst().orElseThrow();
+        AgentOutput announcementRisk = runs.stream()
+                .filter(run -> run.agentCode() == AgentCode.ANNOUNCEMENT_RISK)
+                .findFirst().orElseThrow();
+        AgentOutput positionRisk = runs.stream()
+                .filter(run -> run.agentCode() == AgentCode.POSITION_RISK)
+                .findFirst().orElseThrow();
+        if (dataQuality.gateStatus() == GateStatus.BLOCKED) {
+            validateStage2DBlockedMarketRegime(marketRegime);
+            AgentStage2ETechnicalAnalysisValidator.validateBlocked(
+                    technicalAnalysis);
+            AgentStage3AR3B0BacktestValidator.validateBlocked(strategyBacktest);
+        } else {
+            require(dataQuality.gateStatus() == GateStatus.PASS
+                            || dataQuality.gateStatus() == GateStatus.WARN,
+                    "V2 DATA_QUALITY gate must be PASS/WARN/BLOCKED");
+            validateStage2DMarketRegimeOutput(
+                    request, marketRegime, dataQuality.gateStatus());
+            AgentStage2ETechnicalAnalysisValidator.validate(
+                    request, technicalAnalysis, dataQuality.gateStatus());
+            AgentStage3AR3B0BacktestValidator.validate(
+                    request, strategyBacktest, dataQuality.gateStatus());
+        }
+        AgentStage2GAnnouncementRiskValidator.validate(
+                request, announcementRisk, dataQuality);
+        AgentStage2HPositionRiskValidator.validate(
+                request, response, positionRisk, dataQuality);
+        AgentStage2IChiefDecisionValidator.validate(request, response, runs);
     }
 
     private static boolean containsForbiddenStage2ESummary(String summary) {

@@ -9,7 +9,7 @@
 - 当前稳定版本：`1.3.1`
 - 当前目标版本：`1.4.0`
 - 当前集成分支：`feature/1.4.0-agent-team`
-- 当前集成分支 HEAD：`94d442fa5fcad874462c54ca83b4ba21dcf7d3b4`
+- 当前集成分支 HEAD：`23baf11ed3a236800b5f3feba8681d261a71d9f9`
 - 1D-4 验收来源分支：`codex/1.4.0-1d4-acceptance`
 - 1D-4 验收基线：`5bc492a feat(agent): add safe local team runtime scripts`
 - 阶段 2A 验收来源分支：`codex/1.4.0-2a-readonly-context`
@@ -85,7 +85,11 @@
 - 阶段 3A-R3A 当前状态：可验证 PIT 市场原始事实 V2 的来源资格、事实模型、QFQ as-of 和实施门禁设计已经通过 ChatGPT 对实际 Git 提交的验收；用户已批准纯 fast-forward 合入，集成分支已前进至最终提交。精确验收和批准时间无仓库证据，记为 `UNKNOWN`。该状态只表示设计完成，不表示 Provider 已接入或 V2 已实现。
 - 阶段 3A-R3B iFinD 试用启动规划冻结基线：`94d442fa5fcad874462c54ca83b4ba21dcf7d3b4`
 - 阶段 3A-R3B iFinD 试用启动规划任务分支：`codex/1.4.0-stage-3ar3b-ifind-trial-activation-plan`
-- 阶段 3A-R3B 当前状态：仅在任务分支规划里程碑门禁，`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`；iFinD 试用尚未启动、真实调用数为 0，Provider 尚未接入，3A-R3B-0 至 3A-R3B-3 均未开始实现，待 ChatGPT 基于实际 Git 提交验收且尚未合入。
+- 阶段 3A-R3B iFinD 试用启动规划实现及最终提交：`23baf11ed3a236800b5f3feba8681d261a71d9f9`
+- 阶段 3A-R3B iFinD 试用启动规划当前状态：已通过 ChatGPT 对实际 Git 提交的验收；用户已批准纯 fast-forward 合入，集成分支已前进至最终提交。精确验收和批准时间无仓库证据，记为 `UNKNOWN`。
+- 阶段 3A-R3B-0 冻结集成基线：`23baf11ed3a236800b5f3feba8681d261a71d9f9`
+- 阶段 3A-R3B-0 任务分支：`codex/1.4.0-stage-3ar3b0-provider-neutral-pit-offline-v2`
+- 阶段 3A-R3B-0 当前状态：Provider 中立 PIT 市场事实 V2、V13、TEST/DEMO Mock Provider、`DAILY_EXACT` QFQ、2F V2、六智能体和 EXPLICIT Mock Shadow 的实现与 Codex 本地验证已完成，待 ChatGPT 基于实际 Git 提交验收，尚未 merge。真实 Provider 仍未接入，iFinD 真实调用数为 0，`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`。
 - `master`：`27d9099 chore: checkpoint Stock Quant Pro 1.3.1 and remove tracked cache`
 - 版本号仍保持 `1.3.1`；尚未发布 `1.4.0`。
 
@@ -124,7 +128,7 @@
 
 阶段 2D-1、2D-2A、2D-2B-1A、文档阶段 2D-2B-1B-0 和 TEST/DEMO 实现阶段 2D-2B-1B-1 完成不等于完整阶段 2D、完整阶段 2D-2 或完整阶段 2D-2B 完成；这些上位阶段仍处于进行中。已完成内容是基础设施、只读事实上下文、数据质量门禁、受限的当前证券池宽度状态规则、时态事实基础、来源无关摄取基础、事件物化契约及 TEST/DEMO event 物化基础。当前 event 物化能力不包含正式来源、FORMAL/PIT、history/calendar projection、Universe、完整六智能体分析、完整市场环境模型、历史无前视市场宽度、真实股票分析或投资建议能力。
 
-## 当前规划任务（未验收、未合入）
+## 当前开发任务（未验收、未合入）
 
 Day 001 已在正常业务库形成 1 个真实受控 Shadow 批次和 3 个 item，三项均以
 `BLOCKED_BY_DATA_QUALITY` 终结；正式人工复核已追加。该安全结果没有被重跑或修改规则。
@@ -139,17 +143,19 @@ Day 001 已在正常业务库形成 1 个真实受控 Shadow 批次和 3 个 ite
 Tencent `version=18` 虽一致，但没有正式字段语义、修订关系或旧版本证据，当前资格结论
 固定为 `PROVIDER_REVISION_UNVERIFIED`，不得接入 2F V1。
 
-3A-R3A 设计已经验收并合入，但其冻结的 `PIT_MARKET_FACTS_V2`、四类市场事实、
-`QFQ_AS_OF_ENGINE_V1`、`PROVIDER_PIT_VERIFIED` 与 `SYSTEM_KNOWLEDGE_PIT` 仍只是设计，
-不是集成分支已经具备的生产能力。完整设计见
-[stage-3ar3a-pit-market-facts-v2-design.md](stage-3ar3a-pit-market-facts-v2-design.md)。
+3A-R3A 设计和 3A-R3B 里程碑规划均已验收并合入。当前 3A-R3B-0 任务分支已据此完成
+Provider 中立离线实现：V13 建立四类独立 append-only 市场事实，Java 建立类型化 Provider
+契约、canonical/as-of Repository 和 `QFQ_AS_OF_ENGINE_V1`，精确 V2 ruleVersion 提供
+`BACKTEST_CONTEXT_V2`、六智能体和 TEST/DEMO EXPLICIT Mock Shadow 闭环。该能力目前只在
+任务分支完成 Codex 本地验证，尚未经 ChatGPT 对实际提交验收，尚未 merge，因此不得写成
+集成分支已具备。完整实现边界和证据见
+[stage-3ar3b0-provider-neutral-pit-offline-v2.md](stage-3ar3b0-provider-neutral-pit-offline-v2.md)。
 
-当前任务分支只规划 iFinD 15 天试用的里程碑门禁与 3A-R3B-0 至 3A-R3B-3 顺序。试用不得
-绑定 `2026-08-31` 或任何固定日历日期；日历日期只能是非权威临时估算。当前正式标志为
-`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`，Provider 尚未接入，iFinD 试用尚未启动且真实调用数
-为 0。完整规划见
-[stage-3ar3b-ifind-trial-activation-plan.md](stage-3ar3b-ifind-trial-activation-plan.md)。
-本任务不写数据库、不新增迁移、不修改 2F V1、不创建 Day 002，也不开始 3B。
+Mock Provider 只使用合成固定夹具，不取得真实 Provider、FORMAL 或
+`PROVIDER_PIT_VERIFIED` 资格；iFinD Adapter 仍是默认禁用且网络前失败的骨架，没有安装 SDK、
+没有凭据、没有真实调用。试用不得绑定固定日期，当前正式标志仍为
+`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`。3A-R3B-1 尚未执行独立只读验收，iFinD 真实调用数为
+0，Day 002 未创建，scheduler 仍关闭，3B 未开始。
 
 完整 3A 仍要求不少于 20 个有效观察日、200 个 shadow item、主要 reasonCode 人工复核、
 持续业务表只读证明和正式观察报告；当前只有 1 个观察日和 3 个 item。
@@ -158,7 +164,7 @@ Tencent `version=18` 虽一致，但没有正式字段语义、修订关系或�
 
 Java 是 `taskId`、六个 `runId`、状态、幂等与缓存、持久化和跨语言响应校验的唯一权威。Python 无状态，只处理 Java 传入的只读 `contextSnapshot`，不访问任务数据库。PostgreSQL 已包含 task、run、evidence、veto、decision 五类持久化结构。Vue 可创建、轮询、恢复并展示任务。本地脚本可安全启动、复用和精确停止 Python、Java、Vue。
 
-当前集成分支真实可用的是 Java 权威任务和持久化、阶段 2A 第一批四类上下文、确定性技术指标、确定性 DATA_QUALITY 门禁、`marketBreadth` 只读事实、`scanResult` 历史扫描事实、阶段 2D-1 受限的当前证券池宽度状态规则、阶段 2E-1 确定性 TECHNICAL_ANALYSIS V1、阶段 2F 可靠回测基础与确定性 STRATEGY_BACKTEST V1、阶段 2H 可靠模拟持仓上下文与确定性 POSITION_RISK V1、阶段 2G 研究级公告事实与确定性 ANNOUNCEMENT_RISK V1、阶段 2I 确定性总控综合决策 V1、阶段 3A-1 默认关闭的受控 Shadow 控制与观测基础、V6 时态事实基础、V7 来源无关摄取基础、V8 TEST/DEMO security event 物化基础、V9 append-only PIT 日线观察、V10 append-only 公告观察、V11 Shadow 事实、V12 迁移血统前向修复、Hash 与 JSONB 稳定往返、缺数安全降级、失败原子性和 Vue 工作台观察能力。V8 已实现 run 创建时冻结的 `manifestContractVersion`、TEST/DEMO 稳定证券身份与显式 source identity mapping、`SECURITY_STATUS_RAW_TEST_V1`、`SECURITY_STATUS_EVENT_V1` 物化与严格复用、每 terminal attempt 唯一 normalization result、每逻辑 event 唯一 lineage、`INGESTION_MANIFEST_V2_SECURITY_EVENT`、Java/PostgreSQL 双重门禁，以及幂等、两个 backend 并发和原子失败保护。FORMAL/PIT 继续由数据库门禁拒绝，resolved event 在 2D-2B-2 前不得进入 `security_status_history`；当前尚未形成正式 history/calendar projection 或 Universe。ANNOUNCEMENT_RISK 的 AKShare/CNINFO 来源仍只具备 `RESEARCH` 资格，不声明正式授权、历史绝对完整或 PIT。已合入的 3A-R3A 只冻结 `PIT_MARKET_FACTS_V2` 设计，不是生产集成能力。
+当前集成分支真实可用的是 Java 权威任务和持久化、阶段 2A 第一批四类上下文、确定性技术指标、确定性 DATA_QUALITY 门禁、`marketBreadth` 只读事实、`scanResult` 历史扫描事实、阶段 2D-1 受限的当前证券池宽度状态规则、阶段 2E-1 确定性 TECHNICAL_ANALYSIS V1、阶段 2F 可靠回测基础与确定性 STRATEGY_BACKTEST V1、阶段 2H 可靠模拟持仓上下文与确定性 POSITION_RISK V1、阶段 2G 研究级公告事实与确定性 ANNOUNCEMENT_RISK V1、阶段 2I 确定性总控综合决策 V1、阶段 3A-1 默认关闭的受控 Shadow 控制与观测基础、V6 时态事实基础、V7 来源无关摄取基础、V8 TEST/DEMO security event 物化基础、V9 append-only PIT 日线观察、V10 append-only 公告观察、V11 Shadow 事实、V12 迁移血统前向修复、Hash 与 JSONB 稳定往返、缺数安全降级、失败原子性和 Vue 工作台观察能力。V8 已实现 run 创建时冻结的 `manifestContractVersion`、TEST/DEMO 稳定证券身份与显式 source identity mapping、`SECURITY_STATUS_RAW_TEST_V1`、`SECURITY_STATUS_EVENT_V1` 物化与严格复用、每 terminal attempt 唯一 normalization result、每逻辑 event 唯一 lineage、`INGESTION_MANIFEST_V2_SECURITY_EVENT`、Java/PostgreSQL 双重门禁，以及幂等、两个 backend 并发和原子失败保护。FORMAL/PIT 继续由数据库门禁拒绝，resolved event 在 2D-2B-2 前不得进入 `security_status_history`；当前尚未形成正式 history/calendar projection 或 Universe。ANNOUNCEMENT_RISK 的 AKShare/CNINFO 来源仍只具备 `RESEARCH` 资格，不声明正式授权、历史绝对完整或 PIT。已合入的 3A-R3A 只冻结设计；3A-R3B-0 V2 离线实现仍仅在任务分支待验收，不是集成分支能力。
 
 精确 2I 规则版本启用 `CHIEF_DECISION_V1/CHIEF_SCORE_WEIGHTS_V1`；总控只读取六个专业
 run，不成为第七个 run，不产生独立 finding/evidence，并由 Java 在持久化前独立复算。
@@ -297,6 +303,6 @@ DATA_QUALITY 只作门禁和 confidence 上限，MARKET_REGIME V1 权重为 0 �
 
 完整阶段 2D、完整阶段 2D-2 和完整阶段 2D-2B 仍处于进行中。阶段 2D-2A、2D-2B-1A、文档阶段 2D-2B-1B-0 与 TEST/DEMO 实现阶段 2D-2B-1B-1 已完成；该工作线的唯一入口只是解决 2D-2B-1B-2 的外部前置决策，不是立即开始 adapter、2D-2B-2 或 Universe 实现。阶段 2E-1 已完成独立复审并合入，但没有自动批准或开始任何 2E 后续任务。
 
-**在智能体规则能力工作线上，3A-R3A 已通过 ChatGPT 实际 Git 提交验收并经用户批准纯 fast-forward 合入；当前唯一已授权任务是 3A-R3B iFinD 试用里程碑门禁规划。** Day 001 已形成 1 个真实受控 Shadow 批次和 3 个 item，均以 `BLOCKED_BY_DATA_QUALITY` 安全终结并完成正式人工复核；后续受控行情更新形成的 780 条 V9 观察全部 `sourceRevision=NULL`。当前来源资格结论是 `PROVIDER_REVISION_UNVERIFIED`，Tencent `version=18` 不得作为 revision。iFinD 试用不得绑定 `2026-08-31` 或任何固定日期，只有完成 3A-R3B-0 离线闭环并通过 3A-R3B-1 的 12 项只读验收后，正式标志才可从 `IFIND_TRIAL_ACTIVATION_GATE=BLOCKED` 变为 `IFIND_TRIAL_ACTIVATION_GATE=PASS`；只有用户看到 PASS 并亲自开通试用后才能开始 3A-R3B-2。当前 Provider 尚未接入、iFinD 调用数为 0，scheduler 仍关闭，Day 002 未创建。Codex 不得自行激活或调用 iFinD、合并、恢复长期观察、开始 3B 或其他阶段。
+**在智能体规则能力工作线上，3A-R3B 里程碑规划已经验收并合入；当前唯一已授权任务是 3A-R3B-0 Provider 中立 PIT 市场事实 V2 离线闭环。** Day 001 已形成 1 个真实受控 Shadow 批次和 3 个 item，均以 `BLOCKED_BY_DATA_QUALITY` 安全终结并完成正式人工复核；后续受控行情更新形成的 780 条 V9 观察全部 `sourceRevision=NULL`。当前真实来源资格结论仍是 `PROVIDER_REVISION_UNVERIFIED`，Tencent `version=18` 不得作为 revision。3A-R3B-0 任务分支已完成 V13、四类事实、TEST/DEMO Mock、QFQ、2F V2、六智能体、Mock Shadow 和试用准备工具的 Codex 本地验证，但尚待 ChatGPT 实际 Git 提交验收、尚未 merge。iFinD 试用不得绑定固定日期；3A-R3B-1 尚未执行，`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`，真实 iFinD 调用数为 0，scheduler 仍关闭，Day 002 未创建。Codex 不得自行激活或调用 iFinD、合并、恢复长期观察、开始 3B 或其他阶段。
 
-阻断项包括正式证券状态来源、数据许可、本地持久化权利、历史回放权利、稳定 source instrument ID、revision 语义以及 published/effective 时间语义。当前免费聚合源和 `securities` 当前态投影均不得被视为正式来源；2G 的研究级 AKShare/CNINFO 公告来源同样不得用于解除这些门禁。当前仍未实现正式 source adapter、FORMAL 摄取、PIT_VERIFIED、`SECURITY_STATUS_EVENT_V2`、`security_status_history` 正式投影、正式 trading calendar projection、Universe snapshot、可验证 PIT raw daily/factor/calendar/action、2F V2、`MARKET_BREADTH_V2`、完整 MARKET_REGIME、公告 PDF 语义分析或生产扫描切换；历史市场宽度无前视回放和固定评测集也尚未建立。阶段 2F、2G、2H、2I、3A-1、3A-R1 与 3A-R3A 设计均已完成并合入；3A-R3B-0 至 3A-R3B-3 尚未开始。当前只有 1 个有效观察日和 3 个 shadow item，尚未达到 20 个有效观察日、200 个 item、主要原因人工复核和正式观察报告门槛，因此完整 3A 未完成，3B 未开始。阶段 2D-2B 禁止外部行情补数、LLM 权威决策、投资建议和交易写操作。
+阻断项包括正式证券状态来源、数据许可、本地持久化权利、历史回放权利、稳定 source instrument ID、revision 语义以及 published/effective 时间语义。当前免费聚合源和 `securities` 当前态投影均不得被视为正式来源；2G 的研究级 AKShare/CNINFO 公告来源同样不得用于解除这些门禁。当前仍未实现正式 source adapter、FORMAL 摄取、PROVIDER_PIT_VERIFIED、`SECURITY_STATUS_EVENT_V2`、`security_status_history` 正式投影、正式 Provider trading calendar、Universe snapshot、`MARKET_BREADTH_V2`、完整 MARKET_REGIME、公告 PDF 语义分析或生产扫描切换；3A-R3B-0 的 raw/factor/calendar/action、2F V2 和 Shadow 只使用 TEST/DEMO Mock 且仍待验收、未合入，不能替代真实来源资格。阶段 2F、2G、2H、2I、3A-1、3A-R1、3A-R3A 设计和 3A-R3B 规划均已完成并合入；3A-R3B-0 实现待验收，3A-R3B-1 至 3A-R3B-3 未开始。当前只有 1 个有效观察日和 3 个 shadow item，尚未达到 20 个有效观察日、200 个 item、主要原因人工复核和正式观察报告门槛，因此完整 3A 未完成，3B 未开始。阶段 2D-2B 禁止外部行情补数、LLM 权威决策、投资建议和交易写操作。

@@ -1,6 +1,7 @@
 package com.stockquant.server.agent.service;
 
 import com.stockquant.server.agent.chief.ChiefDecisionContracts;
+import com.stockquant.server.agent.marketfacts.PitMarketFactsContracts;
 import com.stockquant.server.agent.model.AgentModels.AgentOutput;
 import com.stockquant.server.agent.model.AgentModels.AgentTeamResponse;
 import com.stockquant.server.agent.model.AgentModels.Evidence;
@@ -78,7 +79,9 @@ public class AgentResultPersistenceService {
     }
 
     static DecisionStatus decisionStatus(AgentTeamResponse response) {
-        if (ChiefDecisionContracts.RULE_VERSION.equals(response.ruleVersion())) {
+        if (ChiefDecisionContracts.RULE_VERSION.equals(response.ruleVersion())
+                || PitMarketFactsContracts.RULE_VERSION.equals(
+                response.ruleVersion())) {
             FinalDecisionCode finalDecision = response.finalDecision().decision();
             return switch (finalDecision) {
                 case REJECTED_BY_VETO,

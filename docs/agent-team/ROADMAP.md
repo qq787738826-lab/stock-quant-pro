@@ -263,17 +263,20 @@
 - 兼容边界：2F V1、V9、旧 profile、contextHash 和缓存键完全不变；未来 V2 使用独立规则版本/profile。设计合入不表示 Provider 已批准、生产实现或迁移已完成，也没有批准 Day 002 或 3B。
 - 后续入口：按 [3A-R3B iFinD 试用里程碑启动规划](tasks/3ar3b-ifind-trial-activation-plan.md)依次完成离线闭环、启动门、有限试用取证和资格判定；任务书和路线图本身不构成自动实施授权。
 
-### 3A-R3B：iFinD 试用里程碑门禁与资格取证（规划中）
+### 3A-R3B：iFinD 试用里程碑门禁与资格取证（规划已合入）
 
 - 规划文档：[完整 3A-R3B 任务书](tasks/3ar3b-ifind-trial-activation-plan.md)和[阶段规划记录](stage-3ar3b-ifind-trial-activation-plan.md)。
+- 规划状态：提交 `23baf11ed3a236800b5f3feba8681d261a71d9f9` 已通过 ChatGPT 对实际 Git 提交的验收，并经用户批准纯 fast-forward 合入；当前集成分支 HEAD 即该提交。精确验收和批准时间无仓库证据，记为 `UNKNOWN`。
 - 日期边界：iFinD 试用不得绑定 `2026-08-31`、2026 年 8 月 31 日或任何其他固定日期。日历日期只能作为非权威临时估算，不属于路线图依赖，不得因预计日期临近而降低验收标准。
-- 当前门禁：`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`。Provider 尚未接入，试用尚未启动，真实 iFinD 调用数为 0；Day 002 未创建，3B 未开始。
+- 当前门禁：`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`。真实 Provider 尚未接入，试用尚未启动，真实 iFinD 调用数为 0；Day 002 未创建，3B 未开始。
 
-#### 3A-R3B-0：Provider 中立离线闭环与试用准备（未开始）
+#### 3A-R3B-0：Provider 中立离线闭环与试用准备（任务分支实现和 Codex 本地验证完成，待验收、未合入）
 
 - 目标：在不调用 iFinD 的情况下，使用 TEST/DEMO 固定夹具、Mock Provider 和允许的 AKShare 研究级能力完成 Provider 中立链路。
-- 范围：Provider 中立接口与类型化 DTO、Provider capability 契约、raw daily/factor/calendar/corporate action 四类 PIT 市场事实、append-only 版本链、as-of Repository、`DAILY_EXACT` QFQ 引擎、18 个黄金场景、2F V2 离线链路、六智能体 Mock 闭环、EXPLICIT Mock Shadow、默认禁用的 iFinD Adapter 骨架，以及限流、超时、错误、空数据、响应采集、脱敏、Hash 和离线夹具工具。
-- 边界：真实 iFinD 调用数保持 0；不取得 Provider 资格，不创建 Day 002。需要生产迁移、公共 DTO 或实现时，必须由未来大阶段单独授权。
+- 任务证据：[3A-R3B-0 任务书](tasks/3ar3b0-provider-neutral-pit-offline-v2.md)、[阶段记录](stage-3ar3b0-provider-neutral-pit-offline-v2.md)和[iFinD 试用调用矩阵](ifind-trial-call-matrix.md)。
+- 任务分支实现：V13 独立建立 raw daily/factor/calendar/corporate action 四类 PIT 事实和 append-only lineage；Java 建立 Provider 中立 DTO/capability、canonical、as-of Repository 和 `DAILY_EXACT` QFQ 引擎；精确 V2 ruleVersion 建立 2F V2、六智能体和 EXPLICIT Mock Shadow；同时建立默认禁用且网络前失败的 iFinD 骨架、脱敏和离线夹具工具。
+- 验证状态：18 个 QFQ 黄金场景、随机 Schema V1→V13、V6 旧血统→V13、真实 Java/Python/PostgreSQL Mock Shadow、旧阶段兼容矩阵和 AKShare 研究源回归均完成 Codex 本地验证；关键真实组 `Skipped=0`，随机 Schema 残留为 0，public 保持 V12。
+- 边界：上述实现目前只在任务分支，尚待 ChatGPT 基于实际 Git 提交验收且尚未 merge。Mock/TEST/DEMO 不取得真实 Provider 资格；真实 iFinD 调用数保持 0，不创建 Day 002。
 
 #### 3A-R3B-1：iFinD 试用启动门（未开始）
 

@@ -26,6 +26,7 @@ from .models import (
     STAGE_2H_POSITION_RISK_RULE_VERSION,
     STAGE_2G_ANNOUNCEMENT_RISK_RULE_VERSION,
     STAGE_2I_CHIEF_DECISION_RULE_VERSION,
+    STAGE_3AR3B0_PIT_V2_RULE_VERSION,
 )
 
 
@@ -45,7 +46,10 @@ class ChiefDecisionService:
         vetoes: list[FormalVeto],
         generated_at: datetime,
     ) -> FinalDecision:
-        if request.ruleVersion == STAGE_2I_CHIEF_DECISION_RULE_VERSION:
+        if request.ruleVersion in {
+            STAGE_2I_CHIEF_DECISION_RULE_VERSION,
+            STAGE_3AR3B0_PIT_V2_RULE_VERSION,
+        }:
             runs = [
                 data_quality,
                 market_regime,
