@@ -254,14 +254,59 @@
 - 受控证据：`000001` 两次公开 Provider 请求的行数、内容、原始 body 和 Tencent `version=18` 均一致，但没有正式字段语义、修订关系、历史版本或发布时间证据。结论为 `PROVIDER_REVISION_UNVERIFIED`；`version=18`、HTTP Date、UUID、本地 dataset/observation version、内容 Hash 和抓取时间均不得冒充 source revision。
 - 阶段边界：该审计没有修改代码或数据库，没有接入来源、改变 2F V1、创建 Day 002 或开始 3B。
 
-### 3A-R3A：可验证 PIT 市场原始事实 V2 设计冻结（任务分支待验收）
+### 3A-R3A：可验证 PIT 市场原始事实 V2 设计冻结（设计已完成并合入）
 
-- 当前状态：任务分支 `codex/1.4.0-stage-3ar3a-pit-market-facts-design-v2` 已完成来源资格研究、PIT V2 事实模型、QFQ as-of、黄金场景与后续实施门禁的设计冻结和 Codex 本地文档检查，待 ChatGPT 基于实际 Git 提交验收，尚未合入。
+- 当前状态：首次设计提交 `be12916ab0db07ceaa040883397424e10828b867` 和 QFQ factor 选择语义修复及最终提交 `94d442fa5fcad874462c54ca83b4ba21dcf7d3b4` 已通过 ChatGPT 对实际 Git 提交的验收；用户已批准纯 fast-forward 合入，集成分支已到达最终提交。精确验收和批准时间无仓库证据，记为 `UNKNOWN`。
 - 交付文档：[完整 3A-R3A 任务书](tasks/3ar3a-pit-market-facts-v2-design.md)和[阶段设计记录](stage-3ar3a-pit-market-facts-v2-design.md)。
 - 来源路线：Tushare 是 raw daily、`adj_factor`、`trade_cal` 的优先技术候选，但书面许可、样例和版本语义未通过前不批准；AKShare-Tencent 仅保留 current projection 与交叉校验角色；Wind 等企业来源需取得 revision、旧版本、发布时间、许可和合同附件证据。
 - 事实模型：候选 `PIT_MARKET_FACTS_V2` 把 raw daily、复权因子、交易日历和公司行动保存为四类独立 append-only 观察，严格区分 `PROVIDER_PIT_VERIFIED` 与首次捕获之后才可用的 `SYSTEM_KNOWLEDGE_PIT`。
-- 兼容边界：2F V1、V9、旧 profile、contextHash 和缓存键完全不变；未来 V2 使用独立规则版本/profile。当前没有批准 Provider、生产实现、迁移、数据库写入、Day 002 或 3B。
-- 后续入口：先完成 3A-R3B 来源、许可与样例批准门，再由用户独立授权 PIT_MARKET_FACTS_V2 实现和 2F V2；任务书和路线图本身不构成自动实施授权。
+- 兼容边界：2F V1、V9、旧 profile、contextHash 和缓存键完全不变；未来 V2 使用独立规则版本/profile。设计合入不表示 Provider 已批准、生产实现或迁移已完成，也没有批准 Day 002 或 3B。
+- 后续入口：按 [3A-R3B iFinD 试用里程碑启动规划](tasks/3ar3b-ifind-trial-activation-plan.md)依次完成离线闭环、启动门、有限试用取证和资格判定；任务书和路线图本身不构成自动实施授权。
+
+### 3A-R3B：iFinD 试用里程碑门禁与资格取证（规划中）
+
+- 规划文档：[完整 3A-R3B 任务书](tasks/3ar3b-ifind-trial-activation-plan.md)和[阶段规划记录](stage-3ar3b-ifind-trial-activation-plan.md)。
+- 日期边界：iFinD 试用不得绑定 `2026-08-31`、2026 年 8 月 31 日或任何其他固定日期。日历日期只能作为非权威临时估算，不属于路线图依赖，不得因预计日期临近而降低验收标准。
+- 当前门禁：`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`。Provider 尚未接入，试用尚未启动，真实 iFinD 调用数为 0；Day 002 未创建，3B 未开始。
+
+#### 3A-R3B-0：Provider 中立离线闭环与试用准备（未开始）
+
+- 目标：在不调用 iFinD 的情况下，使用 TEST/DEMO 固定夹具、Mock Provider 和允许的 AKShare 研究级能力完成 Provider 中立链路。
+- 范围：Provider 中立接口与类型化 DTO、Provider capability 契约、raw daily/factor/calendar/corporate action 四类 PIT 市场事实、append-only 版本链、as-of Repository、`DAILY_EXACT` QFQ 引擎、18 个黄金场景、2F V2 离线链路、六智能体 Mock 闭环、EXPLICIT Mock Shadow、默认禁用的 iFinD Adapter 骨架，以及限流、超时、错误、空数据、响应采集、脱敏、Hash 和离线夹具工具。
+- 边界：真实 iFinD 调用数保持 0；不取得 Provider 资格，不创建 Day 002。需要生产迁移、公共 DTO 或实现时，必须由未来大阶段单独授权。
+
+#### 3A-R3B-1：iFinD 试用启动门（未开始）
+
+这是只读验收阶段，不开发功能、不调用 iFinD。只有以下条件全部满足才能 PASS：
+
+1. Provider 中立接口和 DTO 冻结；
+2. 四类 PIT 事实实现及随机隔离 PostgreSQL 测试通过；
+3. append-only、幂等、A→B→A 和 cutoff 测试通过；
+4. `DAILY_EXACT` QFQ 的 18 个黄金场景通过；
+5. 2F V2 使用 Mock Provider 完整运行；
+6. 六智能体使用 Mock Provider 完整运行；
+7. EXPLICIT Shadow 的 Mock 闭环通过；
+8. iFinD Adapter 骨架及限流、超时、认证、错误和空数据处理准备完毕但保持禁用；
+9. iFinD 函数、字段、证券、日期范围和调用预算清单完成；
+10. 响应证据采集、凭据剥离、脱敏、Hash 和离线夹具工具完成；
+11. 没有待解决的重大数据库模型、迁移顺序、公共 DTO 或跨语言契约重构；
+12. 用户能够安排连续 15 天集中联调，并决定试用申请和激活时点。
+
+正式状态只能是 `IFIND_TRIAL_ACTIVATION_GATE=PASS` 或
+`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`。任一条件缺失时必须为 BLOCKED，不得以预计日期
+代替门禁。ChatGPT 在每个相关阶段验收时同步检查；只有全部满足后才建议用户亲自开通，
+Codex 不得申请、激活或自动调用 iFinD。
+
+#### 3A-R3B-2：15 天 iFinD 集中接入与取证（未开始）
+
+- 启动条件：ChatGPT 基于实际证据确认 `IFIND_TRIAL_ACTIVATION_GATE=PASS`，且用户亲自申请并开启试用。
+- 目标：核验真实函数、指标、权限、额度、raw daily、factor、calendar、corporate action、单位、时间、空值、错误码、revision/snapshot/update/publish time；完成真实 Adapter 字段映射，验证 PIT 入库、QFQ、2F V2 与 EXPLICIT Shadow，在许可范围内保存脱敏夹具并形成 15 天证据报告。
+- 边界：禁止 scheduler、全市场遍历、无界自动重试消耗额度和自动交易；凭据只通过安全环境注入，任何调用都必须进入批准预算。
+
+#### 3A-R3B-3：Provider 资格判定（未开始）
+
+- 根据 15 天真实证据、书面许可和合同附件，唯一判定为 `PROVIDER_PIT_VERIFIED`、`PROVIDER_REVISION_UNVERIFIED`、`PROVIDER_REVISION_UNAVAILABLE`、`SYSTEM_KNOWLEDGE_PIT`，或许可不足/不批准接入。
+- 资格结论必须通过 ChatGPT 对实际 Git 提交和运行证据的验收并经用户批准，之后才能决定是否恢复 Day 002。试用完成本身不自动批准 Provider、完整 3A 或 3B。
 
 ## 3B：评测集、版本管理和长期复盘（未开始）
 
