@@ -130,7 +130,9 @@ QFQ_AS_OF_ENGINE_V1
 
 - 原始日线：未复权 OHLCV、amount、turnover、来源、Provider 元数据、真实首次观察、
   knowledge-time、内容 Hash、观察版本和本地批次/数据集 lineage；
-- 复权因子：按证券和生效交易日独立版本化，内容变化追加，绝不嵌入 raw bar；
+- 复权因子：按 source instrument、source code、`factorType` 和
+  `factorEffectiveTradeDate` 的精确自然键独立版本化，覆盖模式固定为
+  `DAILY_EXACT`，内容变化追加，绝不嵌入 raw bar；
 - 交易日历：按交易所和日期保存开放状态、session、known time 和观察版本，临时休市或
   修订必须追加；
 - 公司行动：首版即覆盖分红、送转、配股、拆并股、除权除息、生效、公告和修订 lineage；
@@ -173,9 +175,19 @@ qfqPrice(P, t, cutoff)
     / factor(anchorTradeDate, cutoff)
 ```
 
-只允许使用 `knownAt<=knowledgeCutoff` 的 raw、factor、calendar 和必要 action 版本。
+请求级日期统一命名为 `requestEffectiveTradeDate`，窗口最后有效交易日为
+`anchorTradeDate`；二者不得与因子字段 `factorEffectiveTradeDate` 混用。对每根 raw
+bar 日期 `t`，只允许选择同 source instrument、同 source code、同 `factorType`、
+`factorEffectiveTradeDate==t` 且 `knownAt<=knowledgeCutoff` 的最新可见 append-only
+观察版本；锚点因子同样必须精确满足
+`factorEffectiveTradeDate==anchorTradeDate`。
+
+V1 禁止 factor forward-fill、最近值替代、当前最新值补历史、QFQ 反推和跨 Provider
+拼接。任一 bar 缺少精确 factor 时返回 `PIT_FACTOR_UNAVAILABLE`，不产生部分窗口或
+重新归一化。只允许使用 cutoff 前可见的 raw、factor、calendar 和必要 action 版本。
 Java 是未来 as-of 选择、QFQ、lineage 和 Hash 的唯一生产权威，Python 只验证黄金向量，
-不重算第二套事实。
+不重算第二套事实。未来稀疏 effective-from step 因子必须使用独立 Provider 覆盖契约和
+独立 engine 版本，不能由 `QFQ_AS_OF_ENGINE_V1` 推断。
 
 数值规则冻结为：
 
@@ -190,7 +202,7 @@ Java 是未来 as-of 选择、QFQ、lineage 和 Hash 的唯一生产权威，Pyt
 
 ## 8. 黄金场景
 
-设计冻结 16 个场景：
+设计冻结 18 个场景：
 
 1. D 日收盘后捕获 raw 和 factor；
 2. D 日 cutoff 前未捕获时 D 日不可用；
@@ -207,7 +219,11 @@ Java 是未来 as-of 选择、QFQ、lineage 和 Hash 的唯一生产权威，Pyt
 13. cutoff 后观察排除；
 14. Java 权威计算、Python 只验证；
 15. factor 变化无 action/revision 解释时安全不足；
-16. A→B→A 三个 knowledge-time 版本均可重放。
+16. A→B→A 三个 knowledge-time 版本均可重放；
+17. raw bar 日期 `t` 只有更早 factor 时不允许沿用，返回
+    `PIT_FACTOR_UNAVAILABLE`，不产生部分窗口；
+18. `t` 日精确 factor 的 `knownAt` 晚于 cutoff 时排除，返回
+    `PIT_FACTOR_UNAVAILABLE`，不得用更旧 factor 替代。
 
 固定夹具必须包含输入 JSON、canonical 文本、预期 Hash、QFQ 输出和 lineage，预期值不得由
 被测实现运行时生成。

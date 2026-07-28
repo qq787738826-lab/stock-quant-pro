@@ -358,16 +358,24 @@ Provider 资格允许 `providerPublishedAt < firstObservedAt`，但只有完整�
 复权因子不得嵌入 raw bar。至少保存：
 
 - source instrument identity、`symbol`；
-- `effectiveTradeDate`；
+- `factorEffectiveTradeDate`；
 - 正且有限的十进制 `factor`；
 - `factorType` 和明确基准语义；
+- `factorCoverageMode=DAILY_EXACT`；
 - Provider、可空 revision/published time；
 - `firstObservedAt`、`knownAt`、`recordedAt`；
 - canonical Hash、observation version、batch/dataset lineage；
 - revision qualification。
 
-同一 effective date 的因子变化必须追加版本。不得用当前因子覆盖旧因子，也不得由
-QFQ 价格反推因子后声明为供应商事实。
+V1 的因子覆盖模式固定为 `DAILY_EXACT`。因子精确自然键至少由 source code、稳定
+source instrument identity、`factorType` 和 `factorEffectiveTradeDate` 组成；as-of
+查询只能在该精确自然键上选择 `knownAt<=knowledgeCutoff` 的最新可见 append-only
+观察版本。同一精确自然键的因子变化必须追加版本。
+
+V1 不允许把较早因子向后填充，不允许用最近因子或当前最新因子补齐缺失交易日，不允许
+从 QFQ 价格反推因子，也不允许跨 Provider 拼接因子。未来 Provider 如果只提供稀疏的
+effective-from step 因子，必须建立独立 Provider 因子覆盖契约、证明生效区间语义，并
+使用未来独立 engine 版本或资格；`QFQ_AS_OF_ENGINE_V1` 不得隐式推断。
 
 ### 9.3 TRADING_CALENDAR_OBSERVATION_V1
 
@@ -436,14 +444,25 @@ append 规则：
 
 对请求 `(symbol, requestTradeDate, knowledgeCutoff)`：
 
-1. 通过 cutoff 前可见的交易日历确定 `effectiveTradeDate`；
-2. 只读取 `tradeDate<=effectiveTradeDate` 且 `knownAt<=knowledgeCutoff` 的 raw bars；
+1. 通过 cutoff 前可见的交易日历确定请求级 `requestEffectiveTradeDate`；
+2. 只读取 `tradeDate<=requestEffectiveTradeDate` 且 `knownAt<=knowledgeCutoff` 的
+   raw bars；
 3. 每个 raw trade date 选择当时最新可见观察版本；
-4. 对每根 bar，选择 `effectiveTradeDate<=bar.tradeDate` 的最新可见有效因子；
-5. 锚点为窗口内 `effectiveTradeDate` 对应的最后一根有效 raw bar；
-6. 锚点因子必须同样在 cutoff 前可见；
-7. 任一 raw bar、factor、calendar 或必要 corporate action lineage 缺失时安全不可用；
-8. 完整记录所有输入 observationVersion、contentHash、source、qualification 和 cutoff。
+4. `anchorTradeDate` 固定为窗口内最后一根有效 raw bar 的交易日，并且必须等于
+   `requestEffectiveTradeDate`；请求级日期不得与因子字段
+   `factorEffectiveTradeDate` 混用；
+5. 对每根 raw bar 日期 `t`，只在同 source instrument、同 source code、同
+   `factorType` 且 `factorEffectiveTradeDate==t` 的精确自然键上，选择
+   `knownAt<=knowledgeCutoff` 的最新可见 append-only 因子观察版本；
+6. 锚点因子必须精确满足
+   `factorEffectiveTradeDate==anchorTradeDate` 且在 cutoff 前可见；
+7. 任一 bar 缺少精确日期因子时稳定返回 `PIT_FACTOR_UNAVAILABLE`，不产生部分 QFQ
+   窗口，也不对剩余输入重新归一化；
+8. 禁止较早因子向后填充、最近因子替代、当前最新因子补历史、从 QFQ 反推因子或跨
+   Provider 拼接因子；
+9. 任一 raw bar、calendar 或必要 corporate action lineage 缺失时安全不可用；
+10. 完整记录所有输入 observationVersion、contentHash、source、qualification、因子
+    覆盖模式和 cutoff。
 
 ### 11.2 冻结公式
 
@@ -531,6 +550,8 @@ Provider 当前 QFQ 序列。
 | 14 | Java/Python 同时收到固定夹具 | Java 计算权威；Python 只验证，不形成第二套事实 |
 | 15 | 因子变化但没有 action/revision 解释 | 诊断可见，可靠 context 不可用 |
 | 16 | A→B→A 内容链 | 三个时点均可重放，后一次 A 不与第一次合并 |
+| 17 | raw bar 日期 `t` 存在，但只有 `t` 之前的 factor | 不允许沿用旧 factor；返回 `PIT_FACTOR_UNAVAILABLE`；不产生部分 QFQ 窗口 |
+| 18 | `t` 日精确 factor 存在，但 `knownAt` 晚于 cutoff | 排除该 factor；返回 `PIT_FACTOR_UNAVAILABLE`；不得使用更旧 factor 替代 |
 
 固定实现测试必须把输入 JSON、canonical 文本、预期 Hash、QFQ 输出和 lineage 写成仓库
 夹具；预期值不能由被测实现运行时生成。
