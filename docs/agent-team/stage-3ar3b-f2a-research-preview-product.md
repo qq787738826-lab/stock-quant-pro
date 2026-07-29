@@ -2,21 +2,29 @@
 
 ## 1. 阶段状态
 
-状态：**前端技术实现与 Codex 本地离线验证已在任务分支完成，待 ChatGPT 基于实际
-Git 提交验收，尚未合入；用户视觉验收尚未进行。**
+状态：**前端技术实现最终提交已通过 ChatGPT 实际 Git 验收，经用户批准纯
+fast-forward 合入；首次用户视觉验收已完成但结论为 `BLOCKED`。**
 
 - 冻结集成基线：`08943b4f6af03c75aa4df2a4ecf2494bede4e57b`
 - 任务分支：
   `codex/1.4.0-stage-3ar3b-f2a-research-preview-product`
 - 目标提交：`feat(agent): add research preview product`
+- 最终提交：`f5137e2422a48e70d5c706cb146fb034a2b96f65`
 - 完整任务书：
   [tasks/3ar3b-f2a-research-preview-product.md](tasks/3ar3b-f2a-research-preview-product.md)
 - 路由：`/research-preview`
 - 菜单：`研究预览`
+- R1 任务书：
+  [tasks/3ar3b-f2a-r1-preview-ux-convergence.md](tasks/3ar3b-f2a-r1-preview-ux-convergence.md)
 
 F0.5 最终提交 `08943b4f6af03c75aa4df2a4ecf2494bede4e57b` 已通过 ChatGPT
 实际 Git 验收、获得用户批准并纯 fast-forward 合入。精确验收与批准时间没有仓库证据，
 记为 `UNKNOWN`。
+
+F2A 最终提交已完成相同验收与纯 fast-forward 合入；用户于 `2026-07-29` 通过完整页面
+截图完成首次视觉查看。功能闭环、Demo 隔离、六智能体、总控、证据、历史对比和报告均
+可见，但信息密度和层级尚不适合日常使用，因此视觉验收为 `BLOCKED`，进入独立 R1
+视觉与交互收敛。
 
 ## 2. 实施结果
 
@@ -101,8 +109,11 @@ PAID_PROVIDER_UPGRADE_DECISION=PENDING
 IFIND_TRIAL_ACTIVATION_GATE=BLOCKED
 ```
 
-- F2A 技术实现：任务分支已完成，待实际 Git 提交验收，尚未合入；
-- 用户视觉验收：未进行；
+- F2A 技术实现：最终提交 `f5137e2422a48e70d5c706cb146fb034a2b96f65`
+  已验收并纯 fast-forward 合入；
+- 首次用户视觉验收：`2026-07-29` 已进行，结论为 `BLOCKED`；
+- F2A-R1：任务分支技术实现完成，待 ChatGPT 实际 Git 提交验收，尚未合入，用户复验
+  未进行；
 - BaoStock：`PENDING_WRITTEN_PERMISSION`；
 - 免费 Provider 与 iFinD 调用：`0`；
 - 数据库访问与写入：未发生；
@@ -110,9 +121,9 @@ IFIND_TRIAL_ACTIVATION_GATE=BLOCKED
 - Agent/Shadow/Day 002：未创建；
 - scheduler：关闭；
 - F1/F2B/F3、3A-R3B-1、3B：未开始；
-- merge：否；
+- F2A merge：是；R1 merge：否；
 - `.ai/`：只通过 Git 状态确认未跟踪，未读取、修改、暂存或提交。
 
-只有用户实际看到并认可产品形态后，后续独立治理提交才可讨论
+只有 R1 合入后用户再次实际看到并认可产品形态，后续独立治理提交才可讨论
 `FREE_PRODUCT_PREVIEW_GATE=PASS`。F2A 不改变免费 Provider 验证门，也不形成 F3
 效果样本。

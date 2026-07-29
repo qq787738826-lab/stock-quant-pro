@@ -2,23 +2,28 @@
 
 ## 1. 状态与身份
 
-状态：**产品技术实现与 Codex 本地静态验证已在任务分支完成，待 ChatGPT 基于实际
-Git 提交验收，尚未合入；用户视觉验收尚未进行。**
+状态：**产品技术实现最终提交已通过 ChatGPT 实际 Git 验收，经用户批准纯
+fast-forward 合入；首次用户视觉验收已完成但结论为 `BLOCKED`。**
 
 - 冻结集成基线：`08943b4f6af03c75aa4df2a4ecf2494bede4e57b`
 - 任务分支：
   `codex/1.4.0-stage-3ar3b-f2a-research-preview-product`
 - 目标提交：`feat(agent): add research preview product`
+- 最终提交：`f5137e2422a48e70d5c706cb146fb034a2b96f65`
 - 页面路由：`/research-preview`
 - 页面菜单：`研究预览`
 - 实施路径：`FREE_IMPLEMENTATION_PATH=RESEARCH_PREVIEW_FIRST`
 - 产品预览门：`FREE_PRODUCT_PREVIEW_GATE=BLOCKED`
 - 阶段记录：
   [stage-3ar3b-f2a-research-preview-product.md](../stage-3ar3b-f2a-research-preview-product.md)
+- 视觉收敛后续：
+  [3ar3b-f2a-r1-preview-ux-convergence.md](3ar3b-f2a-r1-preview-ux-convergence.md)
 
 F2A 是轨道 A 的产品形态实现，不是 Provider Adapter、PIT 数据接入、Shadow
-效果验证或投资建议能力。技术实现完成后，产品预览门仍须等待用户实际看到页面并明确
-认可，不能由 Codex 自行改为 `PASS`。
+效果验证或投资建议能力。用户于 `2026-07-29` 基于完整页面截图完成首次视觉验收：
+技术闭环均可见，但页面过长、默认技术字段过多、字体偏小、层级不足、Demo 标签重复且
+报告偏日志化，因此产品预览门继续为 `BLOCKED`。R1 仅收敛前端视觉与交互，不改变本任务
+冻结的权威结果或安全边界。
 
 ## 2. 前置事实
 
@@ -212,7 +217,7 @@ finding、reasonCode、资格和不可用原因。它不调用 LLM、不打分�
 
 ## 9. 状态与完成边界
 
-任务分支完成后必须保持：
+当前必须保持：
 
 ```text
 F0_AUDIT_RESULT=PARTIAL
@@ -229,13 +234,15 @@ IFIND_TRIAL_ACTIVATION_GATE=BLOCKED
 - iFinD 真实调用：`0`
 - 数据库访问/写入：未发生
 - 正常业务库 V13：未执行
-- Agent 任务与 Shadow：未创建
+- Agent 任务与 Shadow：本阶段未创建
 - F1/F2B/F3：未开始
 - Day 002：未创建
 - scheduler：关闭
 - 3A-R3B-1/3B：未开始
-- merge：否
+- F2A merge：已纯 fast-forward 合入
+- 首次用户视觉验收：`BLOCKED`
+- F2A-R1：任务分支技术实现完成，待实际 Git 验收，尚未合入，用户复验未进行
 
-F2A 只有在 ChatGPT 基于实际 Git 提交验收、用户批准合入，并由用户实际看到页面、明确
-认可产品形态后，才可通过独立治理提交讨论把
-`FREE_PRODUCT_PREVIEW_GATE` 改为 `PASS`。
+F2A-R1 只有在 ChatGPT 基于实际 Git 提交验收、用户批准合入，并由用户再次实际看到页面、
+明确认可产品形态后，才可通过独立治理提交讨论把 `FREE_PRODUCT_PREVIEW_GATE` 改为
+`PASS`。

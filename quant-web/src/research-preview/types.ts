@@ -12,6 +12,13 @@ import type {
 
 export type PreviewMode = 'EXISTING_RESEARCH_SNAPSHOT' | 'TEST_DEMO_EXPLICIT'
 
+export type PreviewSection =
+  | 'overview'
+  | 'agents'
+  | 'evidence'
+  | 'history'
+  | 'report'
+
 export type PreviewQualification =
   | 'RESEARCH_HISTORICAL_UNVERIFIED'
   | 'TEST_DEMO_EXPLICIT'
@@ -130,6 +137,48 @@ export interface TaskComparison {
   }>
 }
 
+export interface ReportField {
+  label: string
+  value: string
+}
+
+export interface StructuredAgentSummary {
+  agentCode: AgentCode
+  name: string
+  status: string
+  gateStatus: string
+  score: string
+  confidence: string
+  summary: string
+}
+
+export interface StructuredRiskItem {
+  code: string
+  level: string
+  title: string
+  detail: string
+  source: string
+}
+
+export interface StructuredEvidenceIndex {
+  evidenceId: string
+  category: string
+  sourceType: string
+}
+
+export interface StructuredResearchReport {
+  conclusion: ReportField[]
+  conclusionSummary: string
+  qualification: ReportField[]
+  limitations: string[]
+  agents: StructuredAgentSummary[]
+  risks: StructuredRiskItem[]
+  reasons: ReasonCodeEntry[]
+  evidence: StructuredEvidenceIndex[]
+  audit: ReportField[]
+  disclaimer: string
+}
+
 export interface DemoPreviewFixture {
   schemaVersion: 'RESEARCH_PREVIEW_DEMO_V1'
   mode: 'TEST_DEMO_EXPLICIT'
@@ -142,6 +191,7 @@ export interface DemoPreviewFixture {
 
 export interface ResearchPreviewState {
   mode: PreviewMode
+  section: PreviewSection
   qualification: PreviewQualification
   synthetic: boolean
   scanHistory: ScanTaskSnapshot[]

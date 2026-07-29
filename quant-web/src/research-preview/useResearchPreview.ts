@@ -17,6 +17,7 @@ import type {
   PreviewIssue,
   PreviewMode,
   PreviewQualification,
+  PreviewSection,
   PreviewTaskBundle,
   ScanTaskSnapshot,
 } from './types'
@@ -27,6 +28,14 @@ const EMPTY_HISTORY: PageResult<AgentTask> = {
   size: 100,
   total: 0,
 }
+
+const PREVIEW_SECTIONS = new Set<PreviewSection>([
+  'overview',
+  'agents',
+  'evidence',
+  'history',
+  'report',
+])
 
 function safeError(error: unknown): string {
   if (!(error instanceof Error)) return '本地只读接口不可用'
@@ -41,6 +50,12 @@ function safeTaskId(value: unknown): number | null {
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null
 }
 
+function safeSection(value: unknown): PreviewSection {
+  return typeof value === 'string' && PREVIEW_SECTIONS.has(value as PreviewSection)
+    ? value as PreviewSection
+    : 'overview'
+}
+
 export function useResearchPreview() {
   const route = useRoute()
   const router = useRouter()
@@ -49,6 +64,7 @@ export function useResearchPreview() {
     : 'EXISTING_RESEARCH_SNAPSHOT'
 
   const mode = ref<PreviewMode>(initialMode)
+  const section = ref<PreviewSection>(safeSection(route.query.section))
   const qualification = computed<PreviewQualification>(() =>
     mode.value === 'TEST_DEMO_EXPLICIT'
       ? 'TEST_DEMO_EXPLICIT'
@@ -65,12 +81,16 @@ export function useResearchPreview() {
   const history = shallowRef<PageResult<AgentTask>>({ ...EMPTY_HISTORY })
   const knownAgentTasks = shallowRef<AgentTask[]>([])
   const activeBundle = shallowRef<PreviewTaskBundle | null>(null)
+  const selectedSymbol = ref<string | null>(null)
   const comparisonLeft = shallowRef<PreviewTaskBundle | null>(null)
   const comparisonRight = shallowRef<PreviewTaskBundle | null>(null)
   const issues = shallowRef<PreviewIssue[]>([])
 
   const knownAgentSymbols = computed(() =>
     new Set(knownAgentTasks.value.map((task) => task.symbol)),
+  )
+  const selectedCandidate = computed(() =>
+    candidates.value.find((candidate) => candidate.symbol === selectedSymbol.value) ?? null,
   )
 
   function removeIssue(code: string): void {
@@ -90,6 +110,7 @@ export function useResearchPreview() {
     history.value = { ...EMPTY_HISTORY }
     knownAgentTasks.value = []
     activeBundle.value = null
+    selectedSymbol.value = null
     comparisonLeft.value = null
     comparisonRight.value = null
     issues.value = []
@@ -106,6 +127,7 @@ export function useResearchPreview() {
   async function updateRoute(taskId?: number): Promise<void> {
     const query: Record<string, string> = {
       mode: mode.value === 'TEST_DEMO_EXPLICIT' ? 'demo' : 'local',
+      section: section.value,
     }
     if (mode.value === 'EXISTING_RESEARCH_SNAPSHOT' && taskId && taskId > 0) {
       query.taskId = String(taskId)
@@ -128,6 +150,7 @@ export function useResearchPreview() {
       total: knownAgentTasks.value.length,
     }
     activeBundle.value = RESEARCH_PREVIEW_DEMO.bundles[0] ?? null
+    selectedSymbol.value = activeBundle.value?.task.symbol ?? null
     comparisonLeft.value = RESEARCH_PREVIEW_DEMO.bundles[0] ?? null
     comparisonRight.value = RESEARCH_PREVIEW_DEMO.bundles[1] ?? null
   }
@@ -172,6 +195,9 @@ export function useResearchPreview() {
         )
         return candidate ? [candidate] : []
       })
+      if (!candidates.value.some((candidate) => candidate.symbol === selectedSymbol.value)) {
+        selectedSymbol.value = null
+      }
       if (!candidates.value.length) {
         addIssue('PREVIEW_SCAN_RESULTS_EMPTY', '所选已有扫描任务没有可展示的结果。')
       }
@@ -188,7 +214,10 @@ export function useResearchPreview() {
   async function loadBundle(taskId: number, updateUrl = true): Promise<PreviewTaskBundle | null> {
     if (mode.value === 'TEST_DEMO_EXPLICIT') {
       const bundle = RESEARCH_PREVIEW_DEMO.bundles.find((item) => item.task.id === taskId) ?? null
-      if (bundle) activeBundle.value = bundle
+      if (bundle) {
+        activeBundle.value = bundle
+        selectedSymbol.value = bundle.task.symbol
+      }
       return bundle
     }
     taskLoading.value = true
@@ -196,6 +225,7 @@ export function useResearchPreview() {
     try {
       const bundle = await getPreviewTaskBundle(taskId)
       activeBundle.value = bundle
+      selectedSymbol.value = bundle.task.symbol
       if (updateUrl) await updateRoute(taskId)
       return bundle
     } catch (error) {
@@ -208,6 +238,7 @@ export function useResearchPreview() {
   }
 
   async function selectCandidate(candidate: PreviewCandidate): Promise<void> {
+    selectedSymbol.value = candidate.symbol
     if (mode.value === 'TEST_DEMO_EXPLICIT') {
       const bundle = RESEARCH_PREVIEW_DEMO.bundles.find(
         (item) => item.task.symbol === candidate.symbol,
@@ -298,6 +329,11 @@ export function useResearchPreview() {
     await loadLocal()
   }
 
+  async function setSection(nextSection: PreviewSection): Promise<void> {
+    section.value = PREVIEW_SECTIONS.has(nextSection) ? nextSection : 'overview'
+    await updateRoute(activeBundle.value?.task.id)
+  }
+
   async function reloadExistingSnapshots(): Promise<void> {
     if (mode.value === 'EXISTING_RESEARCH_SNAPSHOT') await loadLocal()
   }
@@ -313,6 +349,7 @@ export function useResearchPreview() {
 
   return {
     mode,
+    section,
     qualification,
     synthetic,
     loading,
@@ -324,10 +361,13 @@ export function useResearchPreview() {
     candidates,
     history,
     activeBundle,
+    selectedSymbol,
+    selectedCandidate,
     comparisonLeft,
     comparisonRight,
     issues,
     switchMode,
+    setSection,
     reloadExistingSnapshots,
     loadHistory,
     loadScan,

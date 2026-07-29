@@ -71,7 +71,17 @@ for (const forbiddenImport of [
 
 const apiSource = read('src/research-preview/api.ts')
 const stateSource = read('src/research-preview/useResearchPreview.ts')
+const presentationSource = read('src/research-preview/presentation.ts')
+const viewSource = read('src/views/ResearchPreviewWorkbench.vue')
 const chartSource = read('src/components/research-preview/AgentMetricsChart.vue')
+const overviewSource = read('src/components/research-preview/ResearchOverviewPanel.vue')
+const agentSource = read('src/components/research-preview/AgentRunSection.vue')
+const evidenceSource = read('src/components/research-preview/EvidenceLineagePanel.vue')
+const historySource = read('src/components/research-preview/HistoryComparisonPanel.vue')
+const reportSource = read('src/components/research-preview/ResearchReportPanel.vue')
+const auditSource = read('src/components/research-preview/TechnicalAuditDetails.vue')
+const candidateSource = read('src/components/research-preview/CandidatePoolPanel.vue')
+const taskOutcomeSource = read('src/components/research-preview/TaskOutcomePanel.vue')
 const requiredGetPaths = [
   '/scans/history',
   '/scans/latest-official-task',
@@ -92,6 +102,107 @@ if (/catch\s*\([^)]*\)\s*\{[^}]*applyDemo\s*\(/s.test(stateSource)) {
 for (const lifecycleMarker of ['ResizeObserver', 'chart?.resize()', 'chart?.dispose()']) {
   if (!chartSource.includes(lifecycleMarker)) {
     fail(`ECharts lifecycle marker is missing: ${lifecycleMarker}`)
+  }
+}
+
+const requiredSections = [
+  ['overview', '研究总览'],
+  ['agents', '六智能体'],
+  ['evidence', '证据与审计'],
+  ['history', '历史对比'],
+  ['report', '综合报告'],
+]
+for (const [name, label] of requiredSections) {
+  if (!viewSource.includes(`label="${label}" name="${name}"`)) {
+    fail(`missing research preview section: ${name}/${label}`)
+  }
+}
+if (!viewSource.includes('v-model="activeSection"')) fail('research preview tabs do not bind active section')
+if (!stateSource.includes("return typeof value === 'string'") || !stateSource.includes(": 'overview'")) {
+  fail('invalid section does not safely fall back to overview')
+}
+if (!stateSource.includes("const section = ref<PreviewSection>(safeSection(route.query.section))")) {
+  fail('default/query research section initialization is missing')
+}
+if (!viewSource.includes('<ResearchOverviewPanel')) fail('ResearchOverviewPanel is missing from first section')
+
+const expectedActions = new Map([
+  ['REJECTED_BY_VETO', '因正式风险否决停止研究'],
+  ['BLOCKED_BY_DATA_QUALITY', '等待数据质量修复'],
+  ['INSUFFICIENT_DATA', '暂不形成研究结论'],
+  ['RESEARCH_ONLY', '仅作研究记录'],
+  ['WATCH', '继续观察'],
+  ['PASS_TO_MANUAL_REVIEW', '进入人工研究复核'],
+])
+for (const [decision, action] of expectedActions) {
+  if (!presentationSource.includes(`${decision}: '${action}'`)) {
+    fail(`missing deterministic research action mapping: ${decision}`)
+  }
+}
+for (const forbiddenText of ['买入', '卖出', '加仓', '减仓', '目标价', '预计收益']) {
+  if (sourceText.includes(forbiddenText)) fail(`research preview contains prohibited action wording: ${forbiddenText}`)
+}
+
+if (!auditSource.includes('<details>') || !auditSource.includes('技术审计详情')) {
+  fail('technical audit fields are not grouped in collapsed details')
+}
+if (!agentSource.includes('<details class="technical-details">')) {
+  fail('Agent technical details are not collapsed by default')
+}
+if (!evidenceSource.includes('class="evidence-item"') || !evidenceSource.includes('<details v-for=')) {
+  fail('evidence entries are not collapsed by default')
+}
+if (!historySource.includes('<details class="comparison-section">')) {
+  fail('history comparison is not collapsed by default')
+}
+if (!reportSource.includes('class="structured-report"')) fail('structured research report is missing')
+if (!reportSource.includes('<details class="raw-report">')) {
+  fail('raw report text is not an optional collapsed detail')
+}
+for (const heading of [
+  '研究结论',
+  '数据资格与限制',
+  '六智能体摘要',
+  '主要风险',
+  '结构化原因',
+  '证据索引',
+  '技术审计摘要',
+  '免责声明',
+]) {
+  if (!reportSource.includes(heading)) fail(`structured report section is missing: ${heading}`)
+}
+if (
+  !candidateSource.includes(':class="{ selected: candidate.symbol === selectedSymbol }"')
+  || !candidateSource.includes(':aria-current=')
+) {
+  fail('candidate selected state or keyboard-readable current state is missing')
+}
+const responsiveMarkers = [
+  [viewSource, 'overflow-x: hidden', 'page-level horizontal overflow containment'],
+  [viewSource, '@media (max-width: 1100px)', 'workbench medium viewport breakpoint'],
+  [viewSource, '@media (max-width: 760px)', 'workbench narrow viewport breakpoint'],
+  [overviewSource, '@media (max-width: 1500px)', 'overview wide viewport breakpoint'],
+  [overviewSource, '@media (max-width: 1100px)', 'overview medium viewport breakpoint'],
+  [agentSource, 'grid-template-columns: repeat(3, minmax(0, 1fr))', 'three-column Agent layout'],
+  [agentSource, '@media (max-width: 1450px)', 'two-column Agent breakpoint'],
+  [agentSource, '@media (max-width: 820px)', 'single-column Agent breakpoint'],
+  [candidateSource, 'max-height: 390px; overflow: auto', 'candidate internal scrolling'],
+  [evidenceSource, 'max-height: 300px', 'evidence JSON height containment'],
+  [reportSource, 'max-height: 340px', 'raw report height containment'],
+  [taskOutcomeSource, '@media (max-width: 1250px)', 'risk summary responsive breakpoint'],
+]
+for (const [source, marker, description] of responsiveMarkers) {
+  if (!source.includes(marker)) fail(`missing responsive marker: ${description}`)
+}
+for (const repetitiveFile of [
+  'src/components/research-preview/CandidatePoolPanel.vue',
+  'src/components/research-preview/EvidenceLineagePanel.vue',
+  'src/components/research-preview/HistoryComparisonPanel.vue',
+  'src/components/research-preview/ResearchReportPanel.vue',
+  'src/components/research-preview/TaskOutcomePanel.vue',
+]) {
+  if (/>\s*TEST_DEMO_EXPLICIT\s*</.test(read(repetitiveFile))) {
+    fail(`full demo identity is repeated outside approved primary areas: ${repetitiveFile}`)
   }
 }
 
@@ -159,6 +270,18 @@ for (const bundle of fixture.bundles ?? []) {
   for (const evidence of bundle.evidence ?? []) allEvidenceIds.push(evidence.evidenceId)
 }
 if (new Set(allEvidenceIds).size !== allEvidenceIds.length) fail('demo evidenceId values are not unique')
+const demo01 = (fixture.bundles ?? []).find((bundle) => bundle.task?.symbol === 'DEMO01')
+const demo02 = (fixture.bundles ?? []).find((bundle) => bundle.task?.symbol === 'DEMO02')
+if (!demo01 || demo01.decision?.decision !== 'INSUFFICIENT_DATA' || (demo01.vetoes ?? []).length !== 0) {
+  fail('DEMO01 no longer represents data insufficiency without formal veto')
+}
+if (
+  !demo02
+  || demo02.decision?.decision !== 'REJECTED_BY_VETO'
+  || !(demo02.vetoes ?? []).some((veto) => veto.agentCode === 'POSITION_RISK')
+) {
+  fail('DEMO02 no longer contains a POSITION_RISK formal veto')
+}
 
 const forbiddenMarketKeys = new Set([
   'open',
@@ -243,7 +366,13 @@ if (failures.length) {
 console.log(`PASS research preview files checked: ${previewFiles.length}`)
 console.log(`PASS dedicated API is GET-only; native fetch and write actions absent`)
 console.log(`PASS local API errors do not silently activate demo mode`)
+console.log(`PASS five sections, overview fallback, selected candidate state`)
+console.log(`PASS deterministic research actions and prohibited action wording absent`)
+console.log(`PASS Agent/evidence/comparison/audit details collapsed by default`)
+console.log(`PASS structured report with optional raw text`)
+console.log(`PASS 1920/1440/1366 responsive containment markers`)
 console.log(`PASS ECharts resize and dispose lifecycle markers`)
+console.log(`PASS DEMO01 insufficiency and DEMO02 POSITION_RISK veto`)
 console.log(`PASS demo tasks: ${(fixture.bundles ?? []).length}; exact ordered agents: 6 each`)
 console.log(`PASS demo evidenceId unique: ${allEvidenceIds.length}`)
 console.log(`PASS demo fixture SHA-256: ${fixtureHash}`)

@@ -22,11 +22,11 @@ function renderChart(): void {
   chart.setOption({
     animation: false,
     backgroundColor: 'transparent',
-    grid: { top: 30, right: 24, bottom: 26, left: 78 },
+    grid: { top: 30, right: 22, bottom: 24, left: 92 },
     legend: {
       top: 0,
       right: 8,
-      textStyle: { color: '#9eb0c7' },
+      textStyle: { color: '#aebdd0', fontSize: 12 },
       data: ['评分', '置信度'],
     },
     tooltip: {
@@ -50,13 +50,13 @@ function renderChart(): void {
       type: 'value',
       min: 0,
       max: 100,
-      axisLabel: { color: '#7287a2' },
+      axisLabel: { color: '#94a7be', fontSize: 12 },
       splitLine: { lineStyle: { color: '#1f3249' } },
     },
     yAxis: {
       type: 'category',
       data: labels,
-      axisLabel: { color: '#bdcada' },
+      axisLabel: { color: '#c8d4e1', fontSize: 12 },
       axisLine: { lineStyle: { color: '#2a3f59' } },
       axisTick: { show: false },
     },
@@ -109,7 +109,7 @@ onBeforeUnmount(() => {
   <section class="chart-panel">
     <div class="panel-heading">
       <div><p class="eyebrow">PERSISTED VALUES ONLY</p><h2>六智能体评分与置信度</h2></div>
-      <span v-if="synthetic" class="watermark-label">TEST_DEMO_EXPLICIT</span>
+      <span>缺失值保持“暂无”</span>
     </div>
     <div class="chart-shell">
       <div ref="container" class="chart" />
@@ -127,12 +127,12 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.chart-panel { padding: 20px; border: 1px solid #223a57; border-radius: 12px; background: #0e1a2b; }
-.panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }.panel-heading h2 { margin: 0; font-size: 19px; }.eyebrow { margin: 0 0 5px; color: #5eaaff; font-size: 10px; font-weight: 800; letter-spacing: .15em; }
-.watermark-label { color: #ffc869; font: 11px ui-monospace, monospace; }.chart-shell { position: relative; min-height: 360px; }.chart { width: 100%; height: 360px; }
-.watermark { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; color: rgba(255, 194, 92, .11); font: 800 32px ui-monospace, monospace; transform: rotate(-12deg); }
-.status-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 7px; }.status-grid div { min-width: 0; padding: 8px; border: 1px solid #1f334b; border-radius: 7px; background: #091422; }
-.status-grid b, .status-grid span, .status-grid small { display: block; overflow-wrap: anywhere; }.status-grid b { font-size: 10px; }.status-grid span { margin-top: 4px; color: #80a2c4; font-size: 9px; }.status-grid small { margin-top: 4px; color: #7d8fa5; font-size: 9px; }
-.boundary { margin: 12px 0 0; color: #778aa3; font-size: 11px; }
+.chart-panel { padding: 18px; border: 1px solid #263f5b; border-radius: 12px; background: #0e1b2c; }
+.panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }.panel-heading h2 { margin: 0; font-size: 19px; }.eyebrow { margin: 0 0 5px; color: #73b7f2; font-size: 11px; font-weight: 800; letter-spacing: .13em; }
+.panel-heading > span { color: #91a5bc; font-size: 12px; }.chart-shell { position: relative; min-height: 285px; }.chart { width: 100%; height: 285px; }
+.watermark { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; color: rgba(255, 194, 92, .1); font: 800 28px ui-monospace, monospace; transform: rotate(-10deg); }
+.status-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 7px; }.status-grid div { min-width: 0; padding: 9px; border: 1px solid #1f334b; border-radius: 7px; background: #091422; }
+.status-grid b, .status-grid span, .status-grid small { display: block; overflow-wrap: anywhere; }.status-grid b { font-size: 12px; }.status-grid span { margin-top: 4px; color: #9bb0c8; font-size: 12px; }.status-grid small { margin-top: 4px; color: #91a4ba; font-size: 11px; }
+.boundary { margin: 12px 0 0; color: #93a5ba; font-size: 12px; }
 @media (max-width: 1400px) { .status-grid { grid-template-columns: repeat(3, 1fr); } }
 </style>

@@ -7,6 +7,7 @@ import {
 import type {
   AgentCode,
   AgentRun,
+  FinalDecisionCode,
   Finding,
   JsonValue,
 } from '../agent-team/types'
@@ -20,6 +21,7 @@ import type {
   ReasonCodeEntry,
   RunErrorView,
   ScanResultSnapshot,
+  StructuredResearchReport,
   TaskComparison,
 } from './types'
 
@@ -269,6 +271,35 @@ export function displayMetric(metrics: Record<string, JsonValue>, key: string): 
   return displayValue(metrics[key])
 }
 
+const RESEARCH_ACTIONS: Record<FinalDecisionCode, string> = {
+  REJECTED_BY_VETO: '因正式风险否决停止研究',
+  BLOCKED_BY_DATA_QUALITY: '等待数据质量修复',
+  INSUFFICIENT_DATA: '暂不形成研究结论',
+  RESEARCH_ONLY: '仅作研究记录',
+  WATCH: '继续观察',
+  PASS_TO_MANUAL_REVIEW: '进入人工研究复核',
+}
+
+export function researchActionForDecision(
+  decision: FinalDecisionCode | null | undefined,
+): string {
+  return decision ? RESEARCH_ACTIONS[decision] : '暂无研究动作'
+}
+
+export function dataReliabilityLabel(bundle: PreviewTaskBundle | null): string {
+  const dataQuality = bundle?.runs.find((run) => run.agentCode === 'DATA_QUALITY')
+  if (!dataQuality) return '暂无数据质量结果'
+  if (
+    dataQuality.status === 'INSUFFICIENT_DATA'
+    || dataQuality.status === 'FAILED'
+    || dataQuality.status === 'SKIPPED'
+  ) return '数据不足'
+  if (dataQuality.gateStatus === 'BLOCKED') return '数据质量阻断'
+  if (dataQuality.gateStatus === 'WARN') return '数据质量警告'
+  if (dataQuality.gateStatus === 'PASS') return '数据质量通过'
+  return '暂无数据质量结果'
+}
+
 export function backtestDisplayState(bundle: PreviewTaskBundle | null): string {
   const run = bundle?.runs.find((item) => item.agentCode === 'STRATEGY_BACKTEST')
   if (bundle?.synthetic) return 'TEST_DEMO_EXPLICIT'
@@ -319,6 +350,94 @@ export function buildResearchReport(
   lines.push('本报告只重排已持久化结果或显式固定演示内容，不新增评分、预测或权威结论。')
   lines.push('本页面用于研究产品形态验证，不构成投资建议、收益承诺或自动交易指令。')
   return lines.join('\n')
+}
+
+export function buildStructuredResearchReport(
+  bundle: PreviewTaskBundle | null,
+  issues: PreviewIssue[],
+): StructuredResearchReport {
+  const reasons = extractReasonCodes(bundle, issues)
+  const evidence = bundle ? uniqueEvidence(bundle.evidence).items : []
+  const decision = bundle?.decision ?? null
+  const task = bundle?.task ?? null
+  const riskRuns = new Set<AgentCode>(['ANNOUNCEMENT_RISK', 'POSITION_RISK'])
+  const risks: StructuredResearchReport['risks'] = (bundle?.runs ?? [])
+    .filter((run) => riskRuns.has(run.agentCode))
+    .flatMap((run) => runFindings(run).map((finding) => ({
+      code: finding.code,
+      level: finding.severity,
+      title: finding.title,
+      detail: finding.detail,
+      source: AGENT_NAMES[run.agentCode],
+    })))
+  for (const veto of bundle?.vetoes ?? []) {
+    risks.push({
+      code: veto.vetoCode,
+      level: 'FORMAL_VETO',
+      title: 'POSITION_RISK正式否决',
+      detail: veto.reason,
+      source: AGENT_NAMES[veto.agentCode],
+    })
+  }
+
+  return {
+    conclusion: [
+      {
+        label: '总控结论',
+        value: decision
+          ? `${FINAL_DECISION_NAMES[decision.decision]}（${decision.decision}）`
+          : '暂无',
+      },
+      { label: '研究动作', value: researchActionForDecision(decision?.decision) },
+      { label: '数据可靠性', value: dataReliabilityLabel(bundle) },
+      { label: '总控评分', value: displayValue(decision?.score) },
+      { label: '总控置信度', value: displayValue(decision?.confidence) },
+      { label: '正式否决', value: decision?.vetoed ? '存在' : '无' },
+    ],
+    conclusionSummary: decision?.summary ?? '当前没有已持久化的总控摘要。',
+    qualification: [
+      { label: '数据资格', value: bundle?.qualification ?? '暂无' },
+      { label: '数据性质', value: bundle?.synthetic ? '演示数据' : '本地研究快照' },
+      { label: '访问边界', value: 'READ_ONLY' },
+      { label: '证券', value: task ? `${task.symbol} / ${task.tradeDate}` : '暂无' },
+    ],
+    limitations: [
+      '报告只重排已有结构化结果或固定演示内容。',
+      '数据资格不会因页面展示而提升。',
+      '不可用输入保持不可用，不补值、不重算。',
+    ],
+    agents: buildAgentSlots(bundle?.runs).map((slot) => ({
+      agentCode: slot.agentCode,
+      name: AGENT_NAMES[slot.agentCode],
+      status: displayValue(slot.run?.status),
+      gateStatus: displayValue(slot.run?.gateStatus),
+      score: displayValue(slot.run?.score),
+      confidence: displayValue(slot.run?.confidence),
+      summary: slot.run?.summary ?? '暂无摘要',
+    })),
+    risks,
+    reasons,
+    evidence: evidence.map((item) => ({
+      evidenceId: item.evidenceId,
+      category: item.category,
+      sourceType: item.sourceType,
+    })),
+    audit: [
+      { label: 'taskId', value: displayValue(task?.id) },
+      { label: 'ruleVersion', value: displayValue(task?.ruleVersion) },
+      { label: 'contextSchemaVersion', value: displayValue(task?.contextSchemaVersion) },
+      { label: 'contextHash', value: displayValue(task?.contextHash) },
+      {
+        label: 'sourceRunIds',
+        value: (decision?.sourceRunIds ?? []).join(', ') || '暂无',
+      },
+      {
+        label: 'vetoIds',
+        value: (decision?.vetoIds ?? []).join(', ') || '暂无',
+      },
+    ],
+    disclaimer: '本页面用于研究产品形态验证，不构成投资建议、收益承诺或自动交易指令。',
+  }
 }
 
 function comparisonRow(

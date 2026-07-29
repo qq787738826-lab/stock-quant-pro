@@ -269,7 +269,7 @@
 - 既有规划状态：iFinD 里程碑规划提交 `23baf11ed3a236800b5f3feba8681d261a71d9f9` 已通过 ChatGPT 对实际 Git 提交的验收，并经用户批准纯 fast-forward 合入。精确验收和批准时间无仓库证据，记为 `UNKNOWN`。
 - 免费优先更新：最终提交 `c47b88e586f6751563fe210f40137a3b7ce5e576` 已通过 ChatGPT 对实际 Git 提交的验收，并经用户批准纯 fast-forward 合入。系统先用免费数据验证产品形态和效果；只有系统显示可重复使用价值、数据成为可量化主要瓶颈，且同范围免费/付费 A/B 方案和成本意愿均明确后，才考虑 iFinD 或其他付费 Provider。
 - 日期边界：iFinD 试用不得绑定 `2026-08-31`、2026 年 8 月 31 日或任何其他固定日期。日历日期只能作为非权威临时估算，不属于路线图依赖，不得因预计日期临近而降低验收标准。
-- 当前集成 HEAD：`08943b4f6af03c75aa4df2a4ecf2494bede4e57b`。当前状态：`F0_AUDIT_RESULT=PARTIAL`、`FREE_IMPLEMENTATION_PATH=RESEARCH_PREVIEW_FIRST`、`FREE_PRODUCT_PREVIEW_GATE=BLOCKED`、`FREE_PROVIDER_VALIDATION_GATE=BLOCKED`、`PAID_PROVIDER_UPGRADE_DECISION=PENDING`、`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`。真实 Provider 尚未接入，正常业务库 V13 未执行，试用尚未启动，真实 iFinD 调用数为 0；F2A 只在任务分支完成技术实现，仍待实际 Git 验收、merge 和用户视觉验收；F1/F2B/F3 均未开始，Day 002 未创建，scheduler 关闭，3B 未开始。
+- 当前集成 HEAD：`f5137e2422a48e70d5c706cb146fb034a2b96f65`。当前状态：`F0_AUDIT_RESULT=PARTIAL`、`FREE_IMPLEMENTATION_PATH=RESEARCH_PREVIEW_FIRST`、`FREE_PRODUCT_PREVIEW_GATE=BLOCKED`、`FREE_PROVIDER_VALIDATION_GATE=BLOCKED`、`PAID_PROVIDER_UPGRADE_DECISION=PENDING`、`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`。真实 Provider 尚未接入，正常业务库 V13 未执行，试用尚未启动，真实 iFinD 调用数为 0；F2A 技术实现已经验收并纯 fast-forward 合入，首次用户视觉验收于 `2026-07-29` 完成但结论为 `BLOCKED`；F2A-R1 视觉与交互收敛只在任务分支完成，仍待实际 Git 验收、merge 和用户复验。F1/F2B/F3 均未开始，Day 002 未创建，scheduler 关闭，3B 未开始。
 
 #### 3A-R3B-0：Provider 中立离线闭环与试用准备（已完成并合入）
 
@@ -312,9 +312,9 @@
 - 边界：不得把免费 Provider 升级为 `PROVIDER_PIT_VERIFIED`，不得绕过 V13 用途许可、跨 Provider 拼接 QFQ、自动全市场抓取、开启 scheduler、创建 Day 002 或自动交易。
 - 当前阻断：BaoStock 继续为 `PENDING_WRITTEN_PERMISSION`，不得提升为 `FREE_PROVIDER_F1_CANDIDATE`、`APPROVED_ADAPTER`、`PROVIDER_PIT_VERIFIED` 或 `FORMAL`。
 
-#### 3A-R3B-F2A：免费研究预览产品（任务分支技术实现完成，待验收）
+#### 3A-R3B-F2A：免费研究预览产品（技术实现已完成并合入，首次视觉验收 BLOCKED）
 
-- 当前状态：用户已单独授权；任务分支 `codex/1.4.0-stage-3ar3b-f2a-research-preview-product` 已完成前端技术实现与 Codex 本地离线验证，待 ChatGPT 基于实际 Git 提交验收，尚未合入，用户视觉验收尚未进行。任务证据见 [F2A任务书](tasks/3ar3b-f2a-research-preview-product.md)和[阶段记录](stage-3ar3b-f2a-research-preview-product.md)。
+- 当前状态：最终提交 `f5137e2422a48e70d5c706cb146fb034a2b96f65` 已通过 ChatGPT 对实际 Git 提交的验收，经用户批准纯 fast-forward 合入；本地与远程集成分支一致，ahead/behind 为 `0/0`。用户于 `2026-07-29` 根据完整页面截图完成首次视觉验收：双模式隔离、候选池、六智能体、总控、证据、历史对比和报告均可见，但页面过长、默认技术字段过多、字体偏小、层级不足、Demo 标签重复且报告偏日志化，因此视觉结论为 `BLOCKED`。任务证据见 [F2A任务书](tasks/3ar3b-f2a-research-preview-product.md)和[阶段记录](stage-3ar3b-f2a-research-preview-product.md)。
 - 启动条件：F0 已验收合入，F0.5 通过实际 Git 验收并由用户批准合入，且用户已另行授权 F2A；不要求 F1、BaoStock 书面许可或正常业务库 V13。
 - 输入：只读既有本地研究数据，明确标记 `EXISTING_RESEARCH_SNAPSHOT/RESEARCH_HISTORICAL_UNVERIFIED`；以及 3A-R3B-0 已验收的显式 `TEST_DEMO_EXPLICIT` 固定 Mock。两类结果不得混写。既有 Agent、总控和历史结果只按原规则读取和展示。
 - 目标：展示股票候选池、单股分析、固定六智能体、总控、DATA_QUALITY、技术、市场环境、回测、公告/持仓风险、evidence、lineage、reasonCode、来源资格、历史查询、结果对比和研究用途报告。
@@ -323,6 +323,14 @@
 - 禁止范围：不新增 BaoStock/AKShare/Tencent/Sina/Eastmoney/CNINFO 或其他 Provider 调用，不写 V13、不迁移正常业务库、不创建 Day 002、不运行正式 Shadow、不开启 scheduler、不宣称准确率、推荐有效或盈利，也不自动交易。
 - 验收门：`FREE_PRODUCT_PREVIEW_GATE` 当前为 `BLOCKED`；技术实现、构建和 ChatGPT Git 验收均不能自行改为 PASS，必须等待合入后用户实际看到页面并明确认可产品形态。PASS 只表示用户认可产品形态和日常流程，不表示 Provider、PIT、策略、Shadow、iFinD 或交易获批。
 - 阶段边界：F2A 不计入 `FREE_PROVIDER_VALIDATION_GATE`，也不能作为 F3 准确率或效果评估样本。
+
+#### 3A-R3B-F2A-R1：研究预览视觉与交互收敛（任务分支实现完成，待验收）
+
+- 当前状态：以 F2A 最终合入提交 `f5137e2422a48e70d5c706cb146fb034a2b96f65` 为冻结基线；任务分支 `codex/1.4.0-stage-3ar3b-f2a-r1-preview-ux-convergence` 已完成 Codex 本地实现与验证，待 ChatGPT 基于实际 Git 提交验收，尚未合入，R1 用户视觉复验尚未进行。任务证据见 [R1任务书](tasks/3ar3b-f2a-r1-preview-ux-convergence.md)和[阶段记录](stage-3ar3b-f2a-r1-preview-ux-convergence.md)。
+- 展示结构：固定为“研究总览、六智能体、证据与审计、历史对比、综合报告”五个主分区，默认进入研究总览；首屏显示当前标的、总控结论、确定性研究动作、数据可靠性、正式 veto 和主要结构化原因。
+- 收敛原则：默认隐藏 runId、contextHash、完整 finding、evidence fields 和原始报告等技术细节，通过折叠区域保持完整可追溯；候选池、智能体图表、证据、对比和报告均不得重算或改写权威结果。
+- 安全边界：继续 GET-only，保持本地研究快照与显式 Demo 隔离，不新增 Java/Python/SQL/Flyway、Provider、数据库、Agent、Shadow 或交易写路径；六 run 顺序和 POSITION_RISK 唯一正式 veto 不变。
+- 验收门：R1 技术完成、Git 验收或 merge 均不能把 `FREE_PRODUCT_PREVIEW_GATE` 改为 PASS；必须等待 R1 合入后用户再次实际查看并明确认可，再由后续独立治理提交讨论状态变更。
 
 #### 3A-R3B-F2B：免费 Provider 支持的真实产品闭环（未开始）
 

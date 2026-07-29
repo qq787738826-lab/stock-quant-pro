@@ -14,6 +14,7 @@ const props = defineProps<{
   tasks: ScanTaskSnapshot[]
   selectedTaskId: number | null
   selectedTask: ScanTaskSnapshot | null
+  selectedSymbol: string | null
   candidates: PreviewCandidate[]
   loading: boolean
 }>()
@@ -50,10 +51,10 @@ function changeTask(value: string | number | boolean | undefined): void {
   <section class="preview-panel candidate-panel" :aria-busy="loading">
     <div class="panel-heading">
       <div>
-        <p class="eyebrow">CANDIDATE SNAPSHOT</p>
+        <p class="eyebrow">READ-ONLY CANDIDATE SNAPSHOT</p>
         <h2>候选股票池</h2>
       </div>
-      <span class="qualification">{{ qualification }}</span>
+      <span class="qualification">{{ mode === 'TEST_DEMO_EXPLICIT' ? '演示数据' : '本地研究快照' }}</span>
     </div>
 
     <div class="scan-facts">
@@ -105,12 +106,19 @@ function changeTask(value: string | number | boolean | undefined): void {
           <tr
             v-for="candidate in filteredCandidates"
             :key="candidate.symbol"
+            :class="{ selected: candidate.symbol === selectedSymbol }"
             tabindex="0"
+            role="button"
+            :aria-current="candidate.symbol === selectedSymbol ? 'true' : undefined"
             @click="emit('selectCandidate', candidate)"
             @keydown.enter="emit('selectCandidate', candidate)"
+            @keydown.space.prevent="emit('selectCandidate', candidate)"
           >
             <td>{{ displayValue(candidate.rank) }}</td>
-            <td><b>{{ candidate.symbol }}</b><span>{{ candidate.name }}</span></td>
+            <td>
+              <b>{{ candidate.symbol }}</b><span>{{ candidate.name }}</span>
+              <em v-if="candidate.symbol === selectedSymbol">当前分析</em>
+            </td>
             <td>{{ displayValue(candidate.score) }}</td>
             <td>
               <span v-if="candidate.eligible === true" class="state ok">符合</span>
@@ -125,7 +133,10 @@ function changeTask(value: string | number | boolean | undefined): void {
               <span>突破：{{ displayMetric(candidate.metrics, 'breakout20') }}</span>
             </td>
             <td><span :class="['state', candidate.hasAgentResult ? 'ok' : 'muted-state']">{{ candidate.hasAgentResult ? '已有' : '暂无' }}</span></td>
-            <td><code>{{ candidate.qualification }}</code><small v-if="candidate.synthetic">SYNTHETIC</small></td>
+            <td>
+              <code>{{ candidate.synthetic ? '演示数据' : '研究快照' }}</code>
+              <small>{{ candidate.qualification }}</small>
+            </td>
           </tr>
           <tr v-if="!loading && !filteredCandidates.length">
             <td colspan="8" class="empty-cell">PREVIEW_SCAN_RESULTS_EMPTY · 当前筛选下暂无已有候选结果</td>
@@ -137,23 +148,26 @@ function changeTask(value: string | number | boolean | undefined): void {
 </template>
 
 <style scoped>
-.preview-panel { padding: 20px; border: 1px solid #223a57; border-radius: 12px; background: #0e1a2b; }
+.preview-panel { min-width: 0; padding: 18px; border: 1px solid #263f5b; border-radius: 12px; background: #0e1b2c; }
 .panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-h2 { margin: 0; font-size: 19px; }.eyebrow { margin: 0 0 5px; color: #5eaaff; font-size: 10px; font-weight: 800; letter-spacing: .15em; }
-.qualification { color: #78d8b1; font: 11px ui-monospace, monospace; }
+h2 { margin: 0; font-size: 19px; }.eyebrow { margin: 0 0 5px; color: #73b7f2; font-size: 11px; font-weight: 800; letter-spacing: .13em; }
+.qualification { padding: 4px 8px; border-radius: 999px; background: #17344d; color: #9bcaf0; font-size: 12px; }
 .scan-facts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 15px 0; }
 .scan-facts div { padding: 9px 11px; border: 1px solid #1f3249; border-radius: 7px; background: #0a1524; }
-.scan-facts span { display: block; color: #70839d; font-size: 10px; }.scan-facts strong { font-size: 12px; }
+.scan-facts span { display: block; color: #91a4bb; font-size: 12px; }.scan-facts strong { display: block; margin-top: 4px; font-size: 13px; }
 .candidate-tools { display: grid; grid-template-columns: 1.2fr 1fr 1fr auto; gap: 10px; align-items: center; margin-bottom: 12px; }
-.result-count { color: #778ba5; font-size: 11px; }.table-wrap { overflow: auto; border: 1px solid #1f3249; border-radius: 8px; }
-table { width: 100%; min-width: 1120px; border-collapse: collapse; font-size: 12px; }
-th { padding: 10px; color: #7488a2; text-align: left; background: #0a1524; font-weight: 600; }
+.result-count { color: #96a9bf; font-size: 12px; }.table-wrap { max-height: 390px; overflow: auto; border: 1px solid #1f3249; border-radius: 8px; }
+table { width: 100%; min-width: 1120px; border-collapse: collapse; font-size: 13px; }
+th { position: sticky; top: 0; z-index: 1; padding: 10px; color: #99acc2; text-align: left; background: #0a1524; font-weight: 600; }
 td { padding: 11px 10px; border-top: 1px solid #1a2b40; vertical-align: top; }
-tbody tr { cursor: pointer; }tbody tr:hover, tbody tr:focus { outline: none; background: #142943; }
-td b { display: block; color: #e9f2ff; }td > span { display: block; margin-top: 3px; color: #8ca0ba; }
+tbody tr { cursor: pointer; transition: background .16s ease, box-shadow .16s ease; }
+tbody tr:hover, tbody tr:focus { outline: none; background: #142943; }
+tbody tr.selected { background: #183654; box-shadow: inset 4px 0 #58a9e8; }
+td b { display: block; color: #e9f2ff; }td > span { display: block; margin-top: 3px; color: #a0b1c5; }
+td em { display: inline-block; margin-top: 6px; padding: 2px 6px; border-radius: 999px; background: #2a5577; color: #a9dcff; font-size: 11px; font-style: normal; }
 .metrics-cell { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 8px; color: #9eb0c6; }
 .state { display: inline-block; margin: 0; padding: 2px 6px; border-radius: 99px; }.state.ok { color: #55d5a0; background: #123b30; }.state.warn { color: #ffbd66; background: #46351c; }.state.muted-state { color: #8796aa; background: #253247; }
-code { display: block; color: #70c8ff; font-size: 10px; }small { display: block; margin-top: 4px; color: #ffca73; }
+code { display: block; color: #8ac8f6; font-size: 11px; }small { display: block; margin-top: 4px; color: #aebdd0; font-size: 11px; }
 .empty-cell { padding: 30px; color: #778ba5; text-align: center; cursor: default; }
 @media (max-width: 1250px) { .candidate-tools { grid-template-columns: 1fr 1fr; }.scan-facts { grid-template-columns: repeat(2, 1fr); } }
 </style>
