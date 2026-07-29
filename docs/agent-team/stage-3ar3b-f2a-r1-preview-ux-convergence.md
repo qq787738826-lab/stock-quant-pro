@@ -2,9 +2,9 @@
 
 ## 1. 阶段状态
 
-状态：**最终提交已通过 ChatGPT 实际 Git 技术复验，经用户批准纯 fast-forward 合入；
-用户已于 2026-07-29 完成第二次视觉复验，主体信息架构通过，但产品预览门仍为
-BLOCKED。**
+状态：**最终提交已通过 ChatGPT 实际 Git 技术复验并合入；第二次视觉复验的历史结论为
+主体信息架构通过但总体仍 `BLOCKED`，后续 R1A/R1B 已完成修复，用户最终产品形态验收
+已经通过。**
 
 - 冻结基线：`f5137e2422a48e70d5c706cb146fb034a2b96f65`
 - 任务分支：
@@ -14,7 +14,7 @@ BLOCKED。**
 - 任务书：
   [tasks/3ar3b-f2a-r1-preview-ux-convergence.md](tasks/3ar3b-f2a-r1-preview-ux-convergence.md)
 - 路由：`/research-preview`
-- 产品预览门：`FREE_PRODUCT_PREVIEW_GATE=BLOCKED`
+- 当前产品预览门：`FREE_PRODUCT_PREVIEW_GATE=PASS`
 
 F2A 最终提交 `f5137e2422a48e70d5c706cb146fb034a2b96f65` 已通过 ChatGPT
 实际 Git 验收，经用户批准纯 fast-forward 合入。用户于 `2026-07-29` 通过完整页面截图
@@ -24,8 +24,13 @@ R1 实现已通过 ChatGPT 对实际 Git 提交的技术复验，经用户批准
 用户于 `2026-07-29` 完成第二次视觉复验：五分区、首屏信息层级、精简 Agent 卡片、
 折叠详情、结构化报告、字号和深色主题方向已通过查看；首屏文字重叠、DATA_QUALITY 门禁与
 研究证据不足的语义歧义、INFO finding 使用严重红色，以及 DEMO02 正式 veto 尚待最终
-查看，因此进入
+查看，因此该轮历史状态仍为 `BLOCKED` 并进入
 [R1A 定向修复](tasks/3ar3b-f2a-r1a-visual-semantics-fix.md)。
+
+R1A 随后完成数据质量门禁/研究证据完整性拆分、DATA_QUALITY 优先级和风险 tone 修复；
+R1B 最终提交 `4917bbabc8262106abb47e6cb90cf7ab96e76d7d` 以单列正常文档流解决首屏
+重叠。用户基于该最终基线完成 DEMO01 与 DEMO02 复验，并于
+`2026-07-29 16:44 +08:00` 明确认可当前产品形态。
 
 ## 2. 首次视觉问题与实现对应
 
@@ -100,9 +105,10 @@ R1 实现已通过 ChatGPT 对实际 Git 提交的技术复验，经用户批准
 | Provider/iFinD | 调用数均为 0 |
 
 构建只出现仓库既有 npm 环境配置、Rollup 注释和主包大小提示；没有新增依赖，不影响成功。
-当前执行环境没有可控浏览器实例，因此没有伪称完成截图级 DEMO01/DEMO02 点击与三档视口
-人工视觉复核；相关语义、折叠状态和响应式约束由专用静态脚本验证，Vue 运行可达性已确认，
-R1 用户实际视觉复验仍明确为未进行。该限制不冒充后端或数据库联调。
+R1 提交时的 Codex 执行环境没有可控浏览器实例，因此当时没有伪称完成截图级
+DEMO01/DEMO02 点击与三档视口人工视觉复核；相关语义、折叠状态和响应式约束由专用静态
+脚本验证，Vue 运行可达性已确认。用户随后于 `2026-07-29` 实际完成 R1 视觉复验；该历史
+限制不冒充后端或数据库联调。
 
 ## 5. 修改范围
 
@@ -126,18 +132,26 @@ R1 用户实际视觉复验仍明确为未进行。该限制不冒充后端或�
 ```text
 F0_AUDIT_RESULT=PARTIAL
 FREE_IMPLEMENTATION_PATH=RESEARCH_PREVIEW_FIRST
-FREE_PRODUCT_PREVIEW_GATE=BLOCKED
+FREE_PRODUCT_PREVIEW_GATE=PASS
 FREE_PROVIDER_VALIDATION_GATE=BLOCKED
 PAID_PROVIDER_UPGRADE_DECISION=PENDING
 IFIND_TRIAL_ACTIVATION_GATE=BLOCKED
 ```
 
 - F2A：最终提交已验收并合入；
-- F2A 首次视觉验收：`BLOCKED`；
+- F2A 首次视觉验收（历史状态）：该轮为 `BLOCKED`；
 - F2A-R1：最终提交已验收并纯 fast-forward 合入；
-- R1 用户视觉复验：`2026-07-29` 已进行，主体通过但总体仍 `BLOCKED`；
-- F2A-R1A：任务分支实现完成，待 ChatGPT 实际 Git 提交验收，尚未合入；
-- R1A 用户最终视觉复验：未进行；
+- R1 用户视觉复验（历史状态）：`2026-07-29` 已进行，主体通过但该轮总体仍
+  `BLOCKED`；
+- F2A-R1A：提交 `99b22a5e3bd2ad945c2f2b10ae79618277f8ed01` 与
+  `11657c572d9561ae3b4a37be7a22f7456444844f` 已验收并合入；
+- R1A 用户复验（历史状态）：语义和风险颜色通过，但首屏仍重叠，该轮仍为 `BLOCKED`；
+- F2A-R1B：最终提交 `4917bbabc8262106abb47e6cb90cf7ab96e76d7d` 已验收并合入；
+- 最终用户视觉验收：已通过，批准时间为 `2026-07-29 16:44 +08:00`；
+- 产品门治理：
+  [任务书](tasks/3ar3b-f2a-product-preview-gate-pass.md) /
+  [阶段记录](stage-3ar3b-f2a-product-preview-gate-pass.md) 已在独立任务分支落地，待
+  ChatGPT 实际 Git 验收和合入；
 - BaoStock：`PENDING_WRITTEN_PERMISSION`；
 - Provider/iFinD 调用：`0`；
 - 数据库访问：未发生；
@@ -145,8 +159,8 @@ IFIND_TRIAL_ACTIVATION_GATE=BLOCKED
 - Agent/Shadow/Day 002：未创建；
 - scheduler：关闭；
 - F1/F2B/F3、3A-R3B-1、3B：未开始；
-- R1A merge：否；
+- R1A/R1B merge：是；产品门治理提交 merge：否；
 - `.ai/`：只通过 Git 状态确认未跟踪，未读取、修改、暂存或提交。
 
-R1A 合入后仍必须由用户实际查看 DEMO01 和 DEMO02 并明确认可，后续独立治理提交才可讨论
-`FREE_PRODUCT_PREVIEW_GATE=PASS`。
+产品门 PASS 只表示用户认可信息架构、产品形态和日常只读研究流程，不改变 Provider、
+PIT/QFQ、策略、Shadow、iFinD 或交易门禁。

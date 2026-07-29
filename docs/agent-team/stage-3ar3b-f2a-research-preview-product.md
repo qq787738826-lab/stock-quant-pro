@@ -2,8 +2,8 @@
 
 ## 1. 阶段状态
 
-状态：**前端技术实现最终提交已通过 ChatGPT 实际 Git 验收，经用户批准纯
-fast-forward 合入；首次用户视觉验收已完成但结论为 `BLOCKED`。**
+状态：**前端技术实现已验收并合入；首次视觉验收的历史结论为 `BLOCKED`，经
+R1、R1A 与 R1B 连续收敛后，用户已明确通过最终产品形态验收。**
 
 - 冻结集成基线：`08943b4f6af03c75aa4df2a4ecf2494bede4e57b`
 - 任务分支：
@@ -23,8 +23,10 @@ F0.5 最终提交 `08943b4f6af03c75aa4df2a4ecf2494bede4e57b` 已通过 ChatGPT
 
 F2A 最终提交已完成相同验收与纯 fast-forward 合入；用户于 `2026-07-29` 通过完整页面
 截图完成首次视觉查看。功能闭环、Demo 隔离、六智能体、总控、证据、历史对比和报告均
-可见，但信息密度和层级尚不适合日常使用，因此视觉验收为 `BLOCKED`，进入独立 R1
-视觉与交互收敛。
+可见，但信息密度和层级尚不适合日常使用，因此该轮历史视觉验收为 `BLOCKED`，进入独立
+R1 视觉与交互收敛。R1、R1A 和 R1B 随后依次完成五分区、语义/风险颜色与最终垂直流
+布局修复；用户基于 R1B 最终提交 `4917bbabc8262106abb47e6cb90cf7ab96e76d7d`
+完成最终复验，并于 `2026-07-29 16:44 +08:00` 明确认可产品形态。
 
 ## 2. 实施结果
 
@@ -103,7 +105,7 @@ Provider 名称或 revision，不进入任何网络/扫描/Agent/Shadow/交易�
 ```text
 F0_AUDIT_RESULT=PARTIAL
 FREE_IMPLEMENTATION_PATH=RESEARCH_PREVIEW_FIRST
-FREE_PRODUCT_PREVIEW_GATE=BLOCKED
+FREE_PRODUCT_PREVIEW_GATE=PASS
 FREE_PROVIDER_VALIDATION_GATE=BLOCKED
 PAID_PROVIDER_UPGRADE_DECISION=PENDING
 IFIND_TRIAL_ACTIVATION_GATE=BLOCKED
@@ -111,9 +113,17 @@ IFIND_TRIAL_ACTIVATION_GATE=BLOCKED
 
 - F2A 技术实现：最终提交 `f5137e2422a48e70d5c706cb146fb034a2b96f65`
   已验收并纯 fast-forward 合入；
-- 首次用户视觉验收：`2026-07-29` 已进行，结论为 `BLOCKED`；
-- F2A-R1：任务分支技术实现完成，待 ChatGPT 实际 Git 提交验收，尚未合入，用户复验
-  未进行；
+- 首次用户视觉验收（历史状态）：`2026-07-29` 已进行，该轮结论为 `BLOCKED`；
+- F2A-R1：最终提交 `e2b9457e3594676875167a703ae09ebc75aaaaf6` 已验收并合入；
+- F2A-R1A：提交 `99b22a5e3bd2ad945c2f2b10ae79618277f8ed01` 与
+  `11657c572d9561ae3b4a37be7a22f7456444844f` 已验收并合入；
+- F2A-R1B：最终提交 `4917bbabc8262106abb47e6cb90cf7ab96e76d7d` 已验收并合入；
+- 最终用户视觉验收：用户已查看 DEMO01/DEMO02，并于 `2026-07-29 16:44 +08:00`
+  明确认可当前产品形态；
+- 产品门治理：
+  [任务书](tasks/3ar3b-f2a-product-preview-gate-pass.md) /
+  [阶段记录](stage-3ar3b-f2a-product-preview-gate-pass.md) 已在独立任务分支落地，待
+  ChatGPT 实际 Git 验收和合入；
 - BaoStock：`PENDING_WRITTEN_PERMISSION`；
 - 免费 Provider 与 iFinD 调用：`0`；
 - 数据库访问与写入：未发生；
@@ -121,9 +131,8 @@ IFIND_TRIAL_ACTIVATION_GATE=BLOCKED
 - Agent/Shadow/Day 002：未创建；
 - scheduler：关闭；
 - F1/F2B/F3、3A-R3B-1、3B：未开始；
-- F2A merge：是；R1 merge：否；
+- F2A/R1/R1A/R1B merge：是；产品门治理提交 merge：否；
 - `.ai/`：只通过 Git 状态确认未跟踪，未读取、修改、暂存或提交。
 
-只有 R1 合入后用户再次实际看到并认可产品形态，后续独立治理提交才可讨论
-`FREE_PRODUCT_PREVIEW_GATE=PASS`。F2A 不改变免费 Provider 验证门，也不形成 F3
-效果样本。
+`FREE_PRODUCT_PREVIEW_GATE=PASS` 只表示用户认可产品形态和日常只读研究流程，不改变
+免费 Provider 验证门，不证明 PIT/QFQ、策略收益或 Shadow，也不形成 F3 效果样本。
