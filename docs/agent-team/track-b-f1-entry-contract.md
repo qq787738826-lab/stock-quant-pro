@@ -10,6 +10,8 @@ F1_ENTRY_READINESS=BLOCKED_MULTIPLE
 
 主要路线的具体 Provider 是 Tushare Pro。该选择只确定下一项外部取证顺序，不批准购买、账号、调用、Adapter、V13 业务库迁移或 F1 实施。
 
+Tushare Pro 当前资格固定为 `PIT_PARTIAL`，稳定证券 ID 固定为 `PARTIAL`。前者不表示当前可合法落库；后者只确认 `ts_code`、交易所及上市/退市普通字段存在，不确认永久 instrument identity、换码、迁板、重新上市或历史映射。
+
 ## 2. F1 READY 的全部条件
 
 | 门禁 | READY 证据 | 当前状态 | 当前 finding |
@@ -23,8 +25,8 @@ F1_ENTRY_READINESS=BLOCKED_MULTIPLE
 | 同 Provider factor | `ts_code + trade_date` 精确自然键、正数因子、日覆盖和单位 | PARTIAL | 文档支持逐日返回；需最小探针验证 `DAILY_EXACT` |
 | 同 Provider calendar | SSE/SZSE 稳定身份与精确日期 | PARTIAL | 文档充分；需最小响应样例验证 |
 | 同 Provider action | 事件自然键、类型、公告/生效/修订时间及覆盖清单 | BLOCKED | `dividend` 只形成部分公司行动闭环 |
-| 稳定证券身份 | `ts_code` 生命周期、换码/退市语义 | PARTIAL | 公开字段存在；生命周期需确认 |
-| 前向 PIT | 允许重复捕获并以真实首次接收建立 `SYSTEM_KNOWLEDGE_PIT` | BLOCKED | 技术可建，许可未闭合 |
+| 稳定证券身份 | `ts_code` 生命周期、换码/迁板/重新上市/退市及历史映射 | PARTIAL | `ts_code`、exchange、list/delist 字段存在；永久 identity 与生命周期未获官方保证或样例 |
+| 前向 PIT | 允许重复捕获并以真实首次接收建立 `SYSTEM_KNOWLEDGE_PIT` | BLOCKED | 当前 `PIT_PARTIAL`；技术基础存在，但保存、重复捕获、回放、Agent、备份和终止后留存许可未闭合 |
 | 成本 | 套餐、费用和所需接口范围明确，用户明确批准 | BLOCKED | 200 元/年核心积分价公开，但用户未批准购买 |
 | 实现范围 | Adapter、DTO 映射、调用预算、错误/限流、数据清理、V13 迁移边界冻结 | PARTIAL | Provider 中立基础已完成；真实字段和许可尚未冻结 |
 

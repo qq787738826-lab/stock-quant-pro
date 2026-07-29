@@ -82,6 +82,15 @@ Wind 不进入主矩阵；没有用非官方报价扩展候选。
 - 明确且由用户批准的成本；
 - 个人身份可购买/使用。
 
+状态一致性验收固定为：
+
+1. 同一候选的当前 PIT 状态不得在 Track B0 文档间矛盾；
+2. `PIT_PARTIAL` 不得描述为当前已可合法落库；
+3. 稳定证券 ID 的矩阵状态必须与 F1 合同一致；
+4. `FORWARD_PIT_BUILDABLE` 只有在书面许可通过并完成最小样例复核后，才可由独立治理阶段讨论；
+5. `F1_ENTRY_READINESS=BLOCKED_MULTIPLE`；
+6. 四项正式门禁保持不变。
+
 ## 6. 冻结决定
 
 ```text
@@ -93,6 +102,8 @@ F1_ENTRY_READINESS=BLOCKED_MULTIPLE
 ### 6.1 主要路线
 
 `LOW_COST_PROVIDER_FIRST` 精确指 Tushare Pro。
+
+Tushare Pro 当前 PIT 状态固定为 `PIT_PARTIAL`，稳定证券 ID 状态固定为 `PARTIAL`。这两项当前状态均不得被主要路线选择覆盖。
 
 选择原因：
 

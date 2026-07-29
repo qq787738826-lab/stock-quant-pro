@@ -36,9 +36,10 @@ F1_ENTRY_READINESS=BLOCKED_MULTIPLE
 
 - 法律与用途：`PENDING_WRITTEN_CONFIRMATION`。
 - V13/QFQ：`V13_LINEAGE_PARTIAL`。
-- PIT：`FORWARD_PIT_BUILDABLE`，条件是书面许可通过；不具备 Provider 历史 PIT。
+- PIT：当前为 `PIT_PARTIAL`。技术上具备从首次真实捕获建立前向 PIT 的基础，但不具备公开历史 revision；本地保存、重复捕获、历史回放、Agent、备份和服务终止后留存仍待书面许可。许可通过并完成最小样例复核后，才可由独立治理阶段讨论升级为 `FORWARD_PIT_BUILDABLE`。
 - 成本：2000 积分 200 元/年，`OFFICIAL_CONFIRMED`；用户尚未批准。
-- 技术优势：同平台公开 `daily`、逐交易日 `adj_factor`、SSE/SZSE `trade_cal`、`dividend` 和稳定 `ts_code`；QFQ 动态锚点语义明确。
+- 技术优势：同平台公开 `daily`、逐交易日 `adj_factor`、SSE/SZSE `trade_cal`、`dividend` 和跨核心接口使用的 `ts_code`；QFQ 动态锚点语义明确。
+- 身份边界：稳定证券 ID 当前为 `PARTIAL`；`ts_code` 和 `stock_basic` 支持普通代码、交易所、上市/退市字段，但永久 instrument identity、换码、迁板、重新上市和历史映射仍需官方保证或样例。
 - 许可冲突：现行数据服务协议限定个人、非商业和仅个人查看；官方 AI/技术文档又给出本地缓存、回测与 Agent 工作流。合同优先，必须书面消歧。
 - 技术缺口：公司行动完整范围/稳定事件 ID、修订链、逐版本发布时间、真实 `DAILY_EXACT` 样例和证券身份生命周期。
 - 结论：技术闭环和个人成本最接近 F1，是唯一主要路线；但现在不能购买或开发 Adapter。
@@ -57,11 +58,21 @@ F1_ENTRY_READINESS=BLOCKED_MULTIPLE
 
 | 候选 | 加权总分（0—5） | 排名 | 硬门禁 |
 |---|---:|---:|---|
-| Tushare Pro | 3.10 | 1 | 书面用途、action/版本样例、用户成本批准 |
+| Tushare Pro | 2.95 | 1 | 书面用途、action/版本/身份样例、用户成本批准 |
 | 同花顺 iFinD | 2.10 | 2 | 价格、个人资格、合同、四类字段与 PIT 试用证据 |
 | BaoStock | 1.98 | 3 | 许可、factor/DAILY_EXACT、calendar identity、action revision |
 
 评分没有覆盖硬门禁；三者均未达到 F1 READY。
+
+Tushare Pro 的重算为：
+
+```text
+2.0×30% + 3.5×25% + 2.0×15% + 3.5×15% + 4.5×10% + 4.0×5%
+= 0.600 + 0.875 + 0.300 + 0.525 + 0.450 + 0.200
+= 2.950
+```
+
+PIT/版本因当前 `PIT_PARTIAL` 从 2.5 调整为 2.0，覆盖/稳定性因永久证券身份未验证从 4.0 调整为 3.5；排名仍为第一，主要路线结论由重算结果支持。
 
 ## 5. F1 准入结论
 
@@ -87,6 +98,15 @@ F1_ENTRY_READINESS=BLOCKED_MULTIPLE
 - 不写正常业务库，不执行 V13 public migrate，不开 scheduler，不创建 Day 002。
 
 当前 `TRIAL_PROBE_STATUS=NOT_EXECUTED`。
+
+一致性复验结果：
+
+1. Tushare 当前 PIT 在所有 Track B0 文档中统一为 `PIT_PARTIAL`；
+2. `PIT_PARTIAL` 未被描述为当前已可合法落库；
+3. 稳定证券 ID 在候选矩阵与 F1 合同中均为 `PARTIAL`；
+4. `FORWARD_PIT_BUILDABLE` 只作为书面许可通过并完成最小样例复核后的未来独立治理候选；
+5. `F1_ENTRY_READINESS=BLOCKED_MULTIPLE`；
+6. 四项正式门禁保持不变。
 
 ## 7. 用户外部动作与后续
 

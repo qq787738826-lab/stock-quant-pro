@@ -255,7 +255,11 @@ Tushare Pro 和同花顺 iFinD；主要路线为
 SSE/SZSE trade calendar 和 dividend 等公开 API 使其成为个人开发现实下最接近 V13/QFQ
 闭环的候选，但官方服务协议与缓存、回测、AI 文档之间仍存在用途边界歧义，且公司行动完整性、
 `DAILY_EXACT` 实样、稳定身份生命周期和 revision/published/历史版本语义仍需书面答复或
-受控探针；年度 2000 积分官方价格为人民币 200 元，但用户尚未批准成本。因此
+受控探针。Tushare 当前 PIT 状态为 `PIT_PARTIAL`，稳定证券 ID 状态为 `PARTIAL`；
+技术上虽具备首次捕获后的前向 PIT 基础，但书面许可通过并完成最小样例复核前，不得升级为
+`FORWARD_PIT_BUILDABLE`，也不得合法落库；即使两项前置通过，也只能由后续独立治理阶段
+讨论是否升级。年度 2000 积分官方价格为人民币 200 元，但
+用户尚未批准成本。因此
 `F1_ENTRY_READINESS=BLOCKED_MULTIPLE`，阻断项为书面许可、技术证据与成本批准。BaoStock
 保留研究辅助角色，iFinD 保留专业备用路线；本阶段不批准 Adapter、不调用 Provider，也不
 改变四项正式门禁。

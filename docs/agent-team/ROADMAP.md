@@ -309,8 +309,8 @@
 - 性质：Track B 的唯一入口决策阶段；只调查 BaoStock、Tushare Pro 和同花顺 iFinD 三条路线，只使用官方资料，不开发 Adapter、不调用 Provider。
 - 交付：[任务书](tasks/3ar3b-track-b0-provider-route-decision.md)、[阶段记录](stage-3ar3b-track-b0-provider-route-decision.md)、[候选矩阵](track-b-provider-candidate-matrix.md)、[证据登记册](track-b-provider-evidence-register.md)、[成本模型](track-b-provider-cost-model.md)、[许可请求包](track-b-permission-request-pack.md)、[F1 准入合同](track-b-f1-entry-contract.md)和[试用探针合同](track-b-trial-probe-contract.md)。
 - 决策：`TRACK_B_PRIMARY_ROUTE=LOW_COST_PROVIDER_FIRST`，具体候选为 Tushare Pro；`TRACK_B_FALLBACK_ROUTE=IFIND`。BaoStock 保留免费研究辅助与许可候选角色，不作为当前备用路线。
-- 评分：按法律与用途 30%、V13/QFQ 25%、PIT 15%、覆盖与稳定性 15%、个人成本 10%、接入复杂度 5% 计算，BaoStock 为 `1.98/5`、Tushare Pro 为 `3.10/5`、iFinD 为 `2.10/5`。硬性许可和事实门禁优先于总分。
-- 技术结论：Tushare Pro 已公开 raw daily、独立 `adj_factor`、SSE/SZSE `trade_cal`、`dividend` 与稳定 `ts_code` 等同平台能力，判为 `V13_LINEAGE_PARTIAL`；未证明完整公司行动/修订关系、`DAILY_EXACT` 实样、证券身份生命周期或 Provider revision/published/历史版本，不能判 READY。无已验证 Provider revision 时，只有在用途许可明确后，才能从系统首次真实捕获起建设 `FORWARD_PIT_BUILDABLE`。
+- 评分：按法律与用途 30%、V13/QFQ 25%、PIT 15%、覆盖与稳定性 15%、个人成本 10%、接入复杂度 5% 计算，BaoStock 为 `1.98/5`、Tushare Pro 为 `2.95/5`、iFinD 为 `2.10/5`。Tushare 六项分为 `2.0/3.5/2.0/3.5/4.5/4.0`，加权过程为 `0.600+0.875+0.300+0.525+0.450+0.200=2.950`；排名不变，硬性许可和事实门禁仍优先于总分。
+- 技术结论：Tushare Pro 已公开 raw daily、独立 `adj_factor`、SSE/SZSE `trade_cal`、`dividend` 与跨核心接口使用的 `ts_code`，判为 `V13_LINEAGE_PARTIAL`、`PIT_PARTIAL`，稳定证券 ID 为 `PARTIAL`；未证明完整公司行动/修订关系、`DAILY_EXACT` 实样、永久 instrument identity 生命周期或 Provider revision/published/历史版本，不能判 READY。只有书面许可通过并完成最小样例复核后，才可由独立治理阶段讨论升级为 `FORWARD_PIT_BUILDABLE`。
 - 许可与成本结论：Tushare Pro 官方服务协议的个人查看/非商业限制，与官方缓存、回测和 AI 文档存在需书面澄清的用途边界；2000 积分官方个人价格为人民币 200 元/年，但用户尚未批准购买。因此 `F1_ENTRY_READINESS=BLOCKED_MULTIPLE`，具体为书面许可、技术证据和成本批准三类阻断。
 - iFinD 定位：官方资料显示其 SDK/HTTP、数据覆盖和额度能力适合作为专业备用，但个人资格、授权、价格、V13 字段与 revision 语义必须由官方报价、书面许可和未来受控试用验证；Track A 通过不表示现在应启动 15 天试用。
 - 用户外部动作：优先向 Tushare Pro 官方发送许可与接口确认问题，取得可留档书面答复及准确套餐范围；若答复不能满足硬门禁，则按备用路线向 iFinD 获取正式报价、个人资格与试用授权范围。不得自行注册、购买、激活或调用。

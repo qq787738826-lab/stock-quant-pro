@@ -56,7 +56,7 @@
 | 11. 指数行情 | `PARTIAL` | `VERIFIED`：`index_daily`（TS-012） | `VERIFIED`：历史行情/日期序列支持指数（IF-002/003） |
 | 12. 公告元数据 | `NOT_SUPPORTED` | `VERIFIED`：独立公告权限包含标题和 PDF 链接（TS-003） | `VERIFIED`：`report_query` 返回日期、标题、ctime、PDF URL、seq（IF-003/004） |
 | 13. 公告正文或 PDF | `NOT_SUPPORTED` | `VERIFIED`：独立公告权限，需另购（TS-003） | `VERIFIED`：公告查询与下载额度公开（IF-001/004） |
-| 14. 稳定证券 ID | `PARTIAL`：`sh.600000` 等身份稳定性未有合同/版本保证 | `VERIFIED`：`ts_code` 含交易所后缀并贯穿核心接口（TS-004/005/006/007/009） | `PARTIAL`：`thscode` 跨接口公开，但生命周期/换码语义需探针（IF-003/004） |
+| 14. 稳定证券 ID | `PARTIAL`：`sh.600000` 等身份稳定性未有合同/版本保证 | `PARTIAL`：`ts_code` 含交易所后缀并贯穿核心接口，`stock_basic` 有上市、退市和交易所字段；永久 instrument identity、换码、迁板、重新上市及历史映射没有官方保证或样例（TS-004/005/006/007/009） | `PARTIAL`：`thscode` 跨接口公开，但生命周期/换码语义需探针（IF-003/004） |
 | 15. Provider revision/version | `NOT_SUPPORTED` | `NOT_SUPPORTED`：公开核心字段没有 revision/snapshot | `REQUIRES_TRIAL_PROBE` |
 | 16. published time | `NOT_SUPPORTED` | `PARTIAL`：有接口更新时点和公告日，不等于逐版本 publishedAt（TS-004/005/007） | `REQUIRES_TRIAL_PROBE`：FAQ 有总体入库时点，不等于逐事实 publishedAt（IF-002） |
 | 17. effective time | `PARTIAL`：交易日/除权日存在，语义链不完整 | `PARTIAL`：trade/ex/record/implementation dates 存在，统一事件有效时点需映射验证（TS-005/007） | `REQUIRES_TRIAL_PROBE` |
@@ -74,7 +74,7 @@
 | 候选 | V13/QFQ 状态 | 依据 | PIT 状态 | 依据 |
 |---|---|---|---|---|
 | BaoStock | `V13_LINEAGE_BLOCKED` | raw 可用，但独立因子结果、`DAILY_EXACT`、交易所日历身份、公司行动版本和用途许可均未满足；禁止跨来源补齐 | `PIT_PARTIAL` | 技术上可在获准后从真实首次捕获建立系统知识链，但当前本地保存/回放/Agent 权利未确认，也无 Provider revision |
-| Tushare Pro | `V13_LINEAGE_PARTIAL` | 同一 Provider 已公开 raw、逐交易日 factor、SSE/SZSE calendar、dividend 和统一 `ts_code`；公司行动完整范围、修订关系和合法存储/回测/Agent 用途尚未闭合 | `FORWARD_PIT_BUILDABLE` | 无 Provider 历史 revision，不具备 `PROVIDER_PIT_READY`；在取得书面许可后可依 V13 从首次真实捕获建立 `SYSTEM_KNOWLEDGE_PIT` |
+| Tushare Pro | `V13_LINEAGE_PARTIAL` | 同一 Provider 已公开 raw、逐交易日 factor、SSE/SZSE calendar、dividend 和统一 `ts_code`；公司行动完整范围、修订关系、永久证券身份和合法存储/回测/Agent 用途尚未闭合 | `PIT_PARTIAL` | 技术上具备从首次真实捕获建立前向 PIT 的基础，但无公开历史 revision，且本地保存、重复捕获、历史回放、Agent、备份和服务终止后留存均待书面许可；许可通过并完成最小样例复核后，才可由独立治理阶段讨论升级为 `FORWARD_PIT_BUILDABLE` |
 | 同花顺 iFinD | `V13_LINEAGE_UNVERIFIED` | 公共文档证明接口广度，但核心指标名、字段、四类事实是否同一授权、身份及事件关系只能在试用/书面材料中验证 | `PIT_UNVERIFIED` | 更新时点与复权语义有公开说明，但 revision/snapshot/published/effective/旧版本及留存权利均需试用和合同证据 |
 
 任何候选都未达到 `V13_LINEAGE_READY` 或 `PROVIDER_PIT_READY`。
@@ -86,12 +86,13 @@
 | 候选 | 法律与用途 30% | V13/QFQ 25% | PIT/版本 15% | 覆盖/稳定 15% | 个人成本 10% | 接入复杂度 5% | 加权总分 |
 |---|---:|---:|---:|---:|---:|---:|---:|
 | BaoStock | 1.0 | 1.5 | 1.5 | 2.5 | 5.0 | 4.0 | **1.98** |
-| Tushare Pro | 2.0 | 3.5 | 2.5 | 4.0 | 4.5 | 4.0 | **3.10** |
+| Tushare Pro | 2.0 | 3.5 | 2.0 | 3.5 | 4.5 | 4.0 | **2.95** |
 | 同花顺 iFinD | 1.0 | 2.5 | 2.5 | 4.0 | 1.0 | 2.0 | **2.10** |
 
 评分解释：
 
-- Tushare Pro 不是因为总分最高就获批，而是其核心四事实、交易所日历身份、逐日因子、个人公开价格和 HTTP 接入形成最短的可验证闭环。
+- Tushare Pro 重新计算过程：`2.0×30% + 3.5×25% + 2.0×15% + 3.5×15% + 4.5×10% + 4.0×5% = 0.600 + 0.875 + 0.300 + 0.525 + 0.450 + 0.200 = 2.950`。PIT/版本从 2.5 降为 2.0，原因是当前只能判 `PIT_PARTIAL`；覆盖/稳定性从 4.0 降为 3.5，原因是永久证券身份生命周期尚未验证。
+- 调整后排名仍为 Tushare Pro、iFinD、BaoStock。Tushare Pro 不是因为需要维持主路线而反向调分，而是重新计算后仍以核心四事实、交易所日历、逐日因子、个人公开价格和 HTTP 接入形成最短的可验证闭环。
 - Tushare Pro 仍被硬门禁阻断：本地保存、回测、Agent、长期留存需书面确认，公司行动完整性和版本语义需样例。
 - iFinD 作为备用是因为其专业数据和多语言接口上限高于 BaoStock，但必须先取得报价、合同和试用字段证据；当前不启动试用。
 - BaoStock 免费但许可与核心 `DAILY_EXACT` 证据缺口会持续拖慢完整 V13/QFQ，保留为研究辅助，不作为正式备用路线。
