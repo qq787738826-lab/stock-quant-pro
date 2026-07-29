@@ -2,20 +2,25 @@
 
 ## 1. 阶段状态
 
-状态：**F0 审计、最小受控探针和 Codex 本地验证已完成，待 ChatGPT 基于实际 Git 提交
-验收，尚未合入；F1 未开始。**
+状态：**F0 审计、最小受控探针和修复后离线验证已完成；ChatGPT 已基于实际 Git 最终
+提交复验通过，用户已批准并完成纯 fast-forward 合入；F1 未开始。**
 
 - 冻结集成基线：`c47b88e586f6751563fe210f40137a3b7ce5e576`
 - 任务分支：
   `codex/1.4.0-stage-3ar3b-f0-free-provider-qualification-audit`
 - 提交目标：`docs(agent): audit free provider qualification`
+- 最终提交：`059eacffaf7e4a9f383be205d453c5168279932a`
 - 任务书：
   [tasks/3ar3b-f0-free-provider-qualification-audit.md](tasks/3ar3b-f0-free-provider-qualification-audit.md)
+- 后续治理：
+  [tasks/3ar3b-f05-free-implementation-scope.md](tasks/3ar3b-f05-free-implementation-scope.md)
 
 ## 2. 结果
 
 ```text
 F0_AUDIT_RESULT=PARTIAL
+FREE_IMPLEMENTATION_PATH=RESEARCH_PREVIEW_FIRST
+FREE_PRODUCT_PREVIEW_GATE=BLOCKED
 FREE_PROVIDER_VALIDATION_GATE=BLOCKED
 PAID_PROVIDER_UPGRADE_DECISION=PENDING
 IFIND_TRIAL_ACTIVATION_GATE=BLOCKED
@@ -125,4 +130,7 @@ Java、Vue、SQL/Flyway、配置、现有 Provider Adapter、V13 和
 - F1：未开始；
 - 3A-R3B-1：未开始；
 - 3B：未开始；
-- merge：否。
+- merge：已由用户批准并以纯 fast-forward 完成。
+
+F0 的 `PARTIAL` 结论不是失败，但不构成 F1、Provider、V13、PIT 或 Shadow 授权。后续
+F0.5 只冻结研究预览优先的双轨实施范围；其状态与门禁由独立任务书管理。

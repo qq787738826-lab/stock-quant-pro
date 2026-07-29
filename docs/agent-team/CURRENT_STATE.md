@@ -9,7 +9,7 @@
 - 当前稳定版本：`1.3.1`
 - 当前目标版本：`1.4.0`
 - 当前集成分支：`feature/1.4.0-agent-team`
-- 当前集成分支 HEAD：`c47b88e586f6751563fe210f40137a3b7ce5e576`
+- 当前集成分支 HEAD：`059eacffaf7e4a9f383be205d453c5168279932a`
 - 1D-4 验收来源分支：`codex/1.4.0-1d4-acceptance`
 - 1D-4 验收基线：`5bc492a feat(agent): add safe local team runtime scripts`
 - 阶段 2A 验收来源分支：`codex/1.4.0-2a-readonly-context`
@@ -97,8 +97,12 @@
 - 3A-R3B 免费优先规划当前状态：已通过 ChatGPT 对实际 Git 提交的验收；用户已批准纯 fast-forward 合入，本地和远程集成分支均到达最终提交，ahead/behind 为 `0/0`。精确验收和批准时间无仓库证据，记为 `UNKNOWN`。
 - 3A-R3B-F0 冻结集成基线：`c47b88e586f6751563fe210f40137a3b7ce5e576`
 - 3A-R3B-F0 任务分支：`codex/1.4.0-stage-3ar3b-f0-free-provider-qualification-audit`
-- 3A-R3B-F0 当前状态：免费 Provider 逐来源/逐事实资格审计、BaoStock 最小受控探针、能力矩阵、证据登记册、调用矩阵和书面许可问题清单已完成 Codex 本地验证，结论为 `F0_AUDIT_RESULT=PARTIAL`；待 ChatGPT 基于实际 Git 提交验收，尚未合入，F1 未开始。
-- 当前正式状态：`FREE_PROVIDER_VALIDATION_GATE=BLOCKED`、`PAID_PROVIDER_UPGRADE_DECISION=PENDING`、`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`。iFinD 真实调用数为 0，3A-R3B-1 未开始，Day 002 未创建，scheduler 关闭，3B 未开始。
+- 3A-R3B-F0 最终提交：`059eacffaf7e4a9f383be205d453c5168279932a`
+- 3A-R3B-F0 当前状态：免费 Provider 逐来源/逐事实资格审计、BaoStock 最小受控探针、独立审计工具、能力矩阵、证据登记册、调用矩阵和书面许可问题清单均已完成；ChatGPT 已基于实际 Git 最终提交复验通过，用户已批准并完成纯 fast-forward 合入，本地和远程集成分支均位于最终提交，ahead/behind 为 `0/0`。结论固定为 `F0_AUDIT_RESULT=PARTIAL`，不表示审计失败，也不批准 F1。
+- 3A-R3B-F0.5 冻结集成基线：`059eacffaf7e4a9f383be205d453c5168279932a`
+- 3A-R3B-F0.5 任务分支：`codex/1.4.0-stage-3ar3b-f05-free-implementation-scope`
+- 3A-R3B-F0.5 当前状态：本任务分支只冻结免费版实施顺序、研究预览边界、双轨路线和门禁；待 ChatGPT 基于实际 Git 提交验收，尚未合入，F2A 未获得实施授权。
+- 当前正式状态：`F0_AUDIT_RESULT=PARTIAL`、`FREE_IMPLEMENTATION_PATH=RESEARCH_PREVIEW_FIRST`、`FREE_PRODUCT_PREVIEW_GATE=BLOCKED`、`FREE_PROVIDER_VALIDATION_GATE=BLOCKED`、`PAID_PROVIDER_UPGRADE_DECISION=PENDING`、`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`。iFinD 真实调用数为 0，正常业务库 V13 未执行，F1/F2A/F2B/F3 均未开始，3A-R3B-1 未开始，Day 002 未创建，scheduler 关闭，3B 未开始。
 - `master`：`27d9099 chore: checkpoint Stock Quant Pro 1.3.1 and remove tracked cache`
 - 版本号仍保持 `1.3.1`；尚未发布 `1.4.0`。
 
@@ -164,16 +168,19 @@ Mock Provider 只使用合成固定夹具，不取得真实 Provider、FORMAL �
 没有凭据、没有真实调用。项目现在采用“免费数据完成产品与效果验证，证明价值且数据成为
 主要瓶颈后再评估付费 Provider”的路线。iFinD 是后置专业化升级候选，不再是直接下一阶段。
 
-当前三个正式状态为：
+当前正式状态为：
 
 ```text
+F0_AUDIT_RESULT=PARTIAL
+FREE_IMPLEMENTATION_PATH=RESEARCH_PREVIEW_FIRST
+FREE_PRODUCT_PREVIEW_GATE=BLOCKED
 FREE_PROVIDER_VALIDATION_GATE=BLOCKED
 PAID_PROVIDER_UPGRADE_DECISION=PENDING
 IFIND_TRIAL_ACTIVATION_GATE=BLOCKED
 ```
 
-3A-R3B 免费优先治理规划已通过验收并合入。当前 F0 任务分支已经完成实际审计和 Codex
-本地验证，结论为 `F0_AUDIT_RESULT=PARTIAL`：BaoStock 0.9.3 的两只证券 raw/QFQ
+3A-R3B 免费优先治理规划与 F0 审计均已通过验收并合入。F0 结论为
+`F0_AUDIT_RESULT=PARTIAL`：BaoStock 0.9.3 的两只证券 raw/QFQ
 短日线各观察到 6 行，通用交易日历观察到 8 行，公司行动观察到 1 行，按证券因子在
 固定短区间各观察到 0 行；修复前 collector 未在迭代后复核 Provider 终态，因此本次
 Live response completeness 统一为 `UNVERIFIED`。全市场单日因子按边界未调用；独立
@@ -183,12 +190,19 @@ Live response completeness 统一为 `UNVERIFIED`。全市场单日因子按边�
 上游拆分并保持 `RESEARCH_AUXILIARY_ONLY`；CNINFO/SSE/SZSE/SZSI 只承担
 `OFFICIAL_EVIDENCE_ONLY`。当前没有一个免费来源能单独承担完整 V13/QFQ 同源 lineage。
 
-F0 仍待 ChatGPT 基于实际 Git 提交验收且尚未合入；F1 尚未获得实施授权。F0 唯一实际
-Provider Live 探针执行 8 个 BaoStock 数据逻辑调用和 2 个匿名登录/退出公开操作；
+F0 最终提交 `059eacffaf7e4a9f383be205d453c5168279932a` 已通过 ChatGPT 实际 Git
+复验，经用户批准纯 fast-forward 合入；该 `PARTIAL` 结论不是失败，也不批准 F1。F0
+唯一实际 Provider Live 探针执行 8 个 BaoStock 数据逻辑调用和 2 个匿名登录/退出公开操作；
 socket 级协议请求/frame 数未观测，固定为 `UNVERIFIED`，不得从函数调用数推断。
 Provider HTTP 请求为 0，原始响应残留为 0。没有新增 AKShare Live 调用，没有
-调用 iFinD，没有访问数据库或执行正常业务库 V13。3A-R3B-1 尚未开始，Day 002 未创建，
-scheduler 关闭，3B 未开始。
+调用 iFinD，没有访问数据库或执行正常业务库 V13。
+
+F0.5 当前只在任务分支冻结 `FREE_IMPLEMENTATION_PATH=RESEARCH_PREVIEW_FIRST` 和双轨路线：
+轨道 A 允许在后续独立授权的 F2A 中，只读现有合法研究快照与显式 TEST/DEMO 能力形成
+产品预览；轨道 B 继续解决书面许可、独立因子、交易所日历身份、公司行动版本和 knowledge-time，
+再依次进入 F1、F2B 与 F3。两轨资格严格隔离，F2A 的页面可见性不得被写成 Provider
+资格、PIT、准确率、收益或 Shadow 证据。F0.5 尚未合入，F2A 尚未获得实施授权；F1、
+F2B、F3 和 3A-R3B-1 均未开始，Day 002 未创建，scheduler 关闭，3B 未开始。
 
 完整 3A 仍要求不少于 20 个有效观察日、200 个 shadow item、主要 reasonCode 人工复核、
 持续业务表只读证明和正式观察报告；当前只有 1 个观察日和 3 个 item。
@@ -261,7 +275,7 @@ DATA_QUALITY 只作门禁和 confidence 上限，MARKET_REGIME V1 权重为 0 �
 
 ## 数据库、前端与本地运行
 
-- 集成分支迁移链当前为 Flyway V1 至 V12。V6 新增 dataset 版本、证券状态事件、双时间证券状态历史和 SSE/SZSE 版本化交易日历；V7 新增来源无关 ingestion run、security/calendar raw、run-record 关联、terminal attempt、retry、namespace、assurance、封存与 Manifest V1；V8 新增 `manifestContractVersion`、TEST/DEMO 稳定证券身份及显式来源映射、normalization result、event lineage、Manifest V2 和相应数据库不可绕过门禁；V9 新增 append-only PIT 日线观察；V10 新增 append-only 公告捕获批次与观察版本；V11 新增 shadow batch、item、append-only review 和 `SHADOW` TriggerType；V12 前向承接原本被错误追加回 V6 的时态表不可变保护、knowledge-close 门禁与旧日历导航列删除。V6/V7 均不回填现有 `securities` 或 `daily_bars`，V8 不接入正式来源，V9/V10 不伪造历史 known time。
+- 集成分支代码迁移链当前为 Flyway V1 至 V13；正常业务库仍只执行至 V12。V6 新增 dataset 版本、证券状态事件、双时间证券状态历史和 SSE/SZSE 版本化交易日历；V7 新增来源无关 ingestion run、security/calendar raw、run-record 关联、terminal attempt、retry、namespace、assurance、封存与 Manifest V1；V8 新增 `manifestContractVersion`、TEST/DEMO 稳定证券身份及显式来源映射、normalization result、event lineage、Manifest V2 和相应数据库不可绕过门禁；V9 新增 append-only PIT 日线观察；V10 新增 append-only 公告捕获批次与观察版本；V11 新增 shadow batch、item、append-only review 和 `SHADOW` TriggerType；V12 前向承接原本被错误追加回 V6 的时态表不可变保护、knowledge-close 门禁与旧日历导航列删除；V13 在代码库中新增 Provider 中立 PIT 市场事实 V2，但尚未迁移正常业务库。V6/V7 均不回填现有 `securities` 或 `daily_bars`，V8 不接入正式来源，V9/V10/V13 不伪造历史 known time。
 - 阶段 2A 使用 Agent 专用只读 Repository 查询 `securities` 和截止请求日的 QFQ `daily_bars`；四类上下文在 `REPEATABLE_READ` 只读事务中冻结，不执行市场数据同步或数据库写操作。
 - 阶段 2C 未修改 Flyway 或外层 JSON Schema，`CONTEXT_SCHEMA_VERSION` 仍为 `1.0`。
 - `marketBreadth`、`scanResult` 与阶段 2A 四类上下文在同一个 `REPEATABLE_READ` 只读事务内冻结；Python 始终不直连数据库。旧 profile 的 `backtestContext` 不运行 `BacktestEngine`；仅 2F 精确 profile 由 Java 使用 PIT 观察事实运行冻结引擎。
@@ -336,6 +350,6 @@ DATA_QUALITY 只作门禁和 confidence 上限，MARKET_REGIME V1 权重为 0 �
 
 完整阶段 2D、完整阶段 2D-2 和完整阶段 2D-2B 仍处于进行中。阶段 2D-2A、2D-2B-1A、文档阶段 2D-2B-1B-0 与 TEST/DEMO 实现阶段 2D-2B-1B-1 已完成；该工作线的唯一入口只是解决 2D-2B-1B-2 的外部前置决策，不是立即开始 adapter、2D-2B-2 或 Universe 实现。阶段 2E-1 已完成独立复审并合入，但没有自动批准或开始任何 2E 后续任务。
 
-**在智能体规则能力工作线上，3A-R3B-0 和免费优先治理规划已验收并合入；F0 审计已在任务分支完成并得到 `F0_AUDIT_RESULT=PARTIAL`，待实际 Git 提交验收，尚未合入，F1 未获授权。** Day 001 已形成 1 个真实受控 Shadow 批次和 3 个 item，均以 `BLOCKED_BY_DATA_QUALITY` 安全终结并完成正式人工复核；后续受控行情更新形成的 780 条 V9 观察全部 `sourceRevision=NULL`。当前真实来源资格结论仍是 `PROVIDER_REVISION_UNVERIFIED`，Tencent `version=18` 不得作为 revision。F0 没有找到可单独承担完整 V13/QFQ lineage 的免费来源：BaoStock 技术能力部分可用但许可和 `DAILY_EXACT` 未确认，AKShare 各上游只作研究辅助，官方页面只作核验证据。免费优先路线后续仍是 F1 Adapter/V13 接入、F2 免费版真实产品闭环和 F3 免费 Shadow/效果评估；在系统证明使用价值、数据成为主要瓶颈且 `PAID_PROVIDER_UPGRADE_DECISION=PROCEED` 前，不进入 iFinD 启动门。当前 `FREE_PROVIDER_VALIDATION_GATE=BLOCKED`、`PAID_PROVIDER_UPGRADE_DECISION=PENDING`、`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`，真实 iFinD 调用数为 0，scheduler 关闭，Day 002 未创建。Codex 不得自行开始 F1、激活或调用 iFinD、恢复长期观察、开始 3B 或其他阶段。
+**在智能体规则能力工作线上，3A-R3B-0、免费优先治理规划和 F0 审计均已验收并合入；F0 最终结论为 `F0_AUDIT_RESULT=PARTIAL`。F0.5 当前只在任务分支冻结研究预览优先的双轨路线，尚未合入，F2A 尚未授权。** Day 001 已形成 1 个真实受控 Shadow 批次和 3 个 item，均以 `BLOCKED_BY_DATA_QUALITY` 安全终结并完成正式人工复核；后续受控行情更新形成的 780 条 V9 观察全部 `sourceRevision=NULL`。当前真实来源资格结论仍是 `PROVIDER_REVISION_UNVERIFIED`，Tencent `version=18` 不得作为 revision。F0 没有找到可单独承担完整 V13/QFQ lineage 的免费来源：BaoStock 技术能力部分可用但许可和 `DAILY_EXACT` 未确认，AKShare 各上游只作研究辅助，官方页面只作核验证据。轨道 A 在 F0.5 验收合入并由用户另行授权后，可以进入 F2A 研究预览；轨道 B 继续以书面许可和技术证据为前置，进入 F1 Adapter/V13 接入、F2B Provider-backed 产品和 F3 免费 Shadow。`FREE_PRODUCT_PREVIEW_GATE=BLOCKED` 与 `FREE_PROVIDER_VALIDATION_GATE=BLOCKED` 相互独立，F2A 不计入 Provider 验证或正式 Shadow 准入。在系统证明使用价值、数据成为主要瓶颈且 `PAID_PROVIDER_UPGRADE_DECISION=PROCEED` 前，不进入 iFinD 启动门。当前真实 iFinD 调用数为 0，scheduler 关闭，Day 002 未创建。Codex 不得自行开始 F2A、F1、激活或调用 iFinD、恢复长期观察、开始 3B 或其他阶段。
 
-阻断项包括正式证券状态来源、数据许可、本地持久化权利、历史回放权利、稳定 source instrument ID、revision 语义以及 published/effective 时间语义。当前免费聚合源和 `securities` 当前态投影均不得被视为正式来源；2G 的研究级 AKShare/CNINFO 公告来源同样不得用于解除这些门禁。当前仍未实现正式 source adapter、FORMAL 摄取、PROVIDER_PIT_VERIFIED、`SECURITY_STATUS_EVENT_V2`、`security_status_history` 正式投影、正式 Provider trading calendar、Universe snapshot、`MARKET_BREADTH_V2`、完整 MARKET_REGIME、公告 PDF 语义分析或生产扫描切换。3A-R3B-0 的 raw/factor/calendar/action、2F V2 和 Shadow 已作为 TEST/DEMO 离线能力合入，但不能替代真实来源资格；正常业务库尚未执行 V13。阶段 2F、2G、2H、2I、3A-1、3A-R1、3A-R3A、3A-R3B 规划、3A-R3B-0 和免费优先治理规划均已完成并合入；F0 审计当前只在任务分支完成并待验收，F1 至 F3、3A-R3B-1 至 R3B-3 均未开始。当前只有 1 个有效观察日和 3 个 shadow item，尚未达到 20 个有效观察日、200 个 item、主要原因人工复核和正式观察报告门槛，因此完整 3A 未完成，3B 未开始。阶段 2D-2B 禁止外部行情补数、LLM 权威决策、投资建议和交易写操作。
+阻断项包括正式证券状态来源、数据许可、本地持久化权利、历史回放权利、稳定 source instrument ID、revision 语义以及 published/effective 时间语义。当前免费聚合源和 `securities` 当前态投影均不得被视为正式来源；2G 的研究级 AKShare/CNINFO 公告来源同样不得用于解除这些门禁。当前仍未实现正式 source adapter、FORMAL 摄取、PROVIDER_PIT_VERIFIED、`SECURITY_STATUS_EVENT_V2`、`security_status_history` 正式投影、正式 Provider trading calendar、Universe snapshot、`MARKET_BREADTH_V2`、完整 MARKET_REGIME、公告 PDF 语义分析或生产扫描切换。3A-R3B-0 的 raw/factor/calendar/action、2F V2 和 Shadow 已作为 TEST/DEMO 离线能力合入，但不能替代真实来源资格；正常业务库尚未执行 V13。阶段 2F、2G、2H、2I、3A-1、3A-R1、3A-R3A、3A-R3B 规划、3A-R3B-0、免费优先治理规划和 F0 审计均已完成并合入；F0.5 当前只在任务分支冻结规划，F1、F2A、F2B、F3、3A-R3B-1 至 R3B-3 均未开始。当前只有 1 个有效观察日和 3 个 shadow item，尚未达到 20 个有效观察日、200 个 item、主要原因人工复核和正式观察报告门槛，因此完整 3A 未完成，3B 未开始。阶段 2D-2B 禁止外部行情补数、LLM 权威决策、投资建议和交易写操作。

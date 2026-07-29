@@ -2,13 +2,14 @@
 
 ## 1. 状态与范围
 
-状态：**审计、最小受控探针和 Codex 本地验证已在任务分支完成，待 ChatGPT 基于实际
-Git 提交验收，尚未合入；F1 未开始。**
+状态：**审计、最小受控探针和修复后离线验证已完成；ChatGPT 已基于实际 Git 最终提交
+复验通过，用户已批准并完成纯 fast-forward 合入；F1 未开始。**
 
 - 冻结集成基线：`c47b88e586f6751563fe210f40137a3b7ce5e576`
 - 任务分支：
   `codex/1.4.0-stage-3ar3b-f0-free-provider-qualification-audit`
 - 目标提交：`docs(agent): audit free provider qualification`
+- 最终提交：`059eacffaf7e4a9f383be205d453c5168279932a`
 - 阶段记录：
   [stage-3ar3b-f0-free-provider-qualification-audit.md](../stage-3ar3b-f0-free-provider-qualification-audit.md)
 - 能力矩阵：
@@ -19,6 +20,8 @@ Git 提交验收，尚未合入；F1 未开始。**
   [free-provider-probe-matrix.md](../free-provider-probe-matrix.md)
 - 书面许可问题：
   [free-provider-written-permission-questions.md](../free-provider-written-permission-questions.md)
+- 后续治理：
+  [3ar3b-f05-free-implementation-scope.md](3ar3b-f05-free-implementation-scope.md)
 
 本阶段只审计来源、能力、许可、字段和稳定性。它没有开发生产 Adapter，没有接入或执行
 V13，没有访问数据库，没有启动 FastAPI、Spring Boot、Vue 或 Shadow，也没有调用
@@ -256,6 +259,8 @@ CNINFO 页面确认其为深圳证券交易所法定信息披露平台，由深�
 
 ```text
 F0_AUDIT_RESULT=PARTIAL
+FREE_IMPLEMENTATION_PATH=RESEARCH_PREVIEW_FIRST
+FREE_PRODUCT_PREVIEW_GATE=BLOCKED
 FREE_PROVIDER_VALIDATION_GATE=BLOCKED
 PAID_PROVIDER_UPGRADE_DECISION=PENDING
 IFIND_TRIAL_ACTIVATION_GATE=BLOCKED
@@ -272,8 +277,9 @@ IFIND_TRIAL_ACTIVATION_GATE=BLOCKED
 6. AKShare 各上游只能保持研究辅助；
 7. CNINFO/SSE/SZSE 只能作为官方证据，不是已批准批量数据 Adapter。
 
-当前没有任何免费来源能单独承担完整 V13/QFQ 同源 lineage。F1 只有在书面许可和核心
-技术证据补齐、F0 实际 Git 提交另行验收并获用户授权后才可规划；本阶段没有自动开始 F1。
+当前没有任何免费来源能单独承担完整 V13/QFQ 同源 lineage。F0 已完成实际 Git 验收和
+合入，但 F1 仍只有在书面许可与核心技术证据补齐并获用户单独授权后才可规划；本阶段没有
+自动开始 F1。
 
 ## 9. 验证
 
@@ -302,4 +308,4 @@ quant-ai/.venv/Scripts/python.exe tools/free_provider_audit_f0.py
 - scheduler 关闭；
 - F1、3A-R3B-1 和 3B 均未开始；
 - `.ai/` 未读取、修改、暂存或提交；
-- 本任务分支尚未 merge。
+- 本任务分支已由用户批准纯 fast-forward 合入集成分支。
