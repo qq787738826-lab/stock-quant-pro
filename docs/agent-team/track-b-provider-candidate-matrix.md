@@ -1,0 +1,107 @@
+# Track B Provider 候选统一资格矩阵
+
+## 1. 范围与状态词
+
+- 调查日期：`2026-07-29`
+- 候选数量：精确为 3 个：BaoStock、Tushare Pro、同花顺 iFinD。
+- 本矩阵只使用 [Track B 官方证据登记册](track-b-provider-evidence-register.md) 中的官方资料，以及已经验收的 F0 直接 Provider 探针事实。
+- 不以搜索摘要、博客、论坛、第三方 GitHub、代理报价或未确认身份的聊天记录支撑结论。
+- “没有写禁止”不等于允许；许可不明确时使用 `PENDING_WRITTEN_CONFIRMATION` 或 `UNVERIFIED`。
+
+法律与用途状态只允许：
+
+`VERIFIED_ALLOWED`、`VERIFIED_RESTRICTED`、`VERIFIED_NOT_ALLOWED`、`PENDING_WRITTEN_CONFIRMATION`、`UNVERIFIED`。
+
+技术能力状态只允许：
+
+`VERIFIED`、`PARTIAL`、`UNVERIFIED`、`NOT_SUPPORTED`、`REQUIRES_TRIAL_PROBE`。
+
+## 2. 法律与用途
+
+| 维度 | BaoStock | Tushare Pro | 同花顺 iFinD |
+|---|---|---|---|
+| 个人研究调用 | `PENDING_WRITTEN_CONFIRMATION`：无需注册和免费可用不等于取得具体数据用途许可（BS-001/002） | `VERIFIED_RESTRICTED`：现行数据服务协议限定个人、不可转让、非商业、可撤销、有期限，并写明仅供个人查看（TS-002） | `PENDING_WRITTEN_CONFIRMATION`：免费/试用/正式额度公开，但个人研究授权范围未公开（IF-001/002） |
+| 本地持久化 | `PENDING_WRITTEN_CONFIRMATION`（BS-002） | `PENDING_WRITTEN_CONFIRMATION`：官方技术文档建议本地缓存/保存，但现行协议“仅个人查看”，存在需要书面澄清的边界冲突（TS-002/015/016） | `PENDING_WRITTEN_CONFIRMATION`：接口可导出数据不等于长期落库权利（IF-003/004） |
+| 历史回放与回测 | `PENDING_WRITTEN_CONFIRMATION`（BS-002） | `PENDING_WRITTEN_CONFIRMATION`：官方 AI 文档给出回测工作流，合同适用范围仍需书面确认（TS-002/015） | `PENDING_WRITTEN_CONFIRMATION`：历史行情技术能力公开，回测授权未公开（IF-002/004） |
+| 内部智能体分析 | `PENDING_WRITTEN_CONFIRMATION`（BS-002） | `PENDING_WRITTEN_CONFIRMATION`：官方文档展示 AI/多智能体场景，但不能替代合同授权（TS-002/015） | `PENDING_WRITTEN_CONFIRMATION`：产品支持编程分析，内部 Agent 用途未公开授权（IF-002/003） |
+| 长期保存 | `PENDING_WRITTEN_CONFIRMATION` | `PENDING_WRITTEN_CONFIRMATION` | `PENDING_WRITTEN_CONFIRMATION` |
+| 内部衍生指标 | `PENDING_WRITTEN_CONFIRMATION` | `PENDING_WRITTEN_CONFIRMATION` | `PENDING_WRITTEN_CONFIRMATION` |
+| 个人自建系统展示 | `PENDING_WRITTEN_CONFIRMATION` | `PENDING_WRITTEN_CONFIRMATION` | `PENDING_WRITTEN_CONFIRMATION` |
+| 二次分发限制 | `VERIFIED_RESTRICTED`：官网内容未经书面许可不得复制、传播或商业使用；API 数据适用范围仍需确认（BS-002） | `VERIFIED_RESTRICTED`：许可不可转让且仅限非商业个人使用（TS-002） | `PENDING_WRITTEN_CONFIRMATION`：数据接口专项授权和再分发限制需合同确认 |
+| 是否要求企业身份 | `UNVERIFIED`：匿名 API 可用不能证明正式授权无需身份 | `VERIFIED_ALLOWED`：官方公布个人价格，机构另按个人价 10 倍；技术接入不要求企业身份（TS-003） | `UNVERIFIED`：公开试用入口要求填写公司信息，个人购买资格未明确（IF-006） |
+| 是否需单独协议 | `PENDING_WRITTEN_CONFIRMATION` | `VERIFIED_RESTRICTED`：付费即受数据服务协议约束，独立权限接口另行开通（TS-002/003） | `PENDING_WRITTEN_CONFIRMATION`：试用与正式合同内容未公开 |
+| 服务终止后数据处理 | `UNVERIFIED` | `UNVERIFIED` | `UNVERIFIED` |
+| 免费/积分/试用/付费差异 | `UNVERIFIED` | `VERIFIED_RESTRICTED`：120/2000/5000 等积分与独立接口权限不同，个人与机构价格不同（TS-003） | `VERIFIED_RESTRICTED`：免费、试用、正式账号的额度和历史范围不同（IF-001/002） |
+
+法律结论：
+
+- BaoStock：`PENDING_WRITTEN_CONFIRMATION`。免费访问和客户端许可不能替代底层数据用途许可。
+- Tushare Pro：`PENDING_WRITTEN_CONFIRMATION`。它是三者中用途资料最充分的候选，但现行合同的“个人查看”与官方本地缓存、回测、AI 示例之间需要书面消歧。
+- iFinD：`PENDING_WRITTEN_CONFIRMATION`。专项 API 合同、个人购买、本地保存、试用留存和内部 Agent 权利均需正式报价/合同确认。
+
+## 3. 技术事实能力
+
+| 技术维度 | BaoStock | Tushare Pro | 同花顺 iFinD |
+|---|---|---|---|
+| 1. 日线原始行情 | `VERIFIED`：F0 直接探针观察到未复权日线；终态完整性仍为 `UNVERIFIED`（BS-003/005） | `VERIFIED`：`daily` 明确为未复权，含 OHLC、手、千元单位（TS-004） | `VERIFIED`：官方 HTTP 历史行情示例公开 OHLC（IF-004） |
+| 2. 前复权行情 | `VERIFIED`：公开 API 与 F0 探针均存在 QFQ（BS-003/005） | `VERIFIED`：`pro_bar` 动态计算 QFQ（TS-008） | `PARTIAL`：官方 FAQ 描述复权算法，但实际指标需账号内工具确认（IF-002） |
+| 3. 独立复权因子 | `PARTIAL`：公开因子语义存在，F0 两个证券短区间查询均为 0 行（BS-004/005） | `VERIFIED`：`adj_factor(ts_code, trade_date, adj_factor)`，按交易日返回（TS-005） | `PARTIAL`：公开 FAQ 说明累计复权因子，字段名、精度和取数函数需试用确认（IF-002） |
+| 4. 公司行动 | `PARTIAL`：分红/送转入口与一次 F0 观察存在，稳定事件 ID、修订关系不明（BS-003/005） | `PARTIAL`：`dividend` 覆盖现金、送股、转增及多类日期；配股、拆并股和修订关系未形成完整证明（TS-007） | `REQUIRES_TRIAL_PROBE`：基础数据可覆盖公司资料/重组，但 V13 所需事件函数与字段未公开列全（IF-003） |
+| 5. 除权除息 | `PARTIAL`（BS-004/005） | `VERIFIED`：`record_date/ex_date/imp_ann_date` 等字段公开（TS-007） | `PARTIAL`：FAQ 说明除权日维护因子，具体事件字段需探针（IF-002） |
+| 6. 停复牌 | `PARTIAL`：历史行情含交易状态，但独立事件能力未充分证明 | `VERIFIED`：`suspend_d`（TS-010） | `REQUIRES_TRIAL_PROBE` |
+| 7. 上市/退市状态 | `PARTIAL` | `VERIFIED`：`stock_basic` 提供 `list_status/list_date/delist_date`（TS-009） | `PARTIAL`：公开文档说明可取在市/退市代码列表，时态字段需探针（IF-002） |
+| 8. ST 状态 | `VERIFIED`：历史行情含 `isST`（BS-003） | `VERIFIED`：`stock_st` 提供逐交易日历史，但需 3000 积分（TS-011） | `REQUIRES_TRIAL_PROBE` |
+| 9. 精确交易日历 | `PARTIAL`：通用日历缺交易所身份（BS-005） | `VERIFIED`：`trade_cal` 显式区分 SSE/SZSE（TS-006） | `VERIFIED`：官方 HTTP 示例按 marketCode 查询交易日（IF-004） |
+| 10. 指数成分 | `PARTIAL`：只见有限指数集合 | `VERIFIED`：`index_weight`（TS-013） | `VERIFIED`：官方数据池/板块成分示例（IF-003/004） |
+| 11. 指数行情 | `PARTIAL` | `VERIFIED`：`index_daily`（TS-012） | `VERIFIED`：历史行情/日期序列支持指数（IF-002/003） |
+| 12. 公告元数据 | `NOT_SUPPORTED` | `VERIFIED`：独立公告权限包含标题和 PDF 链接（TS-003） | `VERIFIED`：`report_query` 返回日期、标题、ctime、PDF URL、seq（IF-003/004） |
+| 13. 公告正文或 PDF | `NOT_SUPPORTED` | `VERIFIED`：独立公告权限，需另购（TS-003） | `VERIFIED`：公告查询与下载额度公开（IF-001/004） |
+| 14. 稳定证券 ID | `PARTIAL`：`sh.600000` 等身份稳定性未有合同/版本保证 | `VERIFIED`：`ts_code` 含交易所后缀并贯穿核心接口（TS-004/005/006/007/009） | `PARTIAL`：`thscode` 跨接口公开，但生命周期/换码语义需探针（IF-003/004） |
+| 15. Provider revision/version | `NOT_SUPPORTED` | `NOT_SUPPORTED`：公开核心字段没有 revision/snapshot | `REQUIRES_TRIAL_PROBE` |
+| 16. published time | `NOT_SUPPORTED` | `PARTIAL`：有接口更新时点和公告日，不等于逐版本 publishedAt（TS-004/005/007） | `REQUIRES_TRIAL_PROBE`：FAQ 有总体入库时点，不等于逐事实 publishedAt（IF-002） |
+| 17. effective time | `PARTIAL`：交易日/除权日存在，语义链不完整 | `PARTIAL`：trade/ex/record/implementation dates 存在，统一事件有效时点需映射验证（TS-005/007） | `REQUIRES_TRIAL_PROBE` |
+| 18. 历史修订识别 | `NOT_SUPPORTED` | `UNVERIFIED` | `REQUIRES_TRIAL_PROBE` |
+| 19. 分页和增量 | `PARTIAL`：游标结果存在，稳定增量合同不明 | `VERIFIED`：日期/证券参数、行限和全日抓取模式明确（TS-004/005/006） | `PARTIAL`：函数和数据量限制公开，增量游标语义需确认（IF-001/003） |
+| 20. 全市场批量 | `PARTIAL`：F0 禁止执行全市场探针 | `VERIFIED`：按交易日可获取全市场日线/因子，股票基础信息单次覆盖全市场（TS-004/005/009） | `VERIFIED`：板块成分与多代码接口公开（IF-003/004） |
+| 21. 调用频率 | `UNVERIFIED` | `VERIFIED`：积分等级对应每分钟频次（TS-003） | `VERIFIED`：单函数 QPS 10、账号总 QPS 20（IF-002） |
+| 22. 每日/周期额度 | `UNVERIFIED` | `VERIFIED`：积分等级对应每日额度（TS-003） | `VERIFIED`：免费按月、试用/正式按周额度（IF-001） |
+| 23. 错误码 | `VERIFIED`：结果对象暴露 `error_code/error_msg`（BS-003/005） | `VERIFIED`：HTTP `code/msg/data`，2002 为权限问题（TS-014） | `VERIFIED`：`errorcode/errmsg`，公开部分登录与网络错误码（IF-002/003） |
+| 24. SLA/稳定性承诺 | `NOT_SUPPORTED`：免责声明明确不保证不中断（BS-002） | `NOT_SUPPORTED`：服务协议不保证准确、完整和及时（TS-002） | `UNVERIFIED` |
+| 25. Python/Java 接入 | `PARTIAL`：公开 Python 客户端；Java 公共接入未证明 | `VERIFIED`：Python SDK 与通用 HTTP，可由 Java 调用（TS-014/015） | `VERIFIED`：Python、Java、HTTP 等多语言接口公开（IF-002/003/005） |
+
+## 4. V13/QFQ 与 PIT
+
+| 候选 | V13/QFQ 状态 | 依据 | PIT 状态 | 依据 |
+|---|---|---|---|---|
+| BaoStock | `V13_LINEAGE_BLOCKED` | raw 可用，但独立因子结果、`DAILY_EXACT`、交易所日历身份、公司行动版本和用途许可均未满足；禁止跨来源补齐 | `PIT_PARTIAL` | 技术上可在获准后从真实首次捕获建立系统知识链，但当前本地保存/回放/Agent 权利未确认，也无 Provider revision |
+| Tushare Pro | `V13_LINEAGE_PARTIAL` | 同一 Provider 已公开 raw、逐交易日 factor、SSE/SZSE calendar、dividend 和统一 `ts_code`；公司行动完整范围、修订关系和合法存储/回测/Agent 用途尚未闭合 | `FORWARD_PIT_BUILDABLE` | 无 Provider 历史 revision，不具备 `PROVIDER_PIT_READY`；在取得书面许可后可依 V13 从首次真实捕获建立 `SYSTEM_KNOWLEDGE_PIT` |
+| 同花顺 iFinD | `V13_LINEAGE_UNVERIFIED` | 公共文档证明接口广度，但核心指标名、字段、四类事实是否同一授权、身份及事件关系只能在试用/书面材料中验证 | `PIT_UNVERIFIED` | 更新时点与复权语义有公开说明，但 revision/snapshot/published/effective/旧版本及留存权利均需试用和合同证据 |
+
+任何候选都未达到 `V13_LINEAGE_READY` 或 `PROVIDER_PIT_READY`。
+
+## 5. 加权评分
+
+评分范围为 0—5。总分只用于排序，硬性许可/lineage 门禁优先于总分。
+
+| 候选 | 法律与用途 30% | V13/QFQ 25% | PIT/版本 15% | 覆盖/稳定 15% | 个人成本 10% | 接入复杂度 5% | 加权总分 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| BaoStock | 1.0 | 1.5 | 1.5 | 2.5 | 5.0 | 4.0 | **1.98** |
+| Tushare Pro | 2.0 | 3.5 | 2.5 | 4.0 | 4.5 | 4.0 | **3.10** |
+| 同花顺 iFinD | 1.0 | 2.5 | 2.5 | 4.0 | 1.0 | 2.0 | **2.10** |
+
+评分解释：
+
+- Tushare Pro 不是因为总分最高就获批，而是其核心四事实、交易所日历身份、逐日因子、个人公开价格和 HTTP 接入形成最短的可验证闭环。
+- Tushare Pro 仍被硬门禁阻断：本地保存、回测、Agent、长期留存需书面确认，公司行动完整性和版本语义需样例。
+- iFinD 作为备用是因为其专业数据和多语言接口上限高于 BaoStock，但必须先取得报价、合同和试用字段证据；当前不启动试用。
+- BaoStock 免费但许可与核心 `DAILY_EXACT` 证据缺口会持续拖慢完整 V13/QFQ，保留为研究辅助，不作为正式备用路线。
+
+## 6. 强制路线结论
+
+```text
+TRACK_B_PRIMARY_ROUTE=LOW_COST_PROVIDER_FIRST
+TRACK_B_FALLBACK_ROUTE=IFIND
+F1_ENTRY_READINESS=BLOCKED_MULTIPLE
+```
+
+主要路线具体指 Tushare Pro，不表示批准 Adapter、购买积分、注册账号或发起调用。备用路线具体指 iFinD，仅在 Tushare 书面许可或最小技术样例不能满足 F1 合同时再进入付费路线决策；它不表示现在启动 15 天试用。

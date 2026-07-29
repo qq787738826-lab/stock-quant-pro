@@ -269,7 +269,7 @@
 - 既有规划状态：iFinD 里程碑规划提交 `23baf11ed3a236800b5f3feba8681d261a71d9f9` 已通过 ChatGPT 对实际 Git 提交的验收，并经用户批准纯 fast-forward 合入。精确验收和批准时间无仓库证据，记为 `UNKNOWN`。
 - 免费优先更新：最终提交 `c47b88e586f6751563fe210f40137a3b7ce5e576` 已通过 ChatGPT 对实际 Git 提交的验收，并经用户批准纯 fast-forward 合入。系统先用免费数据验证产品形态和效果；只有系统显示可重复使用价值、数据成为可量化主要瓶颈，且同范围免费/付费 A/B 方案和成本意愿均明确后，才考虑 iFinD 或其他付费 Provider。
 - 日期边界：iFinD 试用不得绑定 `2026-08-31`、2026 年 8 月 31 日或任何其他固定日期。日历日期只能作为非权威临时估算，不属于路线图依赖，不得因预计日期临近而降低验收标准。
-- 当前集成 HEAD：`4917bbabc8262106abb47e6cb90cf7ab96e76d7d`。当前状态：`F0_AUDIT_RESULT=PARTIAL`、`FREE_IMPLEMENTATION_PATH=RESEARCH_PREVIEW_FIRST`、`FREE_PRODUCT_PREVIEW_GATE=PASS`、`FREE_PROVIDER_VALIDATION_GATE=BLOCKED`、`PAID_PROVIDER_UPGRADE_DECISION=PENDING`、`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`。真实 Provider 尚未接入，正常业务库 V13 未执行，试用尚未启动，真实 iFinD 调用数为 0；F2A、R1、R1A 与 R1B 技术实现均已验收并纯 fast-forward 合入。用户基于 R1B 最终基线完成 DEMO01/DEMO02 视觉复验，并于 `2026-07-29 16:44 +08:00` 明确认可产品形态；产品门 PASS 的治理提交当前仍在任务分支等待实际 Git 验收与合入。Track A 已完成，Track B 的 F1/F2B/F3 均未开始，Day 002 未创建，scheduler 关闭，3B 未开始。
+- 当前集成 HEAD：`8b6a6bf39a40e44062a3f7aeb315e17e9b62e199`。当前状态：`F0_AUDIT_RESULT=PARTIAL`、`FREE_IMPLEMENTATION_PATH=RESEARCH_PREVIEW_FIRST`、`FREE_PRODUCT_PREVIEW_GATE=PASS`、`FREE_PROVIDER_VALIDATION_GATE=BLOCKED`、`PAID_PROVIDER_UPGRADE_DECISION=PENDING`、`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`。真实 Provider 尚未接入，正常业务库 V13 未执行，试用尚未启动，真实 Provider 与 iFinD 调用数均为 0；F2A、R1、R1A、R1B 与产品门治理均已验收并纯 fast-forward 合入，Track A 正式完成。Track B0 已在任务分支完成有界官方资料调查和路线推荐，待实际 Git 验收且尚未合入；F1/F2B/F3 均未开始，Day 002 未创建，scheduler 关闭，3B 未开始。
 
 #### 3A-R3B-0：Provider 中立离线闭环与试用准备（已完成并合入）
 
@@ -304,13 +304,25 @@
 - 资格隔离：轨道 A 的产品可见性不能代替轨道 B 的许可、事实身份、`DAILY_EXACT`、knowledge-time 或 Provider 资格。
 - 后续入口：用户已在 F0.5 合入后另行授权 F2A；F1 仍未开始。
 
-#### 3A-R3B-F1：免费 Provider Adapter 与 V13 接入（未开始）
+#### 3A-R3B-TRACK-B0：真实数据 Provider 路线决策与 F1 准入合同（任务分支已完成，待验收）
 
-- 启动条件：至少一条免费路线的个人研究调用、本地持久化、历史回放/回测、内部 Agent 使用、字段单位、稳定来源身份等边界明确；完整 QFQ 还必须解决独立 factor、`DAILY_EXACT`、交易所日历身份、公司行动身份和单 Provider lineage。F0 已验收不自动满足这些条件。
+- 性质：Track B 的唯一入口决策阶段；只调查 BaoStock、Tushare Pro 和同花顺 iFinD 三条路线，只使用官方资料，不开发 Adapter、不调用 Provider。
+- 交付：[任务书](tasks/3ar3b-track-b0-provider-route-decision.md)、[阶段记录](stage-3ar3b-track-b0-provider-route-decision.md)、[候选矩阵](track-b-provider-candidate-matrix.md)、[证据登记册](track-b-provider-evidence-register.md)、[成本模型](track-b-provider-cost-model.md)、[许可请求包](track-b-permission-request-pack.md)、[F1 准入合同](track-b-f1-entry-contract.md)和[试用探针合同](track-b-trial-probe-contract.md)。
+- 决策：`TRACK_B_PRIMARY_ROUTE=LOW_COST_PROVIDER_FIRST`，具体候选为 Tushare Pro；`TRACK_B_FALLBACK_ROUTE=IFIND`。BaoStock 保留免费研究辅助与许可候选角色，不作为当前备用路线。
+- 评分：按法律与用途 30%、V13/QFQ 25%、PIT 15%、覆盖与稳定性 15%、个人成本 10%、接入复杂度 5% 计算，BaoStock 为 `1.98/5`、Tushare Pro 为 `3.10/5`、iFinD 为 `2.10/5`。硬性许可和事实门禁优先于总分。
+- 技术结论：Tushare Pro 已公开 raw daily、独立 `adj_factor`、SSE/SZSE `trade_cal`、`dividend` 与稳定 `ts_code` 等同平台能力，判为 `V13_LINEAGE_PARTIAL`；未证明完整公司行动/修订关系、`DAILY_EXACT` 实样、证券身份生命周期或 Provider revision/published/历史版本，不能判 READY。无已验证 Provider revision 时，只有在用途许可明确后，才能从系统首次真实捕获起建设 `FORWARD_PIT_BUILDABLE`。
+- 许可与成本结论：Tushare Pro 官方服务协议的个人查看/非商业限制，与官方缓存、回测和 AI 文档存在需书面澄清的用途边界；2000 积分官方个人价格为人民币 200 元/年，但用户尚未批准购买。因此 `F1_ENTRY_READINESS=BLOCKED_MULTIPLE`，具体为书面许可、技术证据和成本批准三类阻断。
+- iFinD 定位：官方资料显示其 SDK/HTTP、数据覆盖和额度能力适合作为专业备用，但个人资格、授权、价格、V13 字段与 revision 语义必须由官方报价、书面许可和未来受控试用验证；Track A 通过不表示现在应启动 15 天试用。
+- 用户外部动作：优先向 Tushare Pro 官方发送许可与接口确认问题，取得可留档书面答复及准确套餐范围；若答复不能满足硬门禁，则按备用路线向 iFinD 获取正式报价、个人资格与试用授权范围。不得自行注册、购买、激活或调用。
+- 当前边界：该任务分支待 ChatGPT 实际 Git 验收，尚未合入；即使后续合入也不自动授权 F1。四项正式门禁不变，Provider/iFinD 真实调用数为 0。
+
+#### 3A-R3B-F1：选定 Provider Adapter 与 V13 接入（未开始）
+
+- 启动条件：选定路线的个人研究调用、本地持久化、历史回放/回测、内部 Agent 使用、字段单位、稳定来源身份和成本边界必须明确；完整 QFQ 还必须解决独立 factor、`DAILY_EXACT`、交易所日历身份、公司行动身份和单 Provider lineage。F0 或 Track B0 调查完成均不自动满足这些条件。
 - 历史用途：`RESEARCH_HISTORICAL_UNVERIFIED` 仅用于产品、演示、探索性历史回测、覆盖研究和交叉校验；不声明 Provider PIT、历史无前视、正式商业资格或历史修订版本。
 - 前向用途：只有真实首次捕获之后，满足 append-only、`firstObservedAt`、`knownAt`、cutoff 和许可门禁的事实才能成为 `SYSTEM_KNOWLEDGE_PIT`；它不证明首次捕获前 Provider 的发布时间或修订。
-- 边界：不得把免费 Provider 升级为 `PROVIDER_PIT_VERIFIED`，不得绕过 V13 用途许可、跨 Provider 拼接 QFQ、自动全市场抓取、开启 scheduler、创建 Day 002 或自动交易。
-- 当前阻断：BaoStock 继续为 `PENDING_WRITTEN_PERMISSION`，不得提升为 `FREE_PROVIDER_F1_CANDIDATE`、`APPROVED_ADAPTER`、`PROVIDER_PIT_VERIFIED` 或 `FORMAL`。
+- 边界：不得把任一候选升级为 `PROVIDER_PIT_VERIFIED`，不得绕过 V13 用途许可、跨 Provider 拼接 QFQ、自动全市场抓取、开启 scheduler、创建 Day 002 或自动交易。
+- 当前阻断：`F1_ENTRY_READINESS=BLOCKED_MULTIPLE`。Tushare Pro 缺书面许可、关键技术证据与用户成本批准；BaoStock 继续为 `PENDING_WRITTEN_PERMISSION`；iFinD 仍需报价、授权和未来试用证据。三者均不得提升为 `APPROVED_ADAPTER`、`PROVIDER_PIT_VERIFIED` 或 `FORMAL`。
 
 #### 3A-R3B-F2A：免费研究预览产品（技术与用户产品形态验收均完成）
 
@@ -346,23 +358,23 @@
 - 修复：研究总览头部放弃双列布局，按标签、证券、日期/扫描任务、资格信息的单列正常文档流自然排列；总控、原因和 Agent 状态区域依次位于头部之后，不使用叠层或裁切补丁。
 - 最终视觉结果：DEMO01 的标的、日期、资格与总控不再重叠，并清楚显示“数据质量门禁：通过、研究证据完整性：不足”；DEMO02 清楚显示 `REJECTED_BY_VETO`、POSITION_RISK 正式 veto 与 `DEMO_POSITION_LIMIT` 入口。五个主 Tab、历史高亮、默认折叠和无投资建议边界均通过用户查看。
 
-#### 3A-R3B-F2A-GATE：免费研究预览产品门（治理任务分支待验收）
+#### 3A-R3B-F2A-GATE：免费研究预览产品门（已完成并合入）
 
 - 用户批准：`2026-07-29 16:44 +08:00`，用户明确回复：“认可当前产品形态，批准创建独立治理提交，将FREE_PRODUCT_PREVIEW_GATE改为PASS。”
-- 当前状态：`FREE_PRODUCT_PREVIEW_GATE=PASS` 已在治理任务分支 `codex/1.4.0-stage-3ar3b-f2a-product-preview-gate-pass` 落地；治理提交待 ChatGPT 基于实际 Git 验收，尚未合入，远程集成 HEAD 仍为 `4917bbabc8262106abb47e6cb90cf7ab96e76d7d`。
+- 当前状态：最终提交 `8b6a6bf39a40e44062a3f7aeb315e17e9b62e199` 已通过 ChatGPT 对实际 Git 提交的复验，经用户批准纯 fast-forward 合入；本地和远程集成分支一致，ahead/behind 为 `0/0`。`FREE_PRODUCT_PREVIEW_GATE=PASS`。
 - 任务证据：[产品门任务书](tasks/3ar3b-f2a-product-preview-gate-pass.md)和[产品门阶段记录](stage-3ar3b-f2a-product-preview-gate-pass.md)。
 - 精确定义：PASS 只表示用户已查看并认可免费研究预览的信息架构、产品形态、日常只读研究流程，以及六智能体、总控、证据、历史和报告的展示方式；Track A 正式完成。
 - 不包含范围：不证明 Provider、PIT/QFQ、策略效果、回测收益或 Shadow，不授权投资建议、真实账户、自动交易、iFinD、F1、F2B 或 F3。
 
-#### 3A-R3B-F2B：免费 Provider 支持的真实产品闭环（未开始）
+#### 3A-R3B-F2B：选定 Provider 支持的真实产品闭环（未开始）
 
-- 启动条件：F1 已完成并通过验收，至少一套免费 Provider 路线具有明确用途边界，且合法 `SYSTEM_KNOWLEDGE_PIT` 已能前向积累。
+- 启动条件：F1 已完成并通过验收，选定 Provider 路线具有明确用途边界，且合法 `SYSTEM_KNOWLEDGE_PIT` 已能前向积累。
 - 目标：以真实 Provider-backed 事实驱动合格回测和六智能体，同时执行真实来源资格标签与用途门禁，为 F3 提供输入。
 - 边界：F2A 完成不等于 F2B 或原完整 F2 完成；F2B 也不自动批准 F3、Day 002、scheduler 或 iFinD。
 
-#### 3A-R3B-F3：免费 Shadow 与效果评估（未开始）
+#### 3A-R3B-F3：Provider-backed Shadow 与效果评估（未开始）
 
-- 输入：通过 F1/F2B 形成的免费 Provider 数据和合法 `SYSTEM_KNOWLEDGE_PIT`；F2A 研究预览不得作为正式 F3 输入。
+- 输入：通过 F1/F2B 形成的选定 Provider 数据和合法 `SYSTEM_KNOWLEDGE_PIT`；F2A 研究预览不得作为正式 F3 输入。
 - 最低门槛：不少于 20 个有效观察日、200 个 Shadow item，主要 reasonCode 正式人工复核，持续业务表只读证明和正式观察报告；观察时间由实际开发和市场日历决定，不绑定固定日期。
 - 指标冻结：Shadow 开始前必须冻结 `FREE_VALIDATION_METRICS_V1`，覆盖 5/10/20 日命中、相对基准命中和平均/中位超额、MFE/MAE、最大回撤、盈亏比、换手、交易成本、市场环境、confidence 区分度、阻断率、各 Agent 边际贡献、重放/Hash、随机选择和固定基准。
 - 反选择偏差：冻结后不得移动阈值、周期、基准或样本选择；不得只以推荐上涨比例作为准确率、只报告盈利样本，或删除失败、阻断和无信号样本。

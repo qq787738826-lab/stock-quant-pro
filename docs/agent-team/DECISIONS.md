@@ -161,3 +161,21 @@
 96. **F2A-R1 不改变资格、只读或权威规则边界**：R1 继续 GET-only，保持 `EXISTING_RESEARCH_SNAPSHOT/RESEARCH_HISTORICAL_UNVERIFIED` 与 `TEST_DEMO_EXPLICIT/SYNTHETIC/NOT_REAL_MARKET_RESULT` 隔离，不修改 Demo 事实、Agent 规则、总控、数据资格、六 run 顺序或 POSITION_RISK 唯一正式 veto，不新增 Provider、数据库、Agent、Shadow 或交易写路径。R1 技术实现、测试、Git 验收或 merge 当时均未打开产品门；用户随后通过实际查看 R1A/R1B 最终页面并明确认可，才由独立治理提交记录 PASS。
 97. **F2A-R1A 分离数据门禁、证据完整性和风险颜色语义，R1B 最终采用垂直流**：R1 最终提交 `e2b9457e3594676875167a703ae09ebc75aaaaf6` 已通过 ChatGPT 实际 Git 技术复验并经用户批准纯 fast-forward 合入；用户于 `2026-07-29` 完成第二次视觉复验，主体信息架构通过但该轮产品门仍为 `BLOCKED`。R1A 废止含混的“数据可靠性”：DATA_QUALITY 的 status/gate 只映射为“数据质量门禁”，总控阻断/不足和 STRATEGY_BACKTEST 结构状态只映射为“研究证据完整性”，两者都不是新评分或可靠性认证；DEMO01 固定表达“门禁通过、证据不足”。综合报告风险 tone 只允许 `INFO→info`、`WARN→warning`、`HIGH/CRITICAL→danger`、`FORMAL_VETO→formal-veto`、未知→`neutral`，普通 INFO 不得显示为严重红色，正式 veto 仍只能来自 POSITION_RISK。R1A 的双列 Grid 是该轮历史实现；R1B 最终提交 `4917bbabc8262106abb47e6cb90cf7ab96e76d7d` 将头部替换为单列正常文档流，且不修改 Demo fixture、GET-only、Agent/总控、六 run、资格或 Provider/数据库边界。
 98. **用户最终产品形态验收后，FREE_PRODUCT_PREVIEW_GATE 变更为 PASS**：用户基于最终产品代码基线 `4917bbabc8262106abb47e6cb90cf7ab96e76d7d` 完成 DEMO01 与 DEMO02 最终视觉复验，并于 `2026-07-29 16:44 +08:00` 明确回复：“认可当前产品形态，批准创建独立治理提交，将FREE_PRODUCT_PREVIEW_GATE改为PASS。”因此当前正式状态为 `FREE_PRODUCT_PREVIEW_GATE=PASS`。该 PASS 只证明用户已经实际查看并认可免费研究预览的信息架构、产品形态、日常只读研究流程，以及六智能体、总控、证据、历史和报告的展示方式，Track A 的产品形态验证完成；它不证明免费 Provider、真实数据、Provider PIT、V13 正常业务库、策略效果、回测收益或 Shadow，不授权股票推荐、投资建议、券商账户、真实交易、自动交易、iFinD 或付费采购，也不自动启动 F1、F2B、F3 或其他后续阶段。产品预览门与当前仍为 `BLOCKED` 的免费 Provider 验证门保持独立，付费升级决定继续为 `PENDING`，iFinD 试用启动门继续为 `BLOCKED`。
+
+## Track B Provider 路线与 F1 准入
+
+99. **Track B0 只比较 BaoStock、Tushare Pro 与同花顺 iFinD，并以官方资料为决策证据**：Track B 的入口调查必须保持有界；能力、许可、价格与接口结论只使用 Provider 官方网站、官方 API 文档、官方服务协议、官方价格/申请页和官方联系方式。第三方文章、搜索摘要、论坛、代理报价或未核验客服截图不得支撑正式结论。调查完成不等于 Adapter 获批，也不允许真实 Provider 调用。
+
+100. **Track B 主要路线固定为 Tushare Pro 低成本正式数据，备用路线固定为 iFinD**：正式选择为 `TRACK_B_PRIMARY_ROUTE=LOW_COST_PROVIDER_FIRST`，其具体候选是 Tushare Pro；备用选择为 `TRACK_B_FALLBACK_ROUTE=IFIND`。加权评分按法律与用途 30%、V13/QFQ 25%、PIT 15%、覆盖与稳定性 15%、个人成本 10%、接入复杂度 5%，BaoStock、Tushare Pro、iFinD 分别为 `1.98/5`、`3.10/5`、`2.10/5`。评分只用于比较，硬性许可、同源事实、稳定身份、前向 PIT 与成本批准门禁优先。BaoStock 因用途许可、`DAILY_EXACT`、交易所日历身份和完整公司行动能力未解决，只保留免费研究辅助与书面许可候选角色，不作为当前备用路线。
+
+101. **Tushare Pro 只取得 V13 部分技术资格，不得因 API 覆盖直接进入 F1**：官方文档已证明同平台提供未复权 `daily`、独立 `adj_factor`、SSE/SZSE `trade_cal`、`dividend`、`stock_basic`、停复牌、ST、指数行情/成分以及 HTTP/Python 接入，`ts_code` 可作为证券身份候选；`pro_bar` 的 QFQ 会依赖查询结束日动态锚定，因此不得直接作为历史不可变事实。当前仍未证明公司行动对 V13 的完整覆盖和稳定事件身份、日级精确因子实样、证券身份生命周期、Provider revision/snapshot/published/update time、修订关系或旧版本查询，资格只能是 `V13_LINEAGE_PARTIAL`；在无 Provider 历史版本语义时，只能在书面用途许可通过后从系统首次真实捕获建立 `FORWARD_PIT_BUILDABLE`，不得声明 `PROVIDER_PIT_READY`。
+
+102. **Tushare Pro 的服务协议与缓存、回测、AI 文档之间必须取得书面用途澄清**：官方服务协议把服务描述为个人、不可转让、非商业、可撤销、限时并仅供个人查看；官方缓存/回测/AI 文档同时展示本地缓存、回测和智能体使用路径。页面存在并不自动授予本项目长期本地持久化、历史回放、回测、内部 Agent、衍生指标或本地 UI 展示权。F1 前必须由官方书面确认上述具体用途、终止后的数据处理、禁止再分发边界与相应套餐；“页面没有禁止”不得解释为允许。
+
+103. **F1 当前准入判断固定为多重阻断**：`F1_ENTRY_READINESS=BLOCKED_MULTIPLE`。阻断一是 Tushare Pro 本地持久化、回测、内部 Agent、长期保存和本地展示的书面许可；阻断二是公司行动完整性、`DAILY_EXACT` 实样、证券身份生命周期和修订/发布时间等技术证据；阻断三是官方 2000 积分个人价格人民币 200 元/年虽已公开，但用户尚未批准任何成本。取得书面答复、必要样例或受控试用证据并获得用户成本批准后，仍须经独立 Git 验收与用户单独授权，才能实施 F1；Track B0 合入本身不授权 F1。
+
+104. **iFinD 只作为专业备用路线，当前不启动 15 天试用**：官方资料已证明其提供多语言 SDK/HTTP、历史数据、复权因子、交易日历、公告与调用额度等专业能力，但个人购买资格、API 授权范围、本地保存/回测/Agent 权利、试用结束后的数据处理、正式价格、V13 四类事实字段和 Provider revision/历史版本语义均需官方报价、书面确认和未来受控探针。Track A 通过只证明产品形态，不证明策略价值、数据瓶颈或付费升级收益；因此 `PAID_PROVIDER_UPGRADE_DECISION=PENDING` 与 `IFIND_TRIAL_ACTIVATION_GATE=BLOCKED` 保持不变，Codex 不得申请、激活或调用 iFinD。
+
+105. **未来试用探针固定为最小、隔离且不持久化业务库**：低成本 Provider 或 iFinD 只有在法律与账户前置满足后，才允许针对两只非敏感测试股票、两个历史交易日，在最多 10 次业务请求内验证 raw daily、adjustment factor、trading calendar、corporate action、security identity 和 published/effective/revision 字段。禁止全市场抓取、scheduler、Day 002、正常业务库写入和自动重试；原始响应只能进入临时隔离目录，并必须形成删除或经许可保留的明确记录。该合同只冻结未来证据方法，不构成试用或调用授权。
+
+106. **Track B0 不改变四项正式门禁或 Track A 结果**：当前继续保持 `FREE_PRODUCT_PREVIEW_GATE=PASS`、`FREE_PROVIDER_VALIDATION_GATE=BLOCKED`、`PAID_PROVIDER_UPGRADE_DECISION=PENDING`、`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`。主要路线选择不等于免费 Provider 验证通过，不等于付费升级决定为 PROCEED，也不批准 V13 正常业务库迁移、F2B、F3、Day 002、scheduler、3A-R3B-1、3B、投资建议或真实/自动交易。
