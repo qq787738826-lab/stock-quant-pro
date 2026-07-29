@@ -52,20 +52,24 @@ POSITION_RISK 唯一正式否决权。
 
 ### 4.1 数据质量门禁
 
-只读取 DATA_QUALITY run：
+只读取 DATA_QUALITY run，展示优先级固定为“安全异常终态 → `gateStatus` → 普通运行进度”：
 
-| 结构状态 | 中文展示 |
-|---|---|
-| `gateStatus=PASS` | 通过 |
-| `gateStatus=WARN` | 警告 |
-| `gateStatus=BLOCKED` | 阻断 |
-| `gateStatus=NOT_APPLICABLE` | 不适用 |
-| `status=INSUFFICIENT_DATA` | 数据不足 |
-| `status=FAILED` | 失败 |
-| `status=SKIPPED` | 已跳过 |
-| run 缺失 | 暂无 |
+| 优先层 | 结构状态 | 中文展示 |
+|---|---|---|
+| 安全异常终态 | `status=INSUFFICIENT_DATA` | 数据不足 |
+| 安全异常终态 | `status=FAILED` | 失败 |
+| 安全异常终态 | `status=SKIPPED` | 已跳过 |
+| 门禁 | `gateStatus=BLOCKED` | 阻断 |
+| 门禁 | `gateStatus=WARN` | 警告 |
+| 门禁 | `gateStatus=PASS` | 通过 |
+| 门禁 | `gateStatus=NOT_APPLICABLE` | 不适用 |
+| 普通进度（仅门禁无明确结果） | `status=PARTIAL` | 部分完成 |
+| 普通进度（仅门禁无明确结果） | `status=QUEUED` | 等待中 |
+| 普通进度（仅门禁无明确结果） | `status=RUNNING` | 运行中 |
+| 无 run 或以上均不适用 | run 缺失/未知组合 | 暂无 |
 
-非完成状态不得因同时存在 PASS gate 而显示为“通过”。该字段不创建评分。
+因此 `PARTIAL/RUNNING` 同时带有 `BLOCKED/WARN` 时必须展示门禁，只有
+`INSUFFICIENT_DATA/FAILED/SKIPPED` 可以优先覆盖 gate。该字段不创建评分。
 
 ### 4.2 研究证据完整性
 
@@ -136,7 +140,8 @@ R1A 不修改 `demo.fixture.json`、后端、路由、菜单、API、依赖或�
 5. DEMO02 仍为 `REJECTED_BY_VETO` 且包含 POSITION_RISK 正式 veto；
 6. overview 使用稳定 Grid、自然高度和 1400px 单列降级；
 7. 禁止绝对定位、负 margin、固定 header 高度和溢出隐藏；
-8. `FREE_PRODUCT_PREVIEW_GATE=BLOCKED`。
+8. DATA_QUALITY“安全异常终态 → gate → 普通进度”的九组合优先级矩阵；
+9. `FREE_PRODUCT_PREVIEW_GATE=BLOCKED`。
 
 同时必须通过 `npm run build`（包含 `vue-tsc -b`）、`git diff --check`、Markdown
 链接/表格/UTF-8/换行/尾随空白及变更范围检查。

@@ -30,8 +30,10 @@ R1 最终提交 `e2b9457e3594676875167a703ae09ebc75aaaaf6` 已通过 ChatGPT
 
 ## 3. 首屏语义结果
 
-DATA_QUALITY 非完成/失败/不足状态优先于 gate 展示，避免错误显示“通过”。完成 run 再按
-PASS/WARN/BLOCKED/NOT_APPLICABLE 映射为通过/警告/阻断/不适用。
+DATA_QUALITY 展示顺序固定为：`INSUFFICIENT_DATA/FAILED/SKIPPED` 安全异常终态优先；
+其余 run 先按 `BLOCKED/WARN/PASS/NOT_APPLICABLE` gate 映射为阻断/警告/通过/不适用；
+只有 gate 没有明确结果时，才按 `PARTIAL/QUEUED/RUNNING` 展示普通运行进度。该顺序确保
+`PARTIAL/RUNNING + BLOCKED/WARN` 不会回退为“部分完成/运行中”而遮蔽门禁。
 
 研究证据完整性按总控阻断、总控不足、STRATEGY_BACKTEST 可用性、finalDecision 存在性和
 其他已有结果的固定优先级映射，不解析 summary、不计算新评分。
@@ -66,7 +68,7 @@ DEMO01 的公告和持仓 INFO finding 不再使用红色严重风险样式。DE
 
 | 验证 | 结果 |
 |---|---|
-| `npm run validate:research-preview` | 通过；GET-only、五分区、折叠、Demo、六 run、双数据语义、稳定 Grid、风险 tone 与门禁均通过 |
+| `npm run validate:research-preview` | 通过；GET-only、五分区、折叠、Demo、六 run、双数据语义、稳定 Grid、风险 tone 与门禁均通过；DATA_QUALITY 九组合优先级矩阵 `9/9` |
 | `npm run build` | 通过；命令实际包含 `vue-tsc -b`，TypeScript 和 Vite production build 均通过 |
 | DEMO01 静态向量 | 通过；DATA_QUALITY `COMPLETED/PASS`、回测不足、无正式 veto |
 | DEMO02 静态向量 | 通过；`REJECTED_BY_VETO` 与 POSITION_RISK 正式 veto 保留 |

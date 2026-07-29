@@ -26,6 +26,27 @@ function read(relativePath) {
   return readFileSync(absolutePath, 'utf8')
 }
 
+function extractLiteralStringMap(source, constantName) {
+  const declarationStart = source.indexOf(`const ${constantName}`)
+  if (declarationStart < 0) {
+    fail(`missing deterministic mapping: ${constantName}`)
+    return new Map()
+  }
+  const objectStart = source.indexOf('{', declarationStart)
+  const objectEnd = source.indexOf('\n}', objectStart)
+  if (objectStart < 0 || objectEnd < 0) {
+    fail(`cannot parse deterministic mapping: ${constantName}`)
+    return new Map()
+  }
+  const entries = new Map()
+  const body = source.slice(objectStart + 1, objectEnd)
+  for (const match of body.matchAll(/^\s*([A-Z_]+):\s*'([^']+)',?\s*$/gm)) {
+    entries.set(match[1], match[2])
+  }
+  if (entries.size === 0) fail(`deterministic mapping is empty: ${constantName}`)
+  return entries
+}
+
 function filesRecursively(directory) {
   return readdirSync(directory).flatMap((entry) => {
     const absolute = join(directory, entry)
@@ -151,11 +172,112 @@ for (const functionName of ['dataQualityGateLabel', 'researchEvidenceCompletenes
     fail(`missing deterministic presentation function: ${functionName}`)
   }
 }
+
+const terminalDataQualityLabels = extractLiteralStringMap(
+  presentationSource,
+  'DATA_QUALITY_TERMINAL_LABELS',
+)
+const gateDataQualityLabels = extractLiteralStringMap(
+  presentationSource,
+  'DATA_QUALITY_GATE_LABELS',
+)
+const progressDataQualityLabels = extractLiteralStringMap(
+  presentationSource,
+  'DATA_QUALITY_PROGRESS_LABELS',
+)
+const expectedDataQualityMappings = [
+  [terminalDataQualityLabels, 'INSUFFICIENT_DATA', '数据不足'],
+  [terminalDataQualityLabels, 'FAILED', '失败'],
+  [terminalDataQualityLabels, 'SKIPPED', '已跳过'],
+  [gateDataQualityLabels, 'BLOCKED', '阻断'],
+  [gateDataQualityLabels, 'WARN', '警告'],
+  [gateDataQualityLabels, 'PASS', '通过'],
+  [gateDataQualityLabels, 'NOT_APPLICABLE', '不适用'],
+  [progressDataQualityLabels, 'PARTIAL', '部分完成'],
+  [progressDataQualityLabels, 'QUEUED', '等待中'],
+  [progressDataQualityLabels, 'RUNNING', '运行中'],
+]
+for (const [mapping, key, expected] of expectedDataQualityMappings) {
+  if (mapping.get(key) !== expected) {
+    fail(`invalid data-quality label mapping: ${key} must be ${expected}`)
+  }
+}
+
+const priorityFunction = presentationSource.match(
+  /export function dataQualityGateLabelForState\([\s\S]*?\n\}/,
+)?.[0] ?? ''
+const priorityMarkers = [
+  "if (!status) return '暂无'",
+  'const terminalLabel = DATA_QUALITY_TERMINAL_LABELS[status]',
+  'if (terminalLabel) return terminalLabel',
+  'const gateLabel = gateStatus ? DATA_QUALITY_GATE_LABELS[gateStatus] : undefined',
+  'if (gateLabel) return gateLabel',
+  "return DATA_QUALITY_PROGRESS_LABELS[status] ?? '暂无'",
+]
+let previousPriorityIndex = -1
+for (const marker of priorityMarkers) {
+  const markerIndex = priorityFunction.indexOf(marker)
+  if (markerIndex < 0 || markerIndex <= previousPriorityIndex) {
+    fail(`data-quality priority implementation is missing or out of order: ${marker}`)
+    break
+  }
+  previousPriorityIndex = markerIndex
+}
 if (
-  !presentationSource.includes("dataQuality.gateStatus === 'PASS') return '通过'")
-  || !presentationSource.includes("bundle.decision?.decision === 'INSUFFICIENT_DATA') return '不足'")
+  !presentationSource.includes("if (!dataQuality) return '暂无'")
+  || !presentationSource.includes(
+    'return dataQualityGateLabelForState(dataQuality.status, dataQuality.gateStatus)',
+  )
 ) {
-  fail('DEMO01 data-quality gate / research-evidence semantics are not frozen')
+  fail('DATA_QUALITY run selection does not delegate to the frozen priority function')
+}
+
+function evaluateDataQualityLabel({ status, gateStatus, hasRun = true }) {
+  if (!hasRun) return '暂无'
+  return terminalDataQualityLabels.get(status)
+    ?? gateDataQualityLabels.get(gateStatus)
+    ?? progressDataQualityLabels.get(status)
+    ?? '暂无'
+}
+
+const dataQualityPriorityCases = [
+  { name: 'PARTIAL + BLOCKED', status: 'PARTIAL', gateStatus: 'BLOCKED', expected: '阻断' },
+  { name: 'PARTIAL + WARN', status: 'PARTIAL', gateStatus: 'WARN', expected: '警告' },
+  { name: 'RUNNING + BLOCKED', status: 'RUNNING', gateStatus: 'BLOCKED', expected: '阻断' },
+  { name: 'RUNNING + WARN', status: 'RUNNING', gateStatus: 'WARN', expected: '警告' },
+  { name: 'COMPLETED + PASS', status: 'COMPLETED', gateStatus: 'PASS', expected: '通过' },
+  {
+    name: 'COMPLETED + NOT_APPLICABLE',
+    status: 'COMPLETED',
+    gateStatus: 'NOT_APPLICABLE',
+    expected: '不适用',
+  },
+  { name: 'FAILED + PASS', status: 'FAILED', gateStatus: 'PASS', expected: '失败' },
+  {
+    name: 'INSUFFICIENT_DATA + PASS',
+    status: 'INSUFFICIENT_DATA',
+    gateStatus: 'PASS',
+    expected: '数据不足',
+  },
+  { name: 'no run', status: null, gateStatus: null, hasRun: false, expected: '暂无' },
+]
+let dataQualityPriorityPassCount = 0
+for (const testCase of dataQualityPriorityCases) {
+  const actual = evaluateDataQualityLabel(testCase)
+  if (actual !== testCase.expected) {
+    fail(
+      `data-quality priority case ${testCase.name} expected ${testCase.expected}, got ${actual}`,
+    )
+  } else {
+    dataQualityPriorityPassCount += 1
+  }
+}
+if (
+  !presentationSource.includes(
+    "bundle.decision?.decision === 'INSUFFICIENT_DATA') return '不足'",
+  )
+) {
+  fail('DEMO01 research-evidence insufficiency semantics are not frozen')
 }
 for (const forbiddenText of ['买入', '卖出', '加仓', '减仓', '目标价', '预计收益']) {
   if (sourceText.includes(forbiddenText)) fail(`research preview contains prohibited action wording: ${forbiddenText}`)
@@ -450,6 +572,7 @@ console.log(`PASS local API errors do not silently activate demo mode`)
 console.log(`PASS five sections, overview fallback, selected candidate state`)
 console.log(`PASS deterministic research actions and prohibited action wording absent`)
 console.log(`PASS data-quality gate and research-evidence completeness semantics`)
+console.log(`PASS data-quality gate priority matrix: ${dataQualityPriorityPassCount}/9`)
 console.log(`PASS stable overview grid with responsive single-column fallback`)
 console.log(`PASS Agent/evidence/comparison/audit details collapsed by default`)
 console.log(`PASS structured report with optional raw text`)

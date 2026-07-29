@@ -9,7 +9,9 @@ import type {
   AgentRun,
   FinalDecisionCode,
   Finding,
+  GateStatus,
   JsonValue,
+  RunStatus,
 } from '../agent-team/types'
 import type {
   AgentDisplaySlot,
@@ -288,20 +290,41 @@ export function researchActionForDecision(
   return decision ? RESEARCH_ACTIONS[decision] : '暂无研究动作'
 }
 
+const DATA_QUALITY_TERMINAL_LABELS: Partial<Record<RunStatus, string>> = {
+  INSUFFICIENT_DATA: '数据不足',
+  FAILED: '失败',
+  SKIPPED: '已跳过',
+}
+
+const DATA_QUALITY_GATE_LABELS: Partial<Record<GateStatus, string>> = {
+  BLOCKED: '阻断',
+  WARN: '警告',
+  PASS: '通过',
+  NOT_APPLICABLE: '不适用',
+}
+
+const DATA_QUALITY_PROGRESS_LABELS: Partial<Record<RunStatus, string>> = {
+  PARTIAL: '部分完成',
+  QUEUED: '等待中',
+  RUNNING: '运行中',
+}
+
+export function dataQualityGateLabelForState(
+  status: RunStatus | null | undefined,
+  gateStatus: GateStatus | null | undefined,
+): string {
+  if (!status) return '暂无'
+  const terminalLabel = DATA_QUALITY_TERMINAL_LABELS[status]
+  if (terminalLabel) return terminalLabel
+  const gateLabel = gateStatus ? DATA_QUALITY_GATE_LABELS[gateStatus] : undefined
+  if (gateLabel) return gateLabel
+  return DATA_QUALITY_PROGRESS_LABELS[status] ?? '暂无'
+}
+
 export function dataQualityGateLabel(bundle: PreviewTaskBundle | null): string {
   const dataQuality = bundle?.runs.find((run) => run.agentCode === 'DATA_QUALITY')
   if (!dataQuality) return '暂无'
-  if (dataQuality.status === 'INSUFFICIENT_DATA') return '数据不足'
-  if (dataQuality.status === 'FAILED') return '失败'
-  if (dataQuality.status === 'SKIPPED') return '已跳过'
-  if (dataQuality.status === 'PARTIAL') return '部分完成'
-  if (dataQuality.status === 'QUEUED') return '等待中'
-  if (dataQuality.status === 'RUNNING') return '运行中'
-  if (dataQuality.gateStatus === 'BLOCKED') return '阻断'
-  if (dataQuality.gateStatus === 'WARN') return '警告'
-  if (dataQuality.gateStatus === 'PASS') return '通过'
-  if (dataQuality.gateStatus === 'NOT_APPLICABLE') return '不适用'
-  return '暂无'
+  return dataQualityGateLabelForState(dataQuality.status, dataQuality.gateStatus)
 }
 
 export function researchEvidenceCompletenessLabel(bundle: PreviewTaskBundle | null): string {
