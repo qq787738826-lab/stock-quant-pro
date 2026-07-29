@@ -4,7 +4,8 @@
 
 状态：**免费数据验证优先、付费 Provider 后置升级的治理规划已通过 ChatGPT 对实际
 Git 提交的验收，经用户批准并纯 fast-forward 合入；后续 F0 审计也已通过最终复验并
-纯 fast-forward 合入。F0.5 当前只在独立任务分支冻结双轨实施范围，尚未合入。**
+纯 fast-forward 合入。F0.5 双轨治理也已验收合入；F2A 当前在独立任务分支完成技术
+实现，等待实际 Git 提交验收和用户后续视觉验收。**
 
 - 冻结集成基线：`f0b87e1ecf51d2e94d5eff43d18f5fc3b6abe819`
 - 任务分支：
@@ -39,13 +40,18 @@ iFinD 从项目开发前置依赖调整为“系统证明有效后的专业化�
 
 ## 3. 当前仓库事实
 
-- 当前集成 HEAD 为 `059eacffaf7e4a9f383be205d453c5168279932a`；
+- 当前集成 HEAD 为 `08943b4f6af03c75aa4df2a4ecf2494bede4e57b`；
 - 3A-R3B-0 已通过 ChatGPT 对实际 Git 提交的最终复验，经用户批准并纯
   fast-forward 合入，远程集成分支与最终提交一致，ahead/behind 为 `0/0`；
 - 本免费优先规划已通过验收并纯 fast-forward 合入，远程集成分支与最终提交一致；
 - 3A-R3B-F0 最终提交 `059eacffaf7e4a9f383be205d453c5168279932a`
   已通过 ChatGPT 实际 Git 最终复验，经用户批准并纯 fast-forward 合入，本地与远程集成
   分支一致，ahead/behind 为 `0/0`；
+- 3A-R3B-F0.5 最终提交 `08943b4f6af03c75aa4df2a4ecf2494bede4e57b`
+  已通过 ChatGPT 实际 Git 验收，经用户批准并纯 fast-forward 合入，本地与远程集成
+  分支一致，ahead/behind 为 `0/0`；
+- F2A 已由用户单独授权，技术实现当前在独立任务分支完成，待实际 Git 提交验收，尚未
+  合入或进行用户视觉验收；
 - `F0_AUDIT_RESULT=PARTIAL`，该结果不是失败，但不批准 F1；
 - V13 代码已进入集成分支，但正常业务库尚未执行 V13；
 - 真实 Provider 尚未接入；
@@ -142,7 +148,8 @@ FREE_IMPLEMENTATION_PATH=RESEARCH_PREVIEW_FIRST
 Provider 许可、`SYSTEM_KNOWLEDGE_PIT` 或 F3 已完成。
 
 F0.5 本身是纯治理文档阶段，不开发页面、生产代码或 Adapter，不调用 Provider、数据库或
-iFinD。只有 F0.5 实际提交通过 ChatGPT 验收、用户批准合入并另行授权后，才能开始 F2A。
+iFinD。该提交已通过验收、获得用户合入批准；用户随后已另行授权 F2A。F2A 的技术实现
+不改变 F0.5 的来源资格或效果门禁。
 
 ## 6. 3A-R3B-F1：免费 Provider Adapter 与 V13 接入
 
@@ -188,8 +195,15 @@ F1 不得把免费 Provider 升级为 `PROVIDER_PIT_VERIFIED`，不得绕过 V13
 
 ## 7. 3A-R3B-F2A：免费研究预览产品
 
-F2A 是 F0.5 验收合入后唯一允许规划的下一实施阶段，但仍须用户单独授权。它不要求 F1、
-BaoStock 书面许可或正常业务库 V13。
+F2A 已由用户在 F0.5 验收合入后单独授权；任务分支技术实现与 Codex 本地离线验证已完成，
+待 ChatGPT 基于实际 Git 提交验收，尚未合入或进行用户视觉验收。它不要求 F1、BaoStock
+书面许可或正常业务库 V13。
+
+实现使用独立 `/research-preview` 前端入口，只读取既有扫描和 Agent GET API，严格隔离
+`EXISTING_RESEARCH_SNAPSHOT/RESEARCH_HISTORICAL_UNVERIFIED` 与
+`TEST_DEMO_EXPLICIT`；不新增 Java 接口、数据库写入或 Provider 调用。详细任务和记录见
+[F2A任务书](3ar3b-f2a-research-preview-product.md)和
+[F2A阶段记录](../stage-3ar3b-f2a-research-preview-product.md)。
 
 允许输入只包括：
 
@@ -395,10 +409,11 @@ IFIND_TRIAL_ACTIVATION_GATE=BLOCKED
 ## 14. 完成边界
 
 本治理任务完成只表示免费优先路线、阶段依赖和门禁状态已冻结。该规划与后续 F0 均已
-验收并合入；F0 的 `PARTIAL` 不构成 F1 自动授权。F0.5 当前只在独立任务分支冻结
-`RESEARCH_PREVIEW_FIRST`、双轨路线和产品预览门，尚未合入，也未授权 F2A。
+验收并合入；F0 的 `PARTIAL` 不构成 F1 自动授权。F0.5 已验收合入并冻结
+`RESEARCH_PREVIEW_FIRST`、双轨路线和产品预览门；F2A 技术实现只在独立任务分支完成，
+仍待实际 Git 验收、merge 和用户视觉验收，`FREE_PRODUCT_PREVIEW_GATE` 保持 `BLOCKED`。
 
 本规划与 F0.5 提交自身未调用任何免费 Provider 或 iFinD。F0 历史上仅在固定预算内执行
 BaoStock 最小受控探针；F0.5 没有新增调用，也未修改生产 Adapter、写数据库、执行正常
-业务库 V13、创建 Day 002、开启 scheduler 或开始 F1/F2A/F2B/F3、R3B-1、3B。iFinD
-真实调用数仍为 0。
+业务库 V13、创建 Day 002、开启 scheduler 或开始 F1/F2B/F3、R3B-1、3B。F2A 本阶段
+也没有新增外部调用、数据库访问或 Shadow；iFinD 真实调用数仍为 0。

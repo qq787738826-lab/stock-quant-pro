@@ -269,7 +269,7 @@
 - 既有规划状态：iFinD 里程碑规划提交 `23baf11ed3a236800b5f3feba8681d261a71d9f9` 已通过 ChatGPT 对实际 Git 提交的验收，并经用户批准纯 fast-forward 合入。精确验收和批准时间无仓库证据，记为 `UNKNOWN`。
 - 免费优先更新：最终提交 `c47b88e586f6751563fe210f40137a3b7ce5e576` 已通过 ChatGPT 对实际 Git 提交的验收，并经用户批准纯 fast-forward 合入。系统先用免费数据验证产品形态和效果；只有系统显示可重复使用价值、数据成为可量化主要瓶颈，且同范围免费/付费 A/B 方案和成本意愿均明确后，才考虑 iFinD 或其他付费 Provider。
 - 日期边界：iFinD 试用不得绑定 `2026-08-31`、2026 年 8 月 31 日或任何其他固定日期。日历日期只能作为非权威临时估算，不属于路线图依赖，不得因预计日期临近而降低验收标准。
-- 当前状态：`F0_AUDIT_RESULT=PARTIAL`、`FREE_IMPLEMENTATION_PATH=RESEARCH_PREVIEW_FIRST`、`FREE_PRODUCT_PREVIEW_GATE=BLOCKED`、`FREE_PROVIDER_VALIDATION_GATE=BLOCKED`、`PAID_PROVIDER_UPGRADE_DECISION=PENDING`、`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`。真实 Provider 尚未接入，正常业务库 V13 未执行，试用尚未启动，真实 iFinD 调用数为 0；F1/F2A/F2B/F3 均未开始，Day 002 未创建，scheduler 关闭，3B 未开始。
+- 当前集成 HEAD：`08943b4f6af03c75aa4df2a4ecf2494bede4e57b`。当前状态：`F0_AUDIT_RESULT=PARTIAL`、`FREE_IMPLEMENTATION_PATH=RESEARCH_PREVIEW_FIRST`、`FREE_PRODUCT_PREVIEW_GATE=BLOCKED`、`FREE_PROVIDER_VALIDATION_GATE=BLOCKED`、`PAID_PROVIDER_UPGRADE_DECISION=PENDING`、`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`。真实 Provider 尚未接入，正常业务库 V13 未执行，试用尚未启动，真实 iFinD 调用数为 0；F2A 只在任务分支完成技术实现，仍待实际 Git 验收、merge 和用户视觉验收；F1/F2B/F3 均未开始，Day 002 未创建，scheduler 关闭，3B 未开始。
 
 #### 3A-R3B-0：Provider 中立离线闭环与试用准备（已完成并合入）
 
@@ -292,17 +292,17 @@
 - 实际结果：`F0_AUDIT_RESULT=PARTIAL`。BaoStock 0.9.3 raw/QFQ 日线各观察到 6 行、通用日历观察到 8 行、公司行动观察到 1 行，两个按证券因子查询在固定短区间各观察到 0 行；修复前 collector 未复核迭代终态，因此本次 Live response completeness 为 `UNVERIFIED`。独立因子为 `PARTIAL`、`DAILY_EXACT=UNVERIFIED`，客户端 BSD License 不能替代底层数据许可，因此角色为 `PENDING_WRITTEN_PERMISSION`。AKShare 必须按 Tencent/Sina/Eastmoney/CNINFO 上游拆分并保持研究辅助，CNINFO/SSE/SZSE/SZSI 只作官方证据。当前没有一个免费来源能单独承担完整 V13/QFQ 同源 lineage。
 - 结论边界：`PARTIAL` 不是审计失败，但不批准 F1，也不改变 `FREE_PROVIDER_VALIDATION_GATE=BLOCKED`。
 
-#### 3A-R3B-F0.5：免费版实施范围与双轨路线冻结（任务分支规划中）
+#### 3A-R3B-F0.5：免费版实施范围与双轨路线冻结（已完成并合入）
 
 - 性质：纯治理决策，只冻结实施顺序、研究预览边界和门禁，不开发产品页面、Provider Adapter 或数据库结构。
 - 规划文档：[F0.5任务书](tasks/3ar3b-f05-free-implementation-scope.md)和[阶段记录](stage-3ar3b-f05-free-implementation-scope.md)。
+- 当前状态：最终提交 `08943b4f6af03c75aa4df2a4ecf2494bede4e57b` 已通过 ChatGPT 对实际 Git 提交的验收；用户已批准并完成纯 fast-forward 合入，本地和远程集成分支均位于最终提交，ahead/behind 为 `0/0`。精确验收和批准时间无仓库证据，记为 `UNKNOWN`。
 - 决策：`FREE_IMPLEMENTATION_PATH=RESEARCH_PREVIEW_FIRST`。系统不等待完整免费或付费 Provider，先规划使用已有合法边界内的本地研究快照和 TEST/DEMO 能力展示真实产品形态；该决定不授予 Provider、PIT、Shadow、准确率、盈利或交易资格。
 - 双轨路线：
   - 轨道 A：F0.5 → F2A 免费研究预览产品 → 用户产品形态验收；
   - 轨道 B：F0 → 书面许可或替代 Provider 证据 → F1 → F2B → F3。
 - 资格隔离：轨道 A 的产品可见性不能代替轨道 B 的许可、事实身份、`DAILY_EXACT`、knowledge-time 或 Provider 资格。
-- 当前状态：本任务分支文档完成后仍须通过 ChatGPT 实际 Git 提交验收和用户 merge 批准；尚未合入，不授权自动开始 F2A 或 F1。
-- 后续入口：F0.5 验收并合入后，唯一允许规划的下一实施阶段是 F2A；仍须用户另行授权。
+- 后续入口：用户已在 F0.5 合入后另行授权 F2A；F1 仍未开始。
 
 #### 3A-R3B-F1：免费 Provider Adapter 与 V13 接入（未开始）
 
@@ -312,14 +312,16 @@
 - 边界：不得把免费 Provider 升级为 `PROVIDER_PIT_VERIFIED`，不得绕过 V13 用途许可、跨 Provider 拼接 QFQ、自动全市场抓取、开启 scheduler、创建 Day 002 或自动交易。
 - 当前阻断：BaoStock 继续为 `PENDING_WRITTEN_PERMISSION`，不得提升为 `FREE_PROVIDER_F1_CANDIDATE`、`APPROVED_ADAPTER`、`PROVIDER_PIT_VERIFIED` 或 `FORMAL`。
 
-#### 3A-R3B-F2A：免费研究预览产品（未开始，F0.5 合入后的唯一下一实施候选）
+#### 3A-R3B-F2A：免费研究预览产品（任务分支技术实现完成，待验收）
 
-- 启动条件：F0 已验收合入，F0.5 通过实际 Git 验收并由用户批准合入，且用户另行授权 F2A；不要求 F1、BaoStock 书面许可或正常业务库 V13。
+- 当前状态：用户已单独授权；任务分支 `codex/1.4.0-stage-3ar3b-f2a-research-preview-product` 已完成前端技术实现与 Codex 本地离线验证，待 ChatGPT 基于实际 Git 提交验收，尚未合入，用户视觉验收尚未进行。任务证据见 [F2A任务书](tasks/3ar3b-f2a-research-preview-product.md)和[阶段记录](stage-3ar3b-f2a-research-preview-product.md)。
+- 启动条件：F0 已验收合入，F0.5 通过实际 Git 验收并由用户批准合入，且用户已另行授权 F2A；不要求 F1、BaoStock 书面许可或正常业务库 V13。
 - 输入：只读既有本地研究数据，明确标记 `EXISTING_RESEARCH_SNAPSHOT/RESEARCH_HISTORICAL_UNVERIFIED`；以及 3A-R3B-0 已验收的显式 `TEST_DEMO_EXPLICIT` 固定 Mock。两类结果不得混写。既有 Agent、总控和历史结果只按原规则读取和展示。
 - 目标：展示股票候选池、单股分析、固定六智能体、总控、DATA_QUALITY、技术、市场环境、回测、公告/持仓风险、evidence、lineage、reasonCode、来源资格、历史查询、结果对比和研究用途报告。
+- 实现边界：新增独立 `/research-preview` 前端路由与“研究预览”菜单；只复用既有扫描和 Agent GET API，不新增 Java 接口，不创建 Agent/Shadow，不访问 Provider 或数据库。固定 Demo 使用非真实证券代码、合成标签和精确六 run；本地 API 不可用时只显示结构化错误并提供显式 Demo 切换，不允许静默替代。
 - 不可用语义：真实可靠回测不可用时显示结构化原因；可以用显式 TEST/DEMO 展示页面结构，但不得改用不合格数据计算或把 Mock 收益写成真实历史收益。
 - 禁止范围：不新增 BaoStock/AKShare/Tencent/Sina/Eastmoney/CNINFO 或其他 Provider 调用，不写 V13、不迁移正常业务库、不创建 Day 002、不运行正式 Shadow、不开启 scheduler、不宣称准确率、推荐有效或盈利，也不自动交易。
-- 验收门：`FREE_PRODUCT_PREVIEW_GATE` 当前为 `BLOCKED`；PASS 只表示用户认可产品形态和日常流程，不表示 Provider、PIT、策略、Shadow、iFinD 或交易获批。
+- 验收门：`FREE_PRODUCT_PREVIEW_GATE` 当前为 `BLOCKED`；技术实现、构建和 ChatGPT Git 验收均不能自行改为 PASS，必须等待合入后用户实际看到页面并明确认可产品形态。PASS 只表示用户认可产品形态和日常流程，不表示 Provider、PIT、策略、Shadow、iFinD 或交易获批。
 - 阶段边界：F2A 不计入 `FREE_PROVIDER_VALIDATION_GATE`，也不能作为 F3 准确率或效果评估样本。
 
 #### 3A-R3B-F2B：免费 Provider 支持的真实产品闭环（未开始）

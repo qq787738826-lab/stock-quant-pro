@@ -88,6 +88,13 @@ export interface CreatedTask {
   newlyCreated: boolean
 }
 
+export interface PageResult<T> {
+  content: T[]
+  page: number
+  size: number
+  total: number
+}
+
 export interface AgentRun {
   id: number
   taskId: number
@@ -146,8 +153,8 @@ export interface FinalDecision {
   decision: FinalDecisionCode
   gateStatus: GateStatus
   vetoed: boolean
-  score: number
-  confidence: number
+  score: number | null
+  confidence: number | null
   summary: string
   findings: Finding[] | null
   sourceRunIds: number[] | null

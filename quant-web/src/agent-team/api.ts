@@ -7,6 +7,7 @@ import type {
   Evidence,
   FinalDecision,
   FormalVeto,
+  PageResult,
 } from './types'
 
 export const createAgentTask = (request: CreateAgentTaskRequest) =>
@@ -26,3 +27,6 @@ export const getAgentDecision = (taskId: number) =>
 
 export const getAgentVetoes = (taskId: number) =>
   api.get(`/agent-tasks/${taskId}/vetoes`) as Promise<FormalVeto[]>
+
+export const getAgentTaskHistory = (page = 0, size = 100) =>
+  api.get('/agent-tasks/history', { params: { page, size } }) as Promise<PageResult<AgentTask>>

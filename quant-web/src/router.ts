@@ -12,6 +12,7 @@ export default createRouter({
     { path: '/portfolio', component: () => import('./views/Portfolio.vue') },
     { path: '/backtest', component: () => import('./views/Backtest.vue') },
     { path: '/ai', component: () => import('./views/Ai.vue') },
+    { path: '/research-preview', component: () => import('./views/ResearchPreviewWorkbench.vue') },
     { path: '/agent-team', component: () => import('./views/AgentTeamWorkbench.vue') },
     { path: '/agent-shadow', component: () => import('./views/AgentShadowWorkbench.vue') },
     { path: '/market', component: () => import('./views/Market.vue') },

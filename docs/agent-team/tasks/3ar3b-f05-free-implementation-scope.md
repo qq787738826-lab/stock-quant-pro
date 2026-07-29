@@ -2,13 +2,15 @@
 
 ## 1. 状态与范围
 
-状态：**治理规划与 Codex 本地文档检查已在任务分支完成，待 ChatGPT 基于实际 Git
-提交验收，尚未合入；F1、F2A、F2B 与 F3 均未开始。**
+状态：**治理规划已通过 ChatGPT 对实际 Git 提交的验收，经用户批准并纯
+fast-forward 合入；用户随后已单独授权 F2A，F2A 技术实现当前在独立任务分支待验收，
+F1、F2B 与 F3 仍未开始。**
 
 - 冻结集成基线：`059eacffaf7e4a9f383be205d453c5168279932a`
 - 任务分支：
   `codex/1.4.0-stage-3ar3b-f05-free-implementation-scope`
 - 目标提交：`docs(agent): freeze free implementation scope`
+- 最终提交：`08943b4f6af03c75aa4df2a4ecf2494bede4e57b`
 - 阶段记录：
   [stage-3ar3b-f05-free-implementation-scope.md](../stage-3ar3b-f05-free-implementation-scope.md)
 - 当前事实：
@@ -20,7 +22,7 @@
 
 本阶段只冻结实施顺序、产品预览边界和门禁。没有开发页面或生产代码，没有调用任何免费
 Provider 或 iFinD，没有访问数据库，没有执行正常业务库 V13，也没有创建 Day 002 或
-启动 Shadow。
+启动 Shadow。该历史边界不否定用户随后对独立 F2A 开发阶段的明确授权。
 
 ## 2. F0 已验收事实
 
@@ -271,7 +273,8 @@ IFIND_TRIAL_ACTIVATION_GATE=BLOCKED
 
 - iFinD 真实调用数：`0`；
 - 正常业务库 V13：未执行；
-- F1/F2A/F2B/F3：均未开始；
+- F2A：独立任务分支技术实现已完成，待实际 Git 提交验收，尚未合入或进行用户视觉验收；
+- F1/F2B/F3：未开始；
 - Day 002：未创建；
 - scheduler：关闭；
 - 3A-R3B-1：未开始；
@@ -279,13 +282,14 @@ IFIND_TRIAL_ACTIVATION_GATE=BLOCKED
 
 ## 11. 下一阶段入口
 
-F0.5 实际 Git 提交通过 ChatGPT 验收并由用户批准合入后，唯一允许规划的下一实施阶段是：
+F0.5 实际 Git 提交已经通过 ChatGPT 验收并由用户批准合入。用户已按本门禁另行授权：
 
 ```text
 3A-R3B-F2A：免费研究预览产品
 ```
 
-本任务不授权 Codex 自动开始 F2A。必须等待用户另行批准 F2A 任务。
+F2A 当前已在独立任务分支完成技术实现并等待实际 Git 提交验收；这不改变 F0.5
+“不得自动开始后续阶段”的治理规则，也不授权 F1、F2B 或 F3。
 
 ## 12. 验证与完成边界
 
@@ -301,5 +305,5 @@ F0.5 实际 Git 提交通过 ChatGPT 验收并由用户批准合入后，唯一�
 - 执行正常业务库 V13；
 - 创建 Day 002；
 - 开启 scheduler；
-- 开始 F1、F2A、F2B、F3、3A-R3B-1 或 3B；
+- 在 F0.5 任务自身中开始 F1、F2A、F2B、F3、3A-R3B-1 或 3B；
 - merge 当前任务分支。

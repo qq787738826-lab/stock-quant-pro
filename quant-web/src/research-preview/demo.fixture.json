@@ -1,0 +1,666 @@
+{
+  "schemaVersion": "RESEARCH_PREVIEW_DEMO_V1",
+  "mode": "TEST_DEMO_EXPLICIT",
+  "qualification": "TEST_DEMO_EXPLICIT",
+  "synthetic": true,
+  "scanTask": {
+    "id": -7001,
+    "status": "COMPLETED",
+    "scan_type": "TEST_DEMO_EXPLICIT",
+    "official": false,
+    "requested_limit": 2,
+    "total_symbols": 2,
+    "processed_symbols": 2,
+    "success_symbols": 2,
+    "failed_symbols": 0,
+    "selected_count": 2,
+    "trade_date": "DEMO-DATE-01",
+    "duration_ms": 120,
+    "message": "固定合成候选池，仅用于页面结构演示。"
+  },
+  "candidates": [
+    {
+      "rank": 1,
+      "symbol": "DEMO01",
+      "name": "演示标的A",
+      "score": 68,
+      "eligible": true,
+      "riskLevel": "DEMO_ONLY",
+      "signalLevel": "DEMO_ONLY",
+      "tradeDate": "DEMO-DATE-01",
+      "metrics": {
+        "layoutCoverage": "FULL_DEMO"
+      },
+      "filterReasons": [],
+      "hasAgentResult": true,
+      "qualification": "TEST_DEMO_EXPLICIT",
+      "synthetic": true
+    },
+    {
+      "rank": 2,
+      "symbol": "DEMO02",
+      "name": "演示标的B",
+      "score": 41,
+      "eligible": false,
+      "riskLevel": "DEMO_ONLY",
+      "signalLevel": "DEMO_ONLY",
+      "tradeDate": "DEMO-DATE-01",
+      "metrics": {
+        "layoutCoverage": "VETO_DEMO"
+      },
+      "filterReasons": [
+        "DEMO_POSITION_LIMIT"
+      ],
+      "hasAgentResult": true,
+      "qualification": "TEST_DEMO_EXPLICIT",
+      "synthetic": true
+    }
+  ],
+  "bundles": [
+    {
+      "task": {
+        "id": -9001,
+        "symbol": "DEMO01",
+        "tradeDate": "DEMO-DATE-01",
+        "status": "PARTIAL",
+        "contextSchemaVersion": "DEMO_CONTEXT_SCHEMA_V1",
+        "contextSnapshot": {
+          "synthetic": true,
+          "qualification": "TEST_DEMO_EXPLICIT"
+        },
+        "contextGeneratedAt": "2000-01-01T00:00:00Z",
+        "contextHash": "DEMO_CONTEXT_PLACEHOLDER_NOT_A_REAL_HASH_01",
+        "ruleVersion": "DEMO_RULE_VERSION_NOT_PRODUCTION",
+        "executionMode": "LOCAL_RULES",
+        "triggerType": "MANUAL",
+        "requestedBy": "research-preview-demo",
+        "forceRefresh": false,
+        "startedAt": "2000-01-01T00:00:01Z",
+        "finishedAt": "2000-01-01T00:00:02Z",
+        "errorMessage": null,
+        "createdAt": "2000-01-01T00:00:00Z",
+        "updatedAt": "2000-01-01T00:00:02Z"
+      },
+      "runs": [
+        {
+          "id": -9101,
+          "taskId": -9001,
+          "agentCode": "DATA_QUALITY",
+          "attemptNo": 1,
+          "status": "COMPLETED",
+          "gateStatus": "PASS",
+          "decision": "PASS",
+          "score": 100,
+          "confidence": 100,
+          "veto": false,
+          "summary": "演示数据质量结构完整；该结论不对应真实市场数据。",
+          "outputJson": {
+            "findings": [
+              {
+                "findingId": "demo-01-finding-dq",
+                "code": "DEMO_DATA_QUALITY",
+                "severity": "INFO",
+                "title": "演示数据质量",
+                "detail": "仅验证展示结构。",
+                "evidenceIds": [
+                  "demo-01-evidence-coverage"
+                ]
+              }
+            ],
+            "errors": [],
+            "reasonCode": "DEMO_DATA_QUALITY"
+          },
+          "startedAt": "2000-01-01T00:00:01Z",
+          "finishedAt": "2000-01-01T00:00:01.100Z",
+          "durationMs": 100,
+          "errorMessage": null,
+          "createdAt": "2000-01-01T00:00:00Z",
+          "updatedAt": "2000-01-01T00:00:01.100Z"
+        },
+        {
+          "id": -9102,
+          "taskId": -9001,
+          "agentCode": "MARKET_REGIME",
+          "attemptNo": 1,
+          "status": "COMPLETED",
+          "gateStatus": "PASS",
+          "decision": "WARN",
+          "score": 0,
+          "confidence": 0,
+          "veto": false,
+          "summary": "演示市场环境卡片；不包含真实市场宽度。",
+          "outputJson": {
+            "findings": [
+              {
+                "findingId": "demo-01-finding-regime",
+                "code": "DEMO_MARKET_REGIME_INFORMATIONAL",
+                "severity": "INFO",
+                "title": "演示市场环境",
+                "detail": "固定展示内容，不作市场判断。",
+                "evidenceIds": [
+                  "demo-01-evidence-coverage"
+                ]
+              }
+            ],
+            "errors": []
+          },
+          "startedAt": "2000-01-01T00:00:01.100Z",
+          "finishedAt": "2000-01-01T00:00:01.200Z",
+          "durationMs": 100,
+          "errorMessage": null,
+          "createdAt": "2000-01-01T00:00:00Z",
+          "updatedAt": "2000-01-01T00:00:01.200Z"
+        },
+        {
+          "id": -9103,
+          "taskId": -9001,
+          "agentCode": "TECHNICAL_ANALYSIS",
+          "attemptNo": 1,
+          "status": "COMPLETED",
+          "gateStatus": "PASS",
+          "decision": "WARN",
+          "score": 68,
+          "confidence": 76,
+          "veto": false,
+          "summary": "固定技术分析演示，不包含价格、成交量或预测。",
+          "outputJson": {
+            "findings": [
+              {
+                "findingId": "demo-01-finding-technical",
+                "code": "DEMO_TECHNICAL_PRESENTATION",
+                "severity": "INFO",
+                "title": "演示技术状态",
+                "detail": "仅用于验证卡片和证据引用。",
+                "evidenceIds": [
+                  "demo-01-evidence-technical"
+                ]
+              }
+            ],
+            "errors": []
+          },
+          "startedAt": "2000-01-01T00:00:01.200Z",
+          "finishedAt": "2000-01-01T00:00:01.300Z",
+          "durationMs": 100,
+          "errorMessage": null,
+          "createdAt": "2000-01-01T00:00:00Z",
+          "updatedAt": "2000-01-01T00:00:01.300Z"
+        },
+        {
+          "id": -9104,
+          "taskId": -9001,
+          "agentCode": "STRATEGY_BACKTEST",
+          "attemptNo": 1,
+          "status": "INSUFFICIENT_DATA",
+          "gateStatus": "NOT_APPLICABLE",
+          "decision": "NOT_APPLICABLE",
+          "score": null,
+          "confidence": null,
+          "veto": false,
+          "summary": "演示回测不可用状态；没有真实收益记录。",
+          "outputJson": {
+            "findings": [],
+            "errors": [
+              {
+                "code": "DEMO_BACKTEST_NOT_REAL",
+                "message": "固定演示不执行真实回测。"
+              }
+            ],
+            "reasonCode": "DEMO_BACKTEST_NOT_REAL"
+          },
+          "startedAt": "2000-01-01T00:00:01.300Z",
+          "finishedAt": "2000-01-01T00:00:01.400Z",
+          "durationMs": 100,
+          "errorMessage": null,
+          "createdAt": "2000-01-01T00:00:00Z",
+          "updatedAt": "2000-01-01T00:00:01.400Z"
+        },
+        {
+          "id": -9105,
+          "taskId": -9001,
+          "agentCode": "ANNOUNCEMENT_RISK",
+          "attemptNo": 1,
+          "status": "COMPLETED",
+          "gateStatus": "PASS",
+          "decision": "PASS",
+          "score": 100,
+          "confidence": 40,
+          "veto": false,
+          "summary": "公告风险演示，不包含真实公告或正文。",
+          "outputJson": {
+            "findings": [
+              {
+                "findingId": "demo-01-finding-announcement",
+                "code": "DEMO_ANNOUNCEMENT_PRESENTATION",
+                "severity": "INFO",
+                "title": "演示公告边界",
+                "detail": "没有读取真实公告。",
+                "evidenceIds": [
+                  "demo-01-evidence-coverage"
+                ]
+              }
+            ],
+            "errors": []
+          },
+          "startedAt": "2000-01-01T00:00:01.400Z",
+          "finishedAt": "2000-01-01T00:00:01.500Z",
+          "durationMs": 100,
+          "errorMessage": null,
+          "createdAt": "2000-01-01T00:00:00Z",
+          "updatedAt": "2000-01-01T00:00:01.500Z"
+        },
+        {
+          "id": -9106,
+          "taskId": -9001,
+          "agentCode": "POSITION_RISK",
+          "attemptNo": 1,
+          "status": "COMPLETED",
+          "gateStatus": "PASS",
+          "decision": "PASS",
+          "score": 92,
+          "confidence": 84,
+          "veto": false,
+          "summary": "仓位风险结构演示，不读取真实账户或仓位。",
+          "outputJson": {
+            "findings": [
+              {
+                "findingId": "demo-01-finding-position",
+                "code": "DEMO_POSITION_PRESENTATION",
+                "severity": "INFO",
+                "title": "演示仓位风险",
+                "detail": "仅用于展示风险卡片。",
+                "evidenceIds": [
+                  "demo-01-evidence-position"
+                ]
+              }
+            ],
+            "errors": []
+          },
+          "startedAt": "2000-01-01T00:00:01.500Z",
+          "finishedAt": "2000-01-01T00:00:01.600Z",
+          "durationMs": 100,
+          "errorMessage": null,
+          "createdAt": "2000-01-01T00:00:00Z",
+          "updatedAt": "2000-01-01T00:00:01.600Z"
+        }
+      ],
+      "evidence": [
+        {
+          "evidenceId": "demo-01-evidence-coverage",
+          "category": "QUERY_RESULT",
+          "sourceType": "LOCAL_CACHE",
+          "sourceName": "RESEARCH_PREVIEW_SYNTHETIC_FIXTURE",
+          "sourceRef": "demo.fixture.json#DEMO01/coverage",
+          "symbol": "DEMO01",
+          "tradeDate": "DEMO-DATE-01",
+          "observedAt": "2000-01-01T00:00:00Z",
+          "collectedAt": "2000-01-01T00:00:00Z",
+          "fields": {
+            "synthetic": true,
+            "qualification": "TEST_DEMO_EXPLICIT",
+            "purpose": "LAYOUT_VALIDATION_ONLY"
+          },
+          "contentHash": "DEMO_CONTENT_PLACEHOLDER_NOT_A_REAL_HASH_01"
+        },
+        {
+          "evidenceId": "demo-01-evidence-technical",
+          "category": "TECHNICAL_INDICATOR",
+          "sourceType": "LOCAL_CACHE",
+          "sourceName": "RESEARCH_PREVIEW_SYNTHETIC_FIXTURE",
+          "sourceRef": "demo.fixture.json#DEMO01/technical",
+          "symbol": "DEMO01",
+          "tradeDate": "DEMO-DATE-01",
+          "observedAt": "2000-01-01T00:00:00Z",
+          "collectedAt": "2000-01-01T00:00:00Z",
+          "fields": {
+            "synthetic": true,
+            "qualification": "TEST_DEMO_EXPLICIT",
+            "displayOnly": true
+          },
+          "contentHash": "DEMO_CONTENT_PLACEHOLDER_NOT_A_REAL_HASH_02"
+        },
+        {
+          "evidenceId": "demo-01-evidence-position",
+          "category": "PORTFOLIO_STATE",
+          "sourceType": "LOCAL_CACHE",
+          "sourceName": "RESEARCH_PREVIEW_SYNTHETIC_FIXTURE",
+          "sourceRef": "demo.fixture.json#DEMO01/position",
+          "symbol": "DEMO01",
+          "tradeDate": "DEMO-DATE-01",
+          "observedAt": "2000-01-01T00:00:00Z",
+          "collectedAt": "2000-01-01T00:00:00Z",
+          "fields": {
+            "synthetic": true,
+            "qualification": "TEST_DEMO_EXPLICIT",
+            "accountData": "NOT_REAL"
+          },
+          "contentHash": "DEMO_CONTENT_PLACEHOLDER_NOT_A_REAL_HASH_03"
+        }
+      ],
+      "decision": {
+        "schemaVersion": "DEMO_DECISION_V1",
+        "taskId": -9001,
+        "decision": "INSUFFICIENT_DATA",
+        "gateStatus": "NOT_APPLICABLE",
+        "vetoed": false,
+        "score": 0,
+        "confidence": 0,
+        "summary": "固定演示缺少真实可靠回测，因此只展示数据不足结构，不形成市场或投资结论。",
+        "findings": [
+          {
+            "findingId": "demo-01-final-finding",
+            "code": "DEMO_BACKTEST_NOT_REAL",
+            "severity": "INFO",
+            "title": "演示数据不足",
+            "detail": "不以合成回测替代真实研究证据。",
+            "evidenceIds": [
+              "demo-01-evidence-coverage"
+            ]
+          }
+        ],
+        "sourceRunIds": [
+          -9101,
+          -9102,
+          -9103,
+          -9104,
+          -9105,
+          -9106
+        ],
+        "vetoIds": [],
+        "contextHash": "DEMO_CONTEXT_PLACEHOLDER_NOT_A_REAL_HASH_01",
+        "tradeDate": "DEMO-DATE-01",
+        "ruleVersion": "DEMO_RULE_VERSION_NOT_PRODUCTION",
+        "executionMode": "LOCAL_RULES",
+        "generatedAt": "2000-01-01T00:00:02Z"
+      },
+      "vetoes": [],
+      "qualification": "TEST_DEMO_EXPLICIT",
+      "synthetic": true
+    },
+    {
+      "task": {
+        "id": -9002,
+        "symbol": "DEMO02",
+        "tradeDate": "DEMO-DATE-01",
+        "status": "COMPLETED",
+        "contextSchemaVersion": "DEMO_CONTEXT_SCHEMA_V1",
+        "contextSnapshot": {
+          "synthetic": true,
+          "qualification": "TEST_DEMO_EXPLICIT"
+        },
+        "contextGeneratedAt": "2000-01-01T00:01:00Z",
+        "contextHash": "DEMO_CONTEXT_PLACEHOLDER_NOT_A_REAL_HASH_02",
+        "ruleVersion": "DEMO_RULE_VERSION_NOT_PRODUCTION",
+        "executionMode": "LOCAL_RULES",
+        "triggerType": "MANUAL",
+        "requestedBy": "research-preview-demo",
+        "forceRefresh": false,
+        "startedAt": "2000-01-01T00:01:01Z",
+        "finishedAt": "2000-01-01T00:01:02Z",
+        "errorMessage": null,
+        "createdAt": "2000-01-01T00:01:00Z",
+        "updatedAt": "2000-01-01T00:01:02Z"
+      },
+      "runs": [
+        {
+          "id": -9201,
+          "taskId": -9002,
+          "agentCode": "DATA_QUALITY",
+          "attemptNo": 1,
+          "status": "COMPLETED",
+          "gateStatus": "WARN",
+          "decision": "WARN",
+          "score": 75,
+          "confidence": 100,
+          "veto": false,
+          "summary": "演示数据质量警告，不对应真实数据缺陷。",
+          "outputJson": {
+            "findings": [
+              {
+                "findingId": "demo-02-finding-dq",
+                "code": "DEMO_DATA_WARNING",
+                "severity": "WARN",
+                "title": "演示数据警告",
+                "detail": "仅展示警告状态。",
+                "evidenceIds": [
+                  "demo-02-evidence-coverage"
+                ]
+              }
+            ],
+            "errors": [],
+            "reasonCode": "DEMO_DATA_WARNING"
+          },
+          "startedAt": "2000-01-01T00:01:01Z",
+          "finishedAt": "2000-01-01T00:01:01.100Z",
+          "durationMs": 100,
+          "errorMessage": null,
+          "createdAt": "2000-01-01T00:01:00Z",
+          "updatedAt": "2000-01-01T00:01:01.100Z"
+        },
+        {
+          "id": -9202,
+          "taskId": -9002,
+          "agentCode": "MARKET_REGIME",
+          "attemptNo": 1,
+          "status": "COMPLETED",
+          "gateStatus": "WARN",
+          "decision": "WARN",
+          "score": 0,
+          "confidence": 0,
+          "veto": false,
+          "summary": "演示市场环境卡片，不包含市场事实。",
+          "outputJson": {
+            "findings": [],
+            "errors": []
+          },
+          "startedAt": "2000-01-01T00:01:01.100Z",
+          "finishedAt": "2000-01-01T00:01:01.200Z",
+          "durationMs": 100,
+          "errorMessage": null,
+          "createdAt": "2000-01-01T00:01:00Z",
+          "updatedAt": "2000-01-01T00:01:01.200Z"
+        },
+        {
+          "id": -9203,
+          "taskId": -9002,
+          "agentCode": "TECHNICAL_ANALYSIS",
+          "attemptNo": 1,
+          "status": "COMPLETED",
+          "gateStatus": "WARN",
+          "decision": "WARN",
+          "score": 46,
+          "confidence": 62,
+          "veto": false,
+          "summary": "演示技术状态，不形成预测。",
+          "outputJson": {
+            "findings": [],
+            "errors": []
+          },
+          "startedAt": "2000-01-01T00:01:01.200Z",
+          "finishedAt": "2000-01-01T00:01:01.300Z",
+          "durationMs": 100,
+          "errorMessage": null,
+          "createdAt": "2000-01-01T00:01:00Z",
+          "updatedAt": "2000-01-01T00:01:01.300Z"
+        },
+        {
+          "id": -9204,
+          "taskId": -9002,
+          "agentCode": "STRATEGY_BACKTEST",
+          "attemptNo": 1,
+          "status": "INSUFFICIENT_DATA",
+          "gateStatus": "NOT_APPLICABLE",
+          "decision": "NOT_APPLICABLE",
+          "score": null,
+          "confidence": null,
+          "veto": false,
+          "summary": "演示回测不可用状态；没有真实收益记录。",
+          "outputJson": {
+            "findings": [],
+            "errors": [
+              {
+                "code": "DEMO_BACKTEST_NOT_REAL",
+                "message": "固定演示不执行真实回测。"
+              }
+            ],
+            "reasonCode": "DEMO_BACKTEST_NOT_REAL"
+          },
+          "startedAt": "2000-01-01T00:01:01.300Z",
+          "finishedAt": "2000-01-01T00:01:01.400Z",
+          "durationMs": 100,
+          "errorMessage": null,
+          "createdAt": "2000-01-01T00:01:00Z",
+          "updatedAt": "2000-01-01T00:01:01.400Z"
+        },
+        {
+          "id": -9205,
+          "taskId": -9002,
+          "agentCode": "ANNOUNCEMENT_RISK",
+          "attemptNo": 1,
+          "status": "COMPLETED",
+          "gateStatus": "WARN",
+          "decision": "WARN",
+          "score": 80,
+          "confidence": 40,
+          "veto": false,
+          "summary": "演示公告风险，不包含真实公告。",
+          "outputJson": {
+            "findings": [],
+            "errors": []
+          },
+          "startedAt": "2000-01-01T00:01:01.400Z",
+          "finishedAt": "2000-01-01T00:01:01.500Z",
+          "durationMs": 100,
+          "errorMessage": null,
+          "createdAt": "2000-01-01T00:01:00Z",
+          "updatedAt": "2000-01-01T00:01:01.500Z"
+        },
+        {
+          "id": -9206,
+          "taskId": -9002,
+          "agentCode": "POSITION_RISK",
+          "attemptNo": 1,
+          "status": "COMPLETED",
+          "gateStatus": "BLOCKED",
+          "decision": "REJECT",
+          "score": 20,
+          "confidence": 88,
+          "veto": true,
+          "summary": "演示正式否决结构，不对应真实账户或仓位。",
+          "outputJson": {
+            "findings": [
+              {
+                "findingId": "demo-02-finding-position",
+                "code": "DEMO_POSITION_LIMIT",
+                "severity": "CRITICAL",
+                "title": "演示仓位约束",
+                "detail": "仅展示POSITION_RISK正式否决链路。",
+                "evidenceIds": [
+                  "demo-02-evidence-position"
+                ]
+              }
+            ],
+            "errors": [],
+            "reasonCode": "DEMO_POSITION_LIMIT"
+          },
+          "startedAt": "2000-01-01T00:01:01.500Z",
+          "finishedAt": "2000-01-01T00:01:01.600Z",
+          "durationMs": 100,
+          "errorMessage": null,
+          "createdAt": "2000-01-01T00:01:00Z",
+          "updatedAt": "2000-01-01T00:01:01.600Z"
+        }
+      ],
+      "evidence": [
+        {
+          "evidenceId": "demo-02-evidence-coverage",
+          "category": "QUERY_RESULT",
+          "sourceType": "LOCAL_CACHE",
+          "sourceName": "RESEARCH_PREVIEW_SYNTHETIC_FIXTURE",
+          "sourceRef": "demo.fixture.json#DEMO02/coverage",
+          "symbol": "DEMO02",
+          "tradeDate": "DEMO-DATE-01",
+          "observedAt": "2000-01-01T00:01:00Z",
+          "collectedAt": "2000-01-01T00:01:00Z",
+          "fields": {
+            "synthetic": true,
+            "qualification": "TEST_DEMO_EXPLICIT",
+            "purpose": "LAYOUT_VALIDATION_ONLY"
+          },
+          "contentHash": "DEMO_CONTENT_PLACEHOLDER_NOT_A_REAL_HASH_04"
+        },
+        {
+          "evidenceId": "demo-02-evidence-position",
+          "category": "PORTFOLIO_STATE",
+          "sourceType": "LOCAL_CACHE",
+          "sourceName": "RESEARCH_PREVIEW_SYNTHETIC_FIXTURE",
+          "sourceRef": "demo.fixture.json#DEMO02/position",
+          "symbol": "DEMO02",
+          "tradeDate": "DEMO-DATE-01",
+          "observedAt": "2000-01-01T00:01:00Z",
+          "collectedAt": "2000-01-01T00:01:00Z",
+          "fields": {
+            "synthetic": true,
+            "qualification": "TEST_DEMO_EXPLICIT",
+            "accountData": "NOT_REAL",
+            "formalVetoStructure": true
+          },
+          "contentHash": "DEMO_CONTENT_PLACEHOLDER_NOT_A_REAL_HASH_05"
+        }
+      ],
+      "decision": {
+        "schemaVersion": "DEMO_DECISION_V1",
+        "taskId": -9002,
+        "decision": "REJECTED_BY_VETO",
+        "gateStatus": "BLOCKED",
+        "vetoed": true,
+        "score": 0,
+        "confidence": 88,
+        "summary": "固定演示由POSITION_RISK展示正式否决结构，不对应真实风险或交易动作。",
+        "findings": [
+          {
+            "findingId": "demo-02-final-finding",
+            "code": "DEMO_POSITION_LIMIT",
+            "severity": "CRITICAL",
+            "title": "演示正式否决",
+            "detail": "仅验证否决展示链路。",
+            "evidenceIds": [
+              "demo-02-evidence-position"
+            ]
+          }
+        ],
+        "sourceRunIds": [
+          -9201,
+          -9202,
+          -9203,
+          -9204,
+          -9205,
+          -9206
+        ],
+        "vetoIds": [
+          "DEMO-VETO-02"
+        ],
+        "contextHash": "DEMO_CONTEXT_PLACEHOLDER_NOT_A_REAL_HASH_02",
+        "tradeDate": "DEMO-DATE-01",
+        "ruleVersion": "DEMO_RULE_VERSION_NOT_PRODUCTION",
+        "executionMode": "LOCAL_RULES",
+        "generatedAt": "2000-01-01T00:01:02Z"
+      },
+      "vetoes": [
+        {
+          "vetoId": "DEMO-VETO-02",
+          "taskId": -9002,
+          "runId": -9206,
+          "agentCode": "POSITION_RISK",
+          "vetoCode": "DEMO_POSITION_LIMIT",
+          "reason": "固定演示正式否决，不代表真实账户、仓位或交易建议。",
+          "evidenceIds": [
+            "demo-02-evidence-position"
+          ],
+          "createdAt": "2000-01-01T00:01:02Z"
+        }
+      ],
+      "qualification": "TEST_DEMO_EXPLICIT",
+      "synthetic": true
+    }
+  ]
+}

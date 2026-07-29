@@ -2,13 +2,14 @@
 
 ## 1. 阶段状态
 
-状态：**治理规划与 Codex 本地文档检查已在任务分支完成，待 ChatGPT 基于实际 Git
-提交验收，尚未合入；F2A 与 F1 均未开始。**
+状态：**治理规划已通过 ChatGPT 对实际 Git 提交的验收，经用户批准并纯
+fast-forward 合入；F2A 已在后续独立任务分支完成技术实现并等待验收，F1 未开始。**
 
 - 冻结集成基线：`059eacffaf7e4a9f383be205d453c5168279932a`
 - 任务分支：
   `codex/1.4.0-stage-3ar3b-f05-free-implementation-scope`
 - 目标提交：`docs(agent): freeze free implementation scope`
+- 最终提交：`08943b4f6af03c75aa4df2a4ecf2494bede4e57b`
 - 完整任务书：
   [tasks/3ar3b-f05-free-implementation-scope.md](tasks/3ar3b-f05-free-implementation-scope.md)
 
@@ -28,6 +29,11 @@
 - 当前没有免费来源能单独承担完整 V13/QFQ 同源 lineage。
 
 `PARTIAL` 不是失败，但不批准 F1、Provider 或 PIT。
+
+F0.5 最终提交已经通过 ChatGPT 实际 Git 验收；用户已批准纯 fast-forward 合入，
+本地和远程集成分支均到达
+`08943b4f6af03c75aa4df2a4ecf2494bede4e57b`，ahead/behind 为 `0/0`。精确
+验收和批准时间无仓库证据，记为 `UNKNOWN`。
 
 ## 3. 冻结决定
 
@@ -101,11 +107,13 @@ F3 继续依赖 F1、F2B、合法 `SYSTEM_KNOWLEDGE_PIT`、`FREE_VALIDATION_METR
   requirements、lock、测试、fixture 与脚本：无变化；
 - 免费 Provider 与 iFinD 调用：`0`；
 - 数据库访问和正常业务库 V13：未执行；
-- F1/F2A/F2B/F3：未开始；
+- F2A：后续独立任务分支技术实现已完成，待实际 Git 提交验收，尚未合入或进行用户视觉验收；
+- F1/F2B/F3：未开始；
 - Day 002：未创建；
 - scheduler：关闭；
 - 3A-R3B-1 与 3B：未开始；
-- merge：否；
+- F0.5 merge：已纯 fast-forward 合入；F2A merge：否；
 - `.ai/`：未读取、修改、暂存或提交。
 
-F0.5 验收并合入后，唯一允许另行规划的下一实施阶段是 F2A。本阶段不自动授权开始。
+F0.5 验收并合入后，用户已另行授权 F2A；当前 F2A 只在独立任务分支完成技术实现。
+F0.5 仍不自动授权 F1、F2B、F3 或其他后续阶段。
