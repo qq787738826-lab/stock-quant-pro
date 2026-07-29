@@ -345,30 +345,139 @@ if (
 ) {
   fail('candidate selected state or keyboard-readable current state is missing')
 }
-const overviewHeaderBlock = overviewSource.match(/\.overview-header\s*\{([^}]*)\}/s)?.[1] ?? ''
-if (
-  !/display:\s*grid;/.test(overviewHeaderBlock)
-  || !/grid-template-columns:\s*minmax\(0,\s*1fr\)\s+minmax\(260px,\s*360px\);/.test(overviewHeaderBlock)
-) {
-  fail('overview header does not use the stable two-column grid')
+const overviewTemplateStart = overviewSource.indexOf('<template>')
+const overviewStyleStart = overviewSource.indexOf('<style scoped>')
+const overviewTemplate = overviewSource.slice(overviewTemplateStart, overviewStyleStart)
+const overviewStyles = overviewSource.slice(overviewStyleStart)
+const overviewFlowClasses = [
+  'preview-overview-header',
+  'preview-overview-decision',
+  'preview-overview-reasons',
+  'preview-overview-agent-strip',
+]
+let previousOverviewRegionIndex = -1
+for (const className of overviewFlowClasses) {
+  const regionIndex = overviewTemplate.indexOf(`class="${className}"`)
+  if (regionIndex < 0 || regionIndex <= previousOverviewRegionIndex) {
+    fail(`overview vertical flow region is missing or out of order: ${className}`)
+    break
+  }
+  previousOverviewRegionIndex = regionIndex
+}
+const overviewIdentityOrder = [
+  'preview-overview-identity',
+  'preview-overview-marker-row',
+  'preview-overview-title',
+  'preview-overview-meta',
+  'preview-overview-qualification',
+  'preview-overview-decision',
+]
+let previousOverviewIdentityIndex = -1
+for (const className of overviewIdentityOrder) {
+  const identityIndex = overviewTemplate.indexOf(`class="${className}"`)
+  if (identityIndex < 0 || identityIndex <= previousOverviewIdentityIndex) {
+    fail(`overview identity/qualification flow is missing or out of order: ${className}`)
+    break
+  }
+  previousOverviewIdentityIndex = identityIndex
+}
+
+function cssClassBlock(source, className) {
+  const escapedClassName = className.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return source.match(new RegExp(`\\.${escapedClassName}\\s*\\{([^}]*)\\}`, 's'))?.[1] ?? ''
+}
+
+function cssDeclarationValues(source, propertyName) {
+  const escapedPropertyName = propertyName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const pattern = new RegExp(
+    `(?:^|[;{]\\s*)${escapedPropertyName}\\s*:\\s*([^;]+);`,
+    'gim',
+  )
+  return [...source.matchAll(pattern)].map((match) => match[1].trim().toLowerCase())
+}
+
+const overviewHeaderBlock = cssClassBlock(overviewStyles, 'preview-overview-header')
+if (!/display:\s*block;/.test(overviewHeaderBlock)) {
+  fail('overview header is not a single-column normal-flow block')
 }
 if (
-  !overviewSource.includes('.security-identity, .qualification-summary { min-width: 0; }')
-  || !overviewSource.includes('@media (max-width: 1400px)')
-  || !overviewSource.includes('.overview-header { grid-template-columns: 1fr; gap: 14px; }')
+  /grid-template-columns:/.test(overviewHeaderBlock)
+  || overviewSource.includes('minmax(0, 1fr) minmax(260px, 360px)')
 ) {
-  fail('overview header does not provide the required min-width and responsive single-column fallback')
+  fail('overview header still contains the retired two-column grid')
 }
-if (/position\s*:\s*absolute/i.test(overviewSource)) {
-  fail('overview uses forbidden absolute positioning')
+const qualificationBlock = cssClassBlock(
+  overviewStyles,
+  'preview-overview-qualification',
+)
+if (
+  !/display:\s*flex;/.test(qualificationBlock)
+  || !/flex-wrap:\s*wrap;/.test(qualificationBlock)
+) {
+  fail('overview qualification is not an inline wrapping flow')
 }
-if (/margin(?:-[a-z]+)?\s*:\s*-\d/i.test(overviewSource)) {
+for (const className of [
+  'preview-overview-panel',
+  ...overviewFlowClasses,
+]) {
+  const block = cssClassBlock(overviewStyles, className)
+  for (const marker of [
+    /position:\s*static;/,
+    /float:\s*none;/,
+    /transform:\s*none;/,
+    /min-width:\s*0;/,
+    /height:\s*auto;/,
+  ]) {
+    if (!marker.test(block)) {
+      fail(`overview normal-flow safety marker is missing from ${className}: ${marker}`)
+    }
+  }
+}
+const requiredOverviewPrefixes = [
+  'preview-overview-identity',
+  'preview-overview-title',
+  'preview-overview-qualification',
+  'preview-overview-decision',
+]
+for (const className of requiredOverviewPrefixes) {
+  if (!overviewTemplate.includes(`class="${className}"`)) {
+    fail(`overview internal class is not component-prefixed: ${className}`)
+  }
+}
+const staticOverviewClasses = [...overviewTemplate.matchAll(/\bclass="([^"]+)"/g)]
+  .flatMap((match) => match[1].split(/\s+/))
+for (const legacyClass of [
+  'overview-header',
+  'security-identity',
+  'security-title',
+  'qualification-summary',
+  'decision-overview',
+  'reason-overview',
+  'agent-status-strip',
+]) {
+  if (staticOverviewClasses.includes(legacyClass)) {
+    fail(`overview retains a collision-prone legacy class: ${legacyClass}`)
+  }
+}
+if (/position\s*:\s*(?:absolute|fixed|sticky)/i.test(overviewStyles)) {
+  fail('overview uses forbidden non-flow positioning')
+}
+if (cssDeclarationValues(overviewStyles, 'float').some((value) => value !== 'none')) {
+  fail('overview uses a forbidden float value')
+}
+if (cssDeclarationValues(overviewStyles, 'transform').some((value) => value !== 'none')) {
+  fail('overview uses a forbidden transform displacement')
+}
+if (/margin(?:-[a-z]+)?\s*:\s*-\d/i.test(overviewStyles)) {
   fail('overview uses a forbidden negative margin')
 }
-if (/(^|[;\s])height\s*:/m.test(overviewHeaderBlock)) {
-  fail('overview header uses a fixed height')
+if (/z-index\s*:/i.test(overviewStyles)) {
+  fail('overview uses a forbidden z-index layering patch')
 }
-if (/overflow\s*:\s*hidden/i.test(overviewSource)) {
+if (cssDeclarationValues(overviewStyles, 'height').some((value) => value !== 'auto')) {
+  fail('overview uses a forbidden fixed height')
+}
+if (/overflow\s*:\s*hidden/i.test(overviewStyles)) {
   fail('overview hides overflowing text instead of allowing natural layout')
 }
 const responsiveMarkers = [
@@ -573,7 +682,7 @@ console.log(`PASS five sections, overview fallback, selected candidate state`)
 console.log(`PASS deterministic research actions and prohibited action wording absent`)
 console.log(`PASS data-quality gate and research-evidence completeness semantics`)
 console.log(`PASS data-quality gate priority matrix: ${dataQualityPriorityPassCount}/9`)
-console.log(`PASS stable overview grid with responsive single-column fallback`)
+console.log(`PASS prefixed overview regions use single-column vertical document flow`)
 console.log(`PASS Agent/evidence/comparison/audit details collapsed by default`)
 console.log(`PASS structured report with optional raw text`)
 console.log(`PASS INFO/WARN/HIGH/CRITICAL/FORMAL_VETO risk tone mapping`)
