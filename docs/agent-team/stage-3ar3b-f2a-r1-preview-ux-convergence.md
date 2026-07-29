@@ -2,13 +2,15 @@
 
 ## 1. 阶段状态
 
-状态：**前端实现与 Codex 本地验证已在任务分支完成，待 ChatGPT 基于实际 Git 提交验收；
-尚未合入，R1 用户视觉复验尚未进行。**
+状态：**最终提交已通过 ChatGPT 实际 Git 技术复验，经用户批准纯 fast-forward 合入；
+用户已于 2026-07-29 完成第二次视觉复验，主体信息架构通过，但产品预览门仍为
+BLOCKED。**
 
 - 冻结基线：`f5137e2422a48e70d5c706cb146fb034a2b96f65`
 - 任务分支：
   `codex/1.4.0-stage-3ar3b-f2a-r1-preview-ux-convergence`
 - 目标提交：`feat(agent): refine research preview experience`
+- 最终提交：`e2b9457e3594676875167a703ae09ebc75aaaaf6`
 - 任务书：
   [tasks/3ar3b-f2a-r1-preview-ux-convergence.md](tasks/3ar3b-f2a-r1-preview-ux-convergence.md)
 - 路由：`/research-preview`
@@ -17,6 +19,13 @@
 F2A 最终提交 `f5137e2422a48e70d5c706cb146fb034a2b96f65` 已通过 ChatGPT
 实际 Git 验收，经用户批准纯 fast-forward 合入。用户于 `2026-07-29` 通过完整页面截图
 完成首次视觉查看；功能闭环可见，但视觉层级、信息密度和日常使用体验未通过，因此进入 R1。
+
+R1 实现已通过 ChatGPT 对实际 Git 提交的技术复验，经用户批准纯 fast-forward 合入。
+用户于 `2026-07-29` 完成第二次视觉复验：五分区、首屏信息层级、精简 Agent 卡片、
+折叠详情、结构化报告、字号和深色主题方向已通过查看；首屏文字重叠、DATA_QUALITY 门禁与
+研究证据不足的语义歧义、INFO finding 使用严重红色，以及 DEMO02 正式 veto 尚待最终
+查看，因此进入
+[R1A 定向修复](tasks/3ar3b-f2a-r1a-visual-semantics-fix.md)。
 
 ## 2. 首次视觉问题与实现对应
 
@@ -47,8 +56,8 @@ F2A 最终提交 `f5137e2422a48e70d5c706cb146fb034a2b96f65` 已通过 ChatGPT
 ### 3.2 首屏与候选
 
 - 新增 `ResearchOverviewPanel.vue`；
-- 显示当前标的、日期、扫描任务、资格、总控、研究动作、数据可靠性、正式 veto、六 run 完成数
-  和主要结构化原因；
+- 显示当前标的、日期、扫描任务、资格、总控、研究动作、数据质量门禁、研究证据完整性、
+  正式 veto、六 run 完成数和主要结构化原因；原含混“数据可靠性”展示由 R1A 拆分；
 - 研究动作只按六种现有总控 code 进行中文展示映射；
 - 候选表支持当前行高亮、“当前分析”标签、键盘选择和内部滚动。
 
@@ -125,8 +134,10 @@ IFIND_TRIAL_ACTIVATION_GATE=BLOCKED
 
 - F2A：最终提交已验收并合入；
 - F2A 首次视觉验收：`BLOCKED`；
-- F2A-R1：任务分支实现完成，待 ChatGPT 实际 Git 提交验收，尚未合入；
-- R1 用户视觉复验：未进行；
+- F2A-R1：最终提交已验收并纯 fast-forward 合入；
+- R1 用户视觉复验：`2026-07-29` 已进行，主体通过但总体仍 `BLOCKED`；
+- F2A-R1A：任务分支实现完成，待 ChatGPT 实际 Git 提交验收，尚未合入；
+- R1A 用户最终视觉复验：未进行；
 - BaoStock：`PENDING_WRITTEN_PERMISSION`；
 - Provider/iFinD 调用：`0`；
 - 数据库访问：未发生；
@@ -134,8 +145,8 @@ IFIND_TRIAL_ACTIVATION_GATE=BLOCKED
 - Agent/Shadow/Day 002：未创建；
 - scheduler：关闭；
 - F1/F2B/F3、3A-R3B-1、3B：未开始；
-- merge：否；
+- R1A merge：否；
 - `.ai/`：只通过 Git 状态确认未跟踪，未读取、修改、暂存或提交。
 
-R1 合入后仍必须由用户实际复验并明确认可，后续独立治理提交才可讨论
+R1A 合入后仍必须由用户实际查看 DEMO01 和 DEMO02 并明确认可，后续独立治理提交才可讨论
 `FREE_PRODUCT_PREVIEW_GATE=PASS`。

@@ -8,6 +8,7 @@ import type {
   FormalVeto,
   JsonValue,
   PageResult,
+  Severity,
 } from '../agent-team/types'
 
 export type PreviewMode = 'EXISTING_RESEARCH_SNAPSHOT' | 'TEST_DEMO_EXPLICIT'
@@ -152,9 +153,19 @@ export interface StructuredAgentSummary {
   summary: string
 }
 
+export type StructuredRiskLevel = Severity | 'FORMAL_VETO'
+
+export type StructuredRiskTone =
+  | 'info'
+  | 'warning'
+  | 'danger'
+  | 'formal-veto'
+  | 'neutral'
+
 export interface StructuredRiskItem {
   code: string
-  level: string
+  level: StructuredRiskLevel
+  tone: StructuredRiskTone
   title: string
   detail: string
   source: string

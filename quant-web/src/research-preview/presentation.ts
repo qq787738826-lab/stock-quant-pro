@@ -22,6 +22,8 @@ import type {
   RunErrorView,
   ScanResultSnapshot,
   StructuredResearchReport,
+  StructuredRiskLevel,
+  StructuredRiskTone,
   TaskComparison,
 } from './types'
 
@@ -286,18 +288,35 @@ export function researchActionForDecision(
   return decision ? RESEARCH_ACTIONS[decision] : '暂无研究动作'
 }
 
-export function dataReliabilityLabel(bundle: PreviewTaskBundle | null): string {
+export function dataQualityGateLabel(bundle: PreviewTaskBundle | null): string {
   const dataQuality = bundle?.runs.find((run) => run.agentCode === 'DATA_QUALITY')
-  if (!dataQuality) return '暂无数据质量结果'
+  if (!dataQuality) return '暂无'
+  if (dataQuality.status === 'INSUFFICIENT_DATA') return '数据不足'
+  if (dataQuality.status === 'FAILED') return '失败'
+  if (dataQuality.status === 'SKIPPED') return '已跳过'
+  if (dataQuality.status === 'PARTIAL') return '部分完成'
+  if (dataQuality.status === 'QUEUED') return '等待中'
+  if (dataQuality.status === 'RUNNING') return '运行中'
+  if (dataQuality.gateStatus === 'BLOCKED') return '阻断'
+  if (dataQuality.gateStatus === 'WARN') return '警告'
+  if (dataQuality.gateStatus === 'PASS') return '通过'
+  if (dataQuality.gateStatus === 'NOT_APPLICABLE') return '不适用'
+  return '暂无'
+}
+
+export function researchEvidenceCompletenessLabel(bundle: PreviewTaskBundle | null): string {
+  if (!bundle) return '暂无'
+  if (bundle.decision?.decision === 'BLOCKED_BY_DATA_QUALITY') return '受数据质量阻断'
+  if (bundle.decision?.decision === 'INSUFFICIENT_DATA') return '不足'
+  const backtest = bundle.runs.find((run) => run.agentCode === 'STRATEGY_BACKTEST')
   if (
-    dataQuality.status === 'INSUFFICIENT_DATA'
-    || dataQuality.status === 'FAILED'
-    || dataQuality.status === 'SKIPPED'
-  ) return '数据不足'
-  if (dataQuality.gateStatus === 'BLOCKED') return '数据质量阻断'
-  if (dataQuality.gateStatus === 'WARN') return '数据质量警告'
-  if (dataQuality.gateStatus === 'PASS') return '数据质量通过'
-  return '暂无数据质量结果'
+    !backtest
+    || backtest.status === 'INSUFFICIENT_DATA'
+    || backtest.status === 'FAILED'
+    || backtest.status === 'SKIPPED'
+  ) return '不足'
+  if (!bundle.decision) return '暂无'
+  return '已有研究证据'
 }
 
 export function backtestDisplayState(bundle: PreviewTaskBundle | null): string {
@@ -327,6 +346,8 @@ export function buildResearchReport(
     'UI_PRESENTATION_ONLY',
     `数据资格：${bundle.qualification}`,
     `合成数据：${bundle.synthetic ? '是' : '否'}`,
+    `数据质量门禁：${dataQualityGateLabel(bundle)}`,
+    `研究证据完整性：${researchEvidenceCompletenessLabel(bundle)}`,
     `任务：${task.id} / ${task.symbol} / ${task.tradeDate}`,
     `规则版本：${task.ruleVersion}`,
     `任务状态：${task.status}`,
@@ -352,6 +373,20 @@ export function buildResearchReport(
   return lines.join('\n')
 }
 
+const RISK_TONE_BY_LEVEL: Record<StructuredRiskLevel, StructuredRiskTone> = {
+  INFO: 'info',
+  WARN: 'warning',
+  HIGH: 'danger',
+  CRITICAL: 'danger',
+  FORMAL_VETO: 'formal-veto',
+}
+
+export function riskToneForLevel(
+  level: string | null | undefined,
+): StructuredRiskTone {
+  return RISK_TONE_BY_LEVEL[level as StructuredRiskLevel] ?? 'neutral'
+}
+
 export function buildStructuredResearchReport(
   bundle: PreviewTaskBundle | null,
   issues: PreviewIssue[],
@@ -366,6 +401,7 @@ export function buildStructuredResearchReport(
     .flatMap((run) => runFindings(run).map((finding) => ({
       code: finding.code,
       level: finding.severity,
+      tone: riskToneForLevel(finding.severity),
       title: finding.title,
       detail: finding.detail,
       source: AGENT_NAMES[run.agentCode],
@@ -374,6 +410,7 @@ export function buildStructuredResearchReport(
     risks.push({
       code: veto.vetoCode,
       level: 'FORMAL_VETO',
+      tone: riskToneForLevel('FORMAL_VETO'),
       title: 'POSITION_RISK正式否决',
       detail: veto.reason,
       source: AGENT_NAMES[veto.agentCode],
@@ -389,7 +426,8 @@ export function buildStructuredResearchReport(
           : '暂无',
       },
       { label: '研究动作', value: researchActionForDecision(decision?.decision) },
-      { label: '数据可靠性', value: dataReliabilityLabel(bundle) },
+      { label: '数据质量门禁', value: dataQualityGateLabel(bundle) },
+      { label: '研究证据完整性', value: researchEvidenceCompletenessLabel(bundle) },
       { label: '总控评分', value: displayValue(decision?.score) },
       { label: '总控置信度', value: displayValue(decision?.confidence) },
       { label: '正式否决', value: decision?.vetoed ? '存在' : '无' },

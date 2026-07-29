@@ -3,8 +3,9 @@ import { computed } from 'vue'
 import { AGENT_NAMES, FINAL_DECISION_NAMES } from '../../agent-team/presentation'
 import {
   buildAgentSlots,
-  dataReliabilityLabel,
+  dataQualityGateLabel,
   extractReasonCodes,
+  researchEvidenceCompletenessLabel,
   researchActionForDecision,
 } from '../../research-preview/presentation'
 import type {
@@ -39,7 +40,8 @@ const decisionName = computed(() =>
   decision.value ? FINAL_DECISION_NAMES[decision.value.decision] : '暂无总控结论',
 )
 const action = computed(() => researchActionForDecision(decision.value?.decision))
-const reliability = computed(() => dataReliabilityLabel(props.bundle))
+const dataQualityGate = computed(() => dataQualityGateLabel(props.bundle))
+const evidenceCompleteness = computed(() => researchEvidenceCompletenessLabel(props.bundle))
 const hasFormalVeto = computed(() => (props.bundle?.vetoes.length ?? 0) > 0)
 const decisionTone = computed(() => {
   if (decision.value?.decision === 'REJECTED_BY_VETO') return 'danger'
@@ -86,8 +88,12 @@ const decisionTone = computed(() => {
           <strong>{{ action }}</strong>
         </article>
         <article>
-          <span>数据可靠性</span>
-          <strong>{{ reliability }}</strong>
+          <span>数据质量门禁</span>
+          <strong>{{ dataQualityGate }}</strong>
+        </article>
+        <article>
+          <span>研究证据完整性</span>
+          <strong>{{ evidenceCompleteness }}</strong>
         </article>
         <article :class="{ critical: hasFormalVeto }">
           <span>正式veto</span>
@@ -128,7 +134,6 @@ const decisionTone = computed(() => {
 <style scoped>
 .overview-panel {
   min-width: 0;
-  overflow: hidden;
   border: 1px solid #294763;
   border-left: 4px solid #4c9dde;
   border-radius: 14px;
@@ -141,13 +146,14 @@ const decisionTone = computed(() => {
 .overview-panel.tone-danger { border-left-color: #df6670; }
 .overview-panel.tone-success { border-left-color: #52bd91; }
 .overview-header {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 360px);
   align-items: flex-start;
-  justify-content: space-between;
   gap: 24px;
   padding: 20px 22px 16px;
   border-bottom: 1px solid #233b55;
 }
+.security-identity, .qualification-summary { min-width: 0; }
 .identity-line { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .current-marker, .demo-marker {
   padding: 3px 8px;
@@ -157,11 +163,33 @@ const decisionTone = computed(() => {
 }
 .current-marker { color: #85c9ff; background: #183a58; }
 .demo-marker { color: #ffd182; background: #4a3518; font-family: ui-monospace, monospace; }
-.security-title { display: flex; align-items: baseline; gap: 12px; margin-top: 9px; }
-.security-title strong { color: #78c6ff; font: 700 22px ui-monospace, monospace; }
-.security-title h1 { margin: 0; color: #f1f6fc; font-size: 27px; }
-.security-identity p { margin: 7px 0 0; color: #9fb0c5; font-size: 13px; }
-.qualification-summary { max-width: 420px; text-align: right; }
+.security-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 12px;
+  min-width: 0;
+  margin-top: 9px;
+}
+.security-title strong {
+  overflow-wrap: anywhere;
+  color: #78c6ff;
+  font: 700 22px ui-monospace, monospace;
+}
+.security-title h1 {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: #f1f6fc;
+  font-size: 27px;
+}
+.security-identity p {
+  margin: 7px 0 0;
+  overflow-wrap: anywhere;
+  color: #9fb0c5;
+  font-size: 13px;
+}
+.qualification-summary { text-align: right; }
 .qualification-summary span, .qualification-summary small { display: block; color: #9bacc1; font-size: 12px; }
 .qualification-summary strong {
   display: block;
@@ -169,6 +197,10 @@ const decisionTone = computed(() => {
   overflow-wrap: anywhere;
   color: #75d4ad;
   font: 700 13px ui-monospace, monospace;
+}
+.qualification-summary small {
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 .decision-overview {
   display: grid;
@@ -226,10 +258,12 @@ const decisionTone = computed(() => {
 @media (max-width: 1500px) {
   .reason-list { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
+@media (max-width: 1400px) {
+  .overview-header { grid-template-columns: 1fr; gap: 14px; }
+  .qualification-summary { text-align: left; }
+}
 @media (max-width: 1100px) {
-  .overview-header, .decision-overview { grid-template-columns: 1fr; }
-  .overview-header { display: grid; }
-  .qualification-summary { max-width: none; text-align: left; }
+  .decision-overview { grid-template-columns: 1fr; }
   .reason-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .agent-status-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }

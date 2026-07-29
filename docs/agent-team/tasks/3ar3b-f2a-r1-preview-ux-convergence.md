@@ -2,13 +2,15 @@
 
 ## 1. 状态与身份
 
-状态：**前端视觉与交互收敛已在任务分支完成并通过 Codex 本地验证，待 ChatGPT 基于
-实际 Git 提交验收；尚未合入，R1 用户视觉复验尚未进行。**
+状态：**最终提交已通过 ChatGPT 实际 Git 技术复验，经用户批准纯 fast-forward 合入；
+用户已于 2026-07-29 完成第二次视觉复验，信息架构主体通过，但产品预览门仍因三个定向
+展示问题和 DEMO02 待最终复验而 BLOCKED。**
 
 - 冻结集成基线：`f5137e2422a48e70d5c706cb146fb034a2b96f65`
 - 任务分支：
   `codex/1.4.0-stage-3ar3b-f2a-r1-preview-ux-convergence`
 - 目标提交：`feat(agent): refine research preview experience`
+- 最终提交：`e2b9457e3594676875167a703ae09ebc75aaaaf6`
 - 页面路由：`/research-preview`
 - 页面菜单：`研究预览`
 - 实施路径：`FREE_IMPLEMENTATION_PATH=RESEARCH_PREVIEW_FIRST`
@@ -17,6 +19,8 @@
   [stage-3ar3b-f2a-r1-preview-ux-convergence.md](../stage-3ar3b-f2a-r1-preview-ux-convergence.md)
 - 原 F2A 任务书：
   [3ar3b-f2a-research-preview-product.md](3ar3b-f2a-research-preview-product.md)
+- R1A 定向修复：
+  [3ar3b-f2a-r1a-visual-semantics-fix.md](3ar3b-f2a-r1a-visual-semantics-fix.md)
 
 R1 只改进 F2A 展示层。它不修改 Agent、总控、数据资格、Demo 事实、GET-only 边界或
 POSITION_RISK 唯一正式否决权，也不授予 Provider、PIT、Shadow、收益或交易资格。
@@ -25,11 +29,16 @@ POSITION_RISK 唯一正式否决权，也不授予 Provider、PIT、Shadow、收
 
 - F2A 最终提交 `f5137e2422a48e70d5c706cb146fb034a2b96f65` 已通过 ChatGPT
   实际 Git 验收，经用户批准纯 fast-forward 合入；
+- R1 最终提交 `e2b9457e3594676875167a703ae09ebc75aaaaf6` 已通过 ChatGPT
+  实际 Git 技术复验，经用户批准纯 fast-forward 合入；
 - 用户于 `2026-07-29` 通过完整页面截图完成首次视觉查看；
 - 双模式隔离、候选池、固定六智能体、总控、证据、历史对比和报告均可见；
 - 首次视觉验收因页面过长、入口不明确、总控不突出、技术字段过多、字体偏小、层级不足、
   Demo 标签重复和报告偏日志化而 `BLOCKED`；
 - `FREE_PRODUCT_PREVIEW_GATE=BLOCKED`；
+- 用户于同日完成 R1 第二次视觉复验：五个 Tab、首屏层级、精简 Agent 卡片、默认折叠
+  详情、结构化报告、字号和深色主题方向已通过查看；DEMO01 首屏重叠、“数据可靠性”语义
+  歧义、INFO finding 红色样式和 DEMO02 正式 veto 待最终查看继续阻断 PASS；
 - 正常业务库 V13 未执行，Provider 与 iFinD 调用数为 0；
 - F1、F2B、F3、3A-R3B-1 和 3B 均未开始；
 - Day 002 未创建，scheduler 关闭。
@@ -78,7 +87,7 @@ R1 禁止新增 Java/Python/SQL/Flyway、数据库访问、Provider 调用、Age
 - 数据资格与 Demo 身份；
 - 总控中文结论和原始 code；
 - 确定性研究动作；
-- 数据可靠性；
+- 数据质量门禁与研究证据完整性（原 R1 的含混“数据可靠性”字段由 R1A 拆分）；
 - 正式 veto 状态；
 - 六 run 完成数和固定状态摘要；
 - 三至五条主要结构化原因。
@@ -94,7 +103,8 @@ R1 禁止新增 Java/Python/SQL/Flyway、数据库访问、Provider 调用、Age
 | `WATCH` | 继续观察 |
 | `PASS_TO_MANUAL_REVIEW` | 进入人工研究复核 |
 
-数据可靠性只读取 DATA_QUALITY 的既有状态和门禁，不生成新评分。
+R1A 后，数据质量门禁只读取 DATA_QUALITY 既有状态和 gate，研究证据完整性只按总控和
+STRATEGY_BACKTEST 结构状态确定性展示；两者都不生成新评分或可靠性认证。
 
 ## 6. 各分区收敛
 
@@ -206,8 +216,11 @@ IFIND_TRIAL_ACTIVATION_GATE=BLOCKED
 - Agent、Shadow 与 Day 002：未创建
 - scheduler：关闭
 - F1/F2B/F3、3A-R3B-1、3B：未开始
-- R1 merge：否
-- R1 用户视觉复验：未进行
+- R1 merge：已纯 fast-forward 合入
+- R1 用户视觉复验：`2026-07-29` 已进行，主体通过但总体仍 `BLOCKED`
+- R1A：任务分支实现完成，待 ChatGPT 实际 Git 提交验收，尚未合入
+- R1A 用户最终视觉复验：未进行
 
-只有 R1 实际 Git 提交通过 ChatGPT 验收、用户批准合入，且用户再次实际查看并明确认可，
-后续独立治理提交才可讨论 `FREE_PRODUCT_PREVIEW_GATE=PASS`。
+只有 R1A 实际 Git 提交通过 ChatGPT 验收、用户批准合入，且用户最终实际查看 DEMO01
+和 DEMO02 并明确认可，后续独立治理提交才可讨论
+`FREE_PRODUCT_PREVIEW_GATE=PASS`。

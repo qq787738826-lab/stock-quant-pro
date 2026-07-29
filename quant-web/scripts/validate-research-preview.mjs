@@ -139,6 +139,24 @@ for (const [decision, action] of expectedActions) {
     fail(`missing deterministic research action mapping: ${decision}`)
   }
 }
+if (overviewSource.includes('数据可靠性') || presentationSource.includes('数据可靠性')) {
+  fail('ambiguous data reliability label remains in the research overview or report builder')
+}
+for (const label of ['数据质量门禁', '研究证据完整性']) {
+  if (!overviewSource.includes(label)) fail(`overview is missing semantic field: ${label}`)
+  if (!presentationSource.includes(label)) fail(`report builder is missing semantic field: ${label}`)
+}
+for (const functionName of ['dataQualityGateLabel', 'researchEvidenceCompletenessLabel']) {
+  if (!presentationSource.includes(`export function ${functionName}`)) {
+    fail(`missing deterministic presentation function: ${functionName}`)
+  }
+}
+if (
+  !presentationSource.includes("dataQuality.gateStatus === 'PASS') return '通过'")
+  || !presentationSource.includes("bundle.decision?.decision === 'INSUFFICIENT_DATA') return '不足'")
+) {
+  fail('DEMO01 data-quality gate / research-evidence semantics are not frozen')
+}
 for (const forbiddenText of ['买入', '卖出', '加仓', '减仓', '目标价', '预计收益']) {
   if (sourceText.includes(forbiddenText)) fail(`research preview contains prohibited action wording: ${forbiddenText}`)
 }
@@ -171,11 +189,65 @@ for (const heading of [
 ]) {
   if (!reportSource.includes(heading)) fail(`structured report section is missing: ${heading}`)
 }
+const expectedRiskTones = new Map([
+  ['INFO', 'info'],
+  ['WARN', 'warning'],
+  ['HIGH', 'danger'],
+  ['CRITICAL', 'danger'],
+  ['FORMAL_VETO', 'formal-veto'],
+])
+for (const [level, tone] of expectedRiskTones) {
+  if (!presentationSource.includes(`${level}: '${tone}'`)) {
+    fail(`missing deterministic risk tone mapping: ${level} -> ${tone}`)
+  }
+}
+if (!presentationSource.includes("?? 'neutral'")) {
+  fail('unknown risk level does not fall back to neutral')
+}
+if (/INFO:\s*'(?:danger|formal-veto)'/.test(presentationSource)) {
+  fail('INFO risk is incorrectly mapped to a severe risk tone')
+}
+if (
+  !reportSource.includes(":class=\"['risk-item', `tone-${risk.tone}`]\"")
+  || !reportSource.includes('.risk-item.tone-info')
+  || !reportSource.includes('.risk-item.tone-warning')
+  || !reportSource.includes('.risk-item.tone-danger')
+  || !reportSource.includes('.risk-item.tone-formal-veto')
+  || !reportSource.includes('.risk-item.tone-neutral')
+) {
+  fail('structured report risk tone classes are incomplete')
+}
 if (
   !candidateSource.includes(':class="{ selected: candidate.symbol === selectedSymbol }"')
   || !candidateSource.includes(':aria-current=')
 ) {
   fail('candidate selected state or keyboard-readable current state is missing')
+}
+const overviewHeaderBlock = overviewSource.match(/\.overview-header\s*\{([^}]*)\}/s)?.[1] ?? ''
+if (
+  !/display:\s*grid;/.test(overviewHeaderBlock)
+  || !/grid-template-columns:\s*minmax\(0,\s*1fr\)\s+minmax\(260px,\s*360px\);/.test(overviewHeaderBlock)
+) {
+  fail('overview header does not use the stable two-column grid')
+}
+if (
+  !overviewSource.includes('.security-identity, .qualification-summary { min-width: 0; }')
+  || !overviewSource.includes('@media (max-width: 1400px)')
+  || !overviewSource.includes('.overview-header { grid-template-columns: 1fr; gap: 14px; }')
+) {
+  fail('overview header does not provide the required min-width and responsive single-column fallback')
+}
+if (/position\s*:\s*absolute/i.test(overviewSource)) {
+  fail('overview uses forbidden absolute positioning')
+}
+if (/margin(?:-[a-z]+)?\s*:\s*-\d/i.test(overviewSource)) {
+  fail('overview uses a forbidden negative margin')
+}
+if (/(^|[;\s])height\s*:/m.test(overviewHeaderBlock)) {
+  fail('overview header uses a fixed height')
+}
+if (/overflow\s*:\s*hidden/i.test(overviewSource)) {
+  fail('overview hides overflowing text instead of allowing natural layout')
 }
 const responsiveMarkers = [
   [viewSource, 'overflow-x: hidden', 'page-level horizontal overflow containment'],
@@ -275,6 +347,15 @@ const demo02 = (fixture.bundles ?? []).find((bundle) => bundle.task?.symbol === 
 if (!demo01 || demo01.decision?.decision !== 'INSUFFICIENT_DATA' || (demo01.vetoes ?? []).length !== 0) {
   fail('DEMO01 no longer represents data insufficiency without formal veto')
 }
+const demo01DataQuality = (demo01?.runs ?? []).find((run) => run.agentCode === 'DATA_QUALITY')
+const demo01Backtest = (demo01?.runs ?? []).find((run) => run.agentCode === 'STRATEGY_BACKTEST')
+if (
+  demo01DataQuality?.status !== 'COMPLETED'
+  || demo01DataQuality?.gateStatus !== 'PASS'
+  || demo01Backtest?.status !== 'INSUFFICIENT_DATA'
+) {
+  fail('DEMO01 no longer maps to data-quality gate PASS and research-evidence insufficiency')
+}
 if (
   !demo02
   || demo02.decision?.decision !== 'REJECTED_BY_VETO'
@@ -368,8 +449,11 @@ console.log(`PASS dedicated API is GET-only; native fetch and write actions abse
 console.log(`PASS local API errors do not silently activate demo mode`)
 console.log(`PASS five sections, overview fallback, selected candidate state`)
 console.log(`PASS deterministic research actions and prohibited action wording absent`)
+console.log(`PASS data-quality gate and research-evidence completeness semantics`)
+console.log(`PASS stable overview grid with responsive single-column fallback`)
 console.log(`PASS Agent/evidence/comparison/audit details collapsed by default`)
 console.log(`PASS structured report with optional raw text`)
+console.log(`PASS INFO/WARN/HIGH/CRITICAL/FORMAL_VETO risk tone mapping`)
 console.log(`PASS 1920/1440/1366 responsive containment markers`)
 console.log(`PASS ECharts resize and dispose lifecycle markers`)
 console.log(`PASS DEMO01 insufficiency and DEMO02 POSITION_RISK veto`)

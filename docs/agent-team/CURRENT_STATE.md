@@ -9,7 +9,7 @@
 - 当前稳定版本：`1.3.1`
 - 当前目标版本：`1.4.0`
 - 当前集成分支：`feature/1.4.0-agent-team`
-- 当前集成分支 HEAD：`f5137e2422a48e70d5c706cb146fb034a2b96f65`
+- 当前集成分支 HEAD：`e2b9457e3594676875167a703ae09ebc75aaaaf6`
 - 1D-4 验收来源分支：`codex/1.4.0-1d4-acceptance`
 - 1D-4 验收基线：`5bc492a feat(agent): add safe local team runtime scripts`
 - 阶段 2A 验收来源分支：`codex/1.4.0-2a-readonly-context`
@@ -110,10 +110,16 @@
 - 3A-R3B-F2A 首次视觉验收：用户于 `2026-07-29` 基于完整页面截图完成查看；功能闭环、Demo 隔离、六智能体、总控、证据、历史对比和报告均可见，但页面过长、默认技术字段过多、字体偏小、信息层级不足、Demo 标签重复和报告偏日志化，因此视觉验收结论为 `BLOCKED`。
 - 3A-R3B-F2A-R1 冻结基线：`f5137e2422a48e70d5c706cb146fb034a2b96f65`
 - 3A-R3B-F2A-R1 任务分支：`codex/1.4.0-stage-3ar3b-f2a-r1-preview-ux-convergence`
-- 3A-R3B-F2A-R1 当前状态：研究预览的五分区导航、首屏研究总览、默认折叠技术详情、结构化报告和响应式视觉收敛已在任务分支完成并由 Codex 本地验证；待 ChatGPT 基于实际 Git 提交验收，尚未合入，R1 用户视觉复验尚未进行。
+- 3A-R3B-F2A-R1 最终提交：`e2b9457e3594676875167a703ae09ebc75aaaaf6`
+- 3A-R3B-F2A-R1 当前状态：研究预览的五分区导航、首屏研究总览、默认折叠技术详情、结构化报告和响应式视觉收敛已通过 ChatGPT 对实际 Git 提交的技术复验；用户已批准纯 fast-forward 合入，本地和远程集成分支均位于最终提交，ahead/behind 为 `0/0`。
+- 3A-R3B-F2A-R1 第二次视觉复验：用户于 `2026-07-29` 完成查看；五个 Tab、首屏层级、精简 Agent 卡片、默认折叠技术/证据/历史详情、结构化报告、字号和深色主题方向已通过，但 DEMO01 首屏文字重叠、数据门禁与证据不足语义歧义、INFO finding 严重红色样式以及 DEMO02 正式 veto 待最终查看继续阻断产品预览门。
+- 3A-R3B-F2A-R1A 冻结基线：`e2b9457e3594676875167a703ae09ebc75aaaaf6`
+- 3A-R3B-F2A-R1A 任务分支：`codex/1.4.0-stage-3ar3b-f2a-r1a-visual-semantics-fix`
+- 3A-R3B-F2A-R1A 当前状态：首屏布局、数据质量门禁/研究证据完整性拆分和 finding 风险 tone 修复已在任务分支完成并通过 Codex 本地验证；待 ChatGPT 基于实际 Git 提交验收，尚未合入，R1A 用户最终视觉复验尚未进行。
 - 3A-R3B-F2A 任务书 / 阶段记录：[tasks/3ar3b-f2a-research-preview-product.md](tasks/3ar3b-f2a-research-preview-product.md) / [stage-3ar3b-f2a-research-preview-product.md](stage-3ar3b-f2a-research-preview-product.md)。
 - 3A-R3B-F2A-R1 任务书 / 阶段记录：[tasks/3ar3b-f2a-r1-preview-ux-convergence.md](tasks/3ar3b-f2a-r1-preview-ux-convergence.md) / [stage-3ar3b-f2a-r1-preview-ux-convergence.md](stage-3ar3b-f2a-r1-preview-ux-convergence.md)。
-- 当前正式状态：`F0_AUDIT_RESULT=PARTIAL`、`FREE_IMPLEMENTATION_PATH=RESEARCH_PREVIEW_FIRST`、`FREE_PRODUCT_PREVIEW_GATE=BLOCKED`、`FREE_PROVIDER_VALIDATION_GATE=BLOCKED`、`PAID_PROVIDER_UPGRADE_DECISION=PENDING`、`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`。iFinD 真实调用数为 0，正常业务库 V13 未执行；F2A 技术实现已验收合入，但首次用户视觉验收为 `BLOCKED`，R1 仅在任务分支完成并待验收；F1/F2B/F3、3A-R3B-1 均未开始，Day 002 未创建，scheduler 关闭，3B 未开始。
+- 3A-R3B-F2A-R1A 任务书 / 阶段记录：[tasks/3ar3b-f2a-r1a-visual-semantics-fix.md](tasks/3ar3b-f2a-r1a-visual-semantics-fix.md) / [stage-3ar3b-f2a-r1a-visual-semantics-fix.md](stage-3ar3b-f2a-r1a-visual-semantics-fix.md)。
+- 当前正式状态：`F0_AUDIT_RESULT=PARTIAL`、`FREE_IMPLEMENTATION_PATH=RESEARCH_PREVIEW_FIRST`、`FREE_PRODUCT_PREVIEW_GATE=BLOCKED`、`FREE_PROVIDER_VALIDATION_GATE=BLOCKED`、`PAID_PROVIDER_UPGRADE_DECISION=PENDING`、`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`。iFinD 真实调用数为 0，正常业务库 V13 未执行；F2A 与 R1 技术实现均已验收合入，R1 第二次用户视觉复验为部分通过但总体仍 `BLOCKED`，R1A 仅在任务分支完成并待验收；F1/F2B/F3、3A-R3B-1 均未开始，Day 002 未创建，scheduler 关闭，3B 未开始。
 - `master`：`27d9099 chore: checkpoint Stock Quant Pro 1.3.1 and remove tracked cache`
 - 版本号仍保持 `1.3.1`；尚未发布 `1.4.0`。
 
@@ -210,10 +216,13 @@ Provider HTTP 请求为 0，原始响应残留为 0。没有新增 AKShare Live 
 
 F0.5 已验收并合入，正式冻结 `FREE_IMPLEMENTATION_PATH=RESEARCH_PREVIEW_FIRST` 和
 双轨路线。轨道 A 的 F2A 最终提交
-`f5137e2422a48e70d5c706cb146fb034a2b96f65` 已通过 ChatGPT 实际 Git 验收，经用户
-批准纯 fast-forward 合入。`2026-07-29` 首次视觉验收确认功能闭环可见，但因信息密度和
-视觉层级问题保持 `FREE_PRODUCT_PREVIEW_GATE=BLOCKED`；F2A-R1 只在当前任务分支完成
-视觉与交互收敛，仍待实际 Git 验收、merge 和用户复验。页面只读使用既有扫描/Agent GET API，严格隔离
+`f5137e2422a48e70d5c706cb146fb034a2b96f65` 与 R1 最终提交
+`e2b9457e3594676875167a703ae09ebc75aaaaf6` 均已通过 ChatGPT 实际 Git 验收，经用户
+批准纯 fast-forward 合入。`2026-07-29` 首次视觉验收确认功能闭环可见；同日 R1 第二次
+视觉复验确认五分区、信息层级、折叠详情、结构化报告、字号和深色主题方向已改善，但首屏
+重叠、数据门禁与证据完整性语义、INFO 风险颜色及 DEMO02 待最终复验继续保持
+`FREE_PRODUCT_PREVIEW_GATE=BLOCKED`。R1A 只在当前任务分支完成定向修复，仍待实际 Git
+验收、merge 和用户最终视觉复验。页面只读使用既有扫描/Agent GET API，严格隔离
 `EXISTING_RESEARCH_SNAPSHOT/RESEARCH_HISTORICAL_UNVERIFIED` 与
 `TEST_DEMO_EXPLICIT`，不重算权威结果、不静默切换 Demo、不创建任务或写数据库。轨道 B
 继续解决书面许可、独立因子、交易所日历身份、公司行动版本和 knowledge-time，再依次
@@ -367,6 +376,6 @@ DATA_QUALITY 只作门禁和 confidence 上限，MARKET_REGIME V1 权重为 0 �
 
 完整阶段 2D、完整阶段 2D-2 和完整阶段 2D-2B 仍处于进行中。阶段 2D-2A、2D-2B-1A、文档阶段 2D-2B-1B-0 与 TEST/DEMO 实现阶段 2D-2B-1B-1 已完成；该工作线的唯一入口只是解决 2D-2B-1B-2 的外部前置决策，不是立即开始 adapter、2D-2B-2 或 Universe 实现。阶段 2E-1 已完成独立复审并合入，但没有自动批准或开始任何 2E 后续任务。
 
-**在智能体规则能力工作线上，3A-R3B-0、免费优先治理规划、F0 审计、F0.5 双轨治理和 F2A 技术实现均已验收并合入；F0 最终结论为 `F0_AUDIT_RESULT=PARTIAL`。F2A 首次用户视觉验收已于 `2026-07-29` 完成但结论为 `BLOCKED`；F2A-R1 视觉与交互收敛只在任务分支完成，待实际 Git 验收、merge 和用户复验。** Day 001 已形成 1 个真实受控 Shadow 批次和 3 个 item，均以 `BLOCKED_BY_DATA_QUALITY` 安全终结并完成正式人工复核；后续受控行情更新形成的 780 条 V9 观察全部 `sourceRevision=NULL`。当前真实来源资格结论仍是 `PROVIDER_REVISION_UNVERIFIED`，Tencent `version=18` 不得作为 revision。F0 没有找到可单独承担完整 V13/QFQ lineage 的免费来源：BaoStock 技术能力部分可用但许可和 `DAILY_EXACT` 未确认，AKShare 各上游只作研究辅助，官方页面只作核验证据。轨道 A 的 F2A 只读整合既有 GET 结果与显式合成 Demo；轨道 B 继续以书面许可和技术证据为前置，进入 F1 Adapter/V13 接入、F2B Provider-backed 产品和 F3 免费 Shadow。`FREE_PRODUCT_PREVIEW_GATE=BLOCKED` 与 `FREE_PROVIDER_VALIDATION_GATE=BLOCKED` 相互独立，F2A/R1 技术完成不自动打开产品预览门，也不计入 Provider 验证或正式 Shadow 准入。在系统证明使用价值、数据成为主要瓶颈且 `PAID_PROVIDER_UPGRADE_DECISION=PROCEED` 前，不进入 iFinD 启动门。当前真实 iFinD 调用数为 0，scheduler 关闭，Day 002 未创建。Codex 不得自行开始 F1/F2B/F3、激活或调用 iFinD、恢复长期观察、开始 3B 或其他阶段。
+**在智能体规则能力工作线上，3A-R3B-0、免费优先治理规划、F0 审计、F0.5 双轨治理、F2A 与 F2A-R1 技术实现均已验收并合入；F0 最终结论为 `F0_AUDIT_RESULT=PARTIAL`。F2A 首次用户视觉验收已于 `2026-07-29` 完成但结论为 `BLOCKED`；同日 R1 第二次视觉复验部分通过但总体仍 `BLOCKED`，R1A 首屏布局与风险语义修复只在任务分支完成，待实际 Git 验收、merge 和用户最终复验。** Day 001 已形成 1 个真实受控 Shadow 批次和 3 个 item，均以 `BLOCKED_BY_DATA_QUALITY` 安全终结并完成正式人工复核；后续受控行情更新形成的 780 条 V9 观察全部 `sourceRevision=NULL`。当前真实来源资格结论仍是 `PROVIDER_REVISION_UNVERIFIED`，Tencent `version=18` 不得作为 revision。F0 没有找到可单独承担完整 V13/QFQ lineage 的免费来源：BaoStock 技术能力部分可用但许可和 `DAILY_EXACT` 未确认，AKShare 各上游只作研究辅助，官方页面只作核验证据。轨道 A 的 F2A 只读整合既有 GET 结果与显式合成 Demo；轨道 B 继续以书面许可和技术证据为前置，进入 F1 Adapter/V13 接入、F2B Provider-backed 产品和 F3 免费 Shadow。`FREE_PRODUCT_PREVIEW_GATE=BLOCKED` 与 `FREE_PROVIDER_VALIDATION_GATE=BLOCKED` 相互独立，F2A/R1/R1A 技术完成不自动打开产品预览门，也不计入 Provider 验证或正式 Shadow 准入。在系统证明使用价值、数据成为主要瓶颈且 `PAID_PROVIDER_UPGRADE_DECISION=PROCEED` 前，不进入 iFinD 启动门。当前真实 iFinD 调用数为 0，scheduler 关闭，Day 002 未创建。Codex 不得自行开始 F1/F2B/F3、激活或调用 iFinD、恢复长期观察、开始 3B 或其他阶段。
 
-阻断项包括正式证券状态来源、数据许可、本地持久化权利、历史回放权利、稳定 source instrument ID、revision 语义以及 published/effective 时间语义。当前免费聚合源和 `securities` 当前态投影均不得被视为正式来源；2G 的研究级 AKShare/CNINFO 公告来源同样不得用于解除这些门禁。当前仍未实现正式 source adapter、FORMAL 摄取、PROVIDER_PIT_VERIFIED、`SECURITY_STATUS_EVENT_V2`、`security_status_history` 正式投影、正式 Provider trading calendar、Universe snapshot、`MARKET_BREADTH_V2`、完整 MARKET_REGIME、公告 PDF 语义分析或生产扫描切换。3A-R3B-0 的 raw/factor/calendar/action、2F V2 和 Shadow 已作为 TEST/DEMO 离线能力合入，但不能替代真实来源资格；正常业务库尚未执行 V13。阶段 2F、2G、2H、2I、3A-1、3A-R1、3A-R3A、3A-R3B 规划、3A-R3B-0、免费优先治理规划、F0 审计、F0.5 和 F2A 技术实现已完成并合入；F2A 首次视觉验收为 `BLOCKED`，R1 仍待实际 Git 验收、merge 和用户复验，F1、F2B、F3、3A-R3B-1 至 R3B-3 均未开始。当前只有 1 个有效观察日和 3 个 shadow item，尚未达到 20 个有效观察日、200 个 item、主要原因人工复核和正式观察报告门槛，因此完整 3A 未完成，3B 未开始。阶段 2D-2B 禁止外部行情补数、LLM 权威决策、投资建议和交易写操作。
+阻断项包括正式证券状态来源、数据许可、本地持久化权利、历史回放权利、稳定 source instrument ID、revision 语义以及 published/effective 时间语义。当前免费聚合源和 `securities` 当前态投影均不得被视为正式来源；2G 的研究级 AKShare/CNINFO 公告来源同样不得用于解除这些门禁。当前仍未实现正式 source adapter、FORMAL 摄取、PROVIDER_PIT_VERIFIED、`SECURITY_STATUS_EVENT_V2`、`security_status_history` 正式投影、正式 Provider trading calendar、Universe snapshot、`MARKET_BREADTH_V2`、完整 MARKET_REGIME、公告 PDF 语义分析或生产扫描切换。3A-R3B-0 的 raw/factor/calendar/action、2F V2 和 Shadow 已作为 TEST/DEMO 离线能力合入，但不能替代真实来源资格；正常业务库尚未执行 V13。阶段 2F、2G、2H、2I、3A-1、3A-R1、3A-R3A、3A-R3B 规划、3A-R3B-0、免费优先治理规划、F0 审计、F0.5、F2A 和 R1 技术实现已完成并合入；F2A 首次视觉验收为 `BLOCKED`，R1 第二次视觉复验部分通过但总体仍 `BLOCKED`，R1A 仍待实际 Git 验收、merge 和用户最终复验，F1、F2B、F3、3A-R3B-1 至 R3B-3 均未开始。当前只有 1 个有效观察日和 3 个 shadow item，尚未达到 20 个有效观察日、200 个 item、主要原因人工复核和正式观察报告门槛，因此完整 3A 未完成，3B 未开始。阶段 2D-2B 禁止外部行情补数、LLM 权威决策、投资建议和交易写操作。

@@ -71,8 +71,15 @@ async function copyReport(report: string): Promise<void> {
       <section class="report-section">
         <h3>4. 主要风险</h3>
         <div v-if="report.risks.length" class="risk-list">
-          <article v-for="risk in report.risks" :key="`${risk.source}-${risk.code}-${risk.title}`">
-            <div><code>{{ risk.code }}</code><b>{{ risk.level }}</b></div>
+          <article
+            v-for="risk in report.risks"
+            :key="`${risk.source}-${risk.code}-${risk.title}`"
+            :class="['risk-item', `tone-${risk.tone}`]"
+          >
+            <div>
+              <code>{{ risk.code }}</code>
+              <b>{{ risk.level === 'FORMAL_VETO' ? 'FORMAL_VETO · 正式否决' : risk.level }}</b>
+            </div>
             <strong>{{ risk.title }} · {{ risk.source }}</strong>
             <p>{{ risk.detail }}</p>
           </article>
@@ -154,12 +161,29 @@ async function copyReport(report: string): Promise<void> {
 .agent-report-grid p { min-height: 40px; color: #b4c2d2; font-size: 13px; line-height: 1.55; }
 .agent-report-grid span { color: #91a4ba; font-size: 12px; }
 .risk-list { display: grid; gap: 8px; }
-.risk-list article { padding: 9px; border: 1px solid #5a3f48; border-radius: 7px; background: #251820; }
+.risk-list article { padding: 9px; border: 1px solid #334b64; border-radius: 7px; background: #0c1d2f; }
 .risk-list article div { display: flex; justify-content: space-between; gap: 8px; }
-.risk-list code { color: #eba0a8; font-size: 11px; }
-.risk-list article div b { color: #d7a06c; font-size: 11px; }
+.risk-list code { color: #95b5d2; font-size: 11px; }
+.risk-list article div b { color: #9fb2c7; font-size: 11px; }
 .risk-list strong { display: block; margin-top: 5px; font-size: 13px; }
-.risk-list p { margin: 5px 0 0; color: #c7b4b8; font-size: 13px; line-height: 1.55; }
+.risk-list p { margin: 5px 0 0; color: #b7c6d6; font-size: 13px; line-height: 1.55; }
+.risk-item.tone-info { border-color: #315c7c; background: #0d2538; }
+.risk-item.tone-info code, .risk-item.tone-info div b { color: #80c8f6; }
+.risk-item.tone-warning { border-color: #71572f; background: #2a2114; }
+.risk-item.tone-warning code, .risk-item.tone-warning div b { color: #edbd6c; }
+.risk-item.tone-warning p { color: #d8c5a1; }
+.risk-item.tone-danger { border-color: #75414a; background: #29181f; }
+.risk-item.tone-danger code, .risk-item.tone-danger div b { color: #ec929d; }
+.risk-item.tone-danger p { color: #d4b5ba; }
+.risk-item.tone-formal-veto {
+  border-color: #a84a57;
+  border-left: 4px solid #e45f6d;
+  background: #351820;
+  box-shadow: inset 0 0 0 1px rgba(228, 95, 109, .12);
+}
+.risk-item.tone-formal-veto code, .risk-item.tone-formal-veto div b { color: #ff9eaa; }
+.risk-item.tone-formal-veto p { color: #edc1c6; }
+.risk-item.tone-neutral { border-color: #334b64; background: #0c1d2f; }
 .reason-list, .evidence-index { display: grid; gap: 7px; }
 .reason-list article, .evidence-index article { min-width: 0; padding: 8px; border-radius: 7px; background: #0c1d2f; }
 .reason-list code, .evidence-index code { display: block; color: #82bff0; font-size: 11px; overflow-wrap: anywhere; }
