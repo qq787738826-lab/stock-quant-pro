@@ -1,0 +1,12 @@
+{
+  "canonical": "{\"nested\":{\"a\":true,\"z\":null},\"number\":\"12.34\",\"schemaVersion\":\"FREE_PROVIDER_AUDIT_F0_VECTOR_V1\"}",
+  "input": {
+    "schemaVersion": "FREE_PROVIDER_AUDIT_F0_VECTOR_V1",
+    "number": "12.34",
+    "nested": {
+      "z": null,
+      "a": true
+    }
+  },
+  "sha256": "ba9f5c21489a1c70b58873fe460d3cb2591e1038306b1d386982100130f8674f"
+}

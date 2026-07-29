@@ -263,11 +263,11 @@
 - 兼容边界：2F V1、V9、旧 profile、contextHash 和缓存键完全不变；未来 V2 使用独立规则版本/profile。设计合入不表示 Provider 已批准、生产实现或迁移已完成，也没有批准 Day 002 或 3B。
 - 后续入口：按 [3A-R3B 免费优先 Provider 验证规划](tasks/3ar3b-free-first-provider-validation-plan.md)，先用免费数据验证产品形态、系统价值和数据瓶颈，再决定是否把 iFinD 或其他付费 Provider 作为专业化升级；任务书和路线图本身不构成自动实施授权。
 
-### 3A-R3B：免费优先验证、付费 Provider 后置升级与资格取证（规划更新中）
+### 3A-R3B：免费优先验证、付费 Provider 后置升级与资格取证
 
 - 规划文档：[免费优先完整任务书](tasks/3ar3b-free-first-provider-validation-plan.md)、[免费优先阶段记录](stage-3ar3b-free-first-provider-validation-plan.md)、[iFinD 里程碑任务书](tasks/3ar3b-ifind-trial-activation-plan.md)和[iFinD 阶段规划记录](stage-3ar3b-ifind-trial-activation-plan.md)。
 - 既有规划状态：iFinD 里程碑规划提交 `23baf11ed3a236800b5f3feba8681d261a71d9f9` 已通过 ChatGPT 对实际 Git 提交的验收，并经用户批准纯 fast-forward 合入。精确验收和批准时间无仓库证据，记为 `UNKNOWN`。
-- 免费优先更新：系统先用免费数据验证产品形态和效果；只有系统显示可重复使用价值、数据成为可量化主要瓶颈，且同范围免费/付费 A/B 方案和成本意愿均明确后，才考虑 iFinD 或其他付费 Provider。该治理更新当前只在任务分支待验收，不授权 F0 实施。
+- 免费优先更新：最终提交 `c47b88e586f6751563fe210f40137a3b7ce5e576` 已通过 ChatGPT 对实际 Git 提交的验收，并经用户批准纯 fast-forward 合入。系统先用免费数据验证产品形态和效果；只有系统显示可重复使用价值、数据成为可量化主要瓶颈，且同范围免费/付费 A/B 方案和成本意愿均明确后，才考虑 iFinD 或其他付费 Provider。
 - 日期边界：iFinD 试用不得绑定 `2026-08-31`、2026 年 8 月 31 日或任何其他固定日期。日历日期只能作为非权威临时估算，不属于路线图依赖，不得因预计日期临近而降低验收标准。
 - 当前状态：`FREE_PROVIDER_VALIDATION_GATE=BLOCKED`、`PAID_PROVIDER_UPGRADE_DECISION=PENDING`、`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`。真实 Provider 尚未接入，试用尚未启动，真实 iFinD 调用数为 0；Day 002 未创建，scheduler 关闭，3B 未开始。
 
@@ -281,13 +281,15 @@
 - 验证状态：18 个 QFQ 可执行黄金向量、随机 Schema V1→V13、真实 Java/Python/PostgreSQL Mock Shadow 及相关回归已通过最终提交验收。
 - 部署边界：V13 代码已经进入集成分支，但正常业务库尚未执行 V13。Mock/TEST/DEMO 不取得真实 Provider 资格；真实 iFinD 调用数保持 0，不创建 Day 002。
 
-#### 3A-R3B-F0：免费 Provider 资格审计（下一规划阶段，未授权实施）
+#### 3A-R3B-F0：免费 Provider 资格审计（任务分支已完成，待验收）
 
 - 性质：只读调查、最小受控探针与证据规划，不实现 Adapter。
 - 候选角色：BaoStock 作为免费主 Provider 技术候选；AKShare/Tencent 作为研究级当前投影、辅助与交叉校验候选；巨潮资讯、上交所、深交所公开信息作为公告、公司行动、交易日历和规则的官方证据候选。其他免费来源必须先形成独立审计证据。所有角色均为候选，不是批准。
 - 审计范围：未复权 raw daily、独立复权因子、`DAILY_EXACT`、交易所日历、公司行动、四类稳定来源身份、单位/精度/空值/明确 0、时效与静默修正、限流与结构变化、本地持久化/历史回放/回测/Agent/商业化权利、revision/snapshot/published/update time、旧版本查询、来源差异和维护风险。
 - 禁止推断：开源客户端不证明底层数据商业许可；不得从 QFQ 价格反推因子；不得跨 Provider 拼成伪造同源 PIT lineage。
-- 当前状态：只完成路线规划，未获得业务实现授权，未调用任何免费 Provider。
+- 审计交付：[F0任务书](tasks/3ar3b-f0-free-provider-qualification-audit.md)、[阶段记录](stage-3ar3b-f0-free-provider-qualification-audit.md)、[能力矩阵](free-provider-capability-matrix.md)、[证据登记册](free-provider-evidence-register.md)、[探针矩阵](free-provider-probe-matrix.md)和[书面许可问题](free-provider-written-permission-questions.md)。
+- 实际结果：`F0_AUDIT_RESULT=PARTIAL`。BaoStock 0.9.3 raw/QFQ 日线、通用日历和公司行动最小探针成功，两个按证券因子查询在固定短区间完整返回 0 行；独立因子为 `PARTIAL`、`DAILY_EXACT=UNVERIFIED`，客户端 BSD License 不能替代底层数据许可，因此角色为 `PENDING_WRITTEN_PERMISSION`。AKShare 必须按 Tencent/Sina/Eastmoney/CNINFO 上游拆分并保持研究辅助，CNINFO/SSE/SZSE/SZSI 只作官方证据。当前没有一个免费来源能单独承担完整 V13/QFQ 同源 lineage。
+- 当前状态：实现和 Codex 本地验证已在 F0 任务分支完成，待 ChatGPT 基于实际 Git 提交验收，尚未合入；`FREE_PROVIDER_VALIDATION_GATE` 仍为 `BLOCKED`，F1 未授权、未开始。
 
 #### 3A-R3B-F1：免费 Provider Adapter 与 V13 接入（未开始）
 

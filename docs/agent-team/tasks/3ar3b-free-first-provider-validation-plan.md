@@ -2,13 +2,15 @@
 
 ## 1. 文档状态与范围
 
-状态：**免费数据验证优先、付费 Provider 后置升级的治理规划已在任务分支完成，
-待 ChatGPT 基于实际 Git 提交验收，尚未合入；3A-R3B-F0 尚未获得业务实施授权。**
+状态：**免费数据验证优先、付费 Provider 后置升级的治理规划已通过 ChatGPT 对实际
+Git 提交的验收，经用户批准并纯 fast-forward 合入；后续 F0 审计已在独立任务分支完成
+Codex 本地验证，待实际 Git 提交验收，尚未合入。**
 
 - 冻结集成基线：`f0b87e1ecf51d2e94d5eff43d18f5fc3b6abe819`
 - 任务分支：
   `codex/1.4.0-stage-3ar3b-free-first-validation-plan`
 - 目标提交：`docs(agent): adopt free-first provider validation strategy`
+- 最终提交：`c47b88e586f6751563fe210f40137a3b7ce5e576`
 - 阶段记录：
   [stage-3ar3b-free-first-provider-validation-plan.md](../stage-3ar3b-free-first-provider-validation-plan.md)
 - 当前事实唯一权威：[CURRENT_STATE.md](../CURRENT_STATE.md)
@@ -37,9 +39,10 @@ iFinD 从项目开发前置依赖调整为“系统证明有效后的专业化�
 
 ## 3. 当前仓库事实
 
-- 当前集成 HEAD 为 `f0b87e1ecf51d2e94d5eff43d18f5fc3b6abe819`；
+- 当前集成 HEAD 为 `c47b88e586f6751563fe210f40137a3b7ce5e576`；
 - 3A-R3B-0 已通过 ChatGPT 对实际 Git 提交的最终复验，经用户批准并纯
   fast-forward 合入，远程集成分支与最终提交一致，ahead/behind 为 `0/0`；
+- 本免费优先规划已通过验收并纯 fast-forward 合入，远程集成分支与最终提交一致；
 - V13 代码已进入集成分支，但正常业务库尚未执行 V13；
 - 真实 Provider 尚未接入；
 - iFinD 真实调用数为 `0`；
@@ -66,6 +69,14 @@ F0 是只读调查、最小受控探针与证据规划阶段。它只判断免�
 - 其他免费来源：只有形成独立审计证据后才能加入候选矩阵。
 
 这些角色全部只是待审候选，不代表 Provider 已批准、许可已确认或取得 PIT 资格。
+
+后续 F0 已按本规划执行并形成
+[F0任务书](3ar3b-f0-free-provider-qualification-audit.md)、
+[阶段记录](../stage-3ar3b-f0-free-provider-qualification-audit.md)和逐事实证据矩阵。
+当前结论为 `F0_AUDIT_RESULT=PARTIAL`：BaoStock 技术能力部分可用，但底层数据许可、
+`DAILY_EXACT`、交易所级日历身份和版本语义仍未确认；AKShare 各上游只作研究辅助，
+CNINFO/SSE/SZSE/SZSI 只作官方证据。该 F0 任务分支待 ChatGPT 验收，尚未合入，F1
+未授权。
 
 ### 4.2 必审维度
 
@@ -306,8 +317,9 @@ IFIND_TRIAL_ACTIVATION_GATE=BLOCKED
 
 ## 12. 完成边界
 
-本治理任务完成只表示免费优先路线、阶段依赖和门禁状态已冻结。当前唯一规划中的下一阶段
-是 3A-R3B-F0，但 F0 尚未获得业务实施授权。
+本治理任务完成只表示免费优先路线、阶段依赖和门禁状态已冻结。该规划已验收并合入；
+其后 F0 已在独立任务分支完成审计和 Codex 本地验证，但 `PARTIAL` 不构成 F1 自动授权。
 
-本任务未调用任何免费 Provider 或 iFinD，未修改生产代码，未写数据库，未执行正常业务库
-V13 迁移，未创建 Day 002，未开启 scheduler，未开始 R3B-1 或 3B。
+本规划提交本身未调用任何免费 Provider 或 iFinD。后续 F0 仅在固定预算内执行 BaoStock
+最小受控探针；仍未修改生产 Adapter、写数据库、执行正常业务库 V13、创建 Day 002、
+开启 scheduler 或开始 F1、R3B-1、3B。iFinD 真实调用数仍为 0。
