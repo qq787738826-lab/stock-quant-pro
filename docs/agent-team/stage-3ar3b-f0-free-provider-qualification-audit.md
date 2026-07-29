@@ -21,9 +21,11 @@ PAID_PROVIDER_UPGRADE_DECISION=PENDING
 IFIND_TRIAL_ACTIVATION_GATE=BLOCKED
 ```
 
-BaoStock 0.9.3 的最小受控探针证明 raw/QFQ 日线、通用交易日历、分红和按证券因子函数具有
-实际技术入口，但固定短区间内两个因子查询均为空；全市场单日因子函数按边界未调用。
-因此独立因子只能评为 `PARTIAL`，`DAILY_EXACT=UNVERIFIED`。
+BaoStock 0.9.3 的最小受控探针观察到 raw/QFQ 日线、通用交易日历、分红和按证券因子函数
+具有实际技术入口；固定短区间内两个因子查询观察到 0 行，全市场单日因子函数按边界未
+调用。修复前 collector 未在迭代后复核 Provider 终态，且原始响应已按设计删除，因此
+本次 Live response completeness 统一为 `UNVERIFIED`。独立因子仍只能评为 `PARTIAL`，
+`DAILY_EXACT=UNVERIFIED`。
 
 客户端 BSD License 不能授予底层数据的本地保存、回放、回测、Agent 或商业使用权；
 revision/snapshot/published/update 和旧版本也没有正式证据。BaoStock 的角色为
@@ -39,19 +41,25 @@ lineage。
 | 指标 | 结果 |
 |---|---:|
 | BaoStock 数据逻辑调用 | 8 |
-| BaoStock TCP 协议请求（含登录/退出） | 10 |
+| 匿名登录/退出公开操作 | 2 |
+| socket/frame 级协议请求数 | `UNVERIFIED` |
 | Provider HTTP 请求 | 0 |
 | AKShare 新增 Provider 调用 | 0 |
 | 重试 | 0 |
 | 停止条件 | 未触发 |
-| raw 日线 | 两只证券各 6 行 |
-| QFQ 日线 | 两只证券各 6 行 |
-| 通用交易日历 | 8 行 |
-| 公司行动 | 1 行 |
-| 按证券因子 | 两次均完整空结果 |
+| raw 日线 | 两只证券各观察到 6 行 |
+| QFQ 日线 | 两只证券各观察到 6 行 |
+| 通用交易日历 | 观察到 8 行 |
+| 公司行动 | 观察到 1 行 |
+| 按证券因子 | 两次各观察到 0 行 |
+| 本次 Live response completeness | `UNVERIFIED` |
 | 全市场单日因子 | 未执行 |
 | 原始响应临时残留 | 0 |
 | 安全摘要 SHA-256 | `f97779bb9d6138faa3b049abb5f1f6da98105e359644ecc785002518086ffd0b` |
+
+安全摘要 Hash 是修复前 collector 生成的原 V1 审计产物，只证明该摘要内容，不证明迭代
+终态或响应完整性。8 个数据逻辑调用加 2 个登录/退出操作只是公开函数操作计数，不是
+socket request/frame 观测值。
 
 第一次命令启动曾在任何 Provider 网络动作前被包内运行时版本常量差异拦截，Provider 调用
 数为 0；工具随后改为以已验证 wheel 的分发元数据为版本权威。表中只统计唯一一次实际
@@ -81,7 +89,10 @@ quant-ai/tools/free_provider_audit_f0.py
 
 它默认断网，只有 `--live` 可启用固定 BaoStock 探针；内置 10 次预算、两只证券和一个短
 区间白名单，不访问 `.env`、数据库、生产应用或 iFinD，不允许全市场函数，递归脱敏并在
-`finally` 清理原始响应。
+`finally` 清理原始响应。修复后 collector 在迭代结束后重新读取 Provider
+`error_code/error_msg`：有行且终态错误为 `PARTIAL`，无行且终态错误为 `ERROR`，
+终态持续成功才允许 `SUCCESS/EMPTY`；`TIMEOUT` 和 `STRUCTURE_CHANGED` 独立稳定表达。
+公开函数摘要只保存参数名、参数 kind 和是否存在默认值，不保存任何默认值。
 
 离线测试和固定 Hash 向量：
 

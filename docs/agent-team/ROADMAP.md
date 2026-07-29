@@ -288,7 +288,7 @@
 - 审计范围：未复权 raw daily、独立复权因子、`DAILY_EXACT`、交易所日历、公司行动、四类稳定来源身份、单位/精度/空值/明确 0、时效与静默修正、限流与结构变化、本地持久化/历史回放/回测/Agent/商业化权利、revision/snapshot/published/update time、旧版本查询、来源差异和维护风险。
 - 禁止推断：开源客户端不证明底层数据商业许可；不得从 QFQ 价格反推因子；不得跨 Provider 拼成伪造同源 PIT lineage。
 - 审计交付：[F0任务书](tasks/3ar3b-f0-free-provider-qualification-audit.md)、[阶段记录](stage-3ar3b-f0-free-provider-qualification-audit.md)、[能力矩阵](free-provider-capability-matrix.md)、[证据登记册](free-provider-evidence-register.md)、[探针矩阵](free-provider-probe-matrix.md)和[书面许可问题](free-provider-written-permission-questions.md)。
-- 实际结果：`F0_AUDIT_RESULT=PARTIAL`。BaoStock 0.9.3 raw/QFQ 日线、通用日历和公司行动最小探针成功，两个按证券因子查询在固定短区间完整返回 0 行；独立因子为 `PARTIAL`、`DAILY_EXACT=UNVERIFIED`，客户端 BSD License 不能替代底层数据许可，因此角色为 `PENDING_WRITTEN_PERMISSION`。AKShare 必须按 Tencent/Sina/Eastmoney/CNINFO 上游拆分并保持研究辅助，CNINFO/SSE/SZSE/SZSI 只作官方证据。当前没有一个免费来源能单独承担完整 V13/QFQ 同源 lineage。
+- 实际结果：`F0_AUDIT_RESULT=PARTIAL`。BaoStock 0.9.3 raw/QFQ 日线各观察到 6 行、通用日历观察到 8 行、公司行动观察到 1 行，两个按证券因子查询在固定短区间各观察到 0 行；修复前 collector 未复核迭代终态，因此本次 Live response completeness 为 `UNVERIFIED`。独立因子为 `PARTIAL`、`DAILY_EXACT=UNVERIFIED`，客户端 BSD License 不能替代底层数据许可，因此角色为 `PENDING_WRITTEN_PERMISSION`。AKShare 必须按 Tencent/Sina/Eastmoney/CNINFO 上游拆分并保持研究辅助，CNINFO/SSE/SZSE/SZSI 只作官方证据。当前没有一个免费来源能单独承担完整 V13/QFQ 同源 lineage。
 - 当前状态：实现和 Codex 本地验证已在 F0 任务分支完成，待 ChatGPT 基于实际 Git 提交验收，尚未合入；`FREE_PROVIDER_VALIDATION_GATE` 仍为 `BLOCKED`，F1 未授权、未开始。
 
 #### 3A-R3B-F1：免费 Provider Adapter 与 V13 接入（未开始）

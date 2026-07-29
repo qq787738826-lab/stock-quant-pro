@@ -73,8 +73,9 @@ F0 是只读调查、最小受控探针与证据规划阶段。它只判断免�
 后续 F0 已按本规划执行并形成
 [F0任务书](3ar3b-f0-free-provider-qualification-audit.md)、
 [阶段记录](../stage-3ar3b-f0-free-provider-qualification-audit.md)和逐事实证据矩阵。
-当前结论为 `F0_AUDIT_RESULT=PARTIAL`：BaoStock 技术能力部分可用，但底层数据许可、
-`DAILY_EXACT`、交易所级日历身份和版本语义仍未确认；AKShare 各上游只作研究辅助，
+当前结论为 `F0_AUDIT_RESULT=PARTIAL`：BaoStock 已观察到部分结构化技术能力，但本次
+Live response completeness 为 `UNVERIFIED`，底层数据许可、`DAILY_EXACT`、交易所级
+日历身份和版本语义仍未确认；AKShare 各上游只作研究辅助，
 CNINFO/SSE/SZSE/SZSI 只作官方证据。该 F0 任务分支待 ChatGPT 验收，尚未合入，F1
 未授权。
 

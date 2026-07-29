@@ -174,16 +174,19 @@ IFIND_TRIAL_ACTIVATION_GATE=BLOCKED
 
 3A-R3B 免费优先治理规划已通过验收并合入。当前 F0 任务分支已经完成实际审计和 Codex
 本地验证，结论为 `F0_AUDIT_RESULT=PARTIAL`：BaoStock 0.9.3 的两只证券 raw/QFQ
-短日线、通用交易日历和公司行动最小探针成功，按证券因子在固定短区间完整返回 0 行，
-全市场单日因子按边界未调用；独立因子只能评为 `PARTIAL`，
+短日线各观察到 6 行，通用交易日历观察到 8 行，公司行动观察到 1 行，按证券因子在
+固定短区间各观察到 0 行；修复前 collector 未在迭代后复核 Provider 终态，因此本次
+Live response completeness 统一为 `UNVERIFIED`。全市场单日因子按边界未调用；独立
+因子只能评为 `PARTIAL`，
 `DAILY_EXACT=UNVERIFIED`。客户端 BSD License 不等于底层数据许可，BaoStock 当前角色
 为 `PENDING_WRITTEN_PERMISSION`。AKShare 必须按 Tencent、Sina、Eastmoney、CNINFO
 上游拆分并保持 `RESEARCH_AUXILIARY_ONLY`；CNINFO/SSE/SZSE/SZSI 只承担
 `OFFICIAL_EVIDENCE_ONLY`。当前没有一个免费来源能单独承担完整 V13/QFQ 同源 lineage。
 
 F0 仍待 ChatGPT 基于实际 Git 提交验收且尚未合入；F1 尚未获得实施授权。F0 唯一实际
-Provider Live 探针执行 8 个 BaoStock 数据逻辑调用、10 个 TCP 协议请求（含匿名登录/
-退出）、0 个 Provider HTTP 请求，原始响应残留为 0。没有新增 AKShare Live 调用，没有
+Provider Live 探针执行 8 个 BaoStock 数据逻辑调用和 2 个匿名登录/退出公开操作；
+socket 级协议请求/frame 数未观测，固定为 `UNVERIFIED`，不得从函数调用数推断。
+Provider HTTP 请求为 0，原始响应残留为 0。没有新增 AKShare Live 调用，没有
 调用 iFinD，没有访问数据库或执行正常业务库 V13。3A-R3B-1 尚未开始，Day 002 未创建，
 scheduler 关闭，3B 未开始。
 

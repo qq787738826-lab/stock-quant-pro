@@ -32,10 +32,10 @@ probe、evidence、status 和 F1 role。
 
 | recordId | providerCandidate | client/library | upstreamProvider | sourceCode 候选 | sourceIdentity 候选 | factClass | publicFunction/页面 | raw/adjusted | coverage | probe |
 |---|---|---|---|---|---|---|---|---|---|---|
-| BAO-RAW | BaoStock | baostock 0.9.3 | BaoStock data service | `BAOSTOCK_RESEARCH_CANDIDATE_V1` | 证券身份 `exchange.code` 可观察，稳定承诺未取得 | RAW_DAILY_BAR | `query_history_k_data_plus(adjustflag=3)` | raw | A 股、固定两证券短区间 | 两证券各 6 行 SUCCESS |
-| BAO-FAC | BaoStock | baostock 0.9.3 | BaoStock data service | 同上 | `code + factor type` 候选；版本身份未取得 | ADJUSTMENT_FACTOR | `query_adjust_factor`；`query_daily_adjust_factor` | independent factor surface | 按证券区间；单日函数为全市场 | 两证券区间均 EMPTY；全市场函数未执行 |
-| BAO-CAL | BaoStock | baostock 0.9.3 | BaoStock data service | 同上 | 只有通用 `calendar_date`，无 exchange identity | TRADING_CALENDAR | `query_trade_dates` | n/a | 固定自然日范围 | 8 行 SUCCESS |
-| BAO-ACT | BaoStock | baostock 0.9.3 | BaoStock data service | 同上 | 证券可识别；稳定 action ID 未暴露 | CORPORATE_ACTION | `query_dividend_data(yearType=operate)` | n/a | 分红送转年度数据 | 1 行 SUCCESS |
+| BAO-RAW | BaoStock | baostock 0.9.3 | BaoStock data service | `BAOSTOCK_RESEARCH_CANDIDATE_V1` | 证券身份 `exchange.code` 可观察，稳定承诺未取得 | RAW_DAILY_BAR | `query_history_k_data_plus(adjustflag=3)` | raw | A 股、固定两证券短区间 | 两证券各观察到 6 行；completeness UNVERIFIED |
+| BAO-FAC | BaoStock | baostock 0.9.3 | BaoStock data service | 同上 | `code + factor type` 候选；版本身份未取得 | ADJUSTMENT_FACTOR | `query_adjust_factor`；`query_daily_adjust_factor` | independent factor surface | 按证券区间；单日函数为全市场 | 两证券区间各观察到 0 行，completeness UNVERIFIED；全市场函数未执行 |
+| BAO-CAL | BaoStock | baostock 0.9.3 | BaoStock data service | 同上 | 只有通用 `calendar_date`，无 exchange identity | TRADING_CALENDAR | `query_trade_dates` | n/a | 固定自然日范围 | 观察到 8 行；completeness UNVERIFIED |
+| BAO-ACT | BaoStock | baostock 0.9.3 | BaoStock data service | 同上 | 证券可识别；稳定 action ID 未暴露 | CORPORATE_ACTION | `query_dividend_data(yearType=operate)` | n/a | 分红送转年度数据 | 观察到 1 行；completeness UNVERIFIED |
 | TX-RAW | AKShare 1.18.64 / Tencent | AKShare | Tencent QQ Finance | `TENCENT_QQ_FINANCE_RESEARCH_CANDIDATE_V1` | 腾讯证券代码候选 | RAW_DAILY_BAR | `stock_zh_a_hist_tx` | raw/QFQ/HFQ；生产当前用 QFQ | A 股按年分段 | 复用既有受控两次响应 |
 | TX-FAC | AKShare 1.18.64 / Tencent | AKShare | Tencent QQ Finance | 同上 | 未取得 | ADJUSTMENT_FACTOR | 当前函数未返回独立 factor | n/a | n/a | NOT_EXPOSED |
 | TX-CAL | AKShare 1.18.64 / Tencent | AKShare | Tencent QQ Finance | 同上 | 未取得 | TRADING_CALENDAR | 当前函数未返回 calendar | n/a | n/a | NOT_EXPOSED |
@@ -73,10 +73,10 @@ probe、evidence、status 和 F1 role。
 
 | recordId | unit | precision | null semantics | zero semantics |
 |---|---|---|---|---|
-| BAO-RAW | OHLC/amount/volume/turn 官方冻结单位未取得：UNVERIFIED | 返回十进制字符串可统计；正式精度 UNVERIFIED | 本次日线无空值；长期规则 UNVERIFIED | `isST=0` 可区分；价格/量 0 规则 UNVERIFIED |
+| BAO-RAW | OHLC/amount/volume/turn 官方冻结单位未取得：UNVERIFIED | 返回十进制字符串可统计；正式精度 UNVERIFIED | 本次观察行无空值；响应完整性和长期规则 UNVERIFIED | `isST=0` 可区分；价格/量 0 规则 UNVERIFIED |
 | BAO-FAC | factor 单位/归一化语义 UNVERIFIED | 字段存在；固定区间无值 | 空结果与缺失字段可区分 | 无样本，UNVERIFIED |
-| BAO-CAL | `is_trading_day` 布尔编码 PARTIAL | `0/1` | 本次无空值 | 休市 `0` 明确存在 |
-| BAO-ACT | 分红送转单位 UNVERIFIED | 十进制字段 PARTIAL | 本次多个字段为空 | 送股字段明确 `0` 与空值可区分 |
+| BAO-CAL | `is_trading_day` 布尔编码 PARTIAL | `0/1` | 本次观察行无空值；响应完整性 UNVERIFIED | 休市 `0` 明确存在 |
+| BAO-ACT | 分红送转单位 UNVERIFIED | 十进制字段 PARTIAL | 本次观察行多个字段为空；响应完整性 UNVERIFIED | 送股字段明确 `0` 与空值可区分 |
 | TX-RAW | 当前 payload 的 `amount` 语义与旧链 volume 映射冲突：CONFLICTING_EVIDENCE | 公开响应字符串/数字，冻结精度 UNVERIFIED | 旧 normalizer 会补 0，不能用于 V13 | amount 补 0 不代表 Provider 明确 0 |
 | TX-FAC | UNAVAILABLE | UNAVAILABLE | UNAVAILABLE | UNAVAILABLE |
 | TX-CAL | UNAVAILABLE | UNAVAILABLE | UNAVAILABLE | UNAVAILABLE |
@@ -196,10 +196,10 @@ probe、evidence、status 和 F1 role。
 
 | recordId | rate limit | stability | probe result | evidenceId | status | F1 role |
 |---|---|---|---|---|---|---|
-| BAO-RAW | 官方限流值 UNVERIFIED | 单会话短探针稳定 | 两证券 SUCCESS | `F0-EVID-BAO-LIVE-001` | PARTIAL | PENDING_WRITTEN_PERMISSION |
-| BAO-FAC | 官方限流值 UNVERIFIED | 函数存在，短区间为空 | 两次 EMPTY | `F0-EVID-BAO-LIVE-001` | PARTIAL | PENDING_WRITTEN_PERMISSION |
-| BAO-CAL | 官方限流值 UNVERIFIED | 短探针稳定；缺 exchange identity | SUCCESS | `F0-EVID-BAO-LIVE-001` | PARTIAL | PENDING_WRITTEN_PERMISSION |
-| BAO-ACT | 官方限流值 UNVERIFIED | 单证券年度调用稳定 | SUCCESS | `F0-EVID-BAO-LIVE-001` | PARTIAL | PENDING_WRITTEN_PERMISSION |
+| BAO-RAW | 官方限流值 UNVERIFIED | 单会话短探针观察到结构化行；完整性未证明 | 两证券各观察到 6 行；completeness UNVERIFIED | `F0-EVID-BAO-LIVE-001` | PARTIAL | PENDING_WRITTEN_PERMISSION |
+| BAO-FAC | 官方限流值 UNVERIFIED | 函数存在；短区间观察到 0 行，完整性未证明 | 两次各观察到 0 行；completeness UNVERIFIED | `F0-EVID-BAO-LIVE-001` | PARTIAL | PENDING_WRITTEN_PERMISSION |
+| BAO-CAL | 官方限流值 UNVERIFIED | 观察到结构化日历行；缺 exchange identity 且完整性未证明 | 观察到 8 行；completeness UNVERIFIED | `F0-EVID-BAO-LIVE-001` | PARTIAL | PENDING_WRITTEN_PERMISSION |
+| BAO-ACT | 官方限流值 UNVERIFIED | 观察到单证券年度结构化行；完整性未证明 | 观察到 1 行；completeness UNVERIFIED | `F0-EVID-BAO-LIVE-001` | PARTIAL | PENDING_WRITTEN_PERMISSION |
 | TX-RAW | 无本项目 SLA | AKShare 页面适配存在变化风险 | 既有两次一致；revision 未验证 | `F0-EVID-TENCENT-001` | PARTIAL | RESEARCH_AUXILIARY_ONLY |
 | TX-FAC | n/a | n/a | NOT_EXPOSED | `F0-EVID-AKS-CODE-001` | NOT_EXPOSED | RESEARCH_AUXILIARY_ONLY |
 | TX-CAL | n/a | n/a | NOT_EXPOSED | `F0-EVID-AKS-CODE-001` | NOT_EXPOSED | RESEARCH_AUXILIARY_ONLY |

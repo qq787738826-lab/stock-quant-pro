@@ -22,8 +22,8 @@
 | `F0-EVID-BAO-WHEEL-001` | BaoStock | PyPI artifact | `baostock-0.9.3-py3-none-any.whl` | https://pypi.org/project/baostock/ | 2026-07-28/29 Asia/Shanghai | 0.9.3 | `acbd19403285bc4e254cee8297cf0e2646ae2276e5af7e549deed3988ab02293` (`artifact`) |
 | `F0-EVID-BAO-SDIST-001` | BaoStock | PyPI artifact | `baostock-0.9.3.tar.gz` | https://pypi.org/project/baostock/ | 2026-07-28 Asia/Shanghai | 0.9.3 | `16699d82d05037a8c133577fcdeb9ac0d5a7f31edc2432c4e883004e0a95e3f7` (`artifact`) |
 | `F0-EVID-BAO-WEB-001` | BaoStock | Provider 网站 | disclaimer / Python API shell | https://baostock.com/disclaimer | 2026-07-28 Asia/Shanghai（date-level） | 页面未暴露正文版本 | `92d4eaeb5c101f3029f0b4136fab3fa88668129d2ee61684884f273a07ade836` (`page-body`) |
-| `F0-EVID-BAO-LIVE-001` | BaoStock | 受控 Live 探针 | F0 安全摘要 | n/a（TCP `public-api.baostock.com`） | 2026-07-29 Asia/Shanghai（date-level） | client 0.9.3 / summary V1 | `f97779bb9d6138faa3b049abb5f1f6da98105e359644ecc785002518086ffd0b` (`safe-live-summary`) |
-| `F0-EVID-AKS-DOC-001` | AKShare | 官方 GitHub 文档 | AKShare introduction | https://github.com/akfamily/akshare/blob/main/docs/introduction.md | 2026-07-28 Asia/Shanghai（date-level） | 页面标注 2026-07-24 更新 | `a253112c224e51af19a050ff25191a2d74c9da5cc20963f4b07abab1a5541611` (`normalized-evidence`) |
+| `F0-EVID-BAO-LIVE-001` | BaoStock | 受控 Live 探针 | F0 安全摘要 | n/a（TCP `public-api.baostock.com`） | 2026-07-29 Asia/Shanghai（date-level） | client 0.9.3 / pre-fix collector summary V1；completeness UNVERIFIED | `f97779bb9d6138faa3b049abb5f1f6da98105e359644ecc785002518086ffd0b` (`safe-live-summary`) |
+| `F0-EVID-AKS-DOC-001` | AKShare | 官方 GitHub 文档 | AKShare introduction | https://github.com/akfamily/akshare/blob/main/docs/introduction.md | 2026-07-28 Asia/Shanghai（date-level） | 文档正文标注 2026-05-02 更新 | `a253112c224e51af19a050ff25191a2d74c9da5cc20963f4b07abab1a5541611` (`normalized-evidence`) |
 | `F0-EVID-AKS-CODE-001` | AKShare/Tencent/Sina/Eastmoney | 仓库既有调用链 | `quant-ai/app/main.py` | [仓库文件](../../quant-ai/app/main.py) | 2026-07-29 | 集成基线 `c47b88e` | `54be94cf8af4c8ab908670aa6f2eabd9ee20e26e682afcf25cecafcf8bf9702f` (`repository-file`) |
 | `F0-EVID-AKS-CNINFO-001` | AKShare/CNINFO | 仓库既有 Provider Bridge | `quant-ai/app/announcement_provider.py` | [仓库文件](../../quant-ai/app/announcement_provider.py) | 2026-07-29 | AKShare 1.18.64 / contract V1 | `82d9e9f142ede43427157419585ec17946647f72e850f35fef6ed9b98146b410` (`repository-file`) |
 | `F0-EVID-TENCENT-001` | Tencent via AKShare | 仓库既有受控审计 | PIT market facts V2 design | [任务书](tasks/3ar3a-pit-market-facts-v2-design.md) | 2026-07-29 复核 | 3A-R3A final | `3c403898a0e045d08a18ebe83a022b3f914ee95eb0f9b41c8654ebf2ef322d2c` (`repository-file`) |
@@ -38,10 +38,10 @@
 | evidenceId | 支持的具体结论 | 不支持的结论 | 许可解释 | 需书面确认 | 过期风险 | 备注 |
 |---|---|---|---|---|---|---|
 | `F0-EVID-BAO-PYPI-001` | 当前正式分发版本、上传日期、包声明、项目定位 | 底层数据归属、数据许可、SLA、revision | BSD 是包代码元数据，不是数据授权 | 是 | 中 | PyPI 标记部分元数据未经平台验证 |
-| `F0-EVID-BAO-WHEEL-001` | wheel 字节、公开导出、函数签名、TCP endpoint、依赖 | 服务器端语义、数据权利、旧版本 | 只能审计客户端实现 | 是 | 中 | 本阶段临时安装在仓库外 |
+| `F0-EVID-BAO-WHEEL-001` | wheel 字节、公开导出、参数名、参数 kind、是否存在默认值、TCP endpoint、依赖 | 具体默认值、注解语义、服务器端语义、数据权利、旧版本 | 只能审计客户端实现；安全摘要不保存默认参数值 | 是 | 中 | 本阶段临时安装在仓库外 |
 | `F0-EVID-BAO-SDIST-001` | sdist 字节与版本 | 同上 | 同上 | 是 | 中 | 未提交 artifact |
 | `F0-EVID-BAO-WEB-001` | 两个 URL 可访问且返回同一 JS shell | disclaimer/API 正文、明确许可、数据字典 | 没有可引用正文就不能批准用途 | 是 | 高 | API URL body Hash 与 disclaimer 相同 |
-| `F0-EVID-BAO-LIVE-001` | 匿名单会话、8 个受控调用、字段形态、行数、空值/0、Hash、清理 | 具体行情值、长期稳定、DAILY_EXACT、许可、revision | 技术可用不等于用途获准 | 是 | 中 | 原始响应未保留，残留 0 |
+| `F0-EVID-BAO-LIVE-001` | 匿名单会话、8 个受控数据逻辑调用、2 个登录/退出公开操作、字段形态、观察行数、空值/0、Hash、清理 | Provider 终态响应完整性、socket/frame 请求数、具体行情值、长期稳定、DAILY_EXACT、许可、revision | 原 V1 Hash 只证明修复前安全摘要内容，不证明终态完整性；技术可用不等于用途获准 | 是 | 中 | 原始响应未保留，残留 0；completeness UNVERIFIED |
 | `F0-EVID-AKS-DOC-001` | 多公开上游、学术研究定位、商业风险、接口随网页变化 | 任一上游的许可、版本语义、SLA | AKShare 项目本身不能授权上游数据 | 是 | 高 | 必须逐函数拆上游 |
 | `F0-EVID-AKS-CODE-001` | 当前 Tencent/Sina/Eastmoney 函数、字段和 fallback | Provider 许可、revision、生产 V13 资格 | 旧 current projection 不能升级 | 是 | 中 | Tencent amount/volume 映射存在资格冲突 |
 | `F0-EVID-AKS-CNINFO-001` | 固定公开函数、CNINFO 域名门、字段与错误处理 | PDF 语义、完整修订关系、正式许可 | 2G 固定 RESEARCH | 是 | 中 | 不扩大本阶段 Live 调用 |

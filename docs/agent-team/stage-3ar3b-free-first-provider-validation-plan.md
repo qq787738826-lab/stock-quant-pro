@@ -55,8 +55,9 @@ PIT、许可、lineage、QFQ 或用途资格门槛。
 候选角色仅为 BaoStock 主技术候选、AKShare/Tencent 研究级辅助候选，以及巨潮资讯、
 上交所、深交所公开信息的官方证据候选；均未被本规划批准为正式 Provider。
 
-F0 后续实际审计确认：BaoStock raw/QFQ 日线、通用日历和公司行动最小探针可用，两个
-按证券 factor 查询在固定短区间为空，`DAILY_EXACT=UNVERIFIED`；客户端 BSD License
+F0 后续实际审计观察到 BaoStock raw/QFQ 日线、通用日历和公司行动结构化结果，两个
+按证券 factor 查询在固定短区间各观察到 0 行；修复前 collector 未复核迭代终态，本次
+Live response completeness 为 `UNVERIFIED`，`DAILY_EXACT=UNVERIFIED`；客户端 BSD License
 不能替代底层数据许可，角色为 `PENDING_WRITTEN_PERMISSION`。AKShare 按
 Tencent/Sina/Eastmoney/CNINFO 拆分并保持研究辅助，CNINFO/SSE/SZSE/SZSI 只作官方
 证据。F0 结论为 `F0_AUDIT_RESULT=PARTIAL`，不改变三项正式门禁。

@@ -45,6 +45,15 @@ class FakeResult:
         return self._rows[self._index]
 
 
+class PartialFakeResult(FakeResult):
+    def next(self) -> bool:
+        has_row = super().next()
+        if has_row:
+            self.error_code = "10003001"
+            self.error_msg = "provider stream ended early"
+        return has_row
+
+
 class FakeBaoStock:
     # Synthetic-only values; no row below was copied from a live provider.
     __version__ = "0.9.3"
@@ -55,10 +64,15 @@ class FakeBaoStock:
         empty: bool = False,
         fail_on: str | None = None,
         malformed: bool = False,
+        partial_on: str | None = None,
+        timeout_on: str | None = None,
     ) -> None:
         self.empty = empty
         self.fail_on = fail_on
         self.malformed = malformed
+        self.partial_on = partial_on
+        self.timeout_on = timeout_on
+        self.partial_emitted = False
         self.calls: list[str] = []
         self.logged_out = False
 
@@ -83,6 +97,8 @@ class FakeBaoStock:
         rows: list[list[str]],
     ) -> FakeResult:
         self.calls.append(name)
+        if self.timeout_on == name:
+            raise TimeoutError("synthetic provider timeout")
         if self.fail_on == name:
             return FakeResult(
                 fields,
@@ -94,6 +110,9 @@ class FakeBaoStock:
             rows = []
         if self.malformed and rows:
             rows = [rows[0][:-1]]
+        if self.partial_on == name and not self.partial_emitted:
+            self.partial_emitted = True
+            return PartialFakeResult(fields, rows)
         return FakeResult(fields, rows)
 
     def query_history_k_data_plus(self, *args, **kwargs) -> FakeResult:
@@ -179,6 +198,15 @@ class FreeProviderAuditF0Test(unittest.TestCase):
             0,
             report["callBudget"]["usedProviderLogicalCalls"],
         )
+        self.assertIsNone(
+            report["transportCounts"]["providerProtocolRequestCount"],
+        )
+        self.assertEqual(
+            "UNVERIFIED",
+            report["transportCounts"][
+                "providerProtocolRequestCountStatus"
+            ],
+        )
         self.assertTrue(all(
             item["status"] == "NOT_EXECUTED"
             for item in report["calls"]
@@ -198,6 +226,19 @@ class FreeProviderAuditF0Test(unittest.TestCase):
         self.assertEqual(
             0,
             report["transportCounts"]["providerHttpRequestCount"],
+        )
+        self.assertEqual(
+            2,
+            report["transportCounts"]["loginLogoutOperationCount"],
+        )
+        self.assertIsNone(
+            report["transportCounts"]["providerProtocolRequestCount"],
+        )
+        self.assertEqual(
+            "UNVERIFIED",
+            report["transportCounts"][
+                "providerProtocolRequestCountStatus"
+            ],
         )
         self.assertEqual("login", provider.calls[0])
         self.assertEqual("logout", provider.calls[-1])
@@ -373,6 +414,64 @@ class FreeProviderAuditF0Test(unittest.TestCase):
         self.assertEqual(
             "STRUCTURE_CHANGED",
             malformed["calls"][0]["status"],
+        )
+
+    def test_terminal_provider_error_after_rows_is_partial(self) -> None:
+        with tempfile.TemporaryDirectory() as parent:
+            parent_path = Path(parent)
+            report = audit.run_live_baostock(
+                FakeBaoStock(partial_on="query_history_k_data_plus"),
+                clock=fixed_clock,
+                temp_parent=parent_path,
+            )
+            self.assertEqual([], list(parent_path.iterdir()))
+
+        first_history = report["calls"][0]
+        self.assertEqual("PARTIAL", first_history["status"])
+        self.assertFalse(first_history["responseComplete"])
+        self.assertEqual(1, first_history["rowCount"])
+        self.assertEqual("PROVIDER_ERROR", first_history["errorClass"])
+        self.assertTrue(first_history["fieldStatistics"])
+        self.assertTrue(first_history["temporaryRawFileDeleted"])
+        self.assertEqual(0, report["rawResponseResidueCount"])
+        self.assertEqual(
+            8,
+            report["callBudget"]["usedProviderLogicalCalls"],
+        )
+        serialized = audit.canonical_json(first_history)
+        for raw_value in (
+            "10.11",
+            "10.23",
+            "10.01",
+            "10.20",
+            "10.08",
+            "123456",
+            "9876543.21",
+        ):
+            self.assertNotIn(raw_value, serialized)
+
+    def test_timeout_is_stable_and_incomplete(self) -> None:
+        with tempfile.TemporaryDirectory() as parent:
+            parent_path = Path(parent)
+            report = audit.run_live_baostock(
+                FakeBaoStock(timeout_on="query_trade_dates"),
+                clock=fixed_clock,
+                temp_parent=parent_path,
+            )
+            self.assertEqual([], list(parent_path.iterdir()))
+
+        calendar = next(
+            item for item in report["calls"]
+            if item["stableCallId"] == "F0-BAO-006"
+        )
+        self.assertEqual("TIMEOUT", calendar["status"])
+        self.assertFalse(calendar["responseComplete"])
+        self.assertEqual("NETWORK", calendar["errorClass"])
+        self.assertEqual(0, calendar["rowCount"])
+        self.assertEqual(0, report["rawResponseResidueCount"])
+        self.assertEqual(
+            8,
+            report["callBudget"]["usedProviderLogicalCalls"],
         )
 
     def test_tool_is_standalone_and_contains_no_production_or_secret_access(

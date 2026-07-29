@@ -99,14 +99,17 @@ PyPI 在审计日发布的正式版为 `0.9.3`：
 - 包依赖：`pandas>=0.18.0`
 - 上游端点：`public-api.baostock.com:10030`，TCP socket，而非 HTTP。
 
-wheel 公开导出并给出签名的相关函数包括：
+wheel 公开导出的相关函数包括：
 
-- `login(user_id='anonymous', password='123456')` / `logout(...)`；
+- `login(...)` / `logout(...)`；
 - `query_history_k_data_plus(...)`；
 - `query_trade_dates(...)`；
 - `query_dividend_data(...)`；
 - `query_adjust_factor(...)`；
-- `query_daily_adjust_factor(date=None)`。
+- `query_daily_adjust_factor(...)`。
+
+安全摘要对每个公开函数只保存参数名、参数 `kind` 和是否存在默认值，不保存注解内容或
+任何具体默认值；离线测试证明匿名登录的默认用户名和密码值不会进入摘要。
 
 `query_daily_adjust_factor` 是某日全市场因子接口；F0 禁止全市场查询，因此只登记公开符号，
 不执行该函数。包元数据的 BSD License 不授权底层数据本地保存、回放、回测、Agent 或
@@ -125,8 +128,11 @@ endDate = 2025-06-10
 maximumLogicalCalls = 10
 ```
 
-实际只执行 8 个数据逻辑调用；加匿名登录和退出共 10 个 BaoStock TCP 协议请求，Provider
-HTTP 请求为 0。没有重试，没有全市场调用，没有 AKShare 新增 Live 调用。
+实际只执行 8 个数据逻辑调用，另有匿名登录和退出 2 个公开操作；工具没有 socket/frame
+级观测能力，因此 `providerProtocolRequestCount=null` 且
+`providerProtocolRequestCountStatus=UNVERIFIED`，不得把 10 个公开函数操作写成实际
+TCP request/frame 数。Provider HTTP 请求为 0。没有重试，没有全市场调用，没有
+AKShare 新增 Live 调用。
 
 原始响应只写入操作系统临时目录以计算 SHA-256，摘要只保留字段名、类型、空值数、
 小数位范围、是否存在明确 0、行数、日期范围、重复键计数和 Hash，不保留具体价格、
@@ -135,19 +141,21 @@ HTTP 请求为 0。没有重试，没有全市场调用，没有 AKShare 新增 
 
 ## 5. BaoStock 事实结果
 
-| stableCallId | 能力 | 结果 | 行数 | 关键字段/边界 |
+| stableCallId | 能力 | 修复后的证据口径 | 观察行数 | 关键字段/边界 |
 |---|---|---:|---:|---|
-| `F0-BAO-002` | `sh.600000` 未复权日线 | SUCCESS | 6 | OHLC、preclose、volume、amount、turn、isST；无空值 |
-| `F0-BAO-003` | `sz.000001` 未复权日线 | SUCCESS | 6 | 同上；无空值 |
-| `F0-BAO-004` | `sh.600000` 前复权日线 | SUCCESS | 6 | 与未复权使用相同返回字段；不作为独立因子 |
-| `F0-BAO-005` | `sz.000001` 前复权日线 | SUCCESS | 6 | 与未复权使用相同返回字段；不作为独立因子 |
-| `F0-BAO-006` | 交易日历 | SUCCESS | 8 | `calendar_date/is_trading_day`；没有 exchange identity |
-| `F0-BAO-007` | 分红/公司行动 | SUCCESS | 1 | 多个公告、登记、实施和派付日期；部分字段为空 |
-| `F0-BAO-008` | `sh.600000` 独立因子 | EMPTY | 0 | 函数与字段存在；固定短区间无记录 |
-| `F0-BAO-009` | `sz.000001` 独立因子 | EMPTY | 0 | 函数与字段存在；固定短区间无记录 |
+| `F0-BAO-002` | `sh.600000` 未复权日线 | `COMPLETENESS_UNVERIFIED` | 6 | OHLC、preclose、volume、amount、turn、isST；观察行无空值 |
+| `F0-BAO-003` | `sz.000001` 未复权日线 | `COMPLETENESS_UNVERIFIED` | 6 | 同上；观察行无空值 |
+| `F0-BAO-004` | `sh.600000` 前复权日线 | `COMPLETENESS_UNVERIFIED` | 6 | 与未复权使用相同返回字段；不作为独立因子 |
+| `F0-BAO-005` | `sz.000001` 前复权日线 | `COMPLETENESS_UNVERIFIED` | 6 | 与未复权使用相同返回字段；不作为独立因子 |
+| `F0-BAO-006` | 交易日历 | `COMPLETENESS_UNVERIFIED` | 8 | `calendar_date/is_trading_day`；没有 exchange identity |
+| `F0-BAO-007` | 分红/公司行动 | `COMPLETENESS_UNVERIFIED` | 1 | 多个公告、登记、实施和派付日期；观察行部分字段为空 |
+| `F0-BAO-008` | `sh.600000` 独立因子 | `COMPLETENESS_UNVERIFIED` | 0 | 函数与字段存在；固定短区间未观察到记录 |
+| `F0-BAO-009` | `sz.000001` 独立因子 | `COMPLETENESS_UNVERIFIED` | 0 | 函数与字段存在；固定短区间未观察到记录 |
 | `F0-BAO-010` | 单日全市场因子 | NOT_EXECUTED | — | `F0_FULL_MARKET_CALL_NOT_ALLOWED` |
 
-两个日线结果各覆盖 6 个工作日；交易日历覆盖固定范围内 8 个自然日。短区间因子为空不能
+本次摘要观察到两个日线结果各有 6 个工作日、交易日历有固定范围内 8 个自然日。修复前
+collector 没有在数据迭代后重读 Provider 终态，原始响应又已按设计删除，因此不能重新
+证明这些响应完整；原 V1 安全摘要 Hash 只证明已保存摘要内容。短区间未观察到因子不能
 证明因子不可用，也不能证明逐交易日 `DAILY_EXACT`。`query_adjust_factor` 的包内说明以
 “除权除息日期”为范围，公开的单日因子函数又会返回全市场，因此本阶段只能得出：
 
@@ -255,8 +263,9 @@ IFIND_TRIAL_ACTIVATION_GATE=BLOCKED
 
 `PARTIAL` 的理由：
 
-1. BaoStock raw/QFQ 日线、通用日历、分红和因子接口的最小技术探针可用；
-2. 独立因子在固定区间为空，`DAILY_EXACT` 未验证；
+1. BaoStock raw/QFQ 日线、通用日历、分红和因子接口均观察到可解析的最小技术形态，
+   但本次 Live response completeness 为 `UNVERIFIED`；
+2. 独立因子在固定区间未观察到记录，`DAILY_EXACT` 未验证；
 3. BaoStock 日历没有交易所身份；
 4. 字段单位、空值与许可缺少足够正式证据；
 5. revision/snapshot/published/update 和旧版本不可验证；
@@ -278,8 +287,8 @@ quant-ai/.venv/Scripts/python.exe tools/free_provider_audit_f0.py
 ```
 
 离线测试覆盖默认断网、显式 live、调用预算、证券/日期白名单、禁止全市场、敏感字段递归
-脱敏、不输出实际行情值、临时文件删除、canonical Hash、空数据、错误、结构变化、独立
-运行、不访问数据库和不调用 iFinD。
+脱敏、不输出实际行情值、临时文件删除、canonical Hash、空数据、终态 `PARTIAL`、明确
+`TIMEOUT`、错误、结构变化、独立运行、不访问数据库和不调用 iFinD。
 
 本阶段不需要也没有运行 Java、Vue 或 PostgreSQL 测试；没有启动任何服务。
 

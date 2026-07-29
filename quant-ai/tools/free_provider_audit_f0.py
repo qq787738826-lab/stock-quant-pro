@@ -299,17 +299,26 @@ def _safe_error_class(value: Any) -> str | None:
     return "PROVIDER_ERROR"
 
 
-def _collect_result_rows(result: Any) -> tuple[list[str], list[list[Any]]]:
+def _collect_result_rows(
+    result: Any,
+) -> tuple[list[str], list[list[Any]], str, Any]:
     fields = [str(field) for field in getattr(result, "fields", [])]
-    if not fields and getattr(result, "error_code", None) == "0":
-        return [], []
     rows: list[list[Any]] = []
     while getattr(result, "error_code", None) == "0" and result.next():
         row = list(result.get_row_data())
         if len(row) != len(fields):
             raise AuditPolicyError("F0_PROVIDER_STRUCTURE_CHANGED")
         rows.append(row)
-    return fields, rows
+    terminal_error_code = str(
+        getattr(result, "error_code", "") or ""
+    )
+    terminal_error_message = getattr(result, "error_msg", None)
+    return (
+        fields,
+        rows,
+        terminal_error_code,
+        terminal_error_message,
+    )
 
 
 def _decimal_scale(value: Any) -> int | None:
@@ -489,16 +498,21 @@ def _probe_one(
     try:
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
             result = _call_provider(provider, spec)
-        error_code = str(getattr(result, "error_code", "") or "")
-        if error_code != "0":
-            error_class = _safe_error_class(
-                getattr(result, "error_msg", None)
-            )
-            status = "ERROR"
-        else:
+        (
+            fields,
+            rows,
+            error_code,
+            terminal_error_message,
+        ) = _collect_result_rows(result)
+        if error_code == "0":
+            status = "SUCCESS" if rows else "EMPTY"
             error_class = None
-            fields, rows = _collect_result_rows(result)
-            status = "EMPTY" if not rows else "SUCCESS"
+        else:
+            status = "PARTIAL" if rows else "ERROR"
+            error_class = (
+                _safe_error_class(terminal_error_message)
+                or "PROVIDER_ERROR"
+            )
     except (TimeoutError, socket.timeout):
         status = "TIMEOUT"
         error_class = "NETWORK"
@@ -642,13 +656,13 @@ def run_live_baostock(
     stop_condition: str | None = None
     consecutive_network_errors = 0
     login_succeeded = False
-    protocol_request_count = 0
+    login_logout_operation_count = 0
     old_timeout = socket.getdefaulttimeout()
     try:
         socket.setdefaulttimeout(SOCKET_TIMEOUT_SECONDS)
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
             login_result = provider.login()
-        protocol_request_count += 1
+        login_logout_operation_count += 1
         login_code = str(getattr(login_result, "error_code", "") or "")
         login_class = _safe_error_class(
             getattr(login_result, "error_msg", None)
@@ -670,7 +684,6 @@ def run_live_baostock(
                         raw_directory,
                         clock,
                     )
-                    protocol_request_count += 1
                     summaries.append(summary)
                     if error_class == "NETWORK":
                         consecutive_network_errors += 1
@@ -691,7 +704,7 @@ def run_live_baostock(
                     io.StringIO()
                 ):
                     provider.logout()
-                protocol_request_count += 1
+                login_logout_operation_count += 1
             except Exception:
                 if stop_condition is None:
                     stop_condition = "BAOSTOCK_LOGOUT_FAILED"
@@ -716,7 +729,9 @@ def run_live_baostock(
         },
         "transportCounts": {
             "providerLogicalCallCount": budget.used,
-            "providerProtocolRequestCount": protocol_request_count,
+            "loginLogoutOperationCount": login_logout_operation_count,
+            "providerProtocolRequestCount": None,
+            "providerProtocolRequestCountStatus": "UNVERIFIED",
             "providerHttpRequestCount": 0,
         },
         "publicApiEvidence": _public_api_evidence(provider),
@@ -768,7 +783,9 @@ def build_offline_report() -> dict[str, Any]:
         },
         "transportCounts": {
             "providerLogicalCallCount": 0,
-            "providerProtocolRequestCount": 0,
+            "loginLogoutOperationCount": 0,
+            "providerProtocolRequestCount": None,
+            "providerProtocolRequestCountStatus": "UNVERIFIED",
             "providerHttpRequestCount": 0,
         },
         "calls": calls,

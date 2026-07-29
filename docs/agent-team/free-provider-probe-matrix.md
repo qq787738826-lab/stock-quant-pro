@@ -12,36 +12,43 @@ official page logical GETs <= 15
 retry = 0 by default
 ```
 
-BaoStock 数据服务使用 TCP socket，因此 Provider 数据探针的 HTTP 请求数为 0。官方页面
-GET、PyPI 包检索和 Provider TCP 请求分别计数，不能混为一个“调用次数”。
+BaoStock 数据服务使用 TCP socket，因此 Provider 数据探针的 HTTP 请求数为 0。工具只
+计数公开 Provider 逻辑调用以及登录/退出公开操作，没有 socket/frame 级观测能力；
+`providerProtocolRequestCount` 固定为 `null/UNVERIFIED`，不得由公开函数次数推断。
+官方页面 GET、PyPI 包检索和 Provider 公开操作分别计数，不能混为一个“调用次数”。
 
 ## 2. BaoStock stableCallId
 
-| stableCallId | 公开函数/能力 | 证券/范围 | 是否执行 | Provider逻辑调用 | TCP请求 | 重试 | 开始/结束 | 结果 | raw SHA-256 | safe摘要/清理 | 停止条件 |
-|---|---|---|---:|---:|---:|---:|---|---|---|---|---|
-| `F0-BAO-001` | 包元数据、公开导出和签名 | 0.9.3 wheel/sdist | 是 | 0 | 0 | 0 | 2026-07-28/29（date-level） | SUCCESS | wheel/sdist Hash 见证据登记册 | 未产生行情原始响应 | 否 |
-| `F0-BAO-002` | `query_history_k_data_plus(adjustflag=3)` | `sh.600000`，固定短区间 | 是 | 1 | 1 | 0 | 2026-07-29（date-level） | SUCCESS，6 行 | `657e26f0bf74a2b739c34a7a1a6fa2ce71d8b476d8d54876ab43090bb4d188d7` | 仅字段统计；临时文件已删 | 否 |
-| `F0-BAO-003` | `query_history_k_data_plus(adjustflag=3)` | `sz.000001`，固定短区间 | 是 | 1 | 1 | 0 | 2026-07-29（date-level） | SUCCESS，6 行 | `f3778c4fedcc10fa3d6a0e3153358e11ad2323729258a6a42237a1de876dd10c` | 仅字段统计；临时文件已删 | 否 |
-| `F0-BAO-004` | `query_history_k_data_plus(adjustflag=2)` | `sh.600000`，固定短区间 | 是 | 1 | 1 | 0 | 2026-07-29（date-level） | SUCCESS，6 行 | `5a132e906060764fcd007f2d8865c8fd8c065101a70f7e34c334e54a27e73c7d` | 仅字段统计；临时文件已删 | 否 |
-| `F0-BAO-005` | `query_history_k_data_plus(adjustflag=2)` | `sz.000001`，固定短区间 | 是 | 1 | 1 | 0 | 2026-07-29（date-level） | SUCCESS，6 行 | `6240cd9f44ab5a6aaa3ae626df626bf3c459b37da7ec587834fa77b84d4d532d` | 仅字段统计；临时文件已删 | 否 |
-| `F0-BAO-006` | `query_trade_dates` | 固定短区间 | 是 | 1 | 1 | 0 | 2026-07-29（date-level） | SUCCESS，8 行 | `e728e411131e2145c7d2875ede668e63d83ac3bd96e03c6d2de315ce6727ec7a` | 仅字段统计；临时文件已删 | 否 |
-| `F0-BAO-007` | `query_dividend_data` | `sh.600000`，2025 operate year | 是 | 1 | 1 | 0 | 2026-07-29（date-level） | SUCCESS，1 行 | `9771c1e0ea91f7aabb33684b9971e9e374bf34f37a390deed547cf559a00252b` | 仅字段统计；临时文件已删 | 否 |
-| `F0-BAO-008` | `query_adjust_factor` | `sh.600000`，固定短区间 | 是 | 1 | 1 | 0 | 2026-07-29（date-level） | EMPTY，完整 0 行 | `7b277e5214e7a4e18d7426ece7292cd66057505ed1c87b9dce95a5f84cb0820f` | 字段存在；临时文件已删 | 否 |
-| `F0-BAO-009` | `query_adjust_factor` | `sz.000001`，固定短区间 | 是 | 1 | 1 | 0 | 2026-07-29（date-level） | EMPTY，完整 0 行 | `7504d7be74469f685c12fdef2cf04d1ede61a2633521eaebe7648fcc6472c79f` | 字段存在；临时文件已删 | 否 |
-| `F0-BAO-010` | `query_daily_adjust_factor` | 单日全市场 | 否 | 0 | 0 | 0 | n/a | `F0_FULL_MARKET_CALL_NOT_ALLOWED` | n/a | 无原始响应 | 安全策略主动禁止 |
+| stableCallId | 公开函数/能力 | 证券/范围 | 是否执行 | Provider逻辑调用 | 重试 | 开始/结束 | 观察结果 | completeness | raw SHA-256 | safe摘要/清理 | 停止条件 |
+|---|---|---|---:|---:|---:|---|---|---|---|---|---|
+| `F0-BAO-001` | 包元数据、公开导出和安全参数结构 | 0.9.3 wheel/sdist | 是 | 0 | 0 | 2026-07-28/29（date-level） | SUCCESS | n/a | wheel/sdist Hash 见证据登记册 | 未产生行情原始响应 | 否 |
+| `F0-BAO-002` | `query_history_k_data_plus(adjustflag=3)` | `sh.600000`，固定短区间 | 是 | 1 | 0 | 2026-07-29（date-level） | 观察到 6 行 | UNVERIFIED | `657e26f0bf74a2b739c34a7a1a6fa2ce71d8b476d8d54876ab43090bb4d188d7` | 仅字段统计；临时文件已删 | 否 |
+| `F0-BAO-003` | `query_history_k_data_plus(adjustflag=3)` | `sz.000001`，固定短区间 | 是 | 1 | 0 | 2026-07-29（date-level） | 观察到 6 行 | UNVERIFIED | `f3778c4fedcc10fa3d6a0e3153358e11ad2323729258a6a42237a1de876dd10c` | 仅字段统计；临时文件已删 | 否 |
+| `F0-BAO-004` | `query_history_k_data_plus(adjustflag=2)` | `sh.600000`，固定短区间 | 是 | 1 | 0 | 2026-07-29（date-level） | 观察到 6 行 | UNVERIFIED | `5a132e906060764fcd007f2d8865c8fd8c065101a70f7e34c334e54a27e73c7d` | 仅字段统计；临时文件已删 | 否 |
+| `F0-BAO-005` | `query_history_k_data_plus(adjustflag=2)` | `sz.000001`，固定短区间 | 是 | 1 | 0 | 2026-07-29（date-level） | 观察到 6 行 | UNVERIFIED | `6240cd9f44ab5a6aaa3ae626df626bf3c459b37da7ec587834fa77b84d4d532d` | 仅字段统计；临时文件已删 | 否 |
+| `F0-BAO-006` | `query_trade_dates` | 固定短区间 | 是 | 1 | 0 | 2026-07-29（date-level） | 观察到 8 行 | UNVERIFIED | `e728e411131e2145c7d2875ede668e63d83ac3bd96e03c6d2de315ce6727ec7a` | 仅字段统计；临时文件已删 | 否 |
+| `F0-BAO-007` | `query_dividend_data` | `sh.600000`，2025 operate year | 是 | 1 | 0 | 2026-07-29（date-level） | 观察到 1 行 | UNVERIFIED | `9771c1e0ea91f7aabb33684b9971e9e374bf34f37a390deed547cf559a00252b` | 仅字段统计；临时文件已删 | 否 |
+| `F0-BAO-008` | `query_adjust_factor` | `sh.600000`，固定短区间 | 是 | 1 | 0 | 2026-07-29（date-level） | 观察到 0 行 | UNVERIFIED | `7b277e5214e7a4e18d7426ece7292cd66057505ed1c87b9dce95a5f84cb0820f` | 字段存在；临时文件已删 | 否 |
+| `F0-BAO-009` | `query_adjust_factor` | `sz.000001`，固定短区间 | 是 | 1 | 0 | 2026-07-29（date-level） | 观察到 0 行 | UNVERIFIED | `7504d7be74469f685c12fdef2cf04d1ede61a2633521eaebe7648fcc6472c79f` | 字段存在；临时文件已删 | 否 |
+| `F0-BAO-010` | `query_daily_adjust_factor` | 单日全市场 | 否 | 0 | 0 | n/a | `F0_FULL_MARKET_CALL_NOT_ALLOWED` | n/a | n/a | 无原始响应 | 安全策略主动禁止 |
 
-匿名 `login` 和 `logout` 各产生 1 个 TCP 协议请求，不计入 8 个数据逻辑调用。因此实际
-统计为：
+匿名 `login` 和 `logout` 是 2 个公开操作，不计入 8 个数据逻辑调用。工具没有 socket
+request/frame 观测能力，因此冻结统计为：
 
 ```text
 providerLogicalCallCount=8
-providerProtocolRequestCount=10
+loginLogoutOperationCount=2
+providerProtocolRequestCount=null
+providerProtocolRequestCountStatus=UNVERIFIED
 providerHttpRequestCount=0
 retryCount=0
 rawResponseResidueCount=0
 stopConditionTriggered=false
 safeSummarySha256=f97779bb9d6138faa3b049abb5f1f6da98105e359644ecc785002518086ffd0b
 ```
+
+上述安全摘要 Hash 来自修复前 collector，只证明该 V1 摘要内容；因为原始响应已经按设计
+删除，不能用修复后的终态识别逻辑重新证明本次 Live response completeness。
 
 一次预检命令曾在 `login` 前以 `F0_BAOSTOCK_VERSION_MISMATCH` 本地失败，网络请求和
 Provider 调用均为 0。原因是包内运行时常量没有同步 PyPI 分发版本；工具随后固定以已验证
