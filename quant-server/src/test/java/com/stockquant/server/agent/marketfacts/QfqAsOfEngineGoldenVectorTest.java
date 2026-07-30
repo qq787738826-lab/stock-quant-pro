@@ -24,6 +24,7 @@ import com.stockquant.server.agent.marketfacts.PitMarketFactModels.QfqAsOfResult
 import com.stockquant.server.agent.marketfacts.PitMarketFactModels.QfqSourceIdentities;
 import com.stockquant.server.agent.marketfacts.PitMarketFactModels.RawDailyBarObservation;
 import com.stockquant.server.agent.marketfacts.PitMarketFactModels.TradingCalendarObservation;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -177,6 +178,25 @@ class QfqAsOfEngineGoldenVectorTest {
         assertTrue(expectedHash.matches("[0-9a-f]{64}"));
         assertEquals(expected, projected);
         assertEquals(expectedHash, CANONICAL.hash(projected));
+    }
+
+    @Test
+    void factorChangeWithoutActionKeepsAuthoritativeLineageGate() {
+        JsonNode scenario = java.util.stream.StreamSupport.stream(
+                        FIXTURE.path("scenarios").spliterator(), false)
+                .filter(value -> "FACTOR_CHANGE_WITHOUT_ACTION_OR_VERIFIED_REVISION"
+                        .equals(value.path("name").asText()))
+                .findFirst()
+                .orElseThrow();
+
+        assertEquals(
+                "PIT_CORPORATE_ACTION_LINEAGE_UNAVAILABLE",
+                scenario.path("expectedCanonicalResult")
+                        .path("reasonCode").asText());
+        executesCommittedScenario(
+                scenario.path("id").asInt(),
+                scenario.path("name").asText(),
+                scenario);
     }
 
     private static JsonNode loadFixture() {

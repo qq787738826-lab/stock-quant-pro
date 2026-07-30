@@ -48,8 +48,8 @@ IFIND_TRIAL_ACTIVATION_GATE=BLOCKED
 
 | evidenceId | 页面/API | 官方标识 | 积分要求 | 输入摘要 | 输出摘要 | 更新/单次上限 | 支持的结论 | 不支持的结论 |
 |---|---|---|---|---|---|---|---|---|
-| TS-004 | A 股日线行情 / `daily` | `doc_id=27` | 120 积分可取未复权日线；当前 2000 档覆盖 | `ts_code/trade_date/start_date/end_date` | `ts_code/trade_date/OHLC/pre_close/change/pct_chg/vol/amount` | 15—16 点入库；6000 行 | 未复权日线、成交量为手、成交额为千元、停牌日不返回 | 全历史 null/0 稳定、逐条 published/revision、历史旧版本 |
-| TS-009 | 股票基础信息 / `stock_basic` | `doc_id=25` | 2000 积分 | `ts_code/name/market/list_status/exchange` | `ts_code/symbol/name/market/exchange/list_status/list_date/delist_date` 等 | 6000 行；更新说明未公开 | 当前普通证券身份、上市/退市字段 | 永久 instrument ID、换码/迁板/重上市连续性 |
+| TS-004 | A 股日线行情 / `daily` | `doc_id=27` | 120 积分可取未复权日线；当前 2000 档覆盖 | `ts_code/trade_date/start_date/end_date` | `ts_code/trade_date/OHLC/pre_close/change/pct_chg/vol/amount` | 接口页 500 次/分钟；15—16 点入库；6000 行 | 未复权日线、成交量为手、成交额为千元、停牌日不返回 | 全历史 null/0 稳定、逐条 published/revision、历史旧版本 |
+| TS-009 | 股票基础信息 / `stock_basic` | `doc_id=25` | 2000 积分 | `ts_code/name/market/list_status/exchange` | `ts_code/symbol/name/market/exchange/list_status/list_date/delist_date` 等 | 接口页 50 次/分钟；6000 行；更新说明未公开 | 当前普通证券身份、上市/退市字段 | 永久 instrument ID、换码/迁板/重上市连续性 |
 | TS-018 | 上市公司基本信息 / `stock_company` | `doc_id=112` | 120 积分 | `ts_code/exchange` | `ts_code/com_name/com_id/exchange` 等 | 4500 行；更新说明未公开 | `com_id` 可作为发行主体辅助证据 | `com_id` 不是永久证券工具身份 |
 | TS-019 | 股票曾用名 / `namechange` | `doc_id=100` | 页面未公开 | `ts_code/start_date/end_date` | `ts_code/name/start_date/end_date/ann_date/change_reason` | `OFFICIAL_EVIDENCE_UNAVAILABLE` | 证券名称历史证据 | 代码换码、迁板或重新上市连续性 |
 | TS-020 | 股票历史列表 / `bak_basic` | `doc_id=262` | 正式权限 5000 积分 | `trade_date/ts_code` | `trade_date/ts_code/name/list_date` 等 | 2016 年起；7000 行 | 历史每日股票列表能力存在 | 当前 2000 积分不能取得完整正式权限，也不是永久身份映射 |
@@ -84,8 +84,10 @@ NOT_SUPPORTED
 ```
 
 模型必须逐项持有 raw、factor、calendar、corporate action、revision、历史版本、证券
-身份、QFQ、全历史 `DAILY_EXACT` 与 Provider PIT 资格。任何 `VERIFIED` 维度没有对应
-证据 ID 时必须降为 `UNVERIFIED`，不得靠自由文本升级。
+身份、QFQ、全历史 `DAILY_EXACT` 与 Provider PIT 的类型化
+`TechnicalClaim(status, evidenceIds)`。每一种公司行动各自持有 claim；任何
+`VERIFIED`/`PARTIAL` claim 没有证据 ID 时构造即拒绝。一个泛化
+`CORPORATE_ACTION` evidenceId 不得覆盖八种行动，裸布尔值不得升级资格。
 
 完整路线只有四类事实、完整 action 类型、稳定 action ID、factor/action 关系、
 Provider revision、旧版本、永久证券身份、全历史 `DAILY_EXACT` 和 Provider PIT
@@ -101,6 +103,12 @@ TUSHARE_TECHNICAL_ROUTE_DECISION=REDUCED_RESEARCH_ONLY
 TUSHARE_REDUCED_RESEARCH_CONTRACT=READY
 FULL_TECHNICAL_CONTRACT_READY=false
 REDUCED_RESEARCH_CONTRACT_READY=true
+QFQ_FORMULA_QUALIFICATION=VERIFIED
+QFQ_OPERATIONAL_RUNTIME_QUALIFICATION=PARTIAL
+REDUCED_RESEARCH_RUNTIME_READY=false
+QFQ_OPERATIONAL_BLOCKER=EXISTING_QFQ_ENGINE_REQUIRES_CORPORATE_ACTION_LINEAGE
+OFFICIAL_ENDPOINT_RATE_LIMITS=PARTIAL_CONFLICT_IDENTIFIED
+ENDPOINT_SPECIFIC_RATE_LIMIT_ENFORCED=false
 ```
 
 核心状态：
@@ -114,7 +122,8 @@ REDUCED_RESEARCH_CONTRACT_READY=true
 | revision | `NOT_SUPPORTED` | 核心字段没有逐记录 revision/snapshot |
 | historical versions | `NOT_SUPPORTED` | 没有旧版本查询合同 |
 | security identity | `PARTIAL` | 普通 `ts_code` 生命周期字段不等于永久工具身份 |
-| research QFQ | `VERIFIED` | 官方公式、固定请求结束日锚点及本地确定性测试 |
+| research QFQ formula | `VERIFIED` | 官方公式、固定请求结束日锚点及共享 Java 数学实现 |
+| QFQ operational runtime | `PARTIAL` | 现有权威引擎在因子变化时仍要求公司行动 lineage；F1B 未实现缩减运行入口 |
 | full-history DAILY_EXACT | `UNVERIFIED` | 仅两证券两日样例已验证 |
 | Provider PIT | `NOT_SUPPORTED` | 只能从本系统首次真实捕获建立系统知识时间 |
 
@@ -139,7 +148,24 @@ qfqPrice = rawPrice
 - `dividend` 不参与生成、修复或反推 factor；
 - factor 继续是 `SYSTEM_KNOWLEDGE_ONLY`，不宣称历史版本稳定。
 
-现有 `QfqAsOfEngine` 数学规则和 18 个黄金向量不得修改。
+现有 `QfqAsOfEngine` 与缩减合同校验器必须复用唯一 `QfqPriceMath` 数学实现；该重构
+不改变 lineage/cutoff/四位小数与舍入规则，18 个黄金向量不得变化。因子变化但缺少
+公司行动 lineage 时，权威引擎继续返回
+`PIT_CORPORATE_ACTION_LINEAGE_UNAVAILABLE`。因此公式资格已验证不等于运行入口就绪。
+
+## 6.1 Endpoint 频次合同
+
+官方套餐总表记录 2000 积分档为 200 次/分钟、每 API 100000 次/日；接口页同时记录
+`stock_basic=50` 次/分钟、`daily=500` 次/分钟。当前状态固定为：
+
+```text
+OFFICIAL_ENDPOINT_RATE_LIMITS=PARTIAL_CONFLICT_IDENTIFIED
+ENDPOINT_SPECIFIC_RATE_LIMIT_ENFORCED=false
+```
+
+存在多个适用上限时必须使用最保守的较小值。F1A 的 10 次会话仍在安全范围内，但现有
+单进程 180 次/分钟限流不能证明 `stock_basic` 长期摄取安全。后续受控摄取实现必须先
+增加 Endpoint 级限流；F1B 不修改现有限流器。
 
 ## 7. 身份与公司行动边界
 
@@ -169,7 +195,7 @@ factor/action 稳定解释关系均未获得官方字段证据。不得生成合
 
 ## 8. 缩减个人研究路线
 
-允许：
+缩减合同为未来受控入口定义允许能力，但当前运行入口尚未实现。合同允许：
 
 - 显式 `MANUAL_BOUNDED` 手工有界调用；
 - raw/factor/calendar；
@@ -212,7 +238,12 @@ providerWrittenPermissionComplete=false
 8. issuer identity 不等于 instrument identity；
 9. ChangeLog 不等于单条数据 revision；
 10. reduced route 不开放完整 FORMAL、scheduler 或业务库路径；
-11. F1A、Provider V2 和 18 个 QFQ 黄金向量不回退。
+11. 八种 action 全部 VERIFIED 但任一缺独立 evidenceId 时不得进入 FULL；
+12. 稳定 action ID、factor/action 关系及 Provider PIT 等强结论均须独立证据；
+13. 资格对象拒绝 FULL/blocker、REDUCED/core 与 REJECTED/runtime-ready 等矛盾组合；
+14. QFQ 权威引擎继续执行公司行动 lineage 门禁；
+15. Endpoint 频次冲突和 Endpoint 级限流未实现必须显式投影；
+16. F1A、Provider V2 和 18 个 QFQ 黄金向量不回退。
 
 ## 10. 阶段后状态
 
@@ -224,5 +255,6 @@ BLOCKED_WRITTEN_PERMISSION
 BLOCKED_TECHNICAL_EVIDENCE
 ```
 
-缩减合同 READY 只表示下一阶段可以在用户独立授权后规划“受控本地研究摄取实现”；
-本任务本身不授权该阶段，不授权正常业务库或任何自动采集。
+缩减合同 `READY` 只表示合同定义完成，不表示运行链已完成；
+`REDUCED_RESEARCH_RUNTIME_READY=false`。下一阶段只有在用户独立授权后才能实现
+Endpoint 级限流和受控本地研究摄取入口；本任务不授权正常业务库或任何自动采集。

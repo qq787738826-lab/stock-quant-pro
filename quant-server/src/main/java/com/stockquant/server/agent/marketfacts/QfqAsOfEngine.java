@@ -15,7 +15,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -31,9 +30,6 @@ import java.util.stream.Stream;
 public class QfqAsOfEngine {
 
     public static final int MAXIMUM_BARS = 500;
-    private static final int DIVISION_SCALE = 16;
-    private static final int PRICE_SCALE = 4;
-
     private final PitMarketFactRepository repository;
 
     public QfqAsOfEngine(PitMarketFactRepository repository) {
@@ -286,13 +282,13 @@ public class QfqAsOfEngine {
         List<QfqBar> qfq = new ArrayList<>(raw.size());
         for (RawDailyBarObservation value : raw) {
             AdjustmentFactorObservation factor = factorByDate.get(value.tradeDate());
-            BigDecimal open = price(
+            BigDecimal open = QfqPriceMath.calculate(
                     value.open(), factor.factor(), anchorFactor.factor());
-            BigDecimal high = price(
+            BigDecimal high = QfqPriceMath.calculate(
                     value.high(), factor.factor(), anchorFactor.factor());
-            BigDecimal low = price(
+            BigDecimal low = QfqPriceMath.calculate(
                     value.low(), factor.factor(), anchorFactor.factor());
-            BigDecimal close = price(
+            BigDecimal close = QfqPriceMath.calculate(
                     value.close(), factor.factor(), anchorFactor.factor());
             if (!validOhlc(open, high, low, close)) {
                 return unavailable(
@@ -340,16 +336,6 @@ public class QfqAsOfEngine {
                 PitMarketFactsContracts.FACTOR_COVERAGE_MODE,
                 PitMarketFactsContracts.QFQ_ENGINE_VERSION,
                 qfq, raw, factors, calendar, actions, batchLineage);
-    }
-
-    private static BigDecimal price(
-            BigDecimal raw,
-            BigDecimal factor,
-            BigDecimal anchorFactor
-    ) {
-        return raw.multiply(factor)
-                .divide(anchorFactor, DIVISION_SCALE, RoundingMode.HALF_UP)
-                .setScale(PRICE_SCALE, RoundingMode.HALF_UP);
     }
 
     private static boolean validOhlc(

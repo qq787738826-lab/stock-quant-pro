@@ -1,13 +1,18 @@
 package com.stockquant.server.agent.marketfacts;
 
+import com.stockquant.server.agent.marketfacts.TushareReducedResearchQfqContract.ResearchRawPrice;
+import com.stockquant.server.agent.marketfacts.TushareReferenceDataModels.DividendEvidence;
 import com.stockquant.server.agent.marketfacts.TushareTechnicalQualification.AssessmentInput;
 import com.stockquant.server.agent.marketfacts.TushareTechnicalQualification.CorporateActionType;
-import com.stockquant.server.agent.marketfacts.TushareTechnicalQualification.QualificationDimension;
+import com.stockquant.server.agent.marketfacts.TushareTechnicalQualification.EndpointRateLimitBlocker;
+import com.stockquant.server.agent.marketfacts.TushareTechnicalQualification.EndpointRateLimitQualification;
+import com.stockquant.server.agent.marketfacts.TushareTechnicalQualification.QfqAnchorSemantics;
+import com.stockquant.server.agent.marketfacts.TushareTechnicalQualification.QfqCalculationMode;
+import com.stockquant.server.agent.marketfacts.TushareTechnicalQualification.QfqOperationalBlocker;
 import com.stockquant.server.agent.marketfacts.TushareTechnicalQualification.QualificationStatus;
-import com.stockquant.server.agent.marketfacts.TushareTechnicalQualification.ResearchRawPrice;
 import com.stockquant.server.agent.marketfacts.TushareTechnicalQualification.RouteDecision;
 import com.stockquant.server.agent.marketfacts.TushareTechnicalQualification.TechnicalBlocker;
-import com.stockquant.server.agent.marketfacts.TushareReferenceDataModels.DividendEvidence;
+import com.stockquant.server.agent.marketfacts.TushareTechnicalQualification.TechnicalClaim;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Method;
@@ -16,8 +21,10 @@ import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.EnumMap;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -32,7 +39,7 @@ class TushareTechnicalQualificationTest {
             LocalDate.of(2025, 1, 6);
 
     @Test
-    void current2000PointEvidenceSelectsReducedResearchOnly() {
+    void current2000PointAssessmentDefinesContractButNotRuntime() {
         var actual =
                 TushareTechnicalQualification.current2000PointAssessment();
 
@@ -41,16 +48,30 @@ class TushareTechnicalQualificationTest {
                 actual.routeDecision());
         assertFalse(actual.fullTechnicalContractReady());
         assertTrue(actual.reducedResearchContractReady());
+        assertFalse(actual.reducedResearchRuntimeReady());
+        assertEquals(
+                QualificationStatus.VERIFIED,
+                actual.qfqFormulaQualification());
+        assertEquals(
+                QualificationStatus.PARTIAL,
+                actual.qfqOperationalRuntimeQualification());
+        assertEquals(
+                Set.of(QfqOperationalBlocker
+                        .EXISTING_QFQ_ENGINE_REQUIRES_CORPORATE_ACTION_LINEAGE),
+                actual.qfqOperationalBlockers());
+        assertEquals(
+                EndpointRateLimitQualification
+                        .PARTIAL_CONFLICT_IDENTIFIED,
+                actual.endpointRateLimitQualification());
+        assertFalse(actual.endpointSpecificRateLimitEnforced());
+        assertTrue(actual.endpointRateLimitEvidenceIds().containsAll(
+                Set.of("TS-003", "TS-004", "TS-009")));
+        assertTrue(actual.endpointRateLimitBlockers().containsAll(Set.of(
+                EndpointRateLimitBlocker
+                        .GENERAL_AND_ENDPOINT_LIMITS_REQUIRE_CONSERVATIVE_MINIMUM,
+                EndpointRateLimitBlocker
+                        .ENDPOINT_SPECIFIC_LIMITER_NOT_IMPLEMENTED)));
         assertTrue(actual.forwardSystemKnowledgePitBuildable());
-        assertEquals(
-                QualificationStatus.VERIFIED,
-                actual.rawDailyQualification());
-        assertEquals(
-                QualificationStatus.VERIFIED,
-                actual.adjustmentFactorQualification());
-        assertEquals(
-                QualificationStatus.VERIFIED,
-                actual.calendarQualification());
         assertEquals(
                 QualificationStatus.PARTIAL,
                 actual.corporateActionQualification());
@@ -63,17 +84,9 @@ class TushareTechnicalQualificationTest {
         assertEquals(
                 QualificationStatus.PARTIAL,
                 actual.securityIdentityQualification());
-        assertEquals(
-                QualificationStatus.UNVERIFIED,
-                actual.fullHistoryDailyExactQualification());
-        assertEquals(
-                QualificationStatus.NOT_SUPPORTED,
-                actual.providerPitQualification());
         assertFalse(actual.corporateActionLineageComplete());
-        assertFalse(actual.permanentSecurityIdentityVerified());
         assertFalse(actual.providerRevisionAvailable());
         assertFalse(actual.historicalVersionsQueryable());
-        assertTrue(actual.evidenceIds().contains("TS-021"));
         assertTrue(actual.blockers().containsAll(Set.of(
                 TechnicalBlocker.CORPORATE_ACTION_LINEAGE_INCOMPLETE,
                 TechnicalBlocker.STABLE_ACTION_ID_UNAVAILABLE,
@@ -82,44 +95,23 @@ class TushareTechnicalQualificationTest {
                 TechnicalBlocker.HISTORICAL_VERSIONS_NOT_QUERYABLE,
                 TechnicalBlocker.PERMANENT_SECURITY_IDENTITY_UNVERIFIED,
                 TechnicalBlocker.FULL_HISTORY_DAILY_EXACT_UNVERIFIED,
-                TechnicalBlocker.PROVIDER_PIT_UNAVAILABLE)));
-        assertEquals(
-                QualificationStatus.PARTIAL,
-                actual.corporateActionCoverage()
-                        .get(CorporateActionType.CASH_DIVIDEND));
-        assertEquals(
-                QualificationStatus.PARTIAL,
-                actual.corporateActionCoverage()
-                        .get(CorporateActionType.STOCK_DIVIDEND));
-        assertEquals(
-                QualificationStatus.PARTIAL,
-                actual.corporateActionCoverage()
-                        .get(CorporateActionType.CAPITALIZATION));
-        assertEquals(
-                QualificationStatus.NOT_SUPPORTED,
-                actual.corporateActionCoverage()
-                        .get(CorporateActionType.RIGHTS_ISSUE));
+                TechnicalBlocker.PROVIDER_PIT_UNAVAILABLE,
+                TechnicalBlocker.QFQ_OPERATIONAL_RUNTIME_INCOMPLETE,
+                TechnicalBlocker.ENDPOINT_RATE_LIMIT_EVIDENCE_CONFLICT,
+                TechnicalBlocker
+                        .ENDPOINT_SPECIFIC_RATE_LIMIT_NOT_ENFORCED)));
     }
 
     @Test
-    void onlyAllFullContractConditionsCanSelectFullRoute() {
-        var actual = TushareTechnicalQualification.assess(
-                fullInput(
-                        QualificationStatus.VERIFIED,
-                        QualificationStatus.VERIFIED,
-                        QualificationStatus.VERIFIED,
-                        QualificationStatus.VERIFIED,
-                        QualificationStatus.VERIFIED,
-                        true,
-                        true,
-                        fullActionCoverage(),
-                        completeEvidence()));
+    void onlyIndependentEvidenceForEveryFullConditionCanSelectFull() {
+        var actual = TushareTechnicalQualification.assess(fullInput());
 
         assertEquals(
                 RouteDecision.FULL_F1_BUILDABLE,
                 actual.routeDecision());
         assertTrue(actual.fullTechnicalContractReady());
         assertFalse(actual.reducedResearchContractReady());
+        assertFalse(actual.reducedResearchRuntimeReady());
         assertTrue(actual.corporateActionLineageComplete());
         assertTrue(actual.permanentSecurityIdentityVerified());
         assertTrue(actual.providerRevisionAvailable());
@@ -128,308 +120,490 @@ class TushareTechnicalQualificationTest {
     }
 
     @Test
-    void missingActionIdCanOnlySelectReducedRoute() {
+    void cashDividendEvidenceCannotPromoteOtherActions() {
+        AssessmentInput full = fullInput();
+        Map<CorporateActionType, TechnicalClaim> actions =
+                new EnumMap<>(CorporateActionType.class);
+        EnumSet.allOf(CorporateActionType.class).forEach(type ->
+                actions.put(type, claim(
+                        type == CorporateActionType.CASH_DIVIDEND
+                                ? QualificationStatus.VERIFIED
+                                : QualificationStatus.UNVERIFIED,
+                        type == CorporateActionType.CASH_DIVIDEND
+                                ? Set.of("ACTION-CASH")
+                                : Set.of())));
+
         var actual = TushareTechnicalQualification.assess(
-                fullInput(
-                        QualificationStatus.VERIFIED,
-                        QualificationStatus.VERIFIED,
-                        QualificationStatus.VERIFIED,
-                        QualificationStatus.VERIFIED,
-                        QualificationStatus.VERIFIED,
-                        false,
-                        true,
-                        fullActionCoverage(),
-                        completeEvidence()));
+                withActions(full, actions));
+
+        assertEquals(
+                QualificationStatus.VERIFIED,
+                actual.corporateActionCoverage()
+                        .get(CorporateActionType.CASH_DIVIDEND));
+        assertEquals(
+                QualificationStatus.UNVERIFIED,
+                actual.corporateActionCoverage()
+                        .get(CorporateActionType.SPLIT));
+        assertEquals(
+                RouteDecision.REDUCED_RESEARCH_ONLY,
+                actual.routeDecision());
+        assertFalse(actual.corporateActionLineageComplete());
+    }
+
+    @Test
+    void verifiedActionWithoutEvidenceIsRejectedBeforeAssessment() {
+        IllegalArgumentException error = assertThrows(
+                IllegalArgumentException.class,
+                () -> claim(QualificationStatus.VERIFIED, Set.of()));
+        assertEquals(
+                "VERIFIED claim requires evidence",
+                error.getMessage());
+    }
+
+    @Test
+    void stableActionIdAndFactorRelationshipCannotBypassEvidence() {
+        IllegalArgumentException stableActionId = assertThrows(
+                IllegalArgumentException.class,
+                () -> claim(QualificationStatus.VERIFIED, Set.of()));
+        IllegalArgumentException factorRelationship = assertThrows(
+                IllegalArgumentException.class,
+                () -> new TechnicalClaim(
+                        QualificationStatus.VERIFIED, Set.of()));
+        assertEquals(
+                "VERIFIED claim requires evidence",
+                stableActionId.getMessage());
+        assertEquals(
+                "VERIFIED claim requires evidence",
+                factorRelationship.getMessage());
+        Set<String> recordComponents = Arrays.stream(
+                        TushareTechnicalQualification.class
+                                .getRecordComponents())
+                .map(component -> component.getName())
+                .collect(Collectors.toSet());
+        assertFalse(recordComponents.contains("stableActionIdAvailable"));
+        assertFalse(recordComponents.contains(
+                "factorActionRelationshipVerified"));
+        assertFalse(recordComponents.contains(
+                "forwardSystemKnowledgePitBuildable"));
+        assertFalse(recordComponents.contains(
+                "safetyBoundaryImplementable"));
+    }
+
+    @Test
+    void oneGenericCorporateActionEvidenceCannotCoverAllActions() {
+        AssessmentInput full = fullInput();
+        Map<CorporateActionType, TechnicalClaim> actions =
+                new EnumMap<>(CorporateActionType.class);
+        EnumSet.allOf(CorporateActionType.class).forEach(type ->
+                actions.put(type, verified("GENERIC-CORPORATE-ACTION")));
+
+        var actual = TushareTechnicalQualification.assess(
+                withActions(full, actions));
 
         assertEquals(
                 RouteDecision.REDUCED_RESEARCH_ONLY,
                 actual.routeDecision());
         assertFalse(actual.corporateActionLineageComplete());
-        assertTrue(actual.blockers().contains(
-                TechnicalBlocker.STABLE_ACTION_ID_UNAVAILABLE));
-    }
-
-    @Test
-    void missingRevisionCanOnlySelectReducedRoute() {
-        var actual = TushareTechnicalQualification.assess(
-                fullInput(
-                        QualificationStatus.VERIFIED,
-                        QualificationStatus.VERIFIED,
-                        QualificationStatus.NOT_SUPPORTED,
-                        QualificationStatus.VERIFIED,
-                        QualificationStatus.VERIFIED,
-                        true,
-                        true,
-                        fullActionCoverage(),
-                        completeEvidence()));
-
-        assertEquals(
-                RouteDecision.REDUCED_RESEARCH_ONLY,
-                actual.routeDecision());
-        assertFalse(actual.providerRevisionAvailable());
-        assertTrue(actual.blockers().contains(
-                TechnicalBlocker.PROVIDER_REVISION_UNAVAILABLE));
-    }
-
-    @Test
-    void missingPermanentIdentityCanOnlySelectReducedRoute() {
-        var actual = TushareTechnicalQualification.assess(
-                fullInput(
-                        QualificationStatus.VERIFIED,
-                        QualificationStatus.VERIFIED,
-                        QualificationStatus.VERIFIED,
-                        QualificationStatus.PARTIAL,
-                        QualificationStatus.VERIFIED,
-                        true,
-                        true,
-                        fullActionCoverage(),
-                        completeEvidence()));
-
-        assertEquals(
-                RouteDecision.REDUCED_RESEARCH_ONLY,
-                actual.routeDecision());
-        assertFalse(actual.permanentSecurityIdentityVerified());
-        assertTrue(actual.blockers().contains(
-                TechnicalBlocker
-                        .PERMANENT_SECURITY_IDENTITY_UNVERIFIED));
     }
 
     @Test
     void unavailableCoreFactRejectsProviderRoute() {
+        AssessmentInput full = fullInput();
         for (int index = 0; index < 3; index++) {
-            QualificationStatus raw = index == 0
-                    ? QualificationStatus.UNAVAILABLE
-                    : QualificationStatus.VERIFIED;
-            QualificationStatus factor = index == 1
-                    ? QualificationStatus.UNAVAILABLE
-                    : QualificationStatus.VERIFIED;
-            QualificationStatus calendar = index == 2
-                    ? QualificationStatus.UNAVAILABLE
-                    : QualificationStatus.VERIFIED;
+            TechnicalClaim raw = index == 0
+                    ? unavailable("RAW-UNAVAILABLE")
+                    : full.rawDailyClaim();
+            TechnicalClaim factor = index == 1
+                    ? unavailable("FACTOR-UNAVAILABLE")
+                    : full.adjustmentFactorClaim();
+            TechnicalClaim calendar = index == 2
+                    ? unavailable("CALENDAR-UNAVAILABLE")
+                    : full.calendarClaim();
+
             var actual = TushareTechnicalQualification.assess(
-                    fullInput(
-                            raw,
-                            factor,
-                            QualificationStatus.VERIFIED,
-                            QualificationStatus.VERIFIED,
-                            QualificationStatus.VERIFIED,
-                            true,
-                            true,
-                            fullActionCoverage(),
-                            completeEvidence(),
-                            calendar));
+                    withCore(full, raw, factor, calendar));
+
             assertEquals(
                     RouteDecision.PROVIDER_ROUTE_REJECTED,
                     actual.routeDecision());
-            assertTrue(actual.blockers().contains(
-                    TechnicalBlocker.CORE_FACT_CONTRACT_INCOMPLETE));
+            assertFalse(actual.reducedResearchContractReady());
+            assertFalse(actual.reducedResearchRuntimeReady());
         }
     }
 
     @Test
-    void verifiedStateWithoutDimensionEvidenceIsDowngraded() {
-        Map<QualificationDimension, Set<String>> evidence =
-                new EnumMap<>(completeEvidence());
-        evidence.remove(QualificationDimension.RAW_DAILY);
-
-        var actual = TushareTechnicalQualification.assess(
-                fullInput(
-                        QualificationStatus.VERIFIED,
-                        QualificationStatus.VERIFIED,
-                        QualificationStatus.VERIFIED,
-                        QualificationStatus.VERIFIED,
-                        QualificationStatus.VERIFIED,
+    void directConstructorRejectsRouteAndReadinessContradictions() {
+        TushareTechnicalQualification full =
+                TushareTechnicalQualification.assess(fullInput());
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> copyQualification(
+                        full,
+                        RouteDecision.REDUCED_RESEARCH_ONLY,
+                        full.rawDailyClaim(),
+                        full.blockers(),
+                        false,
                         true,
-                        true,
-                        fullActionCoverage(),
-                        evidence));
+                        true));
 
-        assertEquals(
-                QualificationStatus.UNVERIFIED,
-                actual.rawDailyQualification());
-        assertEquals(
-                RouteDecision.PROVIDER_ROUTE_REJECTED,
-                actual.routeDecision());
+        AssessmentInput rejectedInput = withCore(
+                fullInput(),
+                unavailable("RAW-UNAVAILABLE"),
+                fullInput().adjustmentFactorClaim(),
+                fullInput().calendarClaim());
+        TushareTechnicalQualification rejected =
+                TushareTechnicalQualification.assess(rejectedInput);
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> copyQualification(
+                        rejected,
+                        RouteDecision.PROVIDER_ROUTE_REJECTED,
+                        rejected.rawDailyClaim(),
+                        rejected.blockers(),
+                        false,
+                        false,
+                        true));
     }
 
     @Test
-    void requestedEndDateAnchorIsDeterministicAndChangesResult() {
-        var raw = java.util.List.of(
+    void directConstructorRejectsFullWithBlockers() {
+        TushareTechnicalQualification full =
+                TushareTechnicalQualification.assess(fullInput());
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> copyQualification(
+                        full,
+                        RouteDecision.FULL_F1_BUILDABLE,
+                        full.rawDailyClaim(),
+                        Set.of(TechnicalBlocker.PROVIDER_PIT_UNAVAILABLE),
+                        true,
+                        false,
+                        false));
+    }
+
+    @Test
+    void actionLineageAndRevisionFlagsAreDerivedFromClaims() {
+        var current =
+                TushareTechnicalQualification.current2000PointAssessment();
+
+        assertFalse(current.corporateActionLineageComplete());
+        assertEquals(
+                QualificationStatus.NOT_SUPPORTED,
+                current.providerRevisionClaim().status());
+        assertFalse(current.providerRevisionAvailable());
+        Set<String> componentNames = Arrays.stream(
+                        TushareTechnicalQualification.class
+                                .getRecordComponents())
+                .map(component -> component.getName())
+                .collect(Collectors.toSet());
+        assertFalse(componentNames.contains(
+                "corporateActionLineageComplete"));
+        assertFalse(componentNames.contains("providerRevisionAvailable"));
+    }
+
+    @Test
+    void sharedQfqMathAppliesOfficialEndDateAnchorDeterministically() {
+        List<ResearchRawPrice> raw = List.of(
                 new ResearchRawPrice(FIRST, new BigDecimal("10")),
                 new ResearchRawPrice(SECOND, new BigDecimal("12")));
         Map<LocalDate, BigDecimal> factors = Map.of(
-                FIRST, new BigDecimal("1"),
+                FIRST, BigDecimal.ONE,
                 SECOND, new BigDecimal("2"),
                 LATER_ANCHOR, new BigDecimal("4"));
 
         var endDateAnchored =
-                TushareTechnicalQualification.calculateReducedResearchQfq(
+                TushareReducedResearchQfqContract.validateAndCalculate(
                         "TUSHARE_PRO", "TUSHARE_PRO",
                         raw, factors, SECOND);
         var repeated =
-                TushareTechnicalQualification.calculateReducedResearchQfq(
+                TushareReducedResearchQfqContract.validateAndCalculate(
                         "TUSHARE_PRO", "TUSHARE_PRO",
                         raw, factors, SECOND);
         var laterAnchored =
-                TushareTechnicalQualification.calculateReducedResearchQfq(
+                TushareReducedResearchQfqContract.validateAndCalculate(
                         "TUSHARE_PRO", "TUSHARE_PRO",
                         raw, factors, LATER_ANCHOR);
 
         assertEquals(endDateAnchored, repeated);
         assertEquals(
-                java.util.List.of(
+                List.of(
                         new BigDecimal("5.0000"),
                         new BigDecimal("12.0000")),
                 endDateAnchored.stream()
                         .map(value -> value.qfqPrice())
                         .toList());
         assertEquals(
-                java.util.List.of(
+                List.of(
                         new BigDecimal("2.5000"),
                         new BigDecimal("6.0000")),
                 laterAnchored.stream()
                         .map(value -> value.qfqPrice())
                         .toList());
+        assertEquals(
+                endDateAnchored.get(0).qfqPrice(),
+                QfqPriceMath.calculate(
+                        new BigDecimal("10"),
+                        BigDecimal.ONE,
+                        new BigDecimal("2")));
     }
 
     @Test
-    void missingAnchorOrDailyFactorIsSafelyBlocked() {
-        var raw = java.util.List.of(
+    void reducedQfqContractBlocksMissingAndInvalidFactors() {
+        List<ResearchRawPrice> raw = List.of(
                 new ResearchRawPrice(FIRST, new BigDecimal("10")),
                 new ResearchRawPrice(SECOND, new BigDecimal("12")));
 
-        IllegalArgumentException missingAnchor = assertThrows(
-                IllegalArgumentException.class,
-                () -> TushareTechnicalQualification
-                        .calculateReducedResearchQfq(
-                                "TUSHARE_PRO", "TUSHARE_PRO",
-                                raw,
-                                Map.of(
-                                        FIRST, BigDecimal.ONE,
-                                        SECOND, new BigDecimal("2")),
-                                LATER_ANCHOR));
         assertEquals(
                 "TUSHARE_QFQ_ANCHOR_FACTOR_UNAVAILABLE",
-                missingAnchor.getMessage());
-
-        IllegalArgumentException missingDaily = assertThrows(
-                IllegalArgumentException.class,
-                () -> TushareTechnicalQualification
-                        .calculateReducedResearchQfq(
-                                "TUSHARE_PRO", "TUSHARE_PRO",
-                                raw,
-                                Map.of(SECOND, new BigDecimal("2")),
-                                SECOND));
+                failure(() ->
+                        TushareReducedResearchQfqContract
+                                .validateAndCalculate(
+                                        "TUSHARE_PRO", "TUSHARE_PRO",
+                                        raw,
+                                        Map.of(
+                                                FIRST, BigDecimal.ONE,
+                                                SECOND,
+                                                new BigDecimal("2")),
+                                        LATER_ANCHOR)));
         assertEquals(
                 "TUSHARE_QFQ_DAILY_FACTOR_UNAVAILABLE",
-                missingDaily.getMessage());
+                failure(() ->
+                        TushareReducedResearchQfqContract
+                                .validateAndCalculate(
+                                        "TUSHARE_PRO", "TUSHARE_PRO",
+                                        raw,
+                                        Map.of(
+                                                SECOND,
+                                                new BigDecimal("2")),
+                                        SECOND)));
+        assertEquals(
+                "TUSHARE_QFQ_FACTOR_INVALID",
+                failure(() ->
+                        TushareReducedResearchQfqContract
+                                .validateAndCalculate(
+                                        "TUSHARE_PRO", "TUSHARE_PRO",
+                                        List.of(new ResearchRawPrice(
+                                                FIRST,
+                                                new BigDecimal("10"))),
+                                        Map.of(FIRST, BigDecimal.ZERO),
+                                        FIRST)));
     }
 
     @Test
-    void nonPositiveFactorAndCrossProviderInputsAreRejected() {
-        var raw = java.util.List.of(
-                new ResearchRawPrice(FIRST, new BigDecimal("10")));
-
-        IllegalArgumentException invalid = assertThrows(
-                IllegalArgumentException.class,
-                () -> TushareTechnicalQualification
-                        .calculateReducedResearchQfq(
-                                "TUSHARE_PRO", "TUSHARE_PRO",
-                                raw, Map.of(FIRST, BigDecimal.ZERO), FIRST));
+    void reducedQfqContractRejectsRangeDuplicatesAndCrossProvider() {
         assertEquals(
-                "TUSHARE_QFQ_FACTOR_INVALID",
-                invalid.getMessage());
-
-        IllegalArgumentException mixed = assertThrows(
-                IllegalArgumentException.class,
-                () -> TushareTechnicalQualification
-                        .calculateReducedResearchQfq(
-                                "TUSHARE_PRO", "OTHER_PROVIDER",
-                                raw, Map.of(FIRST, BigDecimal.ONE), FIRST));
+                "TUSHARE_QFQ_RAW_SERIES_EMPTY",
+                failure(() ->
+                        TushareReducedResearchQfqContract
+                                .validateAndCalculate(
+                                        "TUSHARE_PRO", "TUSHARE_PRO",
+                                        List.of(), Map.of(), FIRST)));
+        assertEquals(
+                "TUSHARE_QFQ_TRADE_DATE_AFTER_ANCHOR",
+                failure(() ->
+                        TushareReducedResearchQfqContract
+                                .validateAndCalculate(
+                                        "TUSHARE_PRO", "TUSHARE_PRO",
+                                        List.of(new ResearchRawPrice(
+                                                SECOND,
+                                                new BigDecimal("10"))),
+                                        Map.of(
+                                                FIRST, BigDecimal.ONE,
+                                                SECOND, BigDecimal.ONE),
+                                        FIRST)));
+        assertEquals(
+                "TUSHARE_QFQ_DUPLICATE_TRADE_DATE",
+                failure(() ->
+                        TushareReducedResearchQfqContract
+                                .validateAndCalculate(
+                                        "TUSHARE_PRO", "TUSHARE_PRO",
+                                        List.of(
+                                                new ResearchRawPrice(
+                                                        FIRST,
+                                                        BigDecimal.ONE),
+                                                new ResearchRawPrice(
+                                                        FIRST,
+                                                        BigDecimal.TEN)),
+                                        Map.of(FIRST, BigDecimal.ONE),
+                                        FIRST)));
         assertEquals(
                 "TUSHARE_QFQ_CROSS_PROVIDER_FORBIDDEN",
-                mixed.getMessage());
+                failure(() ->
+                        TushareReducedResearchQfqContract
+                                .validateAndCalculate(
+                                        "TUSHARE_PRO", "OTHER_PROVIDER",
+                                        List.of(new ResearchRawPrice(
+                                                FIRST, BigDecimal.ONE)),
+                                        Map.of(FIRST, BigDecimal.ONE),
+                                        FIRST)));
     }
 
     @Test
     void qfqContractCannotConsumeDividendEvidence() {
         boolean consumesDividend = Arrays.stream(
-                        TushareTechnicalQualification.class
+                        TushareReducedResearchQfqContract.class
                                 .getDeclaredMethods())
                 .filter(method -> method.getName()
-                        .equals("calculateReducedResearchQfq"))
+                        .equals("validateAndCalculate"))
                 .map(Method::getParameterTypes)
                 .flatMap(Arrays::stream)
                 .anyMatch(type -> type == DividendEvidence.class);
 
         assertFalse(consumesDividend);
+        assertTrue(Arrays.stream(
+                        TushareTechnicalQualification.class
+                                .getDeclaredMethods())
+                .noneMatch(method -> method.getName()
+                        .equals("calculateReducedResearchQfq")));
+        assertTrue(Arrays.stream(QfqAsOfEngine.class.getDeclaredMethods())
+                .noneMatch(method -> method.getName().equals("price")));
     }
 
-    private static AssessmentInput fullInput(
-            QualificationStatus raw,
-            QualificationStatus factor,
-            QualificationStatus revision,
-            QualificationStatus identity,
-            QualificationStatus fullHistoryDailyExact,
-            boolean stableActionId,
-            boolean factorActionRelationship,
-            Map<CorporateActionType, QualificationStatus> actions,
-            Map<QualificationDimension, Set<String>> evidence
+    private static String failure(Runnable runnable) {
+        return assertThrows(
+                IllegalArgumentException.class, runnable::run).getMessage();
+    }
+
+    private static AssessmentInput fullInput() {
+        return new AssessmentInput(
+                verified("RAW"),
+                verified("FACTOR"),
+                verified("CALENDAR"),
+                independentFullActionClaims(),
+                verified("STABLE-ACTION-ID"),
+                verified("FACTOR-ACTION-RELATION"),
+                verified("REVISION"),
+                verified("HISTORICAL-VERSIONS"),
+                verified("PERMANENT-IDENTITY"),
+                verified("QFQ-FORMULA"),
+                verified("QFQ-RUNTIME"),
+                verified("FULL-HISTORY-DAILY-EXACT"),
+                verified("PROVIDER-PIT"),
+                verified("FORWARD-PIT"),
+                verified("SAFETY"),
+                verified("ENDPOINT-RATE-EVIDENCE"),
+                verified("ENDPOINT-RATE-ENFORCEMENT"),
+                EndpointRateLimitQualification.VERIFIED_CONSISTENT,
+                QfqCalculationMode.RAW_FACTOR_END_DATE_ANCHORED,
+                QfqAnchorSemantics.REQUESTED_END_DATE_FACTOR);
+    }
+
+    private static Map<CorporateActionType, TechnicalClaim>
+    independentFullActionClaims() {
+        Map<CorporateActionType, TechnicalClaim> result =
+                new EnumMap<>(CorporateActionType.class);
+        EnumSet.allOf(CorporateActionType.class).forEach(type ->
+                result.put(type, verified("ACTION-" + type.name())));
+        return result;
+    }
+
+    private static AssessmentInput withActions(
+            AssessmentInput source,
+            Map<CorporateActionType, TechnicalClaim> actions
     ) {
-        return fullInput(
-                raw, factor, revision, identity, fullHistoryDailyExact,
-                stableActionId, factorActionRelationship,
-                actions, evidence, QualificationStatus.VERIFIED);
+        return new AssessmentInput(
+                source.rawDailyClaim(),
+                source.adjustmentFactorClaim(),
+                source.calendarClaim(),
+                actions,
+                source.stableActionIdClaim(),
+                source.factorActionRelationshipClaim(),
+                source.providerRevisionClaim(),
+                source.historicalVersionsClaim(),
+                source.permanentSecurityIdentityClaim(),
+                source.qfqFormulaClaim(),
+                source.qfqOperationalRuntimeClaim(),
+                source.fullHistoryDailyExactClaim(),
+                source.providerPitClaim(),
+                source.forwardSystemKnowledgePitClaim(),
+                source.safetyBoundaryClaim(),
+                source.endpointRateLimitClaim(),
+                source.endpointRateLimitEnforcementClaim(),
+                source.endpointRateLimitQualification(),
+                source.qfqCalculationMode(),
+                source.qfqAnchorSemantics());
     }
 
-    private static AssessmentInput fullInput(
-            QualificationStatus raw,
-            QualificationStatus factor,
-            QualificationStatus revision,
-            QualificationStatus identity,
-            QualificationStatus fullHistoryDailyExact,
-            boolean stableActionId,
-            boolean factorActionRelationship,
-            Map<CorporateActionType, QualificationStatus> actions,
-            Map<QualificationDimension, Set<String>> evidence,
-            QualificationStatus calendar
+    private static AssessmentInput withCore(
+            AssessmentInput source,
+            TechnicalClaim raw,
+            TechnicalClaim factor,
+            TechnicalClaim calendar
     ) {
         return new AssessmentInput(
                 raw,
                 factor,
                 calendar,
-                QualificationStatus.VERIFIED,
-                revision,
-                QualificationStatus.VERIFIED,
-                identity,
-                QualificationStatus.VERIFIED,
-                fullHistoryDailyExact,
-                QualificationStatus.VERIFIED,
-                actions,
-                evidence,
-                stableActionId,
-                factorActionRelationship,
-                true,
-                true);
+                source.corporateActionClaims(),
+                source.stableActionIdClaim(),
+                source.factorActionRelationshipClaim(),
+                source.providerRevisionClaim(),
+                source.historicalVersionsClaim(),
+                source.permanentSecurityIdentityClaim(),
+                source.qfqFormulaClaim(),
+                source.qfqOperationalRuntimeClaim(),
+                source.fullHistoryDailyExactClaim(),
+                source.providerPitClaim(),
+                source.forwardSystemKnowledgePitClaim(),
+                source.safetyBoundaryClaim(),
+                source.endpointRateLimitClaim(),
+                source.endpointRateLimitEnforcementClaim(),
+                source.endpointRateLimitQualification(),
+                source.qfqCalculationMode(),
+                source.qfqAnchorSemantics());
     }
 
-    private static Map<CorporateActionType, QualificationStatus>
-    fullActionCoverage() {
-        Map<CorporateActionType, QualificationStatus> result =
-                new EnumMap<>(CorporateActionType.class);
-        EnumSet.allOf(CorporateActionType.class).forEach(
-                type -> result.put(type, QualificationStatus.VERIFIED));
-        return result;
+    private static TushareTechnicalQualification copyQualification(
+            TushareTechnicalQualification source,
+            RouteDecision routeDecision,
+            TechnicalClaim rawClaim,
+            Set<TechnicalBlocker> blockers,
+            boolean fullReady,
+            boolean reducedReady,
+            boolean runtimeReady
+    ) {
+        return new TushareTechnicalQualification(
+                routeDecision,
+                rawClaim,
+                source.adjustmentFactorClaim(),
+                source.calendarClaim(),
+                source.corporateActionClaims(),
+                source.stableActionIdClaim(),
+                source.factorActionRelationshipClaim(),
+                source.providerRevisionClaim(),
+                source.historicalVersionsClaim(),
+                source.permanentSecurityIdentityClaim(),
+                source.qfqFormulaClaim(),
+                source.qfqOperationalRuntimeClaim(),
+                source.fullHistoryDailyExactClaim(),
+                source.providerPitClaim(),
+                source.forwardSystemKnowledgePitClaim(),
+                source.safetyBoundaryClaim(),
+                source.endpointRateLimitClaim(),
+                source.endpointRateLimitEnforcementClaim(),
+                source.endpointRateLimitQualification(),
+                blockers,
+                source.qfqOperationalBlockers(),
+                source.endpointRateLimitBlockers(),
+                fullReady,
+                reducedReady,
+                runtimeReady,
+                source.qfqCalculationMode(),
+                source.qfqAnchorSemantics());
     }
 
-    private static Map<QualificationDimension, Set<String>>
-    completeEvidence() {
-        Map<QualificationDimension, Set<String>> result =
-                new EnumMap<>(QualificationDimension.class);
-        EnumSet.allOf(QualificationDimension.class).forEach(
-                dimension -> result.put(
-                        dimension,
-                        Set.of("TEST-" + dimension.name())));
-        return result;
+    private static TechnicalClaim verified(String evidenceId) {
+        return claim(QualificationStatus.VERIFIED, Set.of(evidenceId));
+    }
+
+    private static TechnicalClaim unavailable(String evidenceId) {
+        return claim(QualificationStatus.UNAVAILABLE, Set.of(evidenceId));
+    }
+
+    private static TechnicalClaim claim(
+            QualificationStatus status,
+            Set<String> evidenceIds
+    ) {
+        return new TechnicalClaim(status, evidenceIds);
     }
 }

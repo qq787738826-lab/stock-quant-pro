@@ -36,13 +36,13 @@
 |---|---|---|---|---|---|---|
 | TS-001 | Tushare 平台介绍 | https://tushare.pro/document/1 | A2 | Pro 从网络聚合转为自研生产/治理，面向个人、中小机构、高校和 AI 场景 | 不构成具体数据用途许可或 SLA | 是 |
 | TS-002 | Tushare 数据服务协议 | https://tushare.pro/document/1?doc_id=405 | C1 | 账号付费、非商业个人许可、不可转让、可撤销、有期限、仅供个人查看；不保证准确/完整/及时 | 未明确长期落库、回测、内部 Agent、备份和终止后留存 | 是 |
-| TS-003 | 积分与频次权限对应表 | https://tushare.pro/document/1?doc_id=290 | P1 | 120 积分 raw 日线免费；2000 积分 200 元/年、200 次/分、每 API 10 万次/日；个人价格公开，机构 10 倍；公告另购 | 不证明购买即允许 V13 长期保存/回测/Agent | 是 |
-| TS-004 | A 股日线行情 | https://tushare.pro/document/1?doc_id=27 | A1 | `daily` 为未复权，15—16 点入库；OHLC、volume=手、amount=千元；按证券/日期查询 | 没有 revision、snapshot 或逐记录 publishedAt | 是 |
+| TS-003 | 积分与频次权限对应表 | https://tushare.pro/document/1?doc_id=290 | P1 | 120 积分 raw 日线免费；2000 积分 200 元/年、套餐总表 200 次/分、每 API 10 万次/日；个人价格公开，机构 10 倍；公告另购 | 总表不能覆盖接口页更保守的特定限制，也不证明购买即允许 V13 长期保存/回测/Agent | 是 |
+| TS-004 | A 股日线行情 | https://tushare.pro/document/1?doc_id=27 | A1 | `daily` 为未复权，接口页 500 次/分钟，15—16 点入库；OHLC、volume=手、amount=千元；按证券/日期查询 | 没有 revision、snapshot 或逐记录 publishedAt | 是 |
 | TS-005 | 复权因子 | https://tushare.pro/document/2?doc_id=28 | A1 | `adj_factor` 由 Tushare 自行生产，含 `ts_code/trade_date/adj_factor`；单证券全历史或单日全市场；2000 积分 | 不证明历史修订版本、providerPublishedAt 或 action 关联 ID | 是 |
 | TS-006 | 交易日历 | https://tushare.pro/document/2?doc_id=26 | A1 | `trade_cal` 显式区分 SSE/SZSE，含 calendar date/open/pretrade date；2000 积分 | 不证明临时休市修订旧版本可查 | 是 |
 | TS-007 | 分红送股 | https://tushare.pro/document/2?doc_id=103 | A1 | `dividend` 提供现金/送股/转增、公告日、登记日、除权日、实施公告日；2000 积分 | 未证明配股、拆并股全覆盖、稳定事件 ID 和 revision 链 | 是 |
 | TS-008 | A 股复权行情 | https://tushare.pro/document/2?doc_id=146 | A1 | `pro_bar` 用 `adj_factor` 动态计算；QFQ 锚定查询 `end_date`；公式公开 | 不能把当前 QFQ 序列当历史不可变事实 | 否 |
-| TS-009 | 股票基础信息 | https://tushare.pro/document/1?doc_id=25 | A1 | `ts_code`、exchange、上市/退市状态与日期；2000 积分；官方建议本地保存基础表 | 建议本地保存不自动覆盖所有数据类别的长期许可 | 是 |
+| TS-009 | 股票基础信息 | https://tushare.pro/document/1?doc_id=25 | A1 | `ts_code`、exchange、上市/退市状态与日期；2000 积分；接口页 50 次/分钟；官方建议本地保存基础表 | 建议本地保存不自动覆盖所有数据类别的长期许可；50 次/分钟比当前共享 180 次/分钟应用限制更保守 | 是 |
 | TS-010 | 每日停复牌信息 | https://tushare.pro/document/2?doc_id=214 | A1 | `suspend_d` 提供停/复牌类型与交易日期 | 更新不定期；历史修订关系未公开 | 是 |
 | TS-011 | ST 股票列表 | https://tushare.pro/document/2?doc_id=397 | A1 | `stock_st` 可按交易日取得历史 ST 列表，2016 年起，3000 积分 | 2016 年前不完整；revision 未公开 | 是 |
 | TS-012 | 指数日线行情 | https://tushare.pro/document/1?doc_id=95 | A1 | `index_daily` 与字段/单位、2000 积分 | 不证明所有指数授权可二次展示 | 是 |
@@ -112,6 +112,37 @@ TRACK_B_FULL_PROBE_LEGAL_PREREQUISITES=NOT_MET
 WRITTEN_AUTOMATED_PROBE_PERMISSION=UNVERIFIED
 WRITTEN_RESPONSE_RETENTION_PERMISSION=UNVERIFIED
 ```
+
+### 3.3 F1B claim、QFQ 与频次证据语义
+
+Provider 技术事实继续只由上述 Tushare 官方页面和已验收的 B1/F1A 受控结果支持。F1B
+另登记以下本地代码证据；这些证据只证明实现和门禁行为，不得升级 Provider 自身事实：
+
+| evidenceId | 本地证据 | 支持的结论 | 不支持的结论 |
+|---|---|---|---|
+| `JAVA-QFQ-AS-OF-ENGINE-V1` | `QfqAsOfEngine` 离线回归 | 权威引擎执行 cutoff 与公司行动 lineage 门禁 | Provider action 完整、Provider PIT 或缩减运行入口已实现 |
+| `JAVA-QFQ-GOLDEN-V1` | 18 个既有黄金向量 | 共享 `QfqPriceMath` 重构不改变四位小数与舍入结果 | Tushare 全历史 `DAILY_EXACT` 或 Provider revision |
+| `TS-F1A-SYSTEM-KNOWLEDGE-CAPTURE` | F1A 类型化有限个人 FORMAL 捕获回归 | 指定三类事实可以形成隔离的 `SYSTEM_KNOWLEDGE_ONLY` 链 | 完整 F1、Provider PIT、正常业务库运行 |
+| `TS-F1A-MANUAL-BOUNDED-SAFETY` | F1A 显式会话预算回归 | 10 次会话边界与默认禁用可执行 | Endpoint 级长期频次限制已经实现 |
+| `JAVA-F1A-PROCESS-RATE-LIMITER-V1` | F1A 单进程共享限流回归 | 当前进程内共享 180 次/分钟与每日计数存在 | `stock_basic=50` 的 Endpoint 级限制或跨进程协调 |
+
+强资格必须使用 `TechnicalClaim(status,evidenceIds)`。八种公司行动分别持有 claim；
+一个泛化公司行动 evidenceId 不能覆盖全部类型，稳定 action ID、factor/action 关系、
+Provider revision、历史版本、永久身份和 Provider PIT 都必须有各自证据。
+
+频次证据当前固定为：
+
+```text
+GENERAL_2000_POINT_RATE_LIMIT_PER_MINUTE=200
+GENERAL_2000_POINT_DAILY_LIMIT_PER_API=100000
+STOCK_BASIC_OFFICIAL_RATE_LIMIT_PER_MINUTE=50
+DAILY_OFFICIAL_RATE_LIMIT_PER_MINUTE=500
+OFFICIAL_ENDPOINT_RATE_LIMITS=PARTIAL_CONFLICT_IDENTIFIED
+ENDPOINT_SPECIFIC_RATE_LIMIT_ENFORCED=false
+```
+
+多个限制同时适用时取最保守的较小值。F1A 固定 10 请求仍安全，但当前单一 180 次/分钟
+实现不能证明长期 `stock_basic` 摄取安全；Endpoint 级限流必须由下一阶段实现。
 
 ## 4. 同花顺 iFinD
 

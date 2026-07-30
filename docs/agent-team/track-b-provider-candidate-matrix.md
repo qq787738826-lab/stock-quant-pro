@@ -72,7 +72,7 @@
 | 18. 历史修订识别 | `NOT_SUPPORTED` | `NOT_SUPPORTED`：F1B 复核核心 API 字段与官方 ChangeLog；ChangeLog 只证明接口/字段演进，不是单条数据 revision，也没有旧版本查询（TS-021） | `REQUIRES_TRIAL_PROBE` |
 | 19. 分页和增量 | `PARTIAL`：游标结果存在，稳定增量合同不明 | `VERIFIED`：日期/证券参数、行限和全日抓取模式明确（TS-004/005/006） | `PARTIAL`：函数和数据量限制公开，增量游标语义需确认（IF-001/003） |
 | 20. 全市场批量 | `PARTIAL`：F0 禁止执行全市场探针 | `VERIFIED`：按交易日可获取全市场日线/因子，股票基础信息单次覆盖全市场（TS-004/005/009） | `VERIFIED`：板块成分与多代码接口公开（IF-003/004） |
-| 21. 调用频率 | `UNVERIFIED` | `VERIFIED`：积分等级对应每分钟频次（TS-003） | `VERIFIED`：单函数 QPS 10、账号总 QPS 20（IF-002） |
+| 21. 调用频率 | `UNVERIFIED` | `PARTIAL`：套餐总表为 200 次/分钟；接口页另列 `stock_basic=50`、`daily=500` 次/分钟，存在多个适用上限时必须取最保守较小值；当前尚未实施 Endpoint 级限流（TS-003/004/009） | `VERIFIED`：单函数 QPS 10、账号总 QPS 20（IF-002） |
 | 22. 每日/周期额度 | `UNVERIFIED` | `VERIFIED`：积分等级对应每日额度（TS-003） | `VERIFIED`：免费按月、试用/正式按周额度（IF-001） |
 | 23. 错误码 | `VERIFIED`：结果对象暴露 `error_code/error_msg`（BS-003/005） | `VERIFIED`：HTTP `code/msg/data`，2002 为权限问题（TS-014） | `VERIFIED`：`errorcode/errmsg`，公开部分登录与网络错误码（IF-002/003） |
 | 24. SLA/稳定性承诺 | `NOT_SUPPORTED`：免责声明明确不保证不中断（BS-002） | `NOT_SUPPORTED`：服务协议不保证准确、完整和及时（TS-002） | `UNVERIFIED` |
@@ -95,15 +95,27 @@ TUSHARE_TECHNICAL_ROUTE_DECISION=REDUCED_RESEARCH_ONLY
 TUSHARE_REDUCED_RESEARCH_CONTRACT=READY
 FULL_TECHNICAL_CONTRACT_READY=false
 REDUCED_RESEARCH_CONTRACT_READY=true
+QFQ_FORMULA_QUALIFICATION=VERIFIED
+QFQ_OPERATIONAL_RUNTIME_QUALIFICATION=PARTIAL
+REDUCED_RESEARCH_RUNTIME_READY=false
+QFQ_OPERATIONAL_BLOCKER=EXISTING_QFQ_ENGINE_REQUIRES_CORPORATE_ACTION_LINEAGE
+OFFICIAL_ENDPOINT_RATE_LIMITS=PARTIAL_CONFLICT_IDENTIFIED
+ENDPOINT_SPECIFIC_RATE_LIMIT_ENFORCED=false
 PROVIDER_REVISION_AVAILABLE=false
 HISTORICAL_VERSIONS_QUERYABLE=false
 ```
 
-缩减路线允许同 Provider raw/factor/calendar、请求结束日锚定的研究级 QFQ，以及真实首次
-捕获后的 `SYSTEM_KNOWLEDGE_PIT`。`dividend` 只作
+缩减合同已定义同 Provider raw/factor/calendar、请求结束日锚定的研究级 QFQ，以及真实首次
+捕获后的 `SYSTEM_KNOWLEDGE_PIT`，但运行入口尚未实现。现有 `QfqAsOfEngine` 在 factor
+变化时继续要求公司行动 lineage；官方总表与 Endpoint 页面频次值冲突也尚未由
+Endpoint 级限流落实。`dividend` 只作
 `PARTIAL_DIVIDEND_EVIDENCE`，不得进入完整公司行动 lineage；不允许 Provider PIT、
 历史 revision 回放、永久证券身份、跨 Provider QFQ、正常业务库、scheduler 或全市场
 自动采集。
+
+FULL 判定使用每一种公司行动的独立 `TechnicalClaim(status,evidenceIds)`，并单独要求
+stable action ID、factor/action、revision、历史版本、永久身份与 Provider PIT 证据。
+一个泛化公司行动 evidenceId 或任何无证据裸布尔值均不得升级完整资格。
 
 公司行动逐项状态固定为：
 

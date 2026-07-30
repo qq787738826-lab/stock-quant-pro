@@ -131,16 +131,26 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
         coverage.put(
                 "tushareReducedResearchContract",
                 qualification.reducedResearchContractReady()
-                        ? "READY" : "BLOCKED");
+                        ? "CONTRACT_DEFINED_RUNTIME_NOT_READY"
+                        : "BLOCKED");
         coverage.put(
                 "technicalRouteDecision",
                 qualification.routeDecision().name());
+        coverage.put(
+                "reducedResearchRuntimeReady",
+                qualification.reducedResearchRuntimeReady());
         coverage.put(
                 "qfqCalculationMode",
                 qualification.qfqCalculationMode().name());
         coverage.put(
                 "qfqAnchorSemantics",
                 qualification.qfqAnchorSemantics().name());
+        coverage.put(
+                "qfqFormulaQualification",
+                qualification.qfqFormulaQualification().name());
+        coverage.put(
+                "qfqOperationalRuntimeQualification",
+                qualification.qfqOperationalRuntimeQualification().name());
         coverage.put(
                 "corporateActionLineageComplete",
                 qualification.corporateActionLineageComplete());
@@ -163,6 +173,15 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
                 "forwardSystemKnowledgePitBuildable",
                 qualification.forwardSystemKnowledgePitBuildable());
         coverage.put(
+                "endpointRateLimitQualification",
+                qualification.endpointRateLimitQualification().name());
+        coverage.put(
+                "officialEndpointRateLimits",
+                qualification.endpointRateLimitQualification().name());
+        coverage.put(
+                "endpointSpecificRateLimitEnforced",
+                qualification.endpointSpecificRateLimitEnforced());
+        coverage.put(
                 "stockCompanyIdentityUse",
                 "ISSUER_IDENTITY_EVIDENCE");
         coverage.put(
@@ -183,6 +202,23 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
         qualification.blockers().stream()
                 .sorted()
                 .forEach(value -> technicalBlockers.add(value.name()));
+        ArrayNode qfqOperationalBlockers =
+                coverage.putArray("qfqOperationalBlockers");
+        qualification.qfqOperationalBlockers().stream()
+                .sorted()
+                .forEach(value -> qfqOperationalBlockers.add(
+                        value.name()));
+        ArrayNode endpointRateLimitBlockers =
+                coverage.putArray("endpointRateLimitBlockers");
+        qualification.endpointRateLimitBlockers().stream()
+                .sorted()
+                .forEach(value -> endpointRateLimitBlockers.add(
+                        value.name()));
+        ArrayNode endpointRateLimitEvidenceIds =
+                coverage.putArray("endpointRateLimitEvidenceIds");
+        qualification.endpointRateLimitEvidenceIds().stream()
+                .sorted()
+                .forEach(endpointRateLimitEvidenceIds::add);
         ArrayNode technicalEvidenceIds =
                 coverage.putArray("technicalEvidenceIds");
         qualification.evidenceIds().stream()
@@ -244,6 +280,25 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
         rateLimit.put(
                 "manualBoundedMaximumBusinessRequests",
                 TushareManualBoundedSession.MAX_PROVIDER_BUSINESS_REQUESTS);
+        rateLimit.put(
+                "officialEndpointRateLimits",
+                qualification.endpointRateLimitQualification().name());
+        rateLimit.put(
+                "endpointSpecificRateLimitEnforced",
+                qualification.endpointSpecificRateLimitEnforced());
+        rateLimit.put(
+                "applicableLimitSelection",
+                "MOST_CONSERVATIVE_MINIMUM");
+        ObjectNode endpointLimits =
+                rateLimit.putObject("officialPerMinuteByEndpoint");
+        endpointLimits.put(
+                "stock_basic",
+                TushareTechnicalQualification
+                        .STOCK_BASIC_OFFICIAL_RATE_LIMIT_PER_MINUTE);
+        endpointLimits.put(
+                "daily",
+                TushareTechnicalQualification
+                        .DAILY_OFFICIAL_RATE_LIMIT_PER_MINUTE);
 
         return new ProviderCapability(
                 PitMarketFactsContracts.PROVIDER_CONTRACT_VERSION,

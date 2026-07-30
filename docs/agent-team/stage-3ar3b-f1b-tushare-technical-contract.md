@@ -56,8 +56,10 @@ PROVIDER_ROUTE_REJECTED
 ```
 
 模型逐项持有 raw、factor、calendar、corporate action、revision、历史版本、身份、
-QFQ、全历史 `DAILY_EXACT` 与 Provider PIT 资格，并把证据 ID 和技术 blocker 绑定到
-判定。任何声明为 `VERIFIED` 的维度缺少该维度证据 ID 时自动降为 `UNVERIFIED`。
+QFQ、全历史 `DAILY_EXACT` 与 Provider PIT 的类型化
+`TechnicalClaim(status, evidenceIds)`。八种公司行动分别持有 claim；
+`VERIFIED`/`PARTIAL` 缺证据时拒绝构造，一个泛化 evidenceId 不能覆盖八种 action。
+路线、blocker 和 readiness 均由 claim 推导，不再接收强能力裸布尔值。
 
 当前证据生成的正式判定为：
 
@@ -66,6 +68,12 @@ TUSHARE_TECHNICAL_ROUTE_DECISION=REDUCED_RESEARCH_ONLY
 TUSHARE_REDUCED_RESEARCH_CONTRACT=READY
 FULL_TECHNICAL_CONTRACT_READY=false
 REDUCED_RESEARCH_CONTRACT_READY=true
+QFQ_FORMULA_QUALIFICATION=VERIFIED
+QFQ_OPERATIONAL_RUNTIME_QUALIFICATION=PARTIAL
+REDUCED_RESEARCH_RUNTIME_READY=false
+QFQ_OPERATIONAL_BLOCKER=EXISTING_QFQ_ENGINE_REQUIRES_CORPORATE_ACTION_LINEAGE
+OFFICIAL_ENDPOINT_RATE_LIMITS=PARTIAL_CONFLICT_IDENTIFIED
+ENDPOINT_SPECIFIC_RATE_LIMIT_ENFORCED=false
 ```
 
 不是预先写死路线：测试分别证明全条件满足才能进入 FULL，缺 action ID/revision/永久
@@ -79,10 +87,14 @@ Endpoint 事实，同时从类型化模型投影：
 ```text
 fullTechnicalContractReady=false
 reducedResearchContractReady=true
-tushareReducedResearchContract=READY
+tushareReducedResearchContract=CONTRACT_DEFINED_RUNTIME_NOT_READY
 technicalRouteDecision=REDUCED_RESEARCH_ONLY
+reducedResearchRuntimeReady=false
 qfqCalculationMode=RAW_FACTOR_END_DATE_ANCHORED
 qfqAnchorSemantics=REQUESTED_END_DATE_FACTOR
+qfqFormulaQualification=VERIFIED
+qfqOperationalRuntimeQualification=PARTIAL
+qfqOperationalBlockers=[EXISTING_QFQ_ENGINE_REQUIRES_CORPORATE_ACTION_LINEAGE]
 corporateActionLineageComplete=false
 permanentSecurityIdentityVerified=false
 providerRevisionAvailable=false
@@ -121,8 +133,29 @@ qfqPrice =
 
 结束日锚点由请求显式提供；相同 raw/factor/anchor 重复结果一致，换锚点只按公式改变。
 锚点缺失、任一交易日因子缺失、因子非正数或 raw/factor 跨 Provider 时均安全拒绝。
-计算接口不接受 `DividendEvidence`，因此 `dividend` 不可能被用于生成或修复因子。现有
-`QfqAsOfEngine` 数学规则没有修改，18 个黄金向量继续回归。
+缩减校验器不接受 `DividendEvidence`，因此 `dividend` 不可能被用于生成或修复因子。
+新增唯一 `QfqPriceMath`，现有 `QfqAsOfEngine` 和缩减校验器共同调用该数学实现；
+lineage、cutoff、四位小数和舍入规则不变，18 个黄金向量继续回归。因子变化而缺少
+公司行动 lineage 时，权威引擎仍返回
+`PIT_CORPORATE_ACTION_LINEAGE_UNAVAILABLE`，所以当前只冻结公式合同，没有完成缩减
+研究运行入口。
+
+## 5.1 Endpoint 频次证据
+
+官方总表与接口页同时存在以下值：
+
+```text
+GENERAL_2000_POINT_RATE_LIMIT_PER_MINUTE=200
+GENERAL_2000_POINT_DAILY_LIMIT_PER_API=100000
+STOCK_BASIC_OFFICIAL_RATE_LIMIT_PER_MINUTE=50
+DAILY_OFFICIAL_RATE_LIMIT_PER_MINUTE=500
+OFFICIAL_ENDPOINT_RATE_LIMITS=PARTIAL_CONFLICT_IDENTIFIED
+ENDPOINT_SPECIFIC_RATE_LIMIT_ENFORCED=false
+```
+
+多重限制必须选最保守的较小值。当前 F1A 单进程 180 次/分钟限流没有实现 Endpoint
+差异，不能证明 `stock_basic` 长期摄取安全；F1A 的固定 10 次会话本身未越界。
+Endpoint 级限流是下一独立授权阶段的运行阻断，F1B 没有修改限流器。
 
 ## 6. 公司行动、版本与身份
 
@@ -168,7 +201,7 @@ PIT_PARTIAL
 
 ## 7. 缩减路线边界
 
-允许：
+以下是已经定义的缩减合同能力，不表示运行入口已经实现。合同允许：
 
 - 显式 `MANUAL_BOUNDED` 手工有界调用；
 - raw/factor/calendar；
@@ -184,8 +217,9 @@ PIT_PARTIAL
 - Shadow、Day 002、F2B、F3、3A-R3B-1、3B；
 - 投资建议、券商连接、真实或自动交易。
 
-下一阶段“受控本地研究摄取实现”只有在 F1B 实际 Git 提交验收、用户批准合入及用户
-单独授权后才可开始；F1B 本身不授权。
+下一阶段必须实现 Endpoint 级限流和与权威 lineage 门禁兼容的缩减运行入口；
+“受控本地研究摄取实现”只有在 F1B 实际 Git 提交验收、用户批准合入及用户单独授权
+后才可开始；F1B 本身不授权。
 
 ## 8. 状态保持
 
@@ -214,12 +248,12 @@ IFIND_TRIAL_ACTIVATION_GATE=BLOCKED
 
 | 验证项 | 结果 |
 |---|---|
-| Java 编译 | `mvn -pl quant-server -am -DskipTests test-compile`，`BUILD SUCCESS` |
-| F1B 定向测试 | `21/0/0/0` |
-| F1A、F1B、Provider V2 与 QFQ 联合回归 | `62/0/0/0` |
-| Provider V2 与 18 个 QFQ 黄金向量 | `10/0/0/0` 与 `18/0/0/0` |
+| Java 编译 | `mvn -pl quant-server -am -DskipTests compile`，`BUILD SUCCESS` |
+| F1B 资格、capability 与 QFQ 定向测试 | `43/0/0/0` |
+| F1A、F1B、Provider V2 与 QFQ 联合回归 | `66/0/0/0` |
+| Provider V2 与 QFQ 权威回归 | `10/0/0/0` 与 `19/0/0/0`；后者含 18 个黄金向量和 1 个显式 lineage 门禁测试 |
 | quant-core 全量 | `4/0/0/0` |
-| quant-server 安全全量 | `466/0/0/93`；93 项为外部 PostgreSQL/Python/AKShare 环境门禁跳过，Tushare Live 类被显式排除 |
+| quant-server 安全全量 | `357/0/0/0`；命令显式排除所有 `*IntegrationTest`、`*Postgres*`、`*CrossLanguage*` 与 `*Live*`，未检查 Token 或连接外部环境 |
 | Markdown / UTF-8 / 表格 / 链接 / `git diff --check` | 全部通过 |
 
 本阶段 Provider 新增调用数为 `0`，Tushare 累计真实业务请求继续为 `20`，iFinD

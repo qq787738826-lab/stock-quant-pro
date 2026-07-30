@@ -1,557 +1,836 @@
 package com.stockquant.server.agent.marketfacts;
 
-import java.math.BigDecimal;
-import java.math.RoundingMode;
-import java.time.LocalDate;
-import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
 /**
- * Typed, evidence-backed qualification for the Tushare 2000-point route.
+ * Immutable, evidence-backed technical qualification for the Tushare
+ * 2000-point route.
  *
- * <p>This model deliberately separates a reduced personal-research contract
- * from the complete four-fact F1 contract. Provider revision, complete
- * corporate-action lineage and permanent instrument identity must never be
- * inferred from ordinary API fields or from the local first-observation time.
+ * <p>The route decision is derived from typed claims. No caller-supplied
+ * boolean can promote a capability without evidence, and a reduced contract
+ * being defined must not be confused with an operational runtime being ready.
  */
 public record TushareTechnicalQualification(
         RouteDecision routeDecision,
-        QualificationStatus rawDailyQualification,
-        QualificationStatus adjustmentFactorQualification,
-        QualificationStatus calendarQualification,
-        QualificationStatus corporateActionQualification,
-        QualificationStatus revisionQualification,
-        QualificationStatus historicalVersionQualification,
-        QualificationStatus securityIdentityQualification,
-        QualificationStatus qfqQualification,
-        QualificationStatus fullHistoryDailyExactQualification,
-        QualificationStatus providerPitQualification,
-        Map<CorporateActionType, QualificationStatus> corporateActionCoverage,
-        Set<String> evidenceIds,
+        TechnicalClaim rawDailyClaim,
+        TechnicalClaim adjustmentFactorClaim,
+        TechnicalClaim calendarClaim,
+        Map<CorporateActionType, TechnicalClaim> corporateActionClaims,
+        TechnicalClaim stableActionIdClaim,
+        TechnicalClaim factorActionRelationshipClaim,
+        TechnicalClaim providerRevisionClaim,
+        TechnicalClaim historicalVersionsClaim,
+        TechnicalClaim permanentSecurityIdentityClaim,
+        TechnicalClaim qfqFormulaClaim,
+        TechnicalClaim qfqOperationalRuntimeClaim,
+        TechnicalClaim fullHistoryDailyExactClaim,
+        TechnicalClaim providerPitClaim,
+        TechnicalClaim forwardSystemKnowledgePitClaim,
+        TechnicalClaim safetyBoundaryClaim,
+        TechnicalClaim endpointRateLimitClaim,
+        TechnicalClaim endpointRateLimitEnforcementClaim,
+        EndpointRateLimitQualification endpointRateLimitQualification,
         Set<TechnicalBlocker> blockers,
+        Set<QfqOperationalBlocker> qfqOperationalBlockers,
+        Set<EndpointRateLimitBlocker> endpointRateLimitBlockers,
         boolean fullTechnicalContractReady,
         boolean reducedResearchContractReady,
-        boolean forwardSystemKnowledgePitBuildable,
+        boolean reducedResearchRuntimeReady,
         QfqCalculationMode qfqCalculationMode,
-        QfqAnchorSemantics qfqAnchorSemantics,
-        boolean corporateActionLineageComplete,
-        boolean permanentSecurityIdentityVerified,
-        boolean providerRevisionAvailable,
-        boolean historicalVersionsQueryable
+        QfqAnchorSemantics qfqAnchorSemantics
 ) {
 
-    public static final String PROVIDER_CODE = "TUSHARE_PRO";
-    private static final int DIVISION_SCALE = 16;
-    private static final int PRICE_SCALE = 4;
+    public static final int GENERAL_2000_POINT_RATE_LIMIT_PER_MINUTE = 200;
+    public static final int GENERAL_2000_POINT_DAILY_LIMIT_PER_API = 100_000;
+    public static final int STOCK_BASIC_OFFICIAL_RATE_LIMIT_PER_MINUTE = 50;
+    public static final int DAILY_OFFICIAL_RATE_LIMIT_PER_MINUTE = 500;
 
     public TushareTechnicalQualification {
-        routeDecision = Objects.requireNonNull(routeDecision, "routeDecision");
-        rawDailyQualification = required(
-                rawDailyQualification, "rawDailyQualification");
-        adjustmentFactorQualification = required(
-                adjustmentFactorQualification,
-                "adjustmentFactorQualification");
-        calendarQualification = required(
-                calendarQualification, "calendarQualification");
-        corporateActionQualification = required(
-                corporateActionQualification,
-                "corporateActionQualification");
-        revisionQualification = required(
-                revisionQualification, "revisionQualification");
-        historicalVersionQualification = required(
-                historicalVersionQualification,
-                "historicalVersionQualification");
-        securityIdentityQualification = required(
-                securityIdentityQualification,
-                "securityIdentityQualification");
-        qfqQualification = required(qfqQualification, "qfqQualification");
-        fullHistoryDailyExactQualification = required(
-                fullHistoryDailyExactQualification,
-                "fullHistoryDailyExactQualification");
-        providerPitQualification = required(
-                providerPitQualification, "providerPitQualification");
-        corporateActionCoverage = Map.copyOf(
-                Objects.requireNonNull(
-                        corporateActionCoverage,
-                        "corporateActionCoverage"));
-        if (!corporateActionCoverage.keySet().equals(
-                EnumSet.allOf(CorporateActionType.class))) {
-            throw new IllegalArgumentException(
-                    "All corporate-action types must be qualified");
-        }
-        evidenceIds = Set.copyOf(
-                Objects.requireNonNull(evidenceIds, "evidenceIds"));
-        if (evidenceIds.stream().anyMatch(value ->
-                value == null || value.isBlank())) {
-            throw new IllegalArgumentException(
-                    "evidenceIds must not contain blanks");
-        }
-        blockers = Set.copyOf(Objects.requireNonNull(blockers, "blockers"));
+        routeDecision = Objects.requireNonNull(
+                routeDecision, "routeDecision");
+        rawDailyClaim = required(rawDailyClaim, "rawDailyClaim");
+        adjustmentFactorClaim = required(
+                adjustmentFactorClaim, "adjustmentFactorClaim");
+        calendarClaim = required(calendarClaim, "calendarClaim");
+        corporateActionClaims = copyActionClaims(corporateActionClaims);
+        stableActionIdClaim = required(
+                stableActionIdClaim, "stableActionIdClaim");
+        factorActionRelationshipClaim = required(
+                factorActionRelationshipClaim,
+                "factorActionRelationshipClaim");
+        providerRevisionClaim = required(
+                providerRevisionClaim, "providerRevisionClaim");
+        historicalVersionsClaim = required(
+                historicalVersionsClaim, "historicalVersionsClaim");
+        permanentSecurityIdentityClaim = required(
+                permanentSecurityIdentityClaim,
+                "permanentSecurityIdentityClaim");
+        qfqFormulaClaim = required(qfqFormulaClaim, "qfqFormulaClaim");
+        qfqOperationalRuntimeClaim = required(
+                qfqOperationalRuntimeClaim,
+                "qfqOperationalRuntimeClaim");
+        fullHistoryDailyExactClaim = required(
+                fullHistoryDailyExactClaim,
+                "fullHistoryDailyExactClaim");
+        providerPitClaim = required(
+                providerPitClaim, "providerPitClaim");
+        forwardSystemKnowledgePitClaim = required(
+                forwardSystemKnowledgePitClaim,
+                "forwardSystemKnowledgePitClaim");
+        safetyBoundaryClaim = required(
+                safetyBoundaryClaim, "safetyBoundaryClaim");
+        endpointRateLimitClaim = required(
+                endpointRateLimitClaim, "endpointRateLimitClaim");
+        endpointRateLimitEnforcementClaim = required(
+                endpointRateLimitEnforcementClaim,
+                "endpointRateLimitEnforcementClaim");
+        endpointRateLimitQualification = Objects.requireNonNull(
+                endpointRateLimitQualification,
+                "endpointRateLimitQualification");
+        blockers = Set.copyOf(Objects.requireNonNull(
+                blockers, "blockers"));
+        qfqOperationalBlockers = Set.copyOf(Objects.requireNonNull(
+                qfqOperationalBlockers, "qfqOperationalBlockers"));
+        endpointRateLimitBlockers = Set.copyOf(Objects.requireNonNull(
+                endpointRateLimitBlockers, "endpointRateLimitBlockers"));
         qfqCalculationMode = Objects.requireNonNull(
                 qfqCalculationMode, "qfqCalculationMode");
         qfqAnchorSemantics = Objects.requireNonNull(
                 qfqAnchorSemantics, "qfqAnchorSemantics");
-        if (fullTechnicalContractReady
-                != (routeDecision == RouteDecision.FULL_F1_BUILDABLE)) {
+
+        validateEndpointRateLimitState(
+                endpointRateLimitQualification,
+                endpointRateLimitClaim);
+
+        Set<QfqOperationalBlocker> expectedQfqBlockers =
+                expectedQfqOperationalBlockers(
+                        qfqOperationalRuntimeClaim);
+        if (!qfqOperationalBlockers.equals(expectedQfqBlockers)) {
             throw new IllegalArgumentException(
-                    "fullTechnicalContractReady contradicts routeDecision");
+                    "qfqOperationalBlockers contradict runtime claim");
         }
-        if (reducedResearchContractReady
-                != (routeDecision
-                == RouteDecision.REDUCED_RESEARCH_ONLY)) {
+        Set<EndpointRateLimitBlocker> expectedEndpointBlockers =
+                expectedEndpointRateLimitBlockers(
+                        endpointRateLimitQualification,
+                        endpointRateLimitEnforcementClaim);
+        if (!endpointRateLimitBlockers.equals(
+                expectedEndpointBlockers)) {
             throw new IllegalArgumentException(
-                    "reducedResearchContractReady contradicts routeDecision");
+                    "endpointRateLimitBlockers contradict claims");
+        }
+
+        Set<TechnicalBlocker> expectedBlockers = expectedBlockers(
+                rawDailyClaim,
+                adjustmentFactorClaim,
+                calendarClaim,
+                corporateActionClaims,
+                stableActionIdClaim,
+                factorActionRelationshipClaim,
+                providerRevisionClaim,
+                historicalVersionsClaim,
+                permanentSecurityIdentityClaim,
+                fullHistoryDailyExactClaim,
+                providerPitClaim,
+                forwardSystemKnowledgePitClaim,
+                safetyBoundaryClaim,
+                qfqOperationalRuntimeClaim,
+                endpointRateLimitQualification,
+                endpointRateLimitEnforcementClaim);
+        if (!blockers.equals(expectedBlockers)) {
+            throw new IllegalArgumentException(
+                    "blockers contradict evidence claims");
+        }
+
+        RouteDecision expectedRoute = expectedRoute(
+                rawDailyClaim,
+                adjustmentFactorClaim,
+                calendarClaim,
+                corporateActionClaims,
+                stableActionIdClaim,
+                factorActionRelationshipClaim,
+                providerRevisionClaim,
+                historicalVersionsClaim,
+                permanentSecurityIdentityClaim,
+                qfqFormulaClaim,
+                qfqOperationalRuntimeClaim,
+                fullHistoryDailyExactClaim,
+                providerPitClaim,
+                forwardSystemKnowledgePitClaim,
+                safetyBoundaryClaim,
+                endpointRateLimitQualification,
+                endpointRateLimitEnforcementClaim,
+                expectedBlockers);
+        if (routeDecision != expectedRoute) {
+            throw new IllegalArgumentException(
+                    "routeDecision contradicts evidence claims");
+        }
+        boolean expectedFull =
+                expectedRoute == RouteDecision.FULL_F1_BUILDABLE;
+        boolean expectedReduced =
+                expectedRoute == RouteDecision.REDUCED_RESEARCH_ONLY;
+        boolean expectedRuntime = expectedReduced
+                && qfqOperationalRuntimeClaim.verified()
+                && endpointRateLimitQualification
+                == EndpointRateLimitQualification.VERIFIED_CONSISTENT
+                && endpointRateLimitEnforcementClaim.verified()
+                && expectedQfqBlockers.isEmpty()
+                && expectedEndpointBlockers.isEmpty();
+        if (fullTechnicalContractReady != expectedFull) {
+            throw new IllegalArgumentException(
+                    "fullTechnicalContractReady contradicts claims");
+        }
+        if (reducedResearchContractReady != expectedReduced) {
+            throw new IllegalArgumentException(
+                    "reducedResearchContractReady contradicts claims");
+        }
+        if (reducedResearchRuntimeReady != expectedRuntime) {
+            throw new IllegalArgumentException(
+                    "reducedResearchRuntimeReady contradicts claims");
+        }
+        if (expectedFull && !blockers.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "FULL_F1_BUILDABLE cannot contain blockers");
         }
     }
 
     /**
-     * Current assessment based on official pages TS-003/004/005/006/007/008,
-     * TS-009/018/019/020/021 and accepted bounded evidence TS-PB/TS-F1A.
+     * Current assessment based only on the accepted Tushare official evidence
+     * and bounded technical results recorded by F1A/F1B.
      */
-    public static TushareTechnicalQualification current2000PointAssessment() {
-        Map<QualificationDimension, Set<String>> evidence =
-                new EnumMap<>(QualificationDimension.class);
-        evidence.put(QualificationDimension.RAW_DAILY, Set.of(
-                "TS-004", "TS-PB-005", "TS-PB-006", "TS-F1A-001"));
-        evidence.put(QualificationDimension.ADJUSTMENT_FACTOR, Set.of(
-                "TS-005", "TS-PB-007", "TS-PB-008", "TS-F1A-001"));
-        evidence.put(QualificationDimension.TRADING_CALENDAR, Set.of(
-                "TS-006", "TS-PB-003", "TS-PB-004", "TS-F1A-001"));
-        evidence.put(QualificationDimension.CORPORATE_ACTION, Set.of(
-                "TS-007", "TS-PB-009", "TS-PB-010", "TS-F1A-002"));
-        evidence.put(QualificationDimension.REVISION, Set.of(
-                "TS-004", "TS-005", "TS-006", "TS-007", "TS-021"));
-        evidence.put(QualificationDimension.HISTORICAL_VERSION, Set.of(
-                "TS-021"));
-        evidence.put(QualificationDimension.SECURITY_IDENTITY, Set.of(
-                "TS-009", "TS-018", "TS-019", "TS-020",
-                "TS-PB-001", "TS-PB-002", "TS-F1A-002"));
-        evidence.put(QualificationDimension.QFQ, Set.of(
-                "TS-005", "TS-008", "JAVA-QFQ-GOLDEN-V1"));
-        evidence.put(QualificationDimension.FULL_HISTORY_DAILY_EXACT, Set.of(
-                "TS-004", "TS-005", "TS-PB-005", "TS-PB-006",
-                "TS-PB-007", "TS-PB-008"));
-        evidence.put(QualificationDimension.PROVIDER_PIT, Set.of(
-                "TS-004", "TS-005", "TS-006", "TS-007", "TS-021"));
-
-        Map<CorporateActionType, QualificationStatus> actions =
+    public static TushareTechnicalQualification
+    current2000PointAssessment() {
+        Map<CorporateActionType, TechnicalClaim> actions =
                 new EnumMap<>(CorporateActionType.class);
-        actions.put(
-                CorporateActionType.CASH_DIVIDEND,
-                QualificationStatus.PARTIAL);
-        actions.put(
-                CorporateActionType.STOCK_DIVIDEND,
-                QualificationStatus.PARTIAL);
-        actions.put(
-                CorporateActionType.CAPITALIZATION,
-                QualificationStatus.PARTIAL);
-        actions.put(
-                CorporateActionType.RIGHTS_ISSUE,
-                QualificationStatus.NOT_SUPPORTED);
-        actions.put(
-                CorporateActionType.SPLIT,
-                QualificationStatus.NOT_SUPPORTED);
-        actions.put(
-                CorporateActionType.REVERSE_SPLIT,
-                QualificationStatus.NOT_SUPPORTED);
-        actions.put(
-                CorporateActionType.CORRECTION,
-                QualificationStatus.NOT_SUPPORTED);
-        actions.put(
-                CorporateActionType.WITHDRAWAL,
-                QualificationStatus.NOT_SUPPORTED);
+        actions.put(CorporateActionType.CASH_DIVIDEND, claim(
+                QualificationStatus.PARTIAL,
+                "TS-007", "TS-PB-009", "TS-PB-010", "TS-F1A-002"));
+        actions.put(CorporateActionType.STOCK_DIVIDEND, claim(
+                QualificationStatus.PARTIAL,
+                "TS-007", "TS-PB-009", "TS-PB-010", "TS-F1A-002"));
+        actions.put(CorporateActionType.CAPITALIZATION, claim(
+                QualificationStatus.PARTIAL,
+                "TS-007", "TS-PB-009", "TS-PB-010", "TS-F1A-002"));
+        actions.put(CorporateActionType.RIGHTS_ISSUE, claim(
+                QualificationStatus.NOT_SUPPORTED, "TS-007"));
+        actions.put(CorporateActionType.SPLIT, claim(
+                QualificationStatus.NOT_SUPPORTED, "TS-007"));
+        actions.put(CorporateActionType.REVERSE_SPLIT, claim(
+                QualificationStatus.NOT_SUPPORTED, "TS-007"));
+        actions.put(CorporateActionType.CORRECTION, claim(
+                QualificationStatus.NOT_SUPPORTED, "TS-007"));
+        actions.put(CorporateActionType.WITHDRAWAL, claim(
+                QualificationStatus.NOT_SUPPORTED, "TS-007"));
 
         return assess(new AssessmentInput(
-                QualificationStatus.VERIFIED,
-                QualificationStatus.VERIFIED,
-                QualificationStatus.VERIFIED,
-                QualificationStatus.PARTIAL,
-                QualificationStatus.NOT_SUPPORTED,
-                QualificationStatus.NOT_SUPPORTED,
-                QualificationStatus.PARTIAL,
-                QualificationStatus.VERIFIED,
-                QualificationStatus.UNVERIFIED,
-                QualificationStatus.NOT_SUPPORTED,
+                claim(QualificationStatus.VERIFIED,
+                        "TS-004", "TS-PB-005", "TS-PB-006",
+                        "TS-F1A-001"),
+                claim(QualificationStatus.VERIFIED,
+                        "TS-005", "TS-PB-007", "TS-PB-008",
+                        "TS-F1A-001"),
+                claim(QualificationStatus.VERIFIED,
+                        "TS-006", "TS-PB-003", "TS-PB-004",
+                        "TS-F1A-001"),
                 actions,
-                evidence,
-                false,
-                false,
-                true,
-                true));
+                claim(QualificationStatus.NOT_SUPPORTED, "TS-007"),
+                claim(QualificationStatus.UNVERIFIED,
+                        "TS-005", "TS-007"),
+                claim(QualificationStatus.NOT_SUPPORTED,
+                        "TS-004", "TS-005", "TS-006", "TS-007",
+                        "TS-021"),
+                claim(QualificationStatus.NOT_SUPPORTED, "TS-021"),
+                claim(QualificationStatus.PARTIAL,
+                        "TS-009", "TS-018", "TS-019", "TS-020",
+                        "TS-PB-001", "TS-PB-002", "TS-F1A-002"),
+                claim(QualificationStatus.VERIFIED,
+                        "TS-005", "TS-008", "JAVA-QFQ-GOLDEN-V1"),
+                claim(QualificationStatus.PARTIAL,
+                        "JAVA-QFQ-AS-OF-ENGINE-V1",
+                        "JAVA-QFQ-GOLDEN-V1"),
+                claim(QualificationStatus.UNVERIFIED,
+                        "TS-004", "TS-005", "TS-PB-005", "TS-PB-006",
+                        "TS-PB-007", "TS-PB-008"),
+                claim(QualificationStatus.NOT_SUPPORTED,
+                        "TS-004", "TS-005", "TS-006", "TS-007",
+                        "TS-021"),
+                claim(QualificationStatus.VERIFIED,
+                        "TS-F1A-SYSTEM-KNOWLEDGE-CAPTURE"),
+                claim(QualificationStatus.VERIFIED,
+                        "TS-F1A-MANUAL-BOUNDED-SAFETY"),
+                claim(QualificationStatus.PARTIAL,
+                        "TS-003", "TS-004", "TS-009"),
+                claim(QualificationStatus.PARTIAL,
+                        "JAVA-F1A-PROCESS-RATE-LIMITER-V1"),
+                EndpointRateLimitQualification
+                        .PARTIAL_CONFLICT_IDENTIFIED,
+                QfqCalculationMode.RAW_FACTOR_END_DATE_ANCHORED,
+                QfqAnchorSemantics.REQUESTED_END_DATE_FACTOR));
     }
 
     public static TushareTechnicalQualification assess(
             AssessmentInput input
     ) {
         Objects.requireNonNull(input, "input");
-        Map<QualificationDimension, Set<String>> evidence =
-                normalizeEvidence(input.evidenceByDimension());
-
-        QualificationStatus raw = evidenceBacked(
-                input.rawDailyQualification(),
-                QualificationDimension.RAW_DAILY, evidence);
-        QualificationStatus factor = evidenceBacked(
-                input.adjustmentFactorQualification(),
-                QualificationDimension.ADJUSTMENT_FACTOR, evidence);
-        QualificationStatus calendar = evidenceBacked(
-                input.calendarQualification(),
-                QualificationDimension.TRADING_CALENDAR, evidence);
-        QualificationStatus action = evidenceBacked(
-                input.corporateActionQualification(),
-                QualificationDimension.CORPORATE_ACTION, evidence);
-        QualificationStatus revision = evidenceBacked(
-                input.revisionQualification(),
-                QualificationDimension.REVISION, evidence);
-        QualificationStatus versions = evidenceBacked(
-                input.historicalVersionQualification(),
-                QualificationDimension.HISTORICAL_VERSION, evidence);
-        QualificationStatus identity = evidenceBacked(
-                input.securityIdentityQualification(),
-                QualificationDimension.SECURITY_IDENTITY, evidence);
-        QualificationStatus qfq = evidenceBacked(
-                input.qfqQualification(),
-                QualificationDimension.QFQ, evidence);
-        QualificationStatus dailyExact = evidenceBacked(
-                input.fullHistoryDailyExactQualification(),
-                QualificationDimension.FULL_HISTORY_DAILY_EXACT, evidence);
-        QualificationStatus providerPit = evidenceBacked(
-                input.providerPitQualification(),
-                QualificationDimension.PROVIDER_PIT, evidence);
-
-        Map<CorporateActionType, QualificationStatus> actionCoverage =
-                normalizeActionCoverage(
-                        input.corporateActionCoverage(), evidence);
-        boolean actionLineageComplete =
-                action == QualificationStatus.VERIFIED
-                        && actionCoverage.values().stream().allMatch(
-                        value -> value == QualificationStatus.VERIFIED)
-                        && input.stableActionIdAvailable()
-                        && input.factorActionRelationshipVerified();
-        boolean permanentIdentity =
-                identity == QualificationStatus.VERIFIED;
-        boolean revisionAvailable =
-                revision == QualificationStatus.VERIFIED;
-        boolean versionsQueryable =
-                versions == QualificationStatus.VERIFIED;
-
-        boolean full = raw == QualificationStatus.VERIFIED
-                && factor == QualificationStatus.VERIFIED
-                && calendar == QualificationStatus.VERIFIED
-                && actionLineageComplete
-                && revisionAvailable
-                && versionsQueryable
-                && permanentIdentity
-                && qfq == QualificationStatus.VERIFIED
-                && dailyExact == QualificationStatus.VERIFIED
-                && providerPit == QualificationStatus.VERIFIED
-                && input.forwardSystemKnowledgePitBuildable()
-                && input.safetyBoundaryImplementable();
-        boolean reduced = !full
-                && raw == QualificationStatus.VERIFIED
-                && factor == QualificationStatus.VERIFIED
-                && calendar == QualificationStatus.VERIFIED
-                && qfq == QualificationStatus.VERIFIED
-                && input.forwardSystemKnowledgePitBuildable()
-                && input.safetyBoundaryImplementable();
-
-        RouteDecision decision = full
-                ? RouteDecision.FULL_F1_BUILDABLE
-                : reduced
-                ? RouteDecision.REDUCED_RESEARCH_ONLY
-                : RouteDecision.PROVIDER_ROUTE_REJECTED;
-        Set<TechnicalBlocker> blockers = blockers(
-                raw, factor, calendar, actionLineageComplete,
-                input.stableActionIdAvailable(),
-                input.factorActionRelationshipVerified(),
-                revisionAvailable, versionsQueryable, permanentIdentity,
-                dailyExact, providerPit,
-                input.forwardSystemKnowledgePitBuildable(),
-                input.safetyBoundaryImplementable());
-        Set<String> evidenceIds = new LinkedHashSet<>();
-        evidence.values().forEach(evidenceIds::addAll);
-
+        Set<QfqOperationalBlocker> qfqBlockers =
+                expectedQfqOperationalBlockers(
+                        input.qfqOperationalRuntimeClaim());
+        Set<EndpointRateLimitBlocker> endpointBlockers =
+                expectedEndpointRateLimitBlockers(
+                        input.endpointRateLimitQualification(),
+                        input.endpointRateLimitEnforcementClaim());
+        Set<TechnicalBlocker> blockers = expectedBlockers(
+                input.rawDailyClaim(),
+                input.adjustmentFactorClaim(),
+                input.calendarClaim(),
+                input.corporateActionClaims(),
+                input.stableActionIdClaim(),
+                input.factorActionRelationshipClaim(),
+                input.providerRevisionClaim(),
+                input.historicalVersionsClaim(),
+                input.permanentSecurityIdentityClaim(),
+                input.fullHistoryDailyExactClaim(),
+                input.providerPitClaim(),
+                input.forwardSystemKnowledgePitClaim(),
+                input.safetyBoundaryClaim(),
+                input.qfqOperationalRuntimeClaim(),
+                input.endpointRateLimitQualification(),
+                input.endpointRateLimitEnforcementClaim());
+        RouteDecision decision = expectedRoute(
+                input.rawDailyClaim(),
+                input.adjustmentFactorClaim(),
+                input.calendarClaim(),
+                input.corporateActionClaims(),
+                input.stableActionIdClaim(),
+                input.factorActionRelationshipClaim(),
+                input.providerRevisionClaim(),
+                input.historicalVersionsClaim(),
+                input.permanentSecurityIdentityClaim(),
+                input.qfqFormulaClaim(),
+                input.qfqOperationalRuntimeClaim(),
+                input.fullHistoryDailyExactClaim(),
+                input.providerPitClaim(),
+                input.forwardSystemKnowledgePitClaim(),
+                input.safetyBoundaryClaim(),
+                input.endpointRateLimitQualification(),
+                input.endpointRateLimitEnforcementClaim(),
+                blockers);
+        boolean reduced =
+                decision == RouteDecision.REDUCED_RESEARCH_ONLY;
+        boolean runtimeReady = reduced
+                && input.qfqOperationalRuntimeClaim().verified()
+                && input.endpointRateLimitQualification()
+                == EndpointRateLimitQualification.VERIFIED_CONSISTENT
+                && input.endpointRateLimitEnforcementClaim().verified()
+                && qfqBlockers.isEmpty()
+                && endpointBlockers.isEmpty();
         return new TushareTechnicalQualification(
                 decision,
-                raw,
-                factor,
-                calendar,
-                action,
-                revision,
-                versions,
-                identity,
-                qfq,
-                dailyExact,
-                providerPit,
-                actionCoverage,
-                evidenceIds,
+                input.rawDailyClaim(),
+                input.adjustmentFactorClaim(),
+                input.calendarClaim(),
+                input.corporateActionClaims(),
+                input.stableActionIdClaim(),
+                input.factorActionRelationshipClaim(),
+                input.providerRevisionClaim(),
+                input.historicalVersionsClaim(),
+                input.permanentSecurityIdentityClaim(),
+                input.qfqFormulaClaim(),
+                input.qfqOperationalRuntimeClaim(),
+                input.fullHistoryDailyExactClaim(),
+                input.providerPitClaim(),
+                input.forwardSystemKnowledgePitClaim(),
+                input.safetyBoundaryClaim(),
+                input.endpointRateLimitClaim(),
+                input.endpointRateLimitEnforcementClaim(),
+                input.endpointRateLimitQualification(),
                 blockers,
-                full,
+                qfqBlockers,
+                endpointBlockers,
+                decision == RouteDecision.FULL_F1_BUILDABLE,
                 reduced,
-                input.forwardSystemKnowledgePitBuildable(),
-                QfqCalculationMode.RAW_FACTOR_END_DATE_ANCHORED,
-                QfqAnchorSemantics.REQUESTED_END_DATE_FACTOR,
-                actionLineageComplete,
-                permanentIdentity,
-                revisionAvailable,
-                versionsQueryable);
+                runtimeReady,
+                input.qfqCalculationMode(),
+                input.qfqAnchorSemantics());
     }
 
-    /**
-     * Deterministic reduced-route calculation. Dividend evidence cannot enter
-     * this method and must never be used to derive or repair a factor.
-     */
-    public static List<ResearchQfqPoint> calculateReducedResearchQfq(
-            String rawProviderCode,
-            String factorProviderCode,
-            List<ResearchRawPrice> rawPrices,
-            Map<LocalDate, BigDecimal> factors,
-            LocalDate requestedEndDate
+    public QualificationStatus rawDailyQualification() {
+        return rawDailyClaim.status();
+    }
+
+    public QualificationStatus adjustmentFactorQualification() {
+        return adjustmentFactorClaim.status();
+    }
+
+    public QualificationStatus calendarQualification() {
+        return calendarClaim.status();
+    }
+
+    public QualificationStatus corporateActionQualification() {
+        Set<QualificationStatus> statuses = corporateActionClaims.values()
+                .stream()
+                .map(TechnicalClaim::status)
+                .collect(java.util.stream.Collectors.toSet());
+        if (statuses.size() == 1
+                && statuses.contains(QualificationStatus.VERIFIED)) {
+            return QualificationStatus.VERIFIED;
+        }
+        if (statuses.contains(QualificationStatus.VERIFIED)
+                || statuses.contains(QualificationStatus.PARTIAL)) {
+            return QualificationStatus.PARTIAL;
+        }
+        if (statuses.size() == 1
+                && statuses.contains(QualificationStatus.NOT_SUPPORTED)) {
+            return QualificationStatus.NOT_SUPPORTED;
+        }
+        if (statuses.contains(QualificationStatus.UNAVAILABLE)) {
+            return QualificationStatus.UNAVAILABLE;
+        }
+        return QualificationStatus.UNVERIFIED;
+    }
+
+    public QualificationStatus revisionQualification() {
+        return providerRevisionClaim.status();
+    }
+
+    public QualificationStatus historicalVersionQualification() {
+        return historicalVersionsClaim.status();
+    }
+
+    public QualificationStatus securityIdentityQualification() {
+        return permanentSecurityIdentityClaim.status();
+    }
+
+    public QualificationStatus qfqQualification() {
+        return qfqFormulaClaim.status();
+    }
+
+    public QualificationStatus qfqFormulaQualification() {
+        return qfqFormulaClaim.status();
+    }
+
+    public QualificationStatus qfqOperationalRuntimeQualification() {
+        return qfqOperationalRuntimeClaim.status();
+    }
+
+    public QualificationStatus fullHistoryDailyExactQualification() {
+        return fullHistoryDailyExactClaim.status();
+    }
+
+    public QualificationStatus providerPitQualification() {
+        return providerPitClaim.status();
+    }
+
+    public Map<CorporateActionType, QualificationStatus>
+    corporateActionCoverage() {
+        Map<CorporateActionType, QualificationStatus> result =
+                new EnumMap<>(CorporateActionType.class);
+        corporateActionClaims.forEach(
+                (type, claim) -> result.put(type, claim.status()));
+        return Map.copyOf(result);
+    }
+
+    public Set<String> evidenceIds() {
+        Set<String> result = new LinkedHashSet<>();
+        allClaims().forEach(claim -> result.addAll(claim.evidenceIds()));
+        return Set.copyOf(result);
+    }
+
+    public Set<String> endpointRateLimitEvidenceIds() {
+        Set<String> result = new LinkedHashSet<>(
+                endpointRateLimitClaim.evidenceIds());
+        result.addAll(endpointRateLimitEnforcementClaim.evidenceIds());
+        return Set.copyOf(result);
+    }
+
+    public boolean corporateActionLineageComplete() {
+        return allActionsIndependentlyVerified(corporateActionClaims)
+                && stableActionIdClaim.verified()
+                && factorActionRelationshipClaim.verified();
+    }
+
+    public boolean permanentSecurityIdentityVerified() {
+        return permanentSecurityIdentityClaim.verified();
+    }
+
+    public boolean providerRevisionAvailable() {
+        return providerRevisionClaim.verified();
+    }
+
+    public boolean historicalVersionsQueryable() {
+        return historicalVersionsClaim.verified();
+    }
+
+    public boolean forwardSystemKnowledgePitBuildable() {
+        return forwardSystemKnowledgePitClaim.verified();
+    }
+
+    public boolean endpointSpecificRateLimitEnforced() {
+        return endpointRateLimitEnforcementClaim.verified();
+    }
+
+    private Set<TechnicalClaim> allClaims() {
+        Set<TechnicalClaim> result = new LinkedHashSet<>();
+        result.add(rawDailyClaim);
+        result.add(adjustmentFactorClaim);
+        result.add(calendarClaim);
+        result.addAll(corporateActionClaims.values());
+        result.add(stableActionIdClaim);
+        result.add(factorActionRelationshipClaim);
+        result.add(providerRevisionClaim);
+        result.add(historicalVersionsClaim);
+        result.add(permanentSecurityIdentityClaim);
+        result.add(qfqFormulaClaim);
+        result.add(qfqOperationalRuntimeClaim);
+        result.add(fullHistoryDailyExactClaim);
+        result.add(providerPitClaim);
+        result.add(forwardSystemKnowledgePitClaim);
+        result.add(safetyBoundaryClaim);
+        result.add(endpointRateLimitClaim);
+        result.add(endpointRateLimitEnforcementClaim);
+        return Set.copyOf(result);
+    }
+
+    private static RouteDecision expectedRoute(
+            TechnicalClaim raw,
+            TechnicalClaim factor,
+            TechnicalClaim calendar,
+            Map<CorporateActionType, TechnicalClaim> actions,
+            TechnicalClaim stableActionId,
+            TechnicalClaim factorActionRelationship,
+            TechnicalClaim revision,
+            TechnicalClaim versions,
+            TechnicalClaim identity,
+            TechnicalClaim qfqFormula,
+            TechnicalClaim qfqRuntime,
+            TechnicalClaim dailyExact,
+            TechnicalClaim providerPit,
+            TechnicalClaim forwardPit,
+            TechnicalClaim safety,
+            EndpointRateLimitQualification endpointRateLimitQualification,
+            TechnicalClaim endpointRateLimitEnforcement,
+            Set<TechnicalBlocker> blockers
     ) {
-        if (!PROVIDER_CODE.equals(rawProviderCode)
-                || !PROVIDER_CODE.equals(factorProviderCode)
-                || !rawProviderCode.equals(factorProviderCode)) {
-            throw new IllegalArgumentException(
-                    "TUSHARE_QFQ_CROSS_PROVIDER_FORBIDDEN");
+        boolean core = raw.verified()
+                && factor.verified()
+                && calendar.verified()
+                && qfqFormula.verified()
+                && forwardPit.verified()
+                && safety.verified();
+        boolean full = core
+                && allActionsIndependentlyVerified(actions)
+                && stableActionId.verified()
+                && factorActionRelationship.verified()
+                && revision.verified()
+                && versions.verified()
+                && identity.verified()
+                && qfqRuntime.verified()
+                && dailyExact.verified()
+                && providerPit.verified()
+                && endpointRateLimitQualification
+                == EndpointRateLimitQualification.VERIFIED_CONSISTENT
+                && endpointRateLimitEnforcement.verified()
+                && blockers.isEmpty();
+        if (full) {
+            return RouteDecision.FULL_F1_BUILDABLE;
         }
-        Objects.requireNonNull(rawPrices, "rawPrices");
-        Objects.requireNonNull(factors, "factors");
-        Objects.requireNonNull(requestedEndDate, "requestedEndDate");
-        BigDecimal anchor = factors.get(requestedEndDate);
-        requirePositive(anchor, "TUSHARE_QFQ_ANCHOR_FACTOR_UNAVAILABLE");
-
-        Set<LocalDate> dates = new LinkedHashSet<>();
-        List<ResearchQfqPoint> result =
-                new ArrayList<>(rawPrices.size());
-        for (ResearchRawPrice raw : rawPrices) {
-            Objects.requireNonNull(raw, "rawPrice");
-            if (!dates.add(raw.tradeDate())) {
-                throw new IllegalArgumentException(
-                        "TUSHARE_QFQ_DUPLICATE_TRADE_DATE");
-            }
-            BigDecimal factor = factors.get(raw.tradeDate());
-            requirePositive(
-                    factor, "TUSHARE_QFQ_DAILY_FACTOR_UNAVAILABLE");
-            result.add(new ResearchQfqPoint(
-                    raw.tradeDate(),
-                    price(raw.rawPrice(), factor, anchor)));
+        if (core) {
+            return RouteDecision.REDUCED_RESEARCH_ONLY;
         }
-        return List.copyOf(result);
+        return RouteDecision.PROVIDER_ROUTE_REJECTED;
     }
 
-    private static BigDecimal price(
-            BigDecimal raw,
-            BigDecimal factor,
-            BigDecimal anchor
-    ) {
-        if (raw == null || raw.signum() <= 0) {
-            throw new IllegalArgumentException(
-                    "TUSHARE_QFQ_RAW_PRICE_INVALID");
-        }
-        requirePositive(factor, "TUSHARE_QFQ_FACTOR_INVALID");
-        requirePositive(anchor, "TUSHARE_QFQ_FACTOR_INVALID");
-        return raw.multiply(factor)
-                .divide(anchor, DIVISION_SCALE, RoundingMode.HALF_UP)
-                .setScale(PRICE_SCALE, RoundingMode.HALF_UP);
-    }
-
-    private static void requirePositive(
-            BigDecimal value,
-            String absentCode
-    ) {
-        if (value == null) {
-            throw new IllegalArgumentException(absentCode);
-        }
-        if (value.signum() <= 0) {
-            throw new IllegalArgumentException(
-                    "TUSHARE_QFQ_FACTOR_INVALID");
-        }
-    }
-
-    private static Set<TechnicalBlocker> blockers(
-            QualificationStatus raw,
-            QualificationStatus factor,
-            QualificationStatus calendar,
-            boolean actionLineageComplete,
-            boolean stableActionIdAvailable,
-            boolean factorActionRelationshipVerified,
-            boolean revisionAvailable,
-            boolean versionsQueryable,
-            boolean permanentIdentity,
-            QualificationStatus dailyExact,
-            QualificationStatus providerPit,
-            boolean forwardPit,
-            boolean safetyBoundary
+    private static Set<TechnicalBlocker> expectedBlockers(
+            TechnicalClaim raw,
+            TechnicalClaim factor,
+            TechnicalClaim calendar,
+            Map<CorporateActionType, TechnicalClaim> actions,
+            TechnicalClaim stableActionId,
+            TechnicalClaim factorActionRelationship,
+            TechnicalClaim revision,
+            TechnicalClaim versions,
+            TechnicalClaim identity,
+            TechnicalClaim dailyExact,
+            TechnicalClaim providerPit,
+            TechnicalClaim forwardPit,
+            TechnicalClaim safety,
+            TechnicalClaim qfqRuntime,
+            EndpointRateLimitQualification endpointRateLimitQualification,
+            TechnicalClaim endpointRateLimitEnforcement
     ) {
         Set<TechnicalBlocker> values =
                 EnumSet.noneOf(TechnicalBlocker.class);
-        if (raw != QualificationStatus.VERIFIED
-                || factor != QualificationStatus.VERIFIED
-                || calendar != QualificationStatus.VERIFIED) {
+        if (!raw.verified() || !factor.verified()
+                || !calendar.verified()) {
             values.add(TechnicalBlocker.CORE_FACT_CONTRACT_INCOMPLETE);
         }
-        if (!actionLineageComplete) {
+        if (!allActionsIndependentlyVerified(actions)
+                || !stableActionId.verified()
+                || !factorActionRelationship.verified()) {
             values.add(
                     TechnicalBlocker.CORPORATE_ACTION_LINEAGE_INCOMPLETE);
         }
-        if (!stableActionIdAvailable) {
+        if (!stableActionId.verified()) {
             values.add(TechnicalBlocker.STABLE_ACTION_ID_UNAVAILABLE);
         }
-        if (!factorActionRelationshipVerified) {
+        if (!factorActionRelationship.verified()) {
             values.add(
                     TechnicalBlocker.FACTOR_ACTION_RELATION_UNVERIFIED);
         }
-        if (!revisionAvailable) {
+        if (!revision.verified()) {
             values.add(TechnicalBlocker.PROVIDER_REVISION_UNAVAILABLE);
         }
-        if (!versionsQueryable) {
+        if (!versions.verified()) {
             values.add(
                     TechnicalBlocker.HISTORICAL_VERSIONS_NOT_QUERYABLE);
         }
-        if (!permanentIdentity) {
+        if (!identity.verified()) {
             values.add(
                     TechnicalBlocker.PERMANENT_SECURITY_IDENTITY_UNVERIFIED);
         }
-        if (dailyExact != QualificationStatus.VERIFIED) {
+        if (!dailyExact.verified()) {
             values.add(
                     TechnicalBlocker.FULL_HISTORY_DAILY_EXACT_UNVERIFIED);
         }
-        if (providerPit != QualificationStatus.VERIFIED) {
+        if (!providerPit.verified()) {
             values.add(TechnicalBlocker.PROVIDER_PIT_UNAVAILABLE);
         }
-        if (!forwardPit) {
+        if (!forwardPit.verified()) {
             values.add(
                     TechnicalBlocker.FORWARD_SYSTEM_KNOWLEDGE_PIT_UNAVAILABLE);
         }
-        if (!safetyBoundary) {
+        if (!safety.verified()) {
             values.add(
                     TechnicalBlocker.SAFETY_BOUNDARY_NOT_IMPLEMENTABLE);
+        }
+        if (!qfqRuntime.verified()) {
+            values.add(
+                    TechnicalBlocker.QFQ_OPERATIONAL_RUNTIME_INCOMPLETE);
+        }
+        if (endpointRateLimitQualification
+                != EndpointRateLimitQualification.VERIFIED_CONSISTENT) {
+            values.add(
+                    TechnicalBlocker.ENDPOINT_RATE_LIMIT_EVIDENCE_CONFLICT);
+        }
+        if (!endpointRateLimitEnforcement.verified()) {
+            values.add(
+                    TechnicalBlocker.ENDPOINT_SPECIFIC_RATE_LIMIT_NOT_ENFORCED);
         }
         return Set.copyOf(values);
     }
 
-    private static QualificationStatus evidenceBacked(
-            QualificationStatus status,
-            QualificationDimension dimension,
-            Map<QualificationDimension, Set<String>> evidence
-    ) {
-        QualificationStatus value = required(status, dimension.name());
-        if (value == QualificationStatus.VERIFIED
-                && evidence.getOrDefault(dimension, Set.of()).isEmpty()) {
-            return QualificationStatus.UNVERIFIED;
+    private static Set<QfqOperationalBlocker>
+    expectedQfqOperationalBlockers(TechnicalClaim runtimeClaim) {
+        if (runtimeClaim.verified()) {
+            return Set.of();
         }
-        return value;
+        return Set.of(QfqOperationalBlocker
+                .EXISTING_QFQ_ENGINE_REQUIRES_CORPORATE_ACTION_LINEAGE);
     }
 
-    private static Map<CorporateActionType, QualificationStatus>
-    normalizeActionCoverage(
-            Map<CorporateActionType, QualificationStatus> source,
-            Map<QualificationDimension, Set<String>> evidence
+    private static Set<EndpointRateLimitBlocker>
+    expectedEndpointRateLimitBlockers(
+            EndpointRateLimitQualification qualification,
+            TechnicalClaim enforcementClaim
     ) {
-        Objects.requireNonNull(source, "corporateActionCoverage");
+        Set<EndpointRateLimitBlocker> values =
+                EnumSet.noneOf(EndpointRateLimitBlocker.class);
+        if (qualification
+                == EndpointRateLimitQualification
+                .PARTIAL_CONFLICT_IDENTIFIED) {
+            values.add(EndpointRateLimitBlocker
+                    .GENERAL_AND_ENDPOINT_LIMITS_REQUIRE_CONSERVATIVE_MINIMUM);
+        } else if (qualification
+                == EndpointRateLimitQualification.UNVERIFIED) {
+            values.add(EndpointRateLimitBlocker
+                    .OFFICIAL_ENDPOINT_LIMITS_UNVERIFIED);
+        }
+        if (!enforcementClaim.verified()) {
+            values.add(EndpointRateLimitBlocker
+                    .ENDPOINT_SPECIFIC_LIMITER_NOT_IMPLEMENTED);
+        }
+        return Set.copyOf(values);
+    }
+
+    private static boolean allActionsIndependentlyVerified(
+            Map<CorporateActionType, TechnicalClaim> claims
+    ) {
+        if (!claims.keySet().equals(
+                EnumSet.allOf(CorporateActionType.class))) {
+            return false;
+        }
+        if (claims.values().stream().anyMatch(
+                claim -> !claim.verified()
+                        || claim.evidenceIds().isEmpty())) {
+            return false;
+        }
+        for (Map.Entry<CorporateActionType, TechnicalClaim> entry
+                : claims.entrySet()) {
+            Set<String> otherEvidence = new LinkedHashSet<>();
+            claims.forEach((type, claim) -> {
+                if (type != entry.getKey()) {
+                    otherEvidence.addAll(claim.evidenceIds());
+                }
+            });
+            if (entry.getValue().evidenceIds().stream()
+                    .allMatch(otherEvidence::contains)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static void validateEndpointRateLimitState(
+            EndpointRateLimitQualification qualification,
+            TechnicalClaim claim
+    ) {
+        QualificationStatus expectedStatus = switch (qualification) {
+            case VERIFIED_CONSISTENT -> QualificationStatus.VERIFIED;
+            case PARTIAL_CONFLICT_IDENTIFIED ->
+                    QualificationStatus.PARTIAL;
+            case UNVERIFIED -> QualificationStatus.UNVERIFIED;
+        };
+        if (claim.status() != expectedStatus) {
+            throw new IllegalArgumentException(
+                    "endpointRateLimitQualification contradicts claim");
+        }
+    }
+
+    private static Map<CorporateActionType, TechnicalClaim>
+    copyActionClaims(
+            Map<CorporateActionType, TechnicalClaim> source
+    ) {
+        Objects.requireNonNull(source, "corporateActionClaims");
         if (!source.keySet().equals(
                 EnumSet.allOf(CorporateActionType.class))) {
             throw new IllegalArgumentException(
-                    "All corporate-action types must be assessed");
+                    "All corporate-action types require a claim");
         }
-        Map<CorporateActionType, QualificationStatus> result =
+        Map<CorporateActionType, TechnicalClaim> result =
                 new EnumMap<>(CorporateActionType.class);
-        source.forEach((type, status) -> {
-            if (status == QualificationStatus.UNAVAILABLE) {
-                throw new IllegalArgumentException(
-                        "Corporate-action status must use VERIFIED, PARTIAL, "
-                                + "NOT_SUPPORTED, or UNVERIFIED");
-            }
-            result.put(
-                    type,
-                    evidenceBacked(
-                            status,
-                            QualificationDimension.CORPORATE_ACTION,
-                            evidence));
-        });
+        source.forEach((type, claim) -> result.put(
+                Objects.requireNonNull(type, "corporateActionType"),
+                required(claim, "corporateActionClaim")));
         return Map.copyOf(result);
     }
 
-    private static Map<QualificationDimension, Set<String>>
-    normalizeEvidence(
-            Map<QualificationDimension, Set<String>> source
-    ) {
-        Objects.requireNonNull(source, "evidenceByDimension");
-        Map<QualificationDimension, Set<String>> result =
-                new EnumMap<>(QualificationDimension.class);
-        source.forEach((dimension, ids) -> {
-            Objects.requireNonNull(dimension, "evidence dimension");
-            Set<String> normalized = new LinkedHashSet<>();
-            Objects.requireNonNull(ids, "evidence ids").forEach(id -> {
-                if (id == null || id.isBlank()) {
-                    throw new IllegalArgumentException(
-                            "Evidence IDs must not be blank");
-                }
-                normalized.add(id);
-            });
-            result.put(dimension, Set.copyOf(normalized));
-        });
-        return Map.copyOf(result);
-    }
-
-    private static QualificationStatus required(
-            QualificationStatus value,
+    private static TechnicalClaim required(
+            TechnicalClaim value,
             String name
     ) {
         return Objects.requireNonNull(value, name);
     }
 
+    private static TechnicalClaim claim(
+            QualificationStatus status,
+            String... evidenceIds
+    ) {
+        return new TechnicalClaim(status, Set.of(evidenceIds));
+    }
+
+    public record TechnicalClaim(
+            QualificationStatus status,
+            Set<String> evidenceIds
+    ) {
+        public TechnicalClaim {
+            status = Objects.requireNonNull(status, "status");
+            evidenceIds = Set.copyOf(Objects.requireNonNull(
+                    evidenceIds, "evidenceIds"));
+            if (evidenceIds.stream().anyMatch(
+                    id -> id == null || id.isBlank())) {
+                throw new IllegalArgumentException(
+                        "evidenceIds must not contain blanks");
+            }
+            if ((status == QualificationStatus.VERIFIED
+                    || status == QualificationStatus.PARTIAL)
+                    && evidenceIds.isEmpty()) {
+                throw new IllegalArgumentException(
+                        status + " claim requires evidence");
+            }
+        }
+
+        public boolean verified() {
+            return status == QualificationStatus.VERIFIED
+                    && !evidenceIds.isEmpty();
+        }
+    }
+
     public record AssessmentInput(
-            QualificationStatus rawDailyQualification,
-            QualificationStatus adjustmentFactorQualification,
-            QualificationStatus calendarQualification,
-            QualificationStatus corporateActionQualification,
-            QualificationStatus revisionQualification,
-            QualificationStatus historicalVersionQualification,
-            QualificationStatus securityIdentityQualification,
-            QualificationStatus qfqQualification,
-            QualificationStatus fullHistoryDailyExactQualification,
-            QualificationStatus providerPitQualification,
-            Map<CorporateActionType, QualificationStatus>
-                    corporateActionCoverage,
-            Map<QualificationDimension, Set<String>> evidenceByDimension,
-            boolean stableActionIdAvailable,
-            boolean factorActionRelationshipVerified,
-            boolean forwardSystemKnowledgePitBuildable,
-            boolean safetyBoundaryImplementable
+            TechnicalClaim rawDailyClaim,
+            TechnicalClaim adjustmentFactorClaim,
+            TechnicalClaim calendarClaim,
+            Map<CorporateActionType, TechnicalClaim>
+                    corporateActionClaims,
+            TechnicalClaim stableActionIdClaim,
+            TechnicalClaim factorActionRelationshipClaim,
+            TechnicalClaim providerRevisionClaim,
+            TechnicalClaim historicalVersionsClaim,
+            TechnicalClaim permanentSecurityIdentityClaim,
+            TechnicalClaim qfqFormulaClaim,
+            TechnicalClaim qfqOperationalRuntimeClaim,
+            TechnicalClaim fullHistoryDailyExactClaim,
+            TechnicalClaim providerPitClaim,
+            TechnicalClaim forwardSystemKnowledgePitClaim,
+            TechnicalClaim safetyBoundaryClaim,
+            TechnicalClaim endpointRateLimitClaim,
+            TechnicalClaim endpointRateLimitEnforcementClaim,
+            EndpointRateLimitQualification endpointRateLimitQualification,
+            QfqCalculationMode qfqCalculationMode,
+            QfqAnchorSemantics qfqAnchorSemantics
     ) {
         public AssessmentInput {
-            Objects.requireNonNull(
-                    corporateActionCoverage,
-                    "corporateActionCoverage");
-            Objects.requireNonNull(
-                    evidenceByDimension,
-                    "evidenceByDimension");
-        }
-    }
-
-    public record ResearchRawPrice(
-            LocalDate tradeDate,
-            BigDecimal rawPrice
-    ) {
-        public ResearchRawPrice {
-            Objects.requireNonNull(tradeDate, "tradeDate");
-            Objects.requireNonNull(rawPrice, "rawPrice");
-        }
-    }
-
-    public record ResearchQfqPoint(
-            LocalDate tradeDate,
-            BigDecimal qfqPrice
-    ) {
-        public ResearchQfqPoint {
-            Objects.requireNonNull(tradeDate, "tradeDate");
-            Objects.requireNonNull(qfqPrice, "qfqPrice");
+            rawDailyClaim = required(rawDailyClaim, "rawDailyClaim");
+            adjustmentFactorClaim = required(
+                    adjustmentFactorClaim, "adjustmentFactorClaim");
+            calendarClaim = required(calendarClaim, "calendarClaim");
+            corporateActionClaims = copyActionClaims(
+                    corporateActionClaims);
+            stableActionIdClaim = required(
+                    stableActionIdClaim, "stableActionIdClaim");
+            factorActionRelationshipClaim = required(
+                    factorActionRelationshipClaim,
+                    "factorActionRelationshipClaim");
+            providerRevisionClaim = required(
+                    providerRevisionClaim, "providerRevisionClaim");
+            historicalVersionsClaim = required(
+                    historicalVersionsClaim, "historicalVersionsClaim");
+            permanentSecurityIdentityClaim = required(
+                    permanentSecurityIdentityClaim,
+                    "permanentSecurityIdentityClaim");
+            qfqFormulaClaim = required(
+                    qfqFormulaClaim, "qfqFormulaClaim");
+            qfqOperationalRuntimeClaim = required(
+                    qfqOperationalRuntimeClaim,
+                    "qfqOperationalRuntimeClaim");
+            fullHistoryDailyExactClaim = required(
+                    fullHistoryDailyExactClaim,
+                    "fullHistoryDailyExactClaim");
+            providerPitClaim = required(
+                    providerPitClaim, "providerPitClaim");
+            forwardSystemKnowledgePitClaim = required(
+                    forwardSystemKnowledgePitClaim,
+                    "forwardSystemKnowledgePitClaim");
+            safetyBoundaryClaim = required(
+                    safetyBoundaryClaim, "safetyBoundaryClaim");
+            endpointRateLimitClaim = required(
+                    endpointRateLimitClaim, "endpointRateLimitClaim");
+            endpointRateLimitEnforcementClaim = required(
+                    endpointRateLimitEnforcementClaim,
+                    "endpointRateLimitEnforcementClaim");
+            endpointRateLimitQualification = Objects.requireNonNull(
+                    endpointRateLimitQualification,
+                    "endpointRateLimitQualification");
+            qfqCalculationMode = Objects.requireNonNull(
+                    qfqCalculationMode, "qfqCalculationMode");
+            qfqAnchorSemantics = Objects.requireNonNull(
+                    qfqAnchorSemantics, "qfqAnchorSemantics");
+            validateEndpointRateLimitState(
+                    endpointRateLimitQualification,
+                    endpointRateLimitClaim);
         }
     }
 
@@ -567,19 +846,6 @@ public record TushareTechnicalQualification(
         UNAVAILABLE,
         UNVERIFIED,
         NOT_SUPPORTED
-    }
-
-    public enum QualificationDimension {
-        RAW_DAILY,
-        ADJUSTMENT_FACTOR,
-        TRADING_CALENDAR,
-        CORPORATE_ACTION,
-        REVISION,
-        HISTORICAL_VERSION,
-        SECURITY_IDENTITY,
-        QFQ,
-        FULL_HISTORY_DAILY_EXACT,
-        PROVIDER_PIT
     }
 
     public enum CorporateActionType {
@@ -604,7 +870,26 @@ public record TushareTechnicalQualification(
         FULL_HISTORY_DAILY_EXACT_UNVERIFIED,
         PROVIDER_PIT_UNAVAILABLE,
         FORWARD_SYSTEM_KNOWLEDGE_PIT_UNAVAILABLE,
-        SAFETY_BOUNDARY_NOT_IMPLEMENTABLE
+        SAFETY_BOUNDARY_NOT_IMPLEMENTABLE,
+        QFQ_OPERATIONAL_RUNTIME_INCOMPLETE,
+        ENDPOINT_RATE_LIMIT_EVIDENCE_CONFLICT,
+        ENDPOINT_SPECIFIC_RATE_LIMIT_NOT_ENFORCED
+    }
+
+    public enum QfqOperationalBlocker {
+        EXISTING_QFQ_ENGINE_REQUIRES_CORPORATE_ACTION_LINEAGE
+    }
+
+    public enum EndpointRateLimitBlocker {
+        GENERAL_AND_ENDPOINT_LIMITS_REQUIRE_CONSERVATIVE_MINIMUM,
+        OFFICIAL_ENDPOINT_LIMITS_UNVERIFIED,
+        ENDPOINT_SPECIFIC_LIMITER_NOT_IMPLEMENTED
+    }
+
+    public enum EndpointRateLimitQualification {
+        VERIFIED_CONSISTENT,
+        PARTIAL_CONFLICT_IDENTIFIED,
+        UNVERIFIED
     }
 
     public enum QfqCalculationMode {

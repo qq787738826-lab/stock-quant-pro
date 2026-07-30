@@ -65,16 +65,30 @@ class TushareMarketFactProviderTest {
                 .path("fullTechnicalContractReady").asBoolean(true));
         assertTrue(capability.coverage()
                 .path("reducedResearchContractReady").asBoolean());
-        assertEquals("READY",
+        assertEquals("CONTRACT_DEFINED_RUNTIME_NOT_READY",
                 capability.coverage()
                         .path("tushareReducedResearchContract")
                         .asText());
+        assertFalse(capability.coverage()
+                .path("reducedResearchRuntimeReady").asBoolean(true));
         assertEquals("RAW_FACTOR_END_DATE_ANCHORED",
                 capability.coverage()
                         .path("qfqCalculationMode").asText());
         assertEquals("REQUESTED_END_DATE_FACTOR",
                 capability.coverage()
                         .path("qfqAnchorSemantics").asText());
+        assertEquals("VERIFIED",
+                capability.coverage()
+                        .path("qfqFormulaQualification").asText());
+        assertEquals("PARTIAL",
+                capability.coverage()
+                        .path("qfqOperationalRuntimeQualification")
+                        .asText());
+        assertEquals(
+                "EXISTING_QFQ_ENGINE_REQUIRES_CORPORATE_ACTION_LINEAGE",
+                capability.coverage()
+                        .path("qfqOperationalBlockers").path(0)
+                        .asText());
         assertFalse(capability.coverage()
                 .path("corporateActionLineageComplete")
                 .asBoolean(true));
@@ -96,6 +110,21 @@ class TushareMarketFactProviderTest {
         assertTrue(capability.coverage()
                 .path("forwardSystemKnowledgePitBuildable")
                 .asBoolean());
+        assertEquals("PARTIAL_CONFLICT_IDENTIFIED",
+                capability.coverage()
+                        .path("endpointRateLimitQualification")
+                        .asText());
+        assertEquals("PARTIAL_CONFLICT_IDENTIFIED",
+                capability.coverage()
+                        .path("officialEndpointRateLimits")
+                        .asText());
+        assertFalse(capability.coverage()
+                .path("endpointSpecificRateLimitEnforced")
+                .asBoolean(true));
+        assertTrue(capability.coverage()
+                .path("endpointRateLimitEvidenceIds").isArray());
+        assertTrue(capability.coverage()
+                .path("endpointRateLimitBlockers").isArray());
         assertEquals("ISSUER_IDENTITY_EVIDENCE",
                 capability.coverage()
                         .path("stockCompanyIdentityUse").asText());
@@ -189,6 +218,23 @@ class TushareMarketFactProviderTest {
         assertFalse(capability.rateLimit()
                 .path("distributedDailyQuotaCoordinated")
                 .asBoolean(true));
+        assertEquals("PARTIAL_CONFLICT_IDENTIFIED",
+                capability.rateLimit()
+                        .path("officialEndpointRateLimits").asText());
+        assertFalse(capability.rateLimit()
+                .path("endpointSpecificRateLimitEnforced")
+                .asBoolean(true));
+        assertEquals("MOST_CONSERVATIVE_MINIMUM",
+                capability.rateLimit()
+                        .path("applicableLimitSelection").asText());
+        assertEquals(50,
+                capability.rateLimit()
+                        .path("officialPerMinuteByEndpoint")
+                        .path("stock_basic").asInt());
+        assertEquals(500,
+                capability.rateLimit()
+                        .path("officialPerMinuteByEndpoint")
+                        .path("daily").asInt());
         assertFalse(capability.rateLimit().has("tokenLevelGlobal"));
         assertFalse(capability.toString().contains(TEST_TOKEN));
     }
