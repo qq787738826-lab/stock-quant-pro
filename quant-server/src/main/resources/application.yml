@@ -66,6 +66,16 @@ stockquant:
     ifind:
       enabled: false
       activation-gate: BLOCKED
+    tushare:
+      enabled: ${TUSHARE_MARKET_FACTS_ENABLED:false}
+      base-url: https://api.tushare.pro
+      token: ${TUSHARE_TOKEN:}
+      official-rate-limit-per-minute: 200
+      application-safe-limit-per-minute: 180
+      maximum-rate-limit-retries: 2
+      connect-timeout: 5s
+      read-timeout: 30s
+      retry-backoff: 1s
 logging:
   file:
     name: logs/quant-server.log

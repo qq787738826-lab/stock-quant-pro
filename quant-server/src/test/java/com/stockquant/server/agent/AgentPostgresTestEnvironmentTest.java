@@ -30,6 +30,22 @@ class AgentPostgresTestEnvironmentTest {
     }
 
     @Test
+    void acceptsOnlyTheFixedEphemeralLocalTestPort() {
+        AgentPostgresTestEnvironment.Credentials credentials =
+                AgentPostgresTestEnvironment.validate(
+                        AgentPostgresTestEnvironment.EPHEMERAL_LOCAL_URL,
+                        AgentPostgresTestEnvironment.REQUIRED_USERNAME,
+                        PASSWORD);
+
+        assertEquals(
+                AgentPostgresTestEnvironment.EPHEMERAL_LOCAL_URL,
+                credentials.url());
+        assertEquals(
+                AgentPostgresTestEnvironment.REQUIRED_USERNAME,
+                credentials.username());
+    }
+
+    @Test
     void rejectsPostgresDatabase() {
         assertRejected("jdbc:postgresql://127.0.0.1:5432/postgres", "stock_quant_test", PASSWORD);
     }

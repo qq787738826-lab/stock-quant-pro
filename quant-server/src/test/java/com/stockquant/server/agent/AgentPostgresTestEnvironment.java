@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -21,6 +22,8 @@ final class AgentPostgresTestEnvironment {
 
     static final String REQUIRED_URL =
             "jdbc:postgresql://127.0.0.1:5432/stock_quant_test";
+    static final String EPHEMERAL_LOCAL_URL =
+            "jdbc:postgresql://127.0.0.1:55432/stock_quant_test";
     static final String REQUIRED_USERNAME = "stock_quant_test";
     static final int PUBLIC_V6_CHECKSUM = -981595186;
     static final int PUBLIC_V12_CHECKSUM = -178798261;
@@ -70,7 +73,8 @@ final class AgentPostgresTestEnvironment {
             String username,
             String password
     ) {
-        if (!REQUIRED_URL.equals(url)) {
+        if (!Set.of(REQUIRED_URL, EPHEMERAL_LOCAL_URL)
+                .contains(url)) {
             throw new IllegalStateException(
                     "专用PostgreSQL测试库URL不符合安全要求");
         }

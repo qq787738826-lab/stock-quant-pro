@@ -6,8 +6,10 @@
 - Tushare 受控权限探针日期：`2026-07-30`
 - Tushare 探针执行时刻：`PROBE_EXECUTION_TIME=UNKNOWN`
 - B1 治理复核日期：`2026-07-30`
+- Tushare 有限个人用途书面许可与 F1A 受控联调日期：`2026-07-30`
 - 候选数量：精确为 3 个：BaoStock、Tushare Pro、同花顺 iFinD。
-- 本矩阵只使用 [Track B 证据登记册](track-b-provider-evidence-register.md) 中的官方资料、已经验收的 F0 直接 Provider 探针事实，以及 B1 固定范围 Tushare 受控权限探针事实。
+- 本矩阵只使用 [Track B 证据登记册](track-b-provider-evidence-register.md) 中的官方资料、已经验收的 F0 直接 Provider 探针事实、B1 固定范围 Tushare 受控权限探针事实、
+  Tushare 官方企业微信脱敏书面转录和 F1A 固定范围受控联调事实。
 - 不以搜索摘要、博客、论坛、第三方 GitHub、代理报价或未确认身份的聊天记录支撑结论。
 - “没有写禁止”不等于允许；许可不明确时使用 `PENDING_WRITTEN_CONFIRMATION` 或 `UNVERIFIED`。
 
@@ -23,11 +25,11 @@
 
 | 维度 | BaoStock | Tushare Pro | 同花顺 iFinD |
 |---|---|---|---|
-| 个人研究调用 | `PENDING_WRITTEN_CONFIRMATION`：无需注册和免费可用不等于取得具体数据用途许可（BS-001/002） | `VERIFIED_RESTRICTED`：现行数据服务协议限定个人、不可转让、非商业、可撤销、有期限，并写明仅供个人查看（TS-002） | `PENDING_WRITTEN_CONFIRMATION`：免费/试用/正式额度公开，但个人研究授权范围未公开（IF-001/002） |
-| 本地持久化 | `PENDING_WRITTEN_CONFIRMATION`（BS-002） | `PENDING_WRITTEN_CONFIRMATION`：官方技术文档建议本地缓存/保存，但现行协议“仅个人查看”，存在需要书面澄清的边界冲突（TS-002/015/016） | `PENDING_WRITTEN_CONFIRMATION`：接口可导出数据不等于长期落库权利（IF-003/004） |
-| 历史回放与回测 | `PENDING_WRITTEN_CONFIRMATION`（BS-002） | `PENDING_WRITTEN_CONFIRMATION`：官方 AI 文档给出回测工作流，合同适用范围仍需书面确认（TS-002/015） | `PENDING_WRITTEN_CONFIRMATION`：历史行情技术能力公开，回测授权未公开（IF-002/004） |
-| 内部智能体分析 | `PENDING_WRITTEN_CONFIRMATION`（BS-002） | `PENDING_WRITTEN_CONFIRMATION`：官方文档展示 AI/多智能体场景，但不能替代合同授权（TS-002/015） | `PENDING_WRITTEN_CONFIRMATION`：产品支持编程分析，内部 Agent 用途未公开授权（IF-002/003） |
-| 长期保存 | `PENDING_WRITTEN_CONFIRMATION` | `PENDING_WRITTEN_CONFIRMATION` | `PENDING_WRITTEN_CONFIRMATION` |
+| 个人研究调用 | `PENDING_WRITTEN_CONFIRMATION`：无需注册和免费可用不等于取得具体数据用途许可（BS-001/002） | `VERIFIED_RESTRICTED`：只限购买 2000 积分服务的用户本人、非商业用途；不得转让、共享账号或分发原始数据（TS-002/TS-WP-001） | `PENDING_WRITTEN_CONFIRMATION`：免费/试用/正式额度公开，但个人研究授权范围未公开（IF-001/002） |
+| 本地持久化 | `PENDING_WRITTEN_CONFIRMATION`（BS-002） | `VERIFIED_ALLOWED`：官方企业微信书面确认个人 2000 积分用户允许本地存储；仅限个人研究，服务到期后留存仍未验证（TS-WP-001） | `PENDING_WRITTEN_CONFIRMATION`：接口可导出数据不等于长期落库权利（IF-003/004） |
+| 历史回放与回测 | `PENDING_WRITTEN_CONFIRMATION`（BS-002） | `VERIFIED_ALLOWED`：官方企业微信书面确认允许策略回测；不构成收益、PIT 或数据完整性保证（TS-WP-001） | `PENDING_WRITTEN_CONFIRMATION`：历史行情技术能力公开，回测授权未公开（IF-002/004） |
+| 内部智能体分析 | `PENDING_WRITTEN_CONFIRMATION`（BS-002） | `VERIFIED_ALLOWED`：官方企业微信书面确认允许智能体分析；只限用户本人内部分析（TS-WP-001） | `PENDING_WRITTEN_CONFIRMATION`：产品支持编程分析，内部 Agent 用途未公开授权（IF-002/003） |
+| 长期保存 | `PENDING_WRITTEN_CONFIRMATION` | `VERIFIED_RESTRICTED`：当前个人服务期内本地存储已获允许；服务到期后的原始数据和衍生结果处理仍为 `UNVERIFIED` | `PENDING_WRITTEN_CONFIRMATION` |
 | 内部衍生指标 | `PENDING_WRITTEN_CONFIRMATION` | `PENDING_WRITTEN_CONFIRMATION` | `PENDING_WRITTEN_CONFIRMATION` |
 | 个人自建系统展示 | `PENDING_WRITTEN_CONFIRMATION` | `PENDING_WRITTEN_CONFIRMATION` | `PENDING_WRITTEN_CONFIRMATION` |
 | 二次分发限制 | `VERIFIED_RESTRICTED`：官网内容未经书面许可不得复制、传播或商业使用；API 数据适用范围仍需确认（BS-002） | `VERIFIED_RESTRICTED`：许可不可转让且仅限非商业个人使用（TS-002） | `PENDING_WRITTEN_CONFIRMATION`：数据接口专项授权和再分发限制需合同确认 |
@@ -39,7 +41,9 @@
 法律结论：
 
 - BaoStock：`PENDING_WRITTEN_CONFIRMATION`。免费访问和客户端许可不能替代底层数据用途许可。
-- Tushare Pro：`PENDING_WRITTEN_CONFIRMATION`。它是三者中用途资料最充分的候选，但现行合同的“个人查看”与官方本地缓存、回测、AI 示例之间需要书面消歧。
+- Tushare Pro：`VERIFIED_RESTRICTED`。TS-WP-001 已书面消歧本地存储、策略回测和
+  智能体分析；许可只覆盖购买 2000 积分服务的用户本人、非商业内部用途，不覆盖原始数据
+  再分发、Token/账号共享、商业数据服务或服务到期后留存。
 - iFinD：`PENDING_WRITTEN_CONFIRMATION`。专项 API 合同、个人购买、本地保存、试用留存和内部 Agent 权利均需正式报价/合同确认。
 
 ## 3. 技术事实能力
@@ -77,12 +81,15 @@
 | 候选 | V13/QFQ 状态 | 依据 | PIT 状态 | 依据 |
 |---|---|---|---|---|
 | BaoStock | `V13_LINEAGE_BLOCKED` | raw 可用，但独立因子结果、`DAILY_EXACT`、交易所日历身份、公司行动版本和用途许可均未满足；禁止跨来源补齐 | `PIT_PARTIAL` | 技术上可在获准后从真实首次捕获建立系统知识链，但当前本地保存/回放/Agent 权利未确认，也无 Provider revision |
-| Tushare Pro | `V13_LINEAGE_PARTIAL` | B1 已验证两证券、两日 raw/factor `DAILY_EXACT`、SSE/SZSE calendar、普通证券身份和 dividend 字段；公司行动完整范围/身份/解释关系、永久证券身份和合法存储/回测/Agent 用途尚未闭合 | `PIT_PARTIAL` | 技术上具备从首次真实捕获建立前向 PIT 的基础，但无公开历史 revision，且本地保存、重复捕获、历史回放、Agent、备份和服务终止后留存均待书面许可；B1 技术权限 PASS 不改变当前 PIT 资格 |
+| Tushare Pro | `V13_LINEAGE_PARTIAL` | B1 已验证两证券、两日 raw/factor `DAILY_EXACT`、SSE/SZSE calendar、普通证券身份和 dividend 字段；TS-WP-001 已允许有限个人本地存储、回测和 Agent；公司行动完整范围/身份/解释关系及永久证券身份仍未闭合 | `PIT_PARTIAL` | F1A 已能从首次真实捕获建立 `SYSTEM_KNOWLEDGE_PIT`，但无公开历史 revision，完整证据探针、备份/fixture 和服务到期后留存仍未闭合；不得升级为 Provider PIT |
 | 同花顺 iFinD | `V13_LINEAGE_UNVERIFIED` | 公共文档证明接口广度，但核心指标名、字段、四类事实是否同一授权、身份及事件关系只能在试用/书面材料中验证 | `PIT_UNVERIFIED` | 更新时点与复权语义有公开说明，但 revision/snapshot/published/effective/旧版本及留存权利均需试用和合同证据 |
 
 任何候选都未达到 `V13_LINEAGE_READY` 或 `PROVIDER_PIT_READY`。
 
-B1 的 `TUSHARE_2000_PERMISSION_PROBE=PASS` 只升级最小技术样例；完整 Track B 证据探针仍为 `PARTIAL_NOT_COMPLETE`。Provider 对最小自动 API 探针及响应留存/删除范围的书面许可均为 `UNVERIFIED`，完整合同法律前置为 `NOT_MET`，因此不得从技术 PASS 推导合法落库、用途许可、F1 READY 或正式门禁升级。
+B1 的 `TUSHARE_2000_PERMISSION_PROBE=PASS` 只升级最小技术样例；完整 Track B
+证据探针仍为 `PARTIAL_NOT_COMPLETE`。TS-WP-001 后续独立解决了有限个人用途的本地存储、
+策略回测和 Agent 分析许可，但不回溯满足 B1 完整证据探针的全部法律前置，也不解决
+公司行动、版本和永久身份技术缺口。
 
 ## 5. 加权评分
 
@@ -91,15 +98,15 @@ B1 的 `TUSHARE_2000_PERMISSION_PROBE=PASS` 只升级最小技术样例；完整
 | 候选 | 法律与用途 30% | V13/QFQ 25% | PIT/版本 15% | 覆盖/稳定 15% | 个人成本 10% | 接入复杂度 5% | 加权总分 |
 |---|---:|---:|---:|---:|---:|---:|---:|
 | BaoStock | 1.0 | 1.5 | 1.5 | 2.5 | 5.0 | 4.0 | **1.98** |
-| Tushare Pro | 2.0 | 3.5 | 2.0 | 3.5 | 4.5 | 4.0 | **2.95** |
+| Tushare Pro | 3.5 | 3.5 | 2.0 | 3.5 | 4.5 | 4.0 | **3.40** |
 | 同花顺 iFinD | 1.0 | 2.5 | 2.5 | 4.0 | 1.0 | 2.0 | **2.10** |
 
 评分解释：
 
-- Tushare Pro 重新计算过程：`2.0×30% + 3.5×25% + 2.0×15% + 3.5×15% + 4.5×10% + 4.0×5% = 0.600 + 0.875 + 0.300 + 0.525 + 0.450 + 0.200 = 2.950`。PIT/版本从 2.5 降为 2.0，原因是当前只能判 `PIT_PARTIAL`；覆盖/稳定性从 4.0 降为 3.5，原因是永久证券身份生命周期尚未验证。
-- B1 不重新调整加权分：最小样例消除了部分技术不确定性，但 `V13_LINEAGE_PARTIAL`、`PIT_PARTIAL`、稳定证券 ID `PARTIAL` 和书面许可状态均未升级；成本维度原本已经按官方 2000 积分价格计分。
+- Tushare Pro 当前计算过程：`3.5×30% + 3.5×25% + 2.0×15% + 3.5×15% + 4.5×10% + 4.0×5% = 1.050 + 0.875 + 0.300 + 0.525 + 0.450 + 0.200 = 3.400`。法律与用途因 TS-WP-001 从 2.0 升为 3.5；服务到期留存、再分发和完整探针前置仍未闭合，因此不取满分。PIT/版本仍为 2.0，覆盖/稳定仍为 3.5。
 - 调整后排名仍为 Tushare Pro、iFinD、BaoStock。Tushare Pro 不是因为需要维持主路线而反向调分，而是重新计算后仍以核心四事实、交易所日历、逐日因子、个人公开价格和 HTTP 接入形成最短的可验证闭环。
-- Tushare Pro 仍被硬门禁阻断：本地保存、回测、Agent、长期留存需书面确认，公司行动完整性和版本语义需样例。
+- Tushare Pro 的有限个人 Adapter 不再被本地保存、回测或 Agent 许可阻断；完整 F1 仍被
+  公司行动完整性、版本语义、永久身份和全历史 `DAILY_EXACT` 技术证据阻断。
 - iFinD 作为备用是因为其专业数据和多语言接口上限高于 BaoStock，但必须先取得报价、合同和试用字段证据；当前不启动试用。
 - BaoStock 免费但许可与核心 `DAILY_EXACT` 证据缺口会持续拖慢完整 V13/QFQ，保留为研究辅助，不作为正式备用路线。
 
@@ -108,7 +115,11 @@ B1 的 `TUSHARE_2000_PERMISSION_PROBE=PASS` 只升级最小技术样例；完整
 ```text
 TRACK_B_PRIMARY_ROUTE=LOW_COST_PROVIDER_FIRST
 TRACK_B_FALLBACK_ROUTE=IFIND
-F1_ENTRY_READINESS=BLOCKED_MULTIPLE
+F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE
 ```
 
-主要路线具体指 Tushare Pro。用户已开通 2000 积分且 B1 技术权限探针通过，但这不表示批准 Adapter、再次调用或开始 F1。备用路线具体指 iFinD，仅在 Tushare 书面许可或剩余技术合同不能满足 F1 时再进入专业付费路线决策；它不表示现在启动 15 天试用。
+主要路线具体指 Tushare Pro。用户已开通 2000 积分、B1 技术权限探针通过，且
+TS-WP-001 已书面允许有限个人本地存储、策略回测和 Agent 分析；因此
+`BLOCKED_WRITTEN_PERMISSION=RESOLVED`、`F1_LIMITED_PERSONAL_USE_IMPLEMENTATION=READY`，
+F1A 可实现缩小的真实 Adapter。备用路线仍为 iFinD，仅在剩余技术合同不能满足后续完整
+F1 时再进入专业付费路线决策；它不表示现在启动 15 天试用。

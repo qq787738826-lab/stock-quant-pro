@@ -187,3 +187,28 @@ IFIND_TRIAL_ACTIVATION_GATE=BLOCKED
 - 待 ChatGPT 基于实际 Git 提交验收。
 - 尚未合入集成分支。
 - 本治理阶段没有新增 Provider 调用、代码、数据库或服务变化。
+
+## 10. 合入与后续状态
+
+B1 提交链
+`39ec0411a10e1ea6ada9d34da4a20aee04382c92` →
+`d223fdf9ff997ca256f2d0f651c99542e817dfee`
+后来已通过 ChatGPT 实际 Git 最终复验，经用户批准纯 fast-forward 合入。上述第 7—9 节
+是 B1 完成时的历史状态。
+
+`2026-07-30`，Tushare 官方企业微信后续书面确认个人 2000 积分用户可以本地存储、策略
+回测和智能体分析。F1A 据此固定：
+
+```text
+WRITTEN_PERSONAL_LOCAL_STORAGE_PERMISSION=VERIFIED
+WRITTEN_PERSONAL_BACKTEST_PERMISSION=VERIFIED
+WRITTEN_PERSONAL_AGENT_ANALYSIS_PERMISSION=VERIFIED
+BLOCKED_WRITTEN_PERMISSION=RESOLVED
+F1_LIMITED_PERSONAL_USE_IMPLEMENTATION=READY
+F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE
+```
+
+该后续状态不把 B1 完整证据探针升级为完整成功，也不改变服务到期留存
+`UNVERIFIED`、原始数据再分发 `NOT_GRANTED`、`V13_LINEAGE_PARTIAL`、`PIT_PARTIAL`
+或稳定证券 ID `PARTIAL`。完整公司行动、版本、永久身份和全历史 `DAILY_EXACT` 仍是
+技术阻断。

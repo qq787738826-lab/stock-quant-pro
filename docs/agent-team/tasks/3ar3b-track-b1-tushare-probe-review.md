@@ -200,3 +200,25 @@ IFIND_TRIAL_ACTIVATION_GATE=BLOCKED
 9. 成本批准阻断已解除；
 10. 四项正式门禁保持不变；
 11. 本治理阶段没有新增 Provider 调用、代码或数据库变化。
+
+## 11. 后续 F1A 状态说明
+
+本节记录 B1 合入后的后续事实，不改写第 8 节所保留的 B1 时点历史状态。
+
+`2026-07-30`，Tushare 官方企业微信书面回复确认个人 2000 积分用户可以本地存储、
+策略回测和智能体分析。F1A 因而将有限个人用途状态更新为：
+
+```text
+WRITTEN_PERSONAL_LOCAL_STORAGE_PERMISSION=VERIFIED
+WRITTEN_PERSONAL_BACKTEST_PERMISSION=VERIFIED
+WRITTEN_PERSONAL_AGENT_ANALYSIS_PERMISSION=VERIFIED
+BLOCKED_WRITTEN_PERMISSION=RESOLVED
+F1_LIMITED_PERSONAL_USE_IMPLEMENTATION=READY
+F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE
+```
+
+该后续书面回复不改变 B1 完整证据探针的历史状态：
+`TRACK_B_FULL_EVIDENCE_PROBE_STATUS=PARTIAL_NOT_COMPLETE`、自动探针与响应留存书面许可仍为
+`UNVERIFIED`；服务到期留存仍未验证，原始数据再分发未获授权。F1A 只实现有限个人用途
+raw/factor/calendar Adapter，完整公司行动、版本、永久身份和全历史 `DAILY_EXACT` 继续受
+技术证据阻断。

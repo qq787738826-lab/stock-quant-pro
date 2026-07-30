@@ -6,12 +6,15 @@
 - 官方证据共 **28 条**：BaoStock 4 条、Tushare Pro 17 条、同花顺 iFinD 7 条。
 - 另有 1 条已经验收的 F0 直接 Provider 探针记录 `BS-005`；它不计入 28 条官方页面数量。
 - 另有 10 条 B1 Tushare 受控权限探针摘要 `TS-PB-001`—`TS-PB-010`；它们不计入官方页面数量，不包含完整响应或实际市场值。
+- 另有 1 条 Tushare 官方企业微信脱敏书面转录 `TS-WP-001` 和 1 条 F1A
+  受控联调记录 `TS-F1A-001`；原始截图、完整响应和个人信息均不进入 Git。
 - 证据等级：
   - `C1`：官方合同、服务协议或许可条款；
   - `P1`：官方价格、权限或额度页面；
   - `A1`：官方 API 数据字典/函数文档；
   - `A2`：官方产品、平台、FAQ、部署或案例文档；
   - `D1`：官方联系入口；
+  - `W1`：Provider 官方书面直接回复的脱敏文字转录；
   - `R1`：已经验收的直接 Provider 响应审计。
 - 搜索摘要只用于定位以下 URL；结论依据是对应官方页面，不使用博客、论坛、第三方 GitHub 或代理报价。
 
@@ -64,7 +67,39 @@
 | TS-PB-009 | `dividend` | `600000.SH` | `PASS` | 51 | 接口可调用，返回公告/登记/除权/实施及现金送转字段 | 不证明配股、拆并股、更正/撤回、稳定事件 ID 或 revision |
 | TS-PB-010 | `dividend` | `000001.SZ` | `PASS` | 53 | 同上 | 同上 |
 
-综合技术权限结论为 `TUSHARE_2000_PERMISSION_PROBE=PASS`。但执行前未取得 Provider 对最小自动 API 探针及临时响应、Hash、摘要、夹具保存/删除范围的书面答复，因此 `TRACK_B_FULL_EVIDENCE_PROBE_STATUS=PARTIAL_NOT_COMPLETE`、`TRACK_B_FULL_PROBE_LEGAL_PREREQUISITES=NOT_MET`、`WRITTEN_AUTOMATED_PROBE_PERMISSION=UNVERIFIED`、`WRITTEN_RESPONSE_RETENTION_PERMISSION=UNVERIFIED`。这不判定本次调用合法或违法，也不支持长期本地保存、回测、Agent、Provider PIT、F1 READY 或任何正式门禁升级。
+综合技术权限结论为 `TUSHARE_2000_PERMISSION_PROBE=PASS`。但执行前未取得 Provider 对最小自动 API 探针及临时响应、Hash、摘要、夹具保存/删除范围的书面答复，因此 `TRACK_B_FULL_EVIDENCE_PROBE_STATUS=PARTIAL_NOT_COMPLETE`、`TRACK_B_FULL_PROBE_LEGAL_PREREQUISITES=NOT_MET`、`WRITTEN_AUTOMATED_PROBE_PERMISSION=UNVERIFIED`、`WRITTEN_RESPONSE_RETENTION_PERMISSION=UNVERIFIED`。B1 技术权限证据本身不判定本次调用合法或违法，也不独立支持长期本地保存、回测、Agent、Provider PIT、F1 READY 或任何正式门禁升级；后续三项有限个人用途许可由独立书面证据 `TS-WP-001` 支持。
+
+### 3.2 Tushare 个人用途书面许可与 F1A 联调
+
+| evidenceId | 日期 | 来源/范围 | 等级 | 脱敏内容或结果 | 支持的结论 | 不支持的结论 |
+|---|---|---|---|---|---|---|
+| TS-WP-001 | `2026-07-30` | Tushare 官方企业微信书面文字回复 | W1 | 问：“个人2000积分数据服务用户的本地存储、策略回测和智能体分析都是允许的嘛”；答：“可以的” | 2000 积分个人用户的本地存储、策略回测和内部智能体分析得到官方书面允许 | 不支持原始数据再分发、商业数据服务、共享 Token/账号或服务到期后永久留存 |
+| TS-F1A-001 | `2026-07-30` | 两证券、两日、`daily/adj_factor/trade_cal`，精确 6 次、零重试 | R1 | 两只证券的三类响应均非空且日期范围合规；未保存完整响应、CSV、Token 或市场值 fixture | F1A Java HTTPS Adapter、字段映射和受控零重试路径可用 | 不支持公司行动闭环、revision、历史旧版本、永久证券身份或全历史 `DAILY_EXACT` |
+
+`TS-WP-001` 的规范化脱敏转录 SHA-256 为
+`f0a778d80b9f01cc100040ce3cb7648553eb9a60015da37fba26967128fece71`。
+原始截图不提交 Git；不记录联系人、微信 ID、头像、手机号、Token、账号或其他个人信息。
+
+据此，有限个人用途当前状态为：
+
+```text
+WRITTEN_PERSONAL_LOCAL_STORAGE_PERMISSION=VERIFIED
+WRITTEN_PERSONAL_BACKTEST_PERMISSION=VERIFIED
+WRITTEN_PERSONAL_AGENT_ANALYSIS_PERMISSION=VERIFIED
+BLOCKED_WRITTEN_PERMISSION=RESOLVED
+F1_LIMITED_PERSONAL_USE_IMPLEMENTATION=READY
+```
+
+上述结论不回溯改变 B1 完整证据探针在执行前的法律前置事实，故继续保持：
+
+```text
+POST_EXPIRY_DATA_RETENTION_PERMISSION=UNVERIFIED
+RAW_DATA_REDISTRIBUTION_PERMISSION=NOT_GRANTED
+TRACK_B_FULL_EVIDENCE_PROBE_STATUS=PARTIAL_NOT_COMPLETE
+TRACK_B_FULL_PROBE_LEGAL_PREREQUISITES=NOT_MET
+WRITTEN_AUTOMATED_PROBE_PERMISSION=UNVERIFIED
+WRITTEN_RESPONSE_RETENTION_PERMISSION=UNVERIFIED
+```
 
 ## 4. 同花顺 iFinD
 
@@ -80,7 +115,10 @@
 
 ## 5. 证据冲突与保守解释
 
-1. Tushare TS-015/TS-016 展示本地缓存、回测和 AI 用法，但 TS-002 是更高优先级的现行数据服务协议，并限定个人查看。故本阶段不把本地落库、回测或 Agent 判为 `VERIFIED_ALLOWED`，统一等待书面确认。
+1. Tushare TS-015/TS-016 展示本地缓存、回测和 AI 用法；TS-002 是现行协议。
+   后续官方书面直接回复 TS-WP-001 已对 2000 积分个人用户的本地存储、策略回测和
+   智能体分析作出允许答复，因此这三项有限个人用途升级为 `VERIFIED_ALLOWED`。
+   该答复不覆盖原始数据再分发、商业化或服务到期后留存。
 2. iFinD 公共文档证明接口和额度，不公开专项合同与价格；因此不以技术可导出推断长期保存和回测权利。
 3. BaoStock 公开免费与匿名访问不等于数据用途授权；BS-002 反而明确网站内容的复制/传播/商业使用需要书面许可。
 4. Provider 的更新时点或本地响应 Hash 都不是 revision、snapshot 或 providerPublishedAt。

@@ -168,9 +168,9 @@
 
 100. **Track B 主要路线固定为 Tushare Pro 低成本正式数据，备用路线固定为 iFinD**：正式选择为 `TRACK_B_PRIMARY_ROUTE=LOW_COST_PROVIDER_FIRST`，其具体候选是 Tushare Pro；备用选择为 `TRACK_B_FALLBACK_ROUTE=IFIND`。加权评分按法律与用途 30%、V13/QFQ 25%、PIT 15%、覆盖与稳定性 15%、个人成本 10%、接入复杂度 5%，BaoStock、Tushare Pro、iFinD 分别为 `1.98/5`、`2.95/5`、`2.10/5`。Tushare 六项分为 `2.0/3.5/2.0/3.5/4.5/4.0`，计算为 `0.600+0.875+0.300+0.525+0.450+0.200=2.950`；PIT/版本和覆盖/稳定性分别因当前 `PIT_PARTIAL` 与永久证券身份未验证而下调，排名仍为第一。评分只用于比较，硬性许可、同源事实、稳定身份、前向 PIT 与成本批准门禁优先。BaoStock 因用途许可、`DAILY_EXACT`、交易所日历身份和完整公司行动能力未解决，只保留免费研究辅助与书面许可候选角色，不作为当前备用路线。
 
-101. **Tushare Pro 当前只能取得 V13、PIT 与证券身份的部分资格**：官方文档已证明同平台提供未复权 `daily`、独立 `adj_factor`、SSE/SZSE `trade_cal`、`dividend`、`stock_basic`、停复牌、ST、指数行情/成分以及 HTTP/Python 接入；`pro_bar` 的 QFQ 会依赖查询结束日动态锚定，因此不得直接作为历史不可变事实。当前 `V13_LINEAGE_PARTIAL`、`PIT_PARTIAL`，稳定证券 ID 也只能为 `PARTIAL`：`ts_code` 带交易所后缀并贯穿核心接口，`stock_basic` 存在上市、退市和交易所字段，但永久 instrument identity、换码、迁板、重新上市及历史映射没有官方保证或样例。Provider 也没有公开历史 revision；本地保存、重复捕获、历史回放、Agent、备份和服务终止后留存仍待书面许可。许可通过并完成最小样例复核前，不得把 Tushare 写成当前可合法落库或 `FORWARD_PIT_BUILDABLE`；只有后续独立治理阶段才可讨论升级，且不得声明 `PROVIDER_PIT_READY`。
+101. **Tushare Pro 当前只能取得 V13、PIT 与证券身份的部分资格**：官方文档已证明同平台提供未复权 `daily`、独立 `adj_factor`、SSE/SZSE `trade_cal`、`dividend`、`stock_basic`、停复牌、ST、指数行情/成分以及 HTTP/Python 接入；`pro_bar` 的 QFQ 会依赖查询结束日动态锚定，因此不得直接作为历史不可变事实。当前 `V13_LINEAGE_PARTIAL`、`PIT_PARTIAL`，稳定证券 ID 也只能为 `PARTIAL`：`ts_code` 带交易所后缀并贯穿核心接口，`stock_basic` 存在上市、退市和交易所字段，但永久 instrument identity、换码、迁板、重新上市及历史映射没有官方保证或样例。Provider 也没有公开历史 revision。B0/B1 时点本地保存、回测和 Agent 用途仍待书面许可；F1A 获得官方有限个人用途书面回复后，只解除该缩小范围的许可阻断，不改变 V13、PIT 或稳定身份的部分状态。服务终止后留存仍未验证，原始数据再分发未获授权，且不得声明 `PROVIDER_PIT_READY`。
 
-102. **Tushare Pro 的服务协议与缓存、回测、AI 文档之间必须取得书面用途澄清**：官方服务协议把服务描述为个人、不可转让、非商业、可撤销、限时并仅供个人查看；官方缓存/回测/AI 文档同时展示本地缓存、回测和智能体使用路径。页面存在并不自动授予本项目长期本地持久化、历史回放、回测、内部 Agent、衍生指标或本地 UI 展示权。F1 前必须由官方书面确认上述具体用途、终止后的数据处理、禁止再分发边界与相应套餐；“页面没有禁止”不得解释为允许。
+102. **Tushare Pro 的服务协议与缓存、回测、AI 文档之间必须取得书面用途澄清**：官方服务协议把服务描述为个人、不可转让、非商业、可撤销、限时并仅供个人查看；官方缓存/回测/AI 文档同时展示本地缓存、回测和智能体使用路径。页面存在本身不授予用途。`2026-07-30` 官方企业微信已书面确认个人 2000 积分用户可以本地存储、策略回测和智能体分析，因此这三项有限个人用途按书面证据执行；服务终止后的数据处理和原始数据再分发仍分别为 `UNVERIFIED/NOT_GRANTED`。不得把该回复扩大为商业数据服务、第三方分发或完整 Provider 资格。
 
 103. **Track B0 时点的 F1 准入判断为三类多重阻断**：Track B0 固定 `F1_ENTRY_READINESS=BLOCKED_MULTIPLE`。当时阻断一是 Tushare Pro 本地持久化、回测、内部 Agent、长期保存和本地展示的书面许可；阻断二是公司行动完整性、`DAILY_EXACT` 实样、证券身份生命周期和修订/发布时间等技术证据；阻断三是官方 2000 积分个人价格虽已公开但用户当时尚未批准成本。B1 后续探针与成本复核可以缩小阻断组成，但 Track B0 合入本身始终不授权 F1。
 
@@ -186,6 +186,16 @@
 
 109. **Tushare 最低成本批准阻断解除，但专业付费升级决定不变**：用户已实际开通 2000 积分，受控探针证明权限生效；不记录订单号、手机号、支付渠道或其他隐私。因此 `BLOCKED_COST_APPROVAL` 不再是 Tushare F1 当前阻断。`PAID_PROVIDER_UPGRADE_DECISION=PENDING` 仍控制后续专业付费升级和 iFinD，不因本次低成本权限自动变为 `PROCEED`。
 
-110. **B1 后 F1 仍为两类多重阻断**：当前继续为 `F1_ENTRY_READINESS=BLOCKED_MULTIPLE`，但组成缩小为 `BLOCKED_WRITTEN_PERMISSION + BLOCKED_TECHNICAL_EVIDENCE`。书面许可必须覆盖本地长期保存、历史回放/回测、内部 Agent、派生指标、本地 UI、备份/脱敏 fixture 和服务到期数据处理；技术证据必须补齐公司行动完整范围和稳定身份、factor/action 关系、修订/版本语义及永久证券身份。全部完成后仍须用户单独批准 F1；B1、成本投入或技术权限 PASS 均不自动启动 Adapter、V13、F2B 或 F3。
+110. **B1 时点 F1 仍为两类多重阻断**：B1 合入时 `F1_ENTRY_READINESS=BLOCKED_MULTIPLE`，组成缩小为 `BLOCKED_WRITTEN_PERMISSION + BLOCKED_TECHNICAL_EVIDENCE`。这是探针治理完成时的历史状态；后续 F1A 官方书面回复已解决有限个人用途的本地存储、回测和内部 Agent 许可，当前状态由后续决策更新为 `BLOCKED_TECHNICAL_EVIDENCE`。B1、成本投入或技术权限 PASS 本身均不自动启动 Adapter、V13、F2B 或 F3。
 
 111. **B1 不改变正式门禁和后续阶段边界**：当前继续保持 `FREE_PRODUCT_PREVIEW_GATE=PASS`、`FREE_PROVIDER_VALIDATION_GATE=BLOCKED`、`PAID_PROVIDER_UPGRADE_DECISION=PENDING`、`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`。Tushare 累计真实业务请求为 10，本治理阶段新增 Provider 调用为 0，iFinD 调用为 0；正常业务库 V13 未执行，F1/F2B/F3、Day 002、scheduler、3A-R3B-1、3B、真实交易和自动交易均未启动或授权。
+
+112. **Tushare 官方书面回复解除有限个人用途许可阻断**：`2026-07-30`，用户通过 Tushare 官方企业微信询问“个人2000积分数据服务用户的本地存储、策略回测和智能体分析都是允许的嘛”，官方书面回复“可以的”。仓库只登记脱敏文字转录及其 SHA-256，不提交原始截图，也不记录联系人、微信 ID、头像、手机号、账号、Token 或其他个人信息。据此固定 `WRITTEN_PERSONAL_LOCAL_STORAGE_PERMISSION=VERIFIED`、`WRITTEN_PERSONAL_BACKTEST_PERMISSION=VERIFIED`、`WRITTEN_PERSONAL_AGENT_ANALYSIS_PERMISSION=VERIFIED`、`BLOCKED_WRITTEN_PERMISSION=RESOLVED`、`F1_LIMITED_PERSONAL_USE_IMPLEMENTATION=READY`；不采用“书面许可未通过但用户接受风险”的替代机制。用户不得转售或向第三方分发原始数据、共享 Token/账号或将数据服务商业化；`POST_EXPIRY_DATA_RETENTION_PERMISSION=UNVERIFIED`、`RAW_DATA_REDISTRIBUTION_PERMISSION=NOT_GRANTED`、`TRACK_B_FULL_EVIDENCE_PROBE_STATUS=PARTIAL_NOT_COMPLETE` 保持不变。
+
+113. **F1A 只实现 Tushare 有限个人用途 raw/factor/calendar Adapter**：F1A 允许真实 `daily`、`adj_factor` 和 SSE/SZSE `trade_cal` 进入 Provider 中立 DTO，并经既有 V13 捕获服务形成 `PROVIDER_CAPTURE/RESEARCH_ONLY/formalEligible=false/SYSTEM_KNOWLEDGE_ONLY` 的前向系统知识事实；来源身份分别为 `TUSHARE:SECURITY:<ts_code>`、`TUSHARE:ADJ_FACTOR:<ts_code>` 和 `TUSHARE:TRADE_CAL:<exchange>`。`dividend` 不足以证明完整公司行动、稳定 action ID 或 factor/action 关系，因此 F1A 不实现公司行动，不跨 Provider 拼接，不声明 `V13_LINEAGE_VERIFIED`、`PROVIDER_PIT_VERIFIED`、`STABLE_SECURITY_ID_VERIFIED` 或完整公司行动闭环。生产默认关闭，不提供 Controller、scheduler 或自动抓取入口，正常业务库不执行 V13。
+
+114. **Tushare 所有调用共享 Token 级全局安全限流**：官方当前调用限制记录为 `TUSHARE_OFFICIAL_RATE_LIMIT_PER_MINUTE=200`，应用安全限制固定为 `TUSHARE_APPLICATION_SAFE_LIMIT_PER_MINUTE=180`。所有 Endpoint、Agent、手动或未来允许的调用入口必须经过同一并发安全全局限流器，达到预算后等待下一窗口，禁止按入口拆额度或并发绕过；只记录不含 Token 的总调用数和逐 Endpoint 计数。受控验收禁止重试；正常运行仅允许有限、可配置的限流重试，默认最多 2 次，禁止无限重试。
+
+115. **F1 当前只剩技术证据阻断，有限实现不等于完整准入**：官方有限个人用途书面许可和 2000 积分成本阻断均已解除，因此当前固定 `F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE`。剩余缺口是公司行动完整覆盖、稳定 action ID、factor/action 解释关系、revision/snapshot/published/update 语义、历史旧版本、永久证券身份和全历史 `DAILY_EXACT`。这些缺口不阻止 F1A Adapter 与个人使用隔离联调，但继续保持 `V13_LINEAGE_PARTIAL`、`PIT_PARTIAL`、稳定证券 ID `PARTIAL`，也不自动启动 F2B、F3、Shadow、Day 002、scheduler、3A-R3B-1、3B 或交易。
+
+116. **F1A 受控联调不改变四项正式门禁**：F1A 只在固定两证券、固定两日和 raw/factor/calendar 三类 Endpoint 范围执行一次精确 6 请求、零重试联调；与 B1 累计后 Tushare 真实业务请求为 16，iFinD 为 0。当前继续保持 `FREE_PRODUCT_PREVIEW_GATE=PASS`、`FREE_PROVIDER_VALIDATION_GATE=BLOCKED`、`PAID_PROVIDER_UPGRADE_DECISION=PENDING`、`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`；正常业务库未访问，V13 未执行。

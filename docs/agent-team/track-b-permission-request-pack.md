@@ -4,7 +4,8 @@
 
 - 本文件只生成可由用户后续发送的中文模板；Codex 不发送邮件、不提交表单、不注册账号、不购买服务。
 - 应通过 [官方证据登记册](track-b-provider-evidence-register.md) 中的官方联系方式发送，并保存带日期、回复主体和完整上下文的书面答复。
-- 电话答复只能用于定位合同/邮箱；关键许可必须取得可归档的邮件、工单、合同或技术附件。
+- 电话答复只能用于定位合同/邮箱；关键许可必须取得可归档的邮件、工单、合同、技术附件，
+  或能够确认 Provider 官方主体的企业微信书面文字回复。
 - 回答必须适用于具体产品、账号等级、数据类别和用途，不能用“通常可以”替代。
 
 ## 2. BaoStock 模板
@@ -39,7 +40,9 @@ BaoStock 未书面回答前保持 `PENDING_WRITTEN_PERMISSION`，不进入 F1。
 
 ## 3. Tushare Pro 模板（主要路线）
 
-官方联系：`waditu@163.com`（TS-017），以及 Tushare 权限中心（TS-003）。应要求通过邮件、工单、订单附加条款或合同附件确认，不以群聊口头答复作为准入证据。
+官方联系：`waditu@163.com`（TS-017）、Tushare 权限中心（TS-003）和已确认的官方企业
+微信。`2026-07-30` 的官方企业微信书面回复已经解决 2000 积分个人用户的本地存储、
+策略回测和智能体分析三项有限用途；不以群聊口头答复或无法确认主体的截图作为证据。
 
 **主题：确认个人 Tushare Pro 账号用于本地 PIT 研究、回测与内部 Agent 的授权范围**
 
@@ -62,7 +65,19 @@ BaoStock 未书面回答前保持 `PENDING_WRITTEN_PERMISSION`，不进入 F1。
 >
 > 请逐项回答“允许/限制/不允许/需另购”，并注明适用账号等级、数据接口、合同版本和服务终止后的数据处理要求。谢谢。
 
-Tushare 只有在书面答复覆盖本地保存、回放/回测、Agent、长期留存，并且最小样例满足 F1 技术合同后，才可由用户另行批准 F1。
+当前答复状态：
+
+```text
+WRITTEN_PERSONAL_LOCAL_STORAGE_PERMISSION=VERIFIED
+WRITTEN_PERSONAL_BACKTEST_PERMISSION=VERIFIED
+WRITTEN_PERSONAL_AGENT_ANALYSIS_PERMISSION=VERIFIED
+POST_EXPIRY_DATA_RETENTION_PERMISSION=UNVERIFIED
+RAW_DATA_REDISTRIBUTION_PERMISSION=NOT_GRANTED
+```
+
+不再重复询问已经明确允许的三项用途。若后续需要扩大 F1A 范围，只继续询问服务到期后
+处理、备份/脱敏 fixture、公司行动完整性、事件身份、版本语义和永久证券身份；不得把
+有限个人用途答复解释为转售、第三方分发、共享 Token/账号或商业数据服务许可。
 
 ## 4. 同花顺 iFinD 模板（备用路线）
 
@@ -91,7 +106,8 @@ Tushare 只有在书面答复覆盖本地保存、回放/回测、Agent、长期
 
 以下形式才可以解除书面许可阻断：
 
-1. Provider 官方域名邮件、正式工单、盖章合同或可确认主体的技术/商务附件；
+1. Provider 官方域名邮件、正式工单、盖章合同、可确认主体的技术/商务附件，或可确认
+   Provider 官方主体的企业微信书面文字回复；
 2. 明确指向具体产品、账号等级、数据类别、用途和有效期；
 3. 对本地保存、回放/回测、内部 Agent、长期留存、终止后处理分别回答；
 4. 无“原则上”“一般可以”等无法执行的模糊词；存在限制时能落实为 V13 `usageQualification`；

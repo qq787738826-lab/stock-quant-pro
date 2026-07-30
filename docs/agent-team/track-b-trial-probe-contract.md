@@ -2,7 +2,12 @@
 
 ## 1. 适用范围
 
-本合同冻结 Track B 最小技术探针的一般边界。`2026-07-30` 已按用户专项授权执行 Tushare 2000 积分权限子集探针，精确执行时刻统一记录为 `PROBE_EXECUTION_TIME=UNKNOWN`。执行前没有取得本合同第 2、3 项 Provider 书面前置，因此该子集不是完整 Track B 证据探针，也没有完成 revision、稳定复取和全部用途许可验证。iFinD 探针仍未执行。
+本合同冻结 Track B 最小技术探针的一般边界。`2026-07-30` 已按用户专项授权执行
+Tushare 2000 积分权限子集探针，精确执行时刻统一记录为
+`PROBE_EXECUTION_TIME=UNKNOWN`。执行前没有取得本合同第 2、3 项 Provider 书面前置，
+因此该子集不是完整 Track B 证据探针，也没有完成 revision 或稳定复取。后续同日
+TS-WP-001 已书面允许有限个人本地存储、策略回测和智能体分析；它不回溯改变完整探针
+执行前的法律前置事实。iFinD 探针仍未执行。
 
 ```text
 MAX_BUSINESS_REQUESTS=10
@@ -118,16 +123,62 @@ B1 使用相同两只证券，将日期固定为 `20250102`、`20250103`，日�
 - 公司行动完整覆盖和稳定事件 ID；
 - factor/action 解释关系；
 - 永久证券身份；
-- 本地保存、回测、Agent、备份或服务到期留存许可。
+   - 在该次探针时点，本地保存、回测、Agent、备份或服务到期留存许可。
 
-## 7. 当前状态
+后续 TS-WP-001 已独立验证本地存储、策略回测和智能体分析；备份/脱敏 fixture 与服务
+到期留存仍未验证。
+
+## 7. F1A 受控 Adapter 联调
+
+F1A 在取得 TS-WP-001 后执行一次单独授权的 Adapter 联调，不重复 B1 十项探针：
+
+```text
+MAX_BUSINESS_REQUESTS=6
+MAX_SYMBOLS=2
+FACT_TYPES=RAW_DAILY_BAR,ADJUSTMENT_FACTOR,TRADING_CALENDAR
+QUERY_MODE=CONTROLLED_NO_RETRY
+RETRY_COUNT=0
+```
+
+固定范围：
+
+- `600000.SH` / SSE；
+- `000001.SZ` / SZSE；
+- `2025-01-06`—`2025-01-07`；
+- 每只证券分别执行 `daily`、`adj_factor`、`trade_cal`。
+
+结果：
+
+```text
+TUSHARE_F1A_CONTROLLED_INTEGRATION=PASS
+TUSHARE_F1A_REAL_BUSINESS_CALL_COUNT=6
+TUSHARE_F1A_RETRY_COUNT=0
+```
+
+完整响应、CSV、Token 和真实市场值 fixture 均未保存。联调只验证 Java Adapter 的
+HTTPS、映射和受控零重试路径；不验证公司行动、revision、旧版本、永久证券身份或全历史
+`DAILY_EXACT`。
+
+正常运行限流合同另固定为：
+
+```text
+TUSHARE_OFFICIAL_RATE_LIMIT_PER_MINUTE=200
+TUSHARE_APPLICATION_SAFE_LIMIT_PER_MINUTE=180
+TUSHARE_NORMAL_MAXIMUM_RATE_LIMIT_RETRIES=2
+```
+
+所有 Endpoint 和所有入口共享同一个 Token 级进程内全局限流器；达到安全预算后等待下一
+窗口，并发不能绕过。计数不记录 Token，禁止无限重试。
+
+## 8. 当前状态
 
 ```text
 PROBE_EXECUTION_DATE=2026-07-30
 PROBE_EXECUTION_TIME=UNKNOWN
 TUSHARE_2000_PERMISSION_PROBE=PASS
-TUSHARE_PROVIDER_REAL_BUSINESS_CALL_COUNT=10
+TUSHARE_PROVIDER_REAL_BUSINESS_CALL_COUNT=16
 TUSHARE_RETRY_COUNT=0
+TUSHARE_F1A_CONTROLLED_INTEGRATION=PASS
 TRACK_B_FULL_EVIDENCE_PROBE_STATUS=PARTIAL_NOT_COMPLETE
 TRACK_B_FULL_PROBE_LEGAL_PREREQUISITES=NOT_MET
 WRITTEN_AUTOMATED_PROBE_PERMISSION=UNVERIFIED

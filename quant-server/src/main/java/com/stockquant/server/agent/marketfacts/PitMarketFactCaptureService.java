@@ -161,8 +161,7 @@ public class PitMarketFactCaptureService {
                 switch (response.runNamespace()) {
                     case TEST -> "TEST_FIXTURE";
                     case DEMO -> "DEMO_FIXTURE";
-                    case FORMAL -> throw new IllegalArgumentException(
-                            "stage 3A-R3B-0 forbids FORMAL capture");
+                    case FORMAL -> "PROVIDER_CAPTURE";
                 },
                 response.requestedStart(), response.requestedEnd(),
                 stableObservedAt, stableObservedAt, response.complete(),
@@ -236,10 +235,6 @@ public class PitMarketFactCaptureService {
                 throw new IllegalArgumentException(
                         "provider capability response mismatch");
             }
-        }
-        if (response.runNamespace() == RunNamespace.FORMAL) {
-            throw new IllegalArgumentException(
-                    "stage 3A-R3B-0 forbids FORMAL provider capture");
         }
         if (!response.capability().localPersistenceAllowed()) {
             throw new IllegalArgumentException(
@@ -365,9 +360,37 @@ public class PitMarketFactCaptureService {
                 == RevisionQualification.PROVIDER_VERIFIED
                 ? AssuranceLevel.PROVIDER_PIT_VERIFIED
                 : AssuranceLevel.SYSTEM_KNOWLEDGE_PIT;
+        UsageQualification usageQualification;
+        boolean formalEligible;
+        if (response.runNamespace() == RunNamespace.FORMAL) {
+            JsonNode licensing = response.capability().licensing();
+            JsonNode usageNode = licensing.get("usageQualification");
+            JsonNode formalNode = licensing.get("formalEligible");
+            if (usageNode == null || !usageNode.isTextual()
+                    || formalNode == null || !formalNode.isBoolean()) {
+                throw new IllegalArgumentException(
+                        "formal provider licensing qualification is incomplete");
+            }
+            try {
+                usageQualification = UsageQualification.valueOf(
+                        usageNode.asText());
+            } catch (IllegalArgumentException error) {
+                throw new IllegalArgumentException(
+                        "formal provider usage qualification is invalid",
+                        error);
+            }
+            formalEligible = formalNode.booleanValue();
+            if (usageQualification == UsageQualification.TEST_DEMO_ONLY) {
+                throw new IllegalArgumentException(
+                        "formal provider cannot use TEST_DEMO_ONLY");
+            }
+        } else {
+            usageQualification = UsageQualification.TEST_DEMO_ONLY;
+            formalEligible = false;
+        }
         return new Qualification(
                 providerDatasetVersion, qualification, assurance,
-                UsageQualification.TEST_DEMO_ONLY, false);
+                usageQualification, formalEligible);
     }
 
     private List<TypedFact> sortedFacts(MarketFactResponse response) {

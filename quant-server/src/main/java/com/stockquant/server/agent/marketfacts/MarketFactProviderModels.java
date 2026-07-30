@@ -75,6 +75,7 @@ public final class MarketFactProviderModels {
 
     public enum ProviderErrorType {
         INVALID_REQUEST,
+        PERMISSION_DENIED,
         EMPTY,
         PARTIAL,
         RATE_LIMITED,

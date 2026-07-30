@@ -269,7 +269,7 @@
 - 既有规划状态：iFinD 里程碑规划提交 `23baf11ed3a236800b5f3feba8681d261a71d9f9` 已通过 ChatGPT 对实际 Git 提交的验收，并经用户批准纯 fast-forward 合入。精确验收和批准时间无仓库证据，记为 `UNKNOWN`。
 - 免费优先更新：最终提交 `c47b88e586f6751563fe210f40137a3b7ce5e576` 已通过 ChatGPT 对实际 Git 提交的验收，并经用户批准纯 fast-forward 合入。系统先用免费数据验证产品形态和效果；只有系统显示可重复使用价值、数据成为可量化主要瓶颈，且同范围免费/付费 A/B 方案和成本意愿均明确后，才考虑 iFinD 或其他付费 Provider。
 - 日期边界：iFinD 试用不得绑定 `2026-08-31`、2026 年 8 月 31 日或任何其他固定日期。日历日期只能作为非权威临时估算，不属于路线图依赖，不得因预计日期临近而降低验收标准。
-- 当前集成 HEAD：`284588242443af5ce03b468825f861b29ced5ad0`。当前状态：`F0_AUDIT_RESULT=PARTIAL`、`FREE_IMPLEMENTATION_PATH=RESEARCH_PREVIEW_FIRST`、`FREE_PRODUCT_PREVIEW_GATE=PASS`、`FREE_PROVIDER_VALIDATION_GATE=BLOCKED`、`PAID_PROVIDER_UPGRADE_DECISION=PENDING`、`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`。正常业务库 V13 未执行，iFinD 调用数为 0；Track A 与 Track B0 均已验收并纯 fast-forward 合入。用户已开通 Tushare 2000 积分，十项受控权限探针均 PASS；B1 治理记录已在任务分支完成，待实际 Git 验收且尚未合入。F1/F2B/F3 均未开始，Day 002 未创建，scheduler 关闭，3B 未开始。
+- 当前集成 HEAD：`d223fdf9ff997ca256f2d0f651c99542e817dfee`。当前状态：`F0_AUDIT_RESULT=PARTIAL`、`FREE_IMPLEMENTATION_PATH=RESEARCH_PREVIEW_FIRST`、`FREE_PRODUCT_PREVIEW_GATE=PASS`、`FREE_PROVIDER_VALIDATION_GATE=BLOCKED`、`PAID_PROVIDER_UPGRADE_DECISION=PENDING`、`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`。正常业务库 V13 未执行，iFinD 调用数为 0；Track A、Track B0 与 Track B1 均已验收并纯 fast-forward 合入。用户已开通 Tushare 2000 积分，十项 B1 受控权限探针均 PASS；后续官方书面确认有限个人用途的本地存储、回测和智能体分析。F1A 有限个人用途 Adapter 已在任务分支完成，待实际 Git 验收且尚未合入；完整 F1 仍受技术证据阻断，F2B/F3 均未开始，Day 002 未创建，scheduler 关闭，3B 未开始。
 
 #### 3A-R3B-0：Provider 中立离线闭环与试用准备（已完成并合入）
 
@@ -316,7 +316,7 @@
 - iFinD 定位：官方资料显示其 SDK/HTTP、数据覆盖和额度能力适合作为专业备用，但个人资格、授权、价格、V13 字段与 revision 语义必须由官方报价、书面许可和未来受控试用验证；Track A 通过不表示现在应启动 15 天试用。
 - 当前边界：B0 合入不自动授权 F1。四项正式门禁不变。
 
-#### 3A-R3B-TRACK-B1：Tushare 2000 积分受控权限探针与 F1 准入复核（任务分支已完成，待验收）
+#### 3A-R3B-TRACK-B1：Tushare 2000 积分受控权限探针与 F1 准入复核（已完成并合入）
 
 - 性质：只记录 `2026-07-30` 已完成的固定范围真实探针，并复核 F1；精确执行时刻固定为 `PROBE_EXECUTION_TIME=UNKNOWN`，不再次调用 Provider，不开发 Adapter，不访问数据库。
 - 交付：[B1任务书](tasks/3ar3b-track-b1-tushare-probe-review.md)和[B1阶段记录](stage-3ar3b-track-b1-tushare-probe-review.md)，并同步候选矩阵、证据登记册、成本模型、F1 准入合同和试用探针合同。
@@ -326,16 +326,26 @@
 - 技术升级：2000 积分核心接口权限、raw/factor/calendar/普通身份/dividend 字段和两证券两日 `DAILY_EXACT` 最小样例为 `VERIFIED`。
 - 保持部分：`V13_LINEAGE_PARTIAL`、`PIT_PARTIAL` 和稳定证券 ID `PARTIAL` 不变；公司行动完整覆盖/身份/解释关系、revision/snapshot/published/update/旧版本和永久证券身份仍未验证。
 - 成本复核：用户已开通 2000 积分，`BLOCKED_COST_APPROVAL` 解除；不记录支付隐私。`PAID_PROVIDER_UPGRADE_DECISION=PENDING` 继续控制后续专业付费升级和 iFinD。
-- F1 复核：`F1_ENTRY_READINESS=BLOCKED_MULTIPLE` 不变，但当前阻断从“书面许可 + 技术证据 + 成本批准”缩小为“书面许可 + 剩余技术证据”。
-- 当前边界：B1 治理任务待 ChatGPT 实际 Git 验收且尚未合入；本治理阶段新增 Provider 调用为 0，Tushare 累计真实业务请求为 10，iFinD 为 0。技术权限 PASS 不解除本地保存、回测、Agent、备份或到期留存阻断；后续扩大 Provider 调用前仍需独立授权和书面许可处理。F1 未获得实施授权。
+- B1 时点 F1 复核：`F1_ENTRY_READINESS=BLOCKED_MULTIPLE`，当时阻断从“书面许可 + 技术证据 + 成本批准”缩小为“书面许可 + 剩余技术证据”。这是 B1 的历史状态，后续 F1A 书面证据已再次复核。
+- 合入状态：提交链 `39ec0411a10e1ea6ada9d34da4a20aee04382c92` → `d223fdf9ff997ca256f2d0f651c99542e817dfee` 已通过 ChatGPT 实际 Git 最终复验，经用户批准纯 fast-forward 合入。本治理阶段新增 Provider 调用为 0，B1 时点 Tushare 累计真实业务请求为 10，iFinD 为 0。
 
-#### 3A-R3B-F1：选定 Provider Adapter 与 V13 接入（未开始）
+#### 3A-R3B-F1A：Tushare 有限个人用途 Adapter（任务分支已完成，待验收）
 
-- 启动条件：选定路线的个人研究调用、本地持久化、历史回放/回测、内部 Agent 使用、字段单位、稳定来源身份和成本边界必须明确；完整 QFQ 还必须解决独立 factor、`DAILY_EXACT`、交易所日历身份、公司行动身份和单 Provider lineage。F0 或 Track B0 调查完成均不自动满足这些条件。
+- 交付：[F1A 任务书](tasks/3ar3b-f1a-tushare-limited-personal-adapter.md)和[F1A 阶段记录](stage-3ar3b-f1a-tushare-limited-personal-adapter.md)。
+- 书面许可：`2026-07-30`，Tushare 官方企业微信书面回复确认个人 2000 积分用户可以本地存储、策略回测和智能体分析。原始截图不提交，只登记脱敏转录；因此 `WRITTEN_PERSONAL_LOCAL_STORAGE_PERMISSION=VERIFIED`、`WRITTEN_PERSONAL_BACKTEST_PERMISSION=VERIFIED`、`WRITTEN_PERSONAL_AGENT_ANALYSIS_PERMISSION=VERIFIED`、`BLOCKED_WRITTEN_PERMISSION=RESOLVED`、`F1_LIMITED_PERSONAL_USE_IMPLEMENTATION=READY`。服务到期留存仍为 `UNVERIFIED`，原始数据再分发为 `NOT_GRANTED`。
+- 实现范围：只实现 Tushare `daily`、`adj_factor`、SSE/SZSE `trade_cal` 到 Provider 中立 raw/factor/calendar DTO 和既有 V13 捕获服务；不实现公司行动，不声明完整 QFQ lineage。用途固定为 `RESEARCH_ONLY`、`formalEligible=false`、`SYSTEM_KNOWLEDGE_ONLY/SYSTEM_KNOWLEDGE_PIT`。
+- 运行边界：生产默认关闭，只能从运行时注入 Token；官方限额记录为 200 次/分钟，应用统一安全上限为 180 次/分钟。所有 Endpoint 和调用入口共享 Token 级全局并发安全限流器；普通限流重试默认最多 2 次，受控验收重试为 0，禁止无限重试。
+- 验证：一次固定两证券、三 Endpoint 的受控真实联调精确新增 6 次请求、重试为 0；随机隔离 PostgreSQL 16 Schema 从 V1 迁移到 V13，正常业务数据库和 public 未迁移。Tushare 累计真实业务请求为 16，iFinD 为 0。
+- 当前准入：`F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE`。剩余公司行动完整覆盖/稳定 action ID/factor-action 关系、revision/snapshot/published/update/旧版本、永久证券身份和全历史 `DAILY_EXACT`；继续保持 `V13_LINEAGE_PARTIAL`、`PIT_PARTIAL`、稳定证券 ID `PARTIAL`。这些缺口不阻止本阶段有限 Adapter 与个人用途隔离联调，但禁止升级为完整 lineage、Provider PIT 或永久身份资格。
+- 当前状态：F1A 技术实现与 Codex 本地验证已在 `codex/1.4.0-stage-3ar3b-f1a-tushare-adapter` 完成，待 ChatGPT 基于实际 Git 提交验收，尚未合入；不自动启动 F2B/F3、Shadow、scheduler、Day 002、3A-R3B-1、3B 或交易。
+
+#### 3A-R3B-F1：完整 Provider Adapter 与 V13 闭环（技术证据仍阻断）
+
+- 启动条件：有限个人用途的本地存储、回测和内部 Agent 书面许可已经满足；完整 QFQ 仍必须解决公司行动覆盖与身份、factor/action 关系、全历史 `DAILY_EXACT`、永久证券身份和单 Provider lineage。F1A 有限实现不自动满足完整 F1 条件。
 - 历史用途：`RESEARCH_HISTORICAL_UNVERIFIED` 仅用于产品、演示、探索性历史回测、覆盖研究和交叉校验；不声明 Provider PIT、历史无前视、正式商业资格或历史修订版本。
 - 前向用途：只有真实首次捕获之后，满足 append-only、`firstObservedAt`、`knownAt`、cutoff 和许可门禁的事实才能成为 `SYSTEM_KNOWLEDGE_PIT`；它不证明首次捕获前 Provider 的发布时间或修订。
 - 边界：不得把任一候选升级为 `PROVIDER_PIT_VERIFIED`，不得绕过 V13 用途许可、跨 Provider 拼接 QFQ、自动全市场抓取、开启 scheduler、创建 Day 002 或自动交易。
-- 当前阻断：`F1_ENTRY_READINESS=BLOCKED_MULTIPLE`。Tushare Pro 的最低成本和最小技术样例阻断已部分解除，但仍缺书面用途许可、完整公司行动/稳定事件身份/factor 解释关系、修订和历史版本语义及永久证券身份边界；BaoStock 继续为 `PENDING_WRITTEN_PERMISSION`，iFinD 仍需报价、授权和未来试用证据。三者均不得提升为 `APPROVED_ADAPTER`、`PROVIDER_PIT_VERIFIED` 或 `FORMAL`。
+- 当前阻断：`F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE`。Tushare Pro 的有限个人用途书面许可、最低成本和最小技术样例阻断已解除，但仍缺完整公司行动/稳定事件身份/factor 解释关系、修订和历史版本语义、永久证券身份边界及全历史 `DAILY_EXACT`；BaoStock 继续为 `PENDING_WRITTEN_PERMISSION`，iFinD 仍需报价、授权和未来试用证据。F1A 的 `PROVIDER_CAPTURE/RESEARCH_ONLY/formalEligible=false` 不得解释为 `PROVIDER_PIT_VERIFIED` 或完整 `FORMAL` 资格。
 
 #### 3A-R3B-F2A：免费研究预览产品（技术与用户产品形态验收均完成）
 
