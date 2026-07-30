@@ -125,6 +125,9 @@ Provider 技术事实继续只由上述 Tushare 官方页面和已验收的 B1/F
 | `TS-F1A-SYSTEM-KNOWLEDGE-CAPTURE` | F1A 类型化有限个人 FORMAL 捕获回归 | 指定三类事实可以形成隔离的 `SYSTEM_KNOWLEDGE_ONLY` 链 | 完整 F1、Provider PIT、正常业务库运行 |
 | `TS-F1A-MANUAL-BOUNDED-SAFETY` | F1A 显式会话预算回归 | 10 次会话边界与默认禁用可执行 | Endpoint 级长期频次限制已经实现 |
 | `JAVA-F1A-PROCESS-RATE-LIMITER-V1` | F1A 单进程共享限流回归 | 当前进程内共享 180 次/分钟与每日计数存在 | `stock_basic=50` 的 Endpoint 级限制或跨进程协调 |
+| `JAVA-F1C-ENDPOINT-RATE-POLICY-V1` | F1C Endpoint 策略与并发离线回归 | 五 Endpoint 使用保守较小值；全局分钟、Endpoint 分钟和 Endpoint 每日额度在单进程原子登记 | 官方频次冲突消失、跨进程或分布式 Token 协调 |
+| `JAVA-F1C-ISOLATED-RUNTIME-V1` | F1C 授权、守卫、三请求与公式级 QFQ 离线回归 | 随机隔离手工运行入口及失败前不捕获边界可执行 | 生产运行、正常业务库、完整 QFQ lineage、Agent/回测 |
+| `PG-F1C-ISOLATED-V13-V1` | PostgreSQL 16.13 临时实例随机 Schema V1—V13 回归 | raw/factor/calendar 捕获幂等、缩减 QFQ 不落库、public 指纹不变且残留为 0 | 正常业务数据库可用或 public 已执行 V13 |
 
 强资格必须使用 `TechnicalClaim(status,evidenceIds)`。八种公司行动分别持有 claim；
 一个泛化公司行动 evidenceId 不能覆盖全部类型，稳定 action ID、factor/action 关系、
@@ -138,11 +141,16 @@ GENERAL_2000_POINT_DAILY_LIMIT_PER_API=100000
 STOCK_BASIC_OFFICIAL_RATE_LIMIT_PER_MINUTE=50
 DAILY_OFFICIAL_RATE_LIMIT_PER_MINUTE=500
 OFFICIAL_ENDPOINT_RATE_LIMITS=PARTIAL_CONFLICT_IDENTIFIED
-ENDPOINT_SPECIFIC_RATE_LIMIT_ENFORCED=false
+ENDPOINT_SPECIFIC_RATE_LIMIT_ENFORCED=true
+CONSERVATIVE_ENDPOINT_MINIMUM_POLICY_ENFORCED=true
+DISTRIBUTED_RATE_LIMIT_COORDINATED=false
+DISTRIBUTED_DAILY_QUOTA_COORDINATED=false
 ```
 
-多个限制同时适用时取最保守的较小值。F1A 固定 10 请求仍安全，但当前单一 180 次/分钟
-实现不能证明长期 `stock_basic` 摄取安全；Endpoint 级限流必须由下一阶段实现。
+多个限制同时适用时取最保守的较小值。F1C 已在单进程内把 `stock_basic` 安全值设为
+45 次/分钟，把其余四 Endpoint 设为 180 次/分钟，并与全局 180 次/分钟、每 Endpoint
+每日 90000 次原子登记。该本地实现证据不改变官方页面之间的
+`PARTIAL_CONFLICT_IDENTIFIED`，也不证明多进程或分布式协调。
 
 ## 4. 同花顺 iFinD
 

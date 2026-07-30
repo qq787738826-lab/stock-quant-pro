@@ -65,12 +65,23 @@ class TushareMarketFactProviderTest {
                 .path("fullTechnicalContractReady").asBoolean(true));
         assertTrue(capability.coverage()
                 .path("reducedResearchContractReady").asBoolean());
-        assertEquals("CONTRACT_DEFINED_RUNTIME_NOT_READY",
+        assertEquals("CONTRACT_DEFINED_ISOLATED_MANUAL_READY",
                 capability.coverage()
                         .path("tushareReducedResearchContract")
                         .asText());
         assertFalse(capability.coverage()
                 .path("reducedResearchRuntimeReady").asBoolean(true));
+        assertTrue(capability.coverage()
+                .path("reducedResearchIsolatedManualRuntimeReady")
+                .asBoolean());
+        assertFalse(capability.coverage()
+                .path("reducedResearchProductionRuntimeReady")
+                .asBoolean(true));
+        assertFalse(capability.coverage()
+                .path("normalBusinessDatabaseRuntimeReady")
+                .asBoolean(true));
+        assertFalse(capability.coverage()
+                .path("schedulerRuntimeReady").asBoolean(true));
         assertEquals("RAW_FACTOR_END_DATE_ANCHORED",
                 capability.coverage()
                         .path("qfqCalculationMode").asText());
@@ -83,6 +94,14 @@ class TushareMarketFactProviderTest {
         assertEquals("PARTIAL",
                 capability.coverage()
                         .path("qfqOperationalRuntimeQualification")
+                        .asText());
+        assertEquals("VERIFIED",
+                capability.coverage()
+                        .path("qfqReducedResearchRuntimeQualification")
+                        .asText());
+        assertEquals("PARTIAL",
+                capability.coverage()
+                        .path("qfqFullLineageRuntimeQualification")
                         .asText());
         assertEquals(
                 "EXISTING_QFQ_ENGINE_REQUIRES_CORPORATE_ACTION_LINEAGE",
@@ -118,9 +137,14 @@ class TushareMarketFactProviderTest {
                 capability.coverage()
                         .path("officialEndpointRateLimits")
                         .asText());
-        assertFalse(capability.coverage()
+        assertTrue(capability.coverage()
                 .path("endpointSpecificRateLimitEnforced")
-                .asBoolean(true));
+                .asBoolean());
+        assertTrue(capability.coverage()
+                .path("conservativeEndpointMinimumPolicyEnforced")
+                .asBoolean());
+        assertTrue(capability.coverage()
+                .path("isolatedSchemaGuardVerified").asBoolean());
         assertTrue(capability.coverage()
                 .path("endpointRateLimitEvidenceIds").isArray());
         assertTrue(capability.coverage()
@@ -221,9 +245,12 @@ class TushareMarketFactProviderTest {
         assertEquals("PARTIAL_CONFLICT_IDENTIFIED",
                 capability.rateLimit()
                         .path("officialEndpointRateLimits").asText());
-        assertFalse(capability.rateLimit()
+        assertTrue(capability.rateLimit()
                 .path("endpointSpecificRateLimitEnforced")
-                .asBoolean(true));
+                .asBoolean());
+        assertTrue(capability.rateLimit()
+                .path("conservativeEndpointMinimumPolicyEnforced")
+                .asBoolean());
         assertEquals("MOST_CONSERVATIVE_MINIMUM",
                 capability.rateLimit()
                         .path("applicableLimitSelection").asText());
@@ -235,6 +262,16 @@ class TushareMarketFactProviderTest {
                 capability.rateLimit()
                         .path("officialPerMinuteByEndpoint")
                         .path("daily").asInt());
+        assertEquals(45,
+                capability.rateLimit()
+                        .path("applicationSafePerMinuteByEndpoint")
+                        .path("stock_basic").asInt());
+        assertEquals(180,
+                capability.rateLimit()
+                        .path("applicationSafePerMinuteByEndpoint")
+                        .path("daily").asInt());
+        assertFalse(capability.rateLimit()
+                .path("distributedCoordination").asBoolean(true));
         assertFalse(capability.rateLimit().has("tokenLevelGlobal"));
         assertFalse(capability.toString().contains(TEST_TOKEN));
     }

@@ -49,12 +49,22 @@ class TushareTechnicalQualificationTest {
         assertFalse(actual.fullTechnicalContractReady());
         assertTrue(actual.reducedResearchContractReady());
         assertFalse(actual.reducedResearchRuntimeReady());
+        assertTrue(actual.reducedResearchIsolatedManualRuntimeReady());
+        assertFalse(actual.reducedResearchProductionRuntimeReady());
+        assertFalse(actual.normalBusinessDatabaseRuntimeReady());
+        assertFalse(actual.schedulerRuntimeReady());
         assertEquals(
                 QualificationStatus.VERIFIED,
                 actual.qfqFormulaQualification());
         assertEquals(
+                QualificationStatus.VERIFIED,
+                actual.qfqReducedResearchRuntimeQualification());
+        assertEquals(
                 QualificationStatus.PARTIAL,
                 actual.qfqOperationalRuntimeQualification());
+        assertEquals(
+                QualificationStatus.PARTIAL,
+                actual.qfqFullLineageRuntimeQualification());
         assertEquals(
                 Set.of(QfqOperationalBlocker
                         .EXISTING_QFQ_ENGINE_REQUIRES_CORPORATE_ACTION_LINEAGE),
@@ -63,14 +73,12 @@ class TushareTechnicalQualificationTest {
                 EndpointRateLimitQualification
                         .PARTIAL_CONFLICT_IDENTIFIED,
                 actual.endpointRateLimitQualification());
-        assertFalse(actual.endpointSpecificRateLimitEnforced());
+        assertTrue(actual.endpointSpecificRateLimitEnforced());
+        assertTrue(actual.conservativeEndpointMinimumPolicyEnforced());
+        assertTrue(actual.isolatedSchemaGuardVerified());
         assertTrue(actual.endpointRateLimitEvidenceIds().containsAll(
                 Set.of("TS-003", "TS-004", "TS-009")));
-        assertTrue(actual.endpointRateLimitBlockers().containsAll(Set.of(
-                EndpointRateLimitBlocker
-                        .GENERAL_AND_ENDPOINT_LIMITS_REQUIRE_CONSERVATIVE_MINIMUM,
-                EndpointRateLimitBlocker
-                        .ENDPOINT_SPECIFIC_LIMITER_NOT_IMPLEMENTED)));
+        assertTrue(actual.endpointRateLimitBlockers().isEmpty());
         assertTrue(actual.forwardSystemKnowledgePitBuildable());
         assertEquals(
                 QualificationStatus.PARTIAL,
@@ -97,9 +105,7 @@ class TushareTechnicalQualificationTest {
                 TechnicalBlocker.FULL_HISTORY_DAILY_EXACT_UNVERIFIED,
                 TechnicalBlocker.PROVIDER_PIT_UNAVAILABLE,
                 TechnicalBlocker.QFQ_OPERATIONAL_RUNTIME_INCOMPLETE,
-                TechnicalBlocker.ENDPOINT_RATE_LIMIT_EVIDENCE_CONFLICT,
-                TechnicalBlocker
-                        .ENDPOINT_SPECIFIC_RATE_LIMIT_NOT_ENFORCED)));
+                TechnicalBlocker.ENDPOINT_RATE_LIMIT_EVIDENCE_CONFLICT)));
     }
 
     @Test
@@ -476,13 +482,17 @@ class TushareTechnicalQualificationTest {
                 verified("HISTORICAL-VERSIONS"),
                 verified("PERMANENT-IDENTITY"),
                 verified("QFQ-FORMULA"),
-                verified("QFQ-RUNTIME"),
+                verified("QFQ-REDUCED-RUNTIME"),
+                verified("QFQ-FULL-RUNTIME"),
                 verified("FULL-HISTORY-DAILY-EXACT"),
                 verified("PROVIDER-PIT"),
                 verified("FORWARD-PIT"),
                 verified("SAFETY"),
                 verified("ENDPOINT-RATE-EVIDENCE"),
+                verified("ENDPOINT-CONSERVATIVE-MINIMUM"),
                 verified("ENDPOINT-RATE-ENFORCEMENT"),
+                verified("ISOLATED-MANUAL-RUNTIME"),
+                verified("ISOLATED-SCHEMA-GUARD"),
                 EndpointRateLimitQualification.VERIFIED_CONSISTENT,
                 QfqCalculationMode.RAW_FACTOR_END_DATE_ANCHORED,
                 QfqAnchorSemantics.REQUESTED_END_DATE_FACTOR);
@@ -512,13 +522,17 @@ class TushareTechnicalQualificationTest {
                 source.historicalVersionsClaim(),
                 source.permanentSecurityIdentityClaim(),
                 source.qfqFormulaClaim(),
-                source.qfqOperationalRuntimeClaim(),
+                source.qfqReducedResearchRuntimeClaim(),
+                source.qfqFullLineageRuntimeClaim(),
                 source.fullHistoryDailyExactClaim(),
                 source.providerPitClaim(),
                 source.forwardSystemKnowledgePitClaim(),
                 source.safetyBoundaryClaim(),
                 source.endpointRateLimitClaim(),
-                source.endpointRateLimitEnforcementClaim(),
+                source.endpointConservativeMinimumPolicyClaim(),
+                source.endpointSpecificRateLimitEnforcementClaim(),
+                source.reducedResearchIsolatedManualRuntimeClaim(),
+                source.isolatedSchemaGuardClaim(),
                 source.endpointRateLimitQualification(),
                 source.qfqCalculationMode(),
                 source.qfqAnchorSemantics());
@@ -541,13 +555,17 @@ class TushareTechnicalQualificationTest {
                 source.historicalVersionsClaim(),
                 source.permanentSecurityIdentityClaim(),
                 source.qfqFormulaClaim(),
-                source.qfqOperationalRuntimeClaim(),
+                source.qfqReducedResearchRuntimeClaim(),
+                source.qfqFullLineageRuntimeClaim(),
                 source.fullHistoryDailyExactClaim(),
                 source.providerPitClaim(),
                 source.forwardSystemKnowledgePitClaim(),
                 source.safetyBoundaryClaim(),
                 source.endpointRateLimitClaim(),
-                source.endpointRateLimitEnforcementClaim(),
+                source.endpointConservativeMinimumPolicyClaim(),
+                source.endpointSpecificRateLimitEnforcementClaim(),
+                source.reducedResearchIsolatedManualRuntimeClaim(),
+                source.isolatedSchemaGuardClaim(),
                 source.endpointRateLimitQualification(),
                 source.qfqCalculationMode(),
                 source.qfqAnchorSemantics());
@@ -574,13 +592,17 @@ class TushareTechnicalQualificationTest {
                 source.historicalVersionsClaim(),
                 source.permanentSecurityIdentityClaim(),
                 source.qfqFormulaClaim(),
-                source.qfqOperationalRuntimeClaim(),
+                source.qfqReducedResearchRuntimeClaim(),
+                source.qfqFullLineageRuntimeClaim(),
                 source.fullHistoryDailyExactClaim(),
                 source.providerPitClaim(),
                 source.forwardSystemKnowledgePitClaim(),
                 source.safetyBoundaryClaim(),
                 source.endpointRateLimitClaim(),
-                source.endpointRateLimitEnforcementClaim(),
+                source.endpointConservativeMinimumPolicyClaim(),
+                source.endpointSpecificRateLimitEnforcementClaim(),
+                source.reducedResearchIsolatedManualRuntimeClaim(),
+                source.isolatedSchemaGuardClaim(),
                 source.endpointRateLimitQualification(),
                 blockers,
                 source.qfqOperationalBlockers(),
@@ -588,6 +610,10 @@ class TushareTechnicalQualificationTest {
                 fullReady,
                 reducedReady,
                 runtimeReady,
+                source.reducedResearchIsolatedManualRuntimeReady(),
+                source.reducedResearchProductionRuntimeReady(),
+                source.normalBusinessDatabaseRuntimeReady(),
+                source.schedulerRuntimeReady(),
                 source.qfqCalculationMode(),
                 source.qfqAnchorSemantics());
     }

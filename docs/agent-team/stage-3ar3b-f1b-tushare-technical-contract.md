@@ -258,3 +258,26 @@ IFIND_TRIAL_ACTIVATION_GATE=BLOCKED
 
 本阶段 Provider 新增调用数为 `0`，Tushare 累计真实业务请求继续为 `20`，iFinD
 调用数为 `0`。Token 未读取、检查、记录或输出；数据库未访问，正常业务库 V13 未执行。
+
+## 10. 后续 F1C 入口状态
+
+本节记录后续状态，不改写第 3、5、7 节所述的 F1B 当时状态。F1B 双提交链
+`ce3360058b4ade6a2e86cdd9302387e7d338794b` →
+`0b2dbb665c8e45c4d0024d16094e3925d4dfe55e` 已通过 ChatGPT 对实际 Git 提交的
+最终复验，经用户批准纯 fast-forward 合入。
+
+用户随后单独授权 F1C；截至 F1C 任务分支技术实现完成：
+
+```text
+ENDPOINT_SPECIFIC_RATE_LIMIT_ENFORCED=true
+CONSERVATIVE_ENDPOINT_MINIMUM_POLICY_ENFORCED=true
+REDUCED_RESEARCH_ISOLATED_MANUAL_RUNTIME_READY=true
+REDUCED_RESEARCH_PRODUCTION_RUNTIME_READY=false
+NORMAL_BUSINESS_DATABASE_RUNTIME_READY=false
+REDUCED_RESEARCH_RUNTIME_READY=false
+```
+
+F1C 只增加单证券、两自然日、`daily/adj_factor/trade_cal` 三请求、零重试的随机隔离
+手工入口，并保持 `QfqAsOfEngine` 的完整公司行动 lineage 门禁。实现仍在
+`codex/1.4.0-stage-3ar3b-f1c-tushare-reduced-runtime` 等待实际 Git 验收和合入；
+这不把 F1B 合同 READY 改写为生产 READY，也不解除书面许可或完整技术证据阻断。

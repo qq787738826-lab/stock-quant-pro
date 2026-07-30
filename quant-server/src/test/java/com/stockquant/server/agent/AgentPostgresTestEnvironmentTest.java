@@ -100,6 +100,16 @@ class AgentPostgresTestEnvironmentTest {
                                 "00000000-0000-0000-0000-000000000001"));
         AgentPostgresTestEnvironment
                 .requireSafeMigrationSchema(schema);
+        String f1cSchema = AgentPostgresTestEnvironment
+                .f1cIsolatedSchemaName(
+                        UUID.fromString(
+                                "00000000-0000-0000-0000-000000000002"));
+        AgentPostgresTestEnvironment
+                .requireSafeMigrationSchema(f1cSchema);
+        assertEquals(
+                "f1c_tushare_research_"
+                        + "00000000000000000000000000000002",
+                f1cSchema);
         assertEquals(
                 "agent_it_safety_gate_"
                         + "00000000000000000000000000000001",
@@ -132,7 +142,9 @@ class AgentPostgresTestEnvironmentTest {
                     continue;
                 }
                 boolean sharedGuard = source.contains(
-                        "registerIsolatedDataSource");
+                        "registerIsolatedDataSource")
+                        || source.contains(
+                        "registerF1cIsolatedDataSource");
                 boolean explicitGuard = source.contains(
                         "currentSchema=")
                         && source.contains(

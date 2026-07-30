@@ -27,13 +27,17 @@ public record TushareTechnicalQualification(
         TechnicalClaim historicalVersionsClaim,
         TechnicalClaim permanentSecurityIdentityClaim,
         TechnicalClaim qfqFormulaClaim,
-        TechnicalClaim qfqOperationalRuntimeClaim,
+        TechnicalClaim qfqReducedResearchRuntimeClaim,
+        TechnicalClaim qfqFullLineageRuntimeClaim,
         TechnicalClaim fullHistoryDailyExactClaim,
         TechnicalClaim providerPitClaim,
         TechnicalClaim forwardSystemKnowledgePitClaim,
         TechnicalClaim safetyBoundaryClaim,
         TechnicalClaim endpointRateLimitClaim,
-        TechnicalClaim endpointRateLimitEnforcementClaim,
+        TechnicalClaim endpointConservativeMinimumPolicyClaim,
+        TechnicalClaim endpointSpecificRateLimitEnforcementClaim,
+        TechnicalClaim reducedResearchIsolatedManualRuntimeClaim,
+        TechnicalClaim isolatedSchemaGuardClaim,
         EndpointRateLimitQualification endpointRateLimitQualification,
         Set<TechnicalBlocker> blockers,
         Set<QfqOperationalBlocker> qfqOperationalBlockers,
@@ -41,6 +45,10 @@ public record TushareTechnicalQualification(
         boolean fullTechnicalContractReady,
         boolean reducedResearchContractReady,
         boolean reducedResearchRuntimeReady,
+        boolean reducedResearchIsolatedManualRuntimeReady,
+        boolean reducedResearchProductionRuntimeReady,
+        boolean normalBusinessDatabaseRuntimeReady,
+        boolean schedulerRuntimeReady,
         QfqCalculationMode qfqCalculationMode,
         QfqAnchorSemantics qfqAnchorSemantics
 ) {
@@ -71,9 +79,12 @@ public record TushareTechnicalQualification(
                 permanentSecurityIdentityClaim,
                 "permanentSecurityIdentityClaim");
         qfqFormulaClaim = required(qfqFormulaClaim, "qfqFormulaClaim");
-        qfqOperationalRuntimeClaim = required(
-                qfqOperationalRuntimeClaim,
-                "qfqOperationalRuntimeClaim");
+        qfqReducedResearchRuntimeClaim = required(
+                qfqReducedResearchRuntimeClaim,
+                "qfqReducedResearchRuntimeClaim");
+        qfqFullLineageRuntimeClaim = required(
+                qfqFullLineageRuntimeClaim,
+                "qfqFullLineageRuntimeClaim");
         fullHistoryDailyExactClaim = required(
                 fullHistoryDailyExactClaim,
                 "fullHistoryDailyExactClaim");
@@ -86,9 +97,18 @@ public record TushareTechnicalQualification(
                 safetyBoundaryClaim, "safetyBoundaryClaim");
         endpointRateLimitClaim = required(
                 endpointRateLimitClaim, "endpointRateLimitClaim");
-        endpointRateLimitEnforcementClaim = required(
-                endpointRateLimitEnforcementClaim,
-                "endpointRateLimitEnforcementClaim");
+        endpointConservativeMinimumPolicyClaim = required(
+                endpointConservativeMinimumPolicyClaim,
+                "endpointConservativeMinimumPolicyClaim");
+        endpointSpecificRateLimitEnforcementClaim = required(
+                endpointSpecificRateLimitEnforcementClaim,
+                "endpointSpecificRateLimitEnforcementClaim");
+        reducedResearchIsolatedManualRuntimeClaim = required(
+                reducedResearchIsolatedManualRuntimeClaim,
+                "reducedResearchIsolatedManualRuntimeClaim");
+        isolatedSchemaGuardClaim = required(
+                isolatedSchemaGuardClaim,
+                "isolatedSchemaGuardClaim");
         endpointRateLimitQualification = Objects.requireNonNull(
                 endpointRateLimitQualification,
                 "endpointRateLimitQualification");
@@ -109,7 +129,7 @@ public record TushareTechnicalQualification(
 
         Set<QfqOperationalBlocker> expectedQfqBlockers =
                 expectedQfqOperationalBlockers(
-                        qfqOperationalRuntimeClaim);
+                        qfqFullLineageRuntimeClaim);
         if (!qfqOperationalBlockers.equals(expectedQfqBlockers)) {
             throw new IllegalArgumentException(
                     "qfqOperationalBlockers contradict runtime claim");
@@ -117,7 +137,8 @@ public record TushareTechnicalQualification(
         Set<EndpointRateLimitBlocker> expectedEndpointBlockers =
                 expectedEndpointRateLimitBlockers(
                         endpointRateLimitQualification,
-                        endpointRateLimitEnforcementClaim);
+                        endpointConservativeMinimumPolicyClaim,
+                        endpointSpecificRateLimitEnforcementClaim);
         if (!endpointRateLimitBlockers.equals(
                 expectedEndpointBlockers)) {
             throw new IllegalArgumentException(
@@ -138,9 +159,10 @@ public record TushareTechnicalQualification(
                 providerPitClaim,
                 forwardSystemKnowledgePitClaim,
                 safetyBoundaryClaim,
-                qfqOperationalRuntimeClaim,
+                qfqFullLineageRuntimeClaim,
                 endpointRateLimitQualification,
-                endpointRateLimitEnforcementClaim);
+                endpointConservativeMinimumPolicyClaim,
+                endpointSpecificRateLimitEnforcementClaim);
         if (!blockers.equals(expectedBlockers)) {
             throw new IllegalArgumentException(
                     "blockers contradict evidence claims");
@@ -157,13 +179,14 @@ public record TushareTechnicalQualification(
                 historicalVersionsClaim,
                 permanentSecurityIdentityClaim,
                 qfqFormulaClaim,
-                qfqOperationalRuntimeClaim,
+                qfqFullLineageRuntimeClaim,
                 fullHistoryDailyExactClaim,
                 providerPitClaim,
                 forwardSystemKnowledgePitClaim,
                 safetyBoundaryClaim,
                 endpointRateLimitQualification,
-                endpointRateLimitEnforcementClaim,
+                endpointConservativeMinimumPolicyClaim,
+                endpointSpecificRateLimitEnforcementClaim,
                 expectedBlockers);
         if (routeDecision != expectedRoute) {
             throw new IllegalArgumentException(
@@ -173,13 +196,12 @@ public record TushareTechnicalQualification(
                 expectedRoute == RouteDecision.FULL_F1_BUILDABLE;
         boolean expectedReduced =
                 expectedRoute == RouteDecision.REDUCED_RESEARCH_ONLY;
-        boolean expectedRuntime = expectedReduced
-                && qfqOperationalRuntimeClaim.verified()
-                && endpointRateLimitQualification
-                == EndpointRateLimitQualification.VERIFIED_CONSISTENT
-                && endpointRateLimitEnforcementClaim.verified()
-                && expectedQfqBlockers.isEmpty()
-                && expectedEndpointBlockers.isEmpty();
+        boolean expectedIsolatedRuntime = expectedReduced
+                && qfqReducedResearchRuntimeClaim.verified()
+                && endpointConservativeMinimumPolicyClaim.verified()
+                && endpointSpecificRateLimitEnforcementClaim.verified()
+                && reducedResearchIsolatedManualRuntimeClaim.verified()
+                && isolatedSchemaGuardClaim.verified();
         if (fullTechnicalContractReady != expectedFull) {
             throw new IllegalArgumentException(
                     "fullTechnicalContractReady contradicts claims");
@@ -188,9 +210,20 @@ public record TushareTechnicalQualification(
             throw new IllegalArgumentException(
                     "reducedResearchContractReady contradicts claims");
         }
-        if (reducedResearchRuntimeReady != expectedRuntime) {
+        if (reducedResearchRuntimeReady) {
             throw new IllegalArgumentException(
-                    "reducedResearchRuntimeReady contradicts claims");
+                    "ambiguous reducedResearchRuntimeReady must stay false");
+        }
+        if (reducedResearchIsolatedManualRuntimeReady
+                != expectedIsolatedRuntime) {
+            throw new IllegalArgumentException(
+                    "isolated manual runtime readiness contradicts claims");
+        }
+        if (reducedResearchProductionRuntimeReady
+                || normalBusinessDatabaseRuntimeReady
+                || schedulerRuntimeReady) {
+            throw new IllegalArgumentException(
+                    "F1C cannot enable production database or scheduler");
         }
         if (expectedFull && !blockers.isEmpty()) {
             throw new IllegalArgumentException(
@@ -249,6 +282,9 @@ public record TushareTechnicalQualification(
                         "TS-PB-001", "TS-PB-002", "TS-F1A-002"),
                 claim(QualificationStatus.VERIFIED,
                         "TS-005", "TS-008", "JAVA-QFQ-GOLDEN-V1"),
+                claim(QualificationStatus.VERIFIED,
+                        "JAVA-F1C-REDUCED-QFQ-RUNTIME-V1",
+                        "JAVA-QFQ-GOLDEN-V1"),
                 claim(QualificationStatus.PARTIAL,
                         "JAVA-QFQ-AS-OF-ENGINE-V1",
                         "JAVA-QFQ-GOLDEN-V1"),
@@ -264,8 +300,14 @@ public record TushareTechnicalQualification(
                         "TS-F1A-MANUAL-BOUNDED-SAFETY"),
                 claim(QualificationStatus.PARTIAL,
                         "TS-003", "TS-004", "TS-009"),
-                claim(QualificationStatus.PARTIAL,
-                        "JAVA-F1A-PROCESS-RATE-LIMITER-V1"),
+                claim(QualificationStatus.VERIFIED,
+                        "JAVA-F1C-CONSERVATIVE-ENDPOINT-POLICY-V1"),
+                claim(QualificationStatus.VERIFIED,
+                        "JAVA-F1C-ENDPOINT-RATE-LIMITER-V1"),
+                claim(QualificationStatus.VERIFIED,
+                        "JAVA-F1C-ISOLATED-MANUAL-RUNTIME-V1"),
+                claim(QualificationStatus.VERIFIED,
+                        "JAVA-F1C-ISOLATED-SCHEMA-GUARD-V1"),
                 EndpointRateLimitQualification
                         .PARTIAL_CONFLICT_IDENTIFIED,
                 QfqCalculationMode.RAW_FACTOR_END_DATE_ANCHORED,
@@ -278,11 +320,12 @@ public record TushareTechnicalQualification(
         Objects.requireNonNull(input, "input");
         Set<QfqOperationalBlocker> qfqBlockers =
                 expectedQfqOperationalBlockers(
-                        input.qfqOperationalRuntimeClaim());
+                        input.qfqFullLineageRuntimeClaim());
         Set<EndpointRateLimitBlocker> endpointBlockers =
                 expectedEndpointRateLimitBlockers(
                         input.endpointRateLimitQualification(),
-                        input.endpointRateLimitEnforcementClaim());
+                        input.endpointConservativeMinimumPolicyClaim(),
+                        input.endpointSpecificRateLimitEnforcementClaim());
         Set<TechnicalBlocker> blockers = expectedBlockers(
                 input.rawDailyClaim(),
                 input.adjustmentFactorClaim(),
@@ -297,9 +340,10 @@ public record TushareTechnicalQualification(
                 input.providerPitClaim(),
                 input.forwardSystemKnowledgePitClaim(),
                 input.safetyBoundaryClaim(),
-                input.qfqOperationalRuntimeClaim(),
+                input.qfqFullLineageRuntimeClaim(),
                 input.endpointRateLimitQualification(),
-                input.endpointRateLimitEnforcementClaim());
+                input.endpointConservativeMinimumPolicyClaim(),
+                input.endpointSpecificRateLimitEnforcementClaim());
         RouteDecision decision = expectedRoute(
                 input.rawDailyClaim(),
                 input.adjustmentFactorClaim(),
@@ -311,23 +355,26 @@ public record TushareTechnicalQualification(
                 input.historicalVersionsClaim(),
                 input.permanentSecurityIdentityClaim(),
                 input.qfqFormulaClaim(),
-                input.qfqOperationalRuntimeClaim(),
+                input.qfqFullLineageRuntimeClaim(),
                 input.fullHistoryDailyExactClaim(),
                 input.providerPitClaim(),
                 input.forwardSystemKnowledgePitClaim(),
                 input.safetyBoundaryClaim(),
                 input.endpointRateLimitQualification(),
-                input.endpointRateLimitEnforcementClaim(),
+                input.endpointConservativeMinimumPolicyClaim(),
+                input.endpointSpecificRateLimitEnforcementClaim(),
                 blockers);
         boolean reduced =
                 decision == RouteDecision.REDUCED_RESEARCH_ONLY;
-        boolean runtimeReady = reduced
-                && input.qfqOperationalRuntimeClaim().verified()
-                && input.endpointRateLimitQualification()
-                == EndpointRateLimitQualification.VERIFIED_CONSISTENT
-                && input.endpointRateLimitEnforcementClaim().verified()
-                && qfqBlockers.isEmpty()
-                && endpointBlockers.isEmpty();
+        boolean isolatedRuntimeReady = reduced
+                && input.qfqReducedResearchRuntimeClaim().verified()
+                && input.endpointConservativeMinimumPolicyClaim()
+                .verified()
+                && input.endpointSpecificRateLimitEnforcementClaim()
+                .verified()
+                && input.reducedResearchIsolatedManualRuntimeClaim()
+                .verified()
+                && input.isolatedSchemaGuardClaim().verified();
         return new TushareTechnicalQualification(
                 decision,
                 input.rawDailyClaim(),
@@ -340,20 +387,28 @@ public record TushareTechnicalQualification(
                 input.historicalVersionsClaim(),
                 input.permanentSecurityIdentityClaim(),
                 input.qfqFormulaClaim(),
-                input.qfqOperationalRuntimeClaim(),
+                input.qfqReducedResearchRuntimeClaim(),
+                input.qfqFullLineageRuntimeClaim(),
                 input.fullHistoryDailyExactClaim(),
                 input.providerPitClaim(),
                 input.forwardSystemKnowledgePitClaim(),
                 input.safetyBoundaryClaim(),
                 input.endpointRateLimitClaim(),
-                input.endpointRateLimitEnforcementClaim(),
+                input.endpointConservativeMinimumPolicyClaim(),
+                input.endpointSpecificRateLimitEnforcementClaim(),
+                input.reducedResearchIsolatedManualRuntimeClaim(),
+                input.isolatedSchemaGuardClaim(),
                 input.endpointRateLimitQualification(),
                 blockers,
                 qfqBlockers,
                 endpointBlockers,
                 decision == RouteDecision.FULL_F1_BUILDABLE,
                 reduced,
-                runtimeReady,
+                false,
+                isolatedRuntimeReady,
+                false,
+                false,
+                false,
                 input.qfqCalculationMode(),
                 input.qfqAnchorSemantics());
     }
@@ -414,7 +469,15 @@ public record TushareTechnicalQualification(
     }
 
     public QualificationStatus qfqOperationalRuntimeQualification() {
-        return qfqOperationalRuntimeClaim.status();
+        return qfqFullLineageRuntimeClaim.status();
+    }
+
+    public QualificationStatus qfqReducedResearchRuntimeQualification() {
+        return qfqReducedResearchRuntimeClaim.status();
+    }
+
+    public QualificationStatus qfqFullLineageRuntimeQualification() {
+        return qfqFullLineageRuntimeClaim.status();
     }
 
     public QualificationStatus fullHistoryDailyExactQualification() {
@@ -443,7 +506,10 @@ public record TushareTechnicalQualification(
     public Set<String> endpointRateLimitEvidenceIds() {
         Set<String> result = new LinkedHashSet<>(
                 endpointRateLimitClaim.evidenceIds());
-        result.addAll(endpointRateLimitEnforcementClaim.evidenceIds());
+        result.addAll(
+                endpointConservativeMinimumPolicyClaim.evidenceIds());
+        result.addAll(
+                endpointSpecificRateLimitEnforcementClaim.evidenceIds());
         return Set.copyOf(result);
     }
 
@@ -470,7 +536,28 @@ public record TushareTechnicalQualification(
     }
 
     public boolean endpointSpecificRateLimitEnforced() {
-        return endpointRateLimitEnforcementClaim.verified();
+        return endpointSpecificRateLimitEnforcementClaim.verified();
+    }
+
+    public boolean conservativeEndpointMinimumPolicyEnforced() {
+        return endpointConservativeMinimumPolicyClaim.verified();
+    }
+
+    public boolean isolatedSchemaGuardVerified() {
+        return isolatedSchemaGuardClaim.verified();
+    }
+
+    /**
+     * Compatibility accessor for the F1B name. It means full-lineage runtime,
+     * never the F1C reduced formula-only runtime.
+     */
+    public TechnicalClaim qfqOperationalRuntimeClaim() {
+        return qfqFullLineageRuntimeClaim;
+    }
+
+    /** Compatibility accessor; the claim is now explicitly endpoint-scoped. */
+    public TechnicalClaim endpointRateLimitEnforcementClaim() {
+        return endpointSpecificRateLimitEnforcementClaim;
     }
 
     private Set<TechnicalClaim> allClaims() {
@@ -485,13 +572,17 @@ public record TushareTechnicalQualification(
         result.add(historicalVersionsClaim);
         result.add(permanentSecurityIdentityClaim);
         result.add(qfqFormulaClaim);
-        result.add(qfqOperationalRuntimeClaim);
+        result.add(qfqReducedResearchRuntimeClaim);
+        result.add(qfqFullLineageRuntimeClaim);
         result.add(fullHistoryDailyExactClaim);
         result.add(providerPitClaim);
         result.add(forwardSystemKnowledgePitClaim);
         result.add(safetyBoundaryClaim);
         result.add(endpointRateLimitClaim);
-        result.add(endpointRateLimitEnforcementClaim);
+        result.add(endpointConservativeMinimumPolicyClaim);
+        result.add(endpointSpecificRateLimitEnforcementClaim);
+        result.add(reducedResearchIsolatedManualRuntimeClaim);
+        result.add(isolatedSchemaGuardClaim);
         return Set.copyOf(result);
     }
 
@@ -512,7 +603,8 @@ public record TushareTechnicalQualification(
             TechnicalClaim forwardPit,
             TechnicalClaim safety,
             EndpointRateLimitQualification endpointRateLimitQualification,
-            TechnicalClaim endpointRateLimitEnforcement,
+            TechnicalClaim endpointConservativeMinimumPolicy,
+            TechnicalClaim endpointSpecificRateLimitEnforcement,
             Set<TechnicalBlocker> blockers
     ) {
         boolean core = raw.verified()
@@ -533,7 +625,8 @@ public record TushareTechnicalQualification(
                 && providerPit.verified()
                 && endpointRateLimitQualification
                 == EndpointRateLimitQualification.VERIFIED_CONSISTENT
-                && endpointRateLimitEnforcement.verified()
+                && endpointConservativeMinimumPolicy.verified()
+                && endpointSpecificRateLimitEnforcement.verified()
                 && blockers.isEmpty();
         if (full) {
             return RouteDecision.FULL_F1_BUILDABLE;
@@ -560,7 +653,8 @@ public record TushareTechnicalQualification(
             TechnicalClaim safety,
             TechnicalClaim qfqRuntime,
             EndpointRateLimitQualification endpointRateLimitQualification,
-            TechnicalClaim endpointRateLimitEnforcement
+            TechnicalClaim endpointConservativeMinimumPolicy,
+            TechnicalClaim endpointSpecificRateLimitEnforcement
     ) {
         Set<TechnicalBlocker> values =
                 EnumSet.noneOf(TechnicalBlocker.class);
@@ -616,7 +710,12 @@ public record TushareTechnicalQualification(
             values.add(
                     TechnicalBlocker.ENDPOINT_RATE_LIMIT_EVIDENCE_CONFLICT);
         }
-        if (!endpointRateLimitEnforcement.verified()) {
+        if (!endpointConservativeMinimumPolicy.verified()) {
+            values.add(
+                    TechnicalBlocker
+                            .CONSERVATIVE_ENDPOINT_MINIMUM_POLICY_NOT_ENFORCED);
+        }
+        if (!endpointSpecificRateLimitEnforcement.verified()) {
             values.add(
                     TechnicalBlocker.ENDPOINT_SPECIFIC_RATE_LIMIT_NOT_ENFORCED);
         }
@@ -635,13 +734,15 @@ public record TushareTechnicalQualification(
     private static Set<EndpointRateLimitBlocker>
     expectedEndpointRateLimitBlockers(
             EndpointRateLimitQualification qualification,
+            TechnicalClaim conservativeMinimumPolicyClaim,
             TechnicalClaim enforcementClaim
     ) {
         Set<EndpointRateLimitBlocker> values =
                 EnumSet.noneOf(EndpointRateLimitBlocker.class);
         if (qualification
                 == EndpointRateLimitQualification
-                .PARTIAL_CONFLICT_IDENTIFIED) {
+                .PARTIAL_CONFLICT_IDENTIFIED
+                && !conservativeMinimumPolicyClaim.verified()) {
             values.add(EndpointRateLimitBlocker
                     .GENERAL_AND_ENDPOINT_LIMITS_REQUIRE_CONSERVATIVE_MINIMUM);
         } else if (qualification
@@ -771,13 +872,17 @@ public record TushareTechnicalQualification(
             TechnicalClaim historicalVersionsClaim,
             TechnicalClaim permanentSecurityIdentityClaim,
             TechnicalClaim qfqFormulaClaim,
-            TechnicalClaim qfqOperationalRuntimeClaim,
+            TechnicalClaim qfqReducedResearchRuntimeClaim,
+            TechnicalClaim qfqFullLineageRuntimeClaim,
             TechnicalClaim fullHistoryDailyExactClaim,
             TechnicalClaim providerPitClaim,
             TechnicalClaim forwardSystemKnowledgePitClaim,
             TechnicalClaim safetyBoundaryClaim,
             TechnicalClaim endpointRateLimitClaim,
-            TechnicalClaim endpointRateLimitEnforcementClaim,
+            TechnicalClaim endpointConservativeMinimumPolicyClaim,
+            TechnicalClaim endpointSpecificRateLimitEnforcementClaim,
+            TechnicalClaim reducedResearchIsolatedManualRuntimeClaim,
+            TechnicalClaim isolatedSchemaGuardClaim,
             EndpointRateLimitQualification endpointRateLimitQualification,
             QfqCalculationMode qfqCalculationMode,
             QfqAnchorSemantics qfqAnchorSemantics
@@ -803,9 +908,12 @@ public record TushareTechnicalQualification(
                     "permanentSecurityIdentityClaim");
             qfqFormulaClaim = required(
                     qfqFormulaClaim, "qfqFormulaClaim");
-            qfqOperationalRuntimeClaim = required(
-                    qfqOperationalRuntimeClaim,
-                    "qfqOperationalRuntimeClaim");
+            qfqReducedResearchRuntimeClaim = required(
+                    qfqReducedResearchRuntimeClaim,
+                    "qfqReducedResearchRuntimeClaim");
+            qfqFullLineageRuntimeClaim = required(
+                    qfqFullLineageRuntimeClaim,
+                    "qfqFullLineageRuntimeClaim");
             fullHistoryDailyExactClaim = required(
                     fullHistoryDailyExactClaim,
                     "fullHistoryDailyExactClaim");
@@ -818,9 +926,18 @@ public record TushareTechnicalQualification(
                     safetyBoundaryClaim, "safetyBoundaryClaim");
             endpointRateLimitClaim = required(
                     endpointRateLimitClaim, "endpointRateLimitClaim");
-            endpointRateLimitEnforcementClaim = required(
-                    endpointRateLimitEnforcementClaim,
-                    "endpointRateLimitEnforcementClaim");
+            endpointConservativeMinimumPolicyClaim = required(
+                    endpointConservativeMinimumPolicyClaim,
+                    "endpointConservativeMinimumPolicyClaim");
+            endpointSpecificRateLimitEnforcementClaim = required(
+                    endpointSpecificRateLimitEnforcementClaim,
+                    "endpointSpecificRateLimitEnforcementClaim");
+            reducedResearchIsolatedManualRuntimeClaim = required(
+                    reducedResearchIsolatedManualRuntimeClaim,
+                    "reducedResearchIsolatedManualRuntimeClaim");
+            isolatedSchemaGuardClaim = required(
+                    isolatedSchemaGuardClaim,
+                    "isolatedSchemaGuardClaim");
             endpointRateLimitQualification = Objects.requireNonNull(
                     endpointRateLimitQualification,
                     "endpointRateLimitQualification");
@@ -831,6 +948,14 @@ public record TushareTechnicalQualification(
             validateEndpointRateLimitState(
                     endpointRateLimitQualification,
                     endpointRateLimitClaim);
+        }
+
+        public TechnicalClaim qfqOperationalRuntimeClaim() {
+            return qfqFullLineageRuntimeClaim;
+        }
+
+        public TechnicalClaim endpointRateLimitEnforcementClaim() {
+            return endpointSpecificRateLimitEnforcementClaim;
         }
     }
 
@@ -873,6 +998,7 @@ public record TushareTechnicalQualification(
         SAFETY_BOUNDARY_NOT_IMPLEMENTABLE,
         QFQ_OPERATIONAL_RUNTIME_INCOMPLETE,
         ENDPOINT_RATE_LIMIT_EVIDENCE_CONFLICT,
+        CONSERVATIVE_ENDPOINT_MINIMUM_POLICY_NOT_ENFORCED,
         ENDPOINT_SPECIFIC_RATE_LIMIT_NOT_ENFORCED
     }
 

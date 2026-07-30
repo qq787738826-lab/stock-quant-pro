@@ -49,6 +49,31 @@ final class AgentPostgresTestEnvironment {
         );
         IsolatedSchema isolated = IsolatedSchema.create(
                 credentials, scope);
+        registerDataSourceProperties(
+                registry, credentials, isolated);
+        return isolated;
+    }
+
+    static IsolatedSchema registerF1cIsolatedDataSource(
+            DynamicPropertyRegistry registry
+    ) {
+        Credentials credentials = validate(
+                System.getenv(URL_VARIABLE),
+                System.getenv(USERNAME_VARIABLE),
+                System.getenv(PASSWORD_VARIABLE)
+        );
+        IsolatedSchema isolated =
+                IsolatedSchema.createF1c(credentials);
+        registerDataSourceProperties(
+                registry, credentials, isolated);
+        return isolated;
+    }
+
+    private static void registerDataSourceProperties(
+            DynamicPropertyRegistry registry,
+            Credentials credentials,
+            IsolatedSchema isolated
+    ) {
         registry.add("spring.datasource.url", isolated::url);
         registry.add("spring.datasource.username",
                 credentials::username);
@@ -65,7 +90,6 @@ final class AgentPostgresTestEnvironment {
                 () -> true);
         registry.add("spring.flyway.baseline-on-migrate",
                 () -> false);
-        return isolated;
     }
 
     static Credentials validate(
@@ -104,6 +128,13 @@ final class AgentPostgresTestEnvironment {
         return schema;
     }
 
+    static String f1cIsolatedSchemaName(UUID suffix) {
+        String schema = "f1c_tushare_research_"
+                + suffix.toString().replace("-", "");
+        requireSafeMigrationSchema(schema);
+        return schema;
+    }
+
     static String schemaUrl(
             Credentials credentials,
             String schema
@@ -117,8 +148,10 @@ final class AgentPostgresTestEnvironment {
 
     static void requireSafeMigrationSchema(String schema) {
         if (schema == null || "public".equalsIgnoreCase(schema)
-                || !schema.matches(
-                "^agent_it_[a-z0-9_]{1,20}_[0-9a-f]{32}$")) {
+                || !(schema.matches(
+                "^agent_it_[a-z0-9_]{1,20}_[0-9a-f]{32}$")
+                || schema.matches(
+                "^f1c_tushare_research_[0-9a-f]{32}$"))) {
             throw new IllegalStateException(
                     "Flyway integration tests must use a random "
                             + "isolated schema, never public");
@@ -433,6 +466,21 @@ final class AgentPostgresTestEnvironment {
         ) {
             String schema = isolatedSchemaName(
                     scope, UUID.randomUUID());
+            return createWithSchema(credentials, schema);
+        }
+
+        private static IsolatedSchema createF1c(
+                Credentials credentials
+        ) {
+            return createWithSchema(
+                    credentials,
+                    f1cIsolatedSchemaName(UUID.randomUUID()));
+        }
+
+        private static IsolatedSchema createWithSchema(
+                Credentials credentials,
+                String schema
+        ) {
             requireSafeMigrationSchema(schema);
             PublicBaseline baseline;
             try {

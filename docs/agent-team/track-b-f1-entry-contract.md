@@ -20,9 +20,15 @@ FULL_TECHNICAL_CONTRACT_READY=false
 REDUCED_RESEARCH_CONTRACT_READY=true
 QFQ_FORMULA_QUALIFICATION=VERIFIED
 QFQ_OPERATIONAL_RUNTIME_QUALIFICATION=PARTIAL
+QFQ_REDUCED_RESEARCH_RUNTIME_QUALIFICATION=VERIFIED
+QFQ_FULL_LINEAGE_RUNTIME_QUALIFICATION=PARTIAL
 REDUCED_RESEARCH_RUNTIME_READY=false
+REDUCED_RESEARCH_ISOLATED_MANUAL_RUNTIME_READY=true
+REDUCED_RESEARCH_PRODUCTION_RUNTIME_READY=false
+NORMAL_BUSINESS_DATABASE_RUNTIME_READY=false
 OFFICIAL_ENDPOINT_RATE_LIMITS=PARTIAL_CONFLICT_IDENTIFIED
-ENDPOINT_SPECIFIC_RATE_LIMIT_ENFORCED=false
+ENDPOINT_SPECIFIC_RATE_LIMIT_ENFORCED=true
+CONSERVATIVE_ENDPOINT_MINIMUM_POLICY_ENFORCED=true
 ```
 
 主要路线的具体 Provider 是 Tushare Pro。用户已开通 2000 积分且 `2026-07-30`
@@ -63,8 +69,8 @@ instrument identity、完整 action、历史版本和 Provider PIT 均未确认�
 | 前向 PIT | 允许重复捕获并以真实首次接收建立 `SYSTEM_KNOWLEDGE_PIT` | PARTIAL | F1A 可在个人用途隔离范围建立 SYSTEM_KNOWLEDGE 链；无历史 revision、完整 action 和到期留存结论，禁止升级 Provider PIT |
 | 成本 | 套餐、费用和所需接口范围明确，用户明确批准 | PASS | 用户已开通 2000 积分，B1 十项探针证明权限生效；不记录支付隐私 |
 | 实现范围 | Adapter、DTO 映射、调用预算、错误/限流、数据清理、V13 迁移边界冻结 | F1A_ACCEPTED_AND_MERGED | 五 Endpoint、显式 MANUAL_BOUNDED、10 次共享预算、分钟/每日限额、随机 Schema 和受控 10 调用已通过实际 Git 最终复验并纯 fast-forward 合入；dividend 仍不升级完整 action |
-| QFQ 运行链 | 公式与权威引擎 lineage 门禁兼容，并有受控缩减运行入口 | BLOCKED | 公式 `VERIFIED`；现有 `QfqAsOfEngine` 在 factor 变化时仍要求公司行动 lineage，缩减运行入口未实现 |
-| Endpoint 频次 | 每个 Endpoint 使用所有适用官方上限中的保守较小值 | BLOCKED | 总表 200 次/分钟与 `stock_basic=50`、`daily=500` 次/分钟并存；当前只有共享 180 次/分钟限流，未实现 Endpoint 级限制 |
+| QFQ 运行链 | 公式与权威引擎 lineage 门禁兼容，并有受控缩减运行入口 | PARTIAL | F1C 隔离手工公式入口 `VERIFIED`；现有 `QfqAsOfEngine` 在 factor 变化时仍要求公司行动 lineage，完整运行链继续阻断 |
+| Endpoint 频次 | 每个 Endpoint 使用所有适用官方上限中的保守较小值 | PASS_LIMITED_PROCESS | F1C 已实现 `stock_basic=45`、其余四项 180 次/分钟的保守安全值、全局 180 与每 Endpoint 每日 90000 原子计数；跨进程协调仍为 false |
 
 只有上述所有条件均通过，才能把：
 
@@ -96,12 +102,13 @@ VERIFIED，也不表示原始数据再分发、商业化或服务到期后留存
 
 `BLOCKED_COST_APPROVAL` 已解除：用户已开通 2000 积分，技术权限已验证生效。
 
-F1B 已把技术阻断从“是否存在可用路线”收敛为“完整合同仍不成立”：当前
-`TUSHARE_REDUCED_RESEARCH_CONTRACT=READY` 只表示缩减合同定义完成。
-`REDUCED_RESEARCH_RUNTIME_READY=false`，现有权威 QFQ 引擎的公司行动 lineage 门禁仍在，
-Endpoint 级限流也未实现。后续独立授权阶段才可实现受控本地研究摄取；完整 F1 仍缺
-公司行动 lineage、Provider revision/旧版本、永久证券身份和全历史 `DAILY_EXACT`，
-所以 `BLOCKED_TECHNICAL_EVIDENCE` 不解除。
+F1B 已把技术阻断从“是否存在可用路线”收敛为“完整合同仍不成立”。
+F1C 随后只在随机隔离 Schema 实现手工三请求运行入口和 Endpoint 级进程内限流：
+`REDUCED_RESEARCH_ISOLATED_MANUAL_RUNTIME_READY=true`，但历史含混的
+`REDUCED_RESEARCH_RUNTIME_READY=false`，且
+`REDUCED_RESEARCH_PRODUCTION_RUNTIME_READY=false`。现有权威 QFQ 引擎的公司行动
+lineage 门禁仍在；完整 F1 仍缺公司行动 lineage、Provider revision/旧版本、永久证券
+身份和全历史 `DAILY_EXACT`，所以 `BLOCKED_TECHNICAL_EVIDENCE` 不解除。
 
 因此当前合法判定是：
 
@@ -137,14 +144,21 @@ TUSHARE_TECHNICAL_ROUTE_DECISION=REDUCED_RESEARCH_ONLY
 TUSHARE_REDUCED_RESEARCH_CONTRACT=READY
 QFQ_FORMULA_QUALIFICATION=VERIFIED
 QFQ_OPERATIONAL_RUNTIME_QUALIFICATION=PARTIAL
+QFQ_REDUCED_RESEARCH_RUNTIME_QUALIFICATION=VERIFIED
+QFQ_FULL_LINEAGE_RUNTIME_QUALIFICATION=PARTIAL
 REDUCED_RESEARCH_RUNTIME_READY=false
+REDUCED_RESEARCH_ISOLATED_MANUAL_RUNTIME_READY=true
+REDUCED_RESEARCH_PRODUCTION_RUNTIME_READY=false
+NORMAL_BUSINESS_DATABASE_RUNTIME_READY=false
 F1_ENTRY_READINESS=BLOCKED_MULTIPLE
 ```
 
-缩减合同为未来运行入口定义：只允许手工有界 raw/factor/calendar、结束日因子锚定的研究级 QFQ、普通
-`stock_basic` 身份、`dividend` 解释性部分证据和首次捕获后的
-`SYSTEM_KNOWLEDGE_PIT`。当前尚无该缩减运行入口。合同不允许完整公司行动、Provider PIT、历史 revision、永久
-证券身份、跨 Provider QFQ、正常业务库、scheduler、Shadow 或全市场采集。
+F1C 已实现一个严格更窄的随机隔离运行入口：只允许单证券、最多两自然日、
+`daily/adj_factor/trade_cal` 精确三次、零重试，结束日开市 raw/factor 为锚点的研究级
+QFQ 只在内存返回，raw/factor/calendar 才能进入随机 Schema。`stock_basic` 与
+`dividend` 仍只是 F1A 参考 DTO，不在 F1C 运行入口中。该入口不允许完整公司行动、
+Provider PIT、历史 revision、永久证券身份、跨 Provider QFQ、正常业务库、scheduler、
+Shadow、Agent、回测、全市场采集或交易。
 
 ## 5. F1A 已冻结技术范围
 
@@ -153,8 +167,8 @@ F1_ENTRY_READINESS=BLOCKED_MULTIPLE
 2. HTTP 只使用官方 HTTPS Host；
 3. 官方总表为 200 次/分钟、每 API 100000 次/日；接口页另列
    `stock_basic=50`、`daily=500` 次/分钟。存在多个适用限制时必须取最保守较小值；
-4. 应用当前安全预算为共享单进程 180 次/分钟、每 API 90000 次/日，尚未实现
-   Endpoint 级限制，也不声明跨进程 Token 协调；
+4. F1C 在单进程中实现全局 180 次/分钟、`stock_basic=45`、其余四 Endpoint
+   `180` 次/分钟及每 Endpoint 90000 次/日的原子安全预算；不声明跨进程 Token 协调；
 5. 默认 `DISABLED`，联网必须显式 `MANUAL_BOUNDED`，五 Endpoint 共用 10 次会话预算；
    `daily/adj_factor/trade_cal` 的固定两日约束不扩展到无日期参数的
    `stock_basic/dividend`；
@@ -170,6 +184,20 @@ F1_ENTRY_READINESS=BLOCKED_MULTIPLE
     `providerWrittenPermissionComplete=false`；
 12. partial Provider 响应不写事实观察；
 13. 公司行动、Provider revision 和永久证券身份不实现、不伪造。
+
+### 5.1 F1C 随机隔离运行范围
+
+1. 唯一类型化授权固定 `ISOLATED_MANUAL`、单证券、最多两自然日、三 Endpoint、
+   三请求和零重试；
+2. Provider 前与持久化前都要求精确
+   `f1c_tushare_research_<32位十六进制随机后缀>`、无 public 回退和完整 V1—V13；
+3. 公式级 QFQ 只复用 `QfqPriceMath`，结果固定为
+   `REDUCED_RESEARCH_FORMULA_ONLY` 且不写数据库；
+4. `QfqAsOfEngine` 的完整 lineage/cutoff 门禁不变；
+5. `ENDPOINT_SPECIFIC_RATE_LIMIT_ENFORCED=true` 不表示官方频次证据冲突已消失，也不
+   表示多进程协调完成；
+6. F1C 只把随机隔离手工运行设为 READY，生产、正常业务库、scheduler、Agent、回测、
+   Shadow、F2B/F3 和交易继续不就绪。
 
 ## 6. 继续禁止
 

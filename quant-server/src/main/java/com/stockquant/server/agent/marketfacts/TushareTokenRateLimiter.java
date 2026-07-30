@@ -7,13 +7,14 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayDeque;
+import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * One process-wide sliding-window and per-endpoint daily limiter shared by
+ * Atomic process-wide, endpoint-minute and endpoint-daily limiter shared by
  * every in-process Tushare caller. It does not coordinate other processes.
  */
 @Component
@@ -23,14 +24,16 @@ public final class TushareTokenRateLimiter {
     static final ZoneId PROVIDER_ZONE = ZoneId.of("Asia/Shanghai");
 
     private final Object monitor = new Object();
-    private final int minuteSafeLimit;
-    private final int dailySafeLimitPerApi;
+    private final TushareEndpointRateLimitPolicy policy;
     private final Duration window;
     private final long windowNanos;
     private final NanoTimeSource nanoTimeSource;
     private final DateSource dateSource;
     private final WaitStrategy waitStrategy;
-    private final ArrayDeque<Long> grantedAt = new ArrayDeque<>();
+    private final ArrayDeque<Long> globalGrantedAt = new ArrayDeque<>();
+    private final Map<TushareEndpointRateLimitPolicy.Endpoint,
+            ArrayDeque<Long>> endpointGrantedAt =
+            new EnumMap<>(TushareEndpointRateLimitPolicy.Endpoint.class);
     private final AtomicLong totalCallCount = new AtomicLong();
     private final Map<String, Long> endpointCallCounts =
             new LinkedHashMap<>();
@@ -40,21 +43,23 @@ public final class TushareTokenRateLimiter {
 
     @Autowired
     public TushareTokenRateLimiter(
+            TushareEndpointRateLimitPolicy policy
+    ) {
+        this(
+                policy,
+                DEFAULT_WINDOW,
+                System::nanoTime,
+                () -> LocalDate.now(PROVIDER_ZONE),
+                duration -> Thread.sleep(
+                        duration.toMillis(),
+                        duration.minusMillis(
+                                duration.toMillis()).getNano()));
+    }
+
+    public TushareTokenRateLimiter(
             TushareMarketFactProperties properties
     ) {
-        properties.validateFrozenContract();
-        this.minuteSafeLimit =
-                properties.getApplicationSafeLimitPerMinute();
-        this.dailySafeLimitPerApi =
-                properties.getApplicationDailySafeLimitPerApi();
-        this.window = DEFAULT_WINDOW;
-        this.windowNanos = window.toNanos();
-        this.nanoTimeSource = System::nanoTime;
-        this.dateSource = () -> LocalDate.now(PROVIDER_ZONE);
-        this.waitStrategy = duration ->
-                Thread.sleep(duration.toMillis(),
-                        duration.minusMillis(duration.toMillis()).getNano());
-        this.dailyCountDate = dateSource.currentDate();
+        this(new TushareEndpointRateLimitPolicy(properties));
     }
 
     TushareTokenRateLimiter(
@@ -65,17 +70,25 @@ public final class TushareTokenRateLimiter {
             DateSource dateSource,
             WaitStrategy waitStrategy
     ) {
-        if (minuteSafeLimit <= 0) {
-            throw new IllegalArgumentException("minuteSafeLimit");
-        }
-        if (dailySafeLimitPerApi <= 0) {
-            throw new IllegalArgumentException("dailySafeLimitPerApi");
-        }
+        this(
+                testPolicy(minuteSafeLimit, dailySafeLimitPerApi),
+                window,
+                nanoTimeSource,
+                dateSource,
+                waitStrategy);
+    }
+
+    TushareTokenRateLimiter(
+            TushareEndpointRateLimitPolicy policy,
+            Duration window,
+            NanoTimeSource nanoTimeSource,
+            DateSource dateSource,
+            WaitStrategy waitStrategy
+    ) {
         if (window == null || window.isZero() || window.isNegative()) {
             throw new IllegalArgumentException("window");
         }
-        this.minuteSafeLimit = minuteSafeLimit;
-        this.dailySafeLimitPerApi = dailySafeLimitPerApi;
+        this.policy = Objects.requireNonNull(policy, "policy");
         this.window = window;
         this.windowNanos = window.toNanos();
         this.nanoTimeSource = Objects.requireNonNull(
@@ -86,6 +99,9 @@ public final class TushareTokenRateLimiter {
                 waitStrategy, "waitStrategy");
         this.dailyCountDate = Objects.requireNonNull(
                 dateSource.currentDate(), "currentDate");
+        TushareEndpointRateLimitPolicy.Endpoint.stream()
+                .forEach(endpoint -> endpointGrantedAt.put(
+                        endpoint, new ArrayDeque<>()));
     }
 
     /**
@@ -93,30 +109,50 @@ public final class TushareTokenRateLimiter {
      * sliding-window slot; daily exhaustion fails immediately.
      */
     public void acquire(String endpoint) {
-        validateEndpoint(endpoint);
+        TushareEndpointRateLimitPolicy.Endpoint typedEndpoint =
+                policy.endpoint(endpoint).orElseThrow(() ->
+                        new QuotaException(
+                                "TUSHARE_ENDPOINT_NOT_ALLOWED"));
         while (true) {
             long waitNanos;
             synchronized (monitor) {
                 rotateDailyCounts();
                 long dailyCount = dailyEndpointCallCounts
                         .getOrDefault(endpoint, 0L);
-                if (dailyCount >= dailySafeLimitPerApi) {
+                if (dailyCount >= policy.dailySafeLimitPerEndpoint()) {
                     throw new QuotaException(
                             "TUSHARE_DAILY_API_BUDGET_EXHAUSTED");
                 }
                 long now = nanoTimeSource.nanoTime();
-                evictExpired(now);
-                if (grantedAt.size() < minuteSafeLimit) {
-                    grantedAt.addLast(now);
+                evictExpired(globalGrantedAt, now);
+                ArrayDeque<Long> endpointWindow =
+                        endpointGrantedAt.get(typedEndpoint);
+                if (endpointWindow == null) {
+                    throw new QuotaException(
+                            "TUSHARE_ENDPOINT_RATE_POLICY_INVALID");
+                }
+                evictExpired(endpointWindow, now);
+                boolean globalAvailable =
+                        globalGrantedAt.size()
+                                < policy.globalSafeLimitPerMinute();
+                boolean endpointAvailable =
+                        endpointWindow.size()
+                                < policy.safeLimitPerMinute(typedEndpoint);
+                if (globalAvailable && endpointAvailable) {
+                    globalGrantedAt.addLast(now);
+                    endpointWindow.addLast(now);
                     totalCallCount.incrementAndGet();
                     endpointCallCounts.merge(endpoint, 1L, Long::sum);
                     dailyEndpointCallCounts.merge(
                             endpoint, 1L, Long::sum);
                     return;
                 }
-                long oldest = grantedAt.getFirst();
+                long globalWait = globalAvailable
+                        ? 0L : waitFor(globalGrantedAt, now);
+                long endpointWait = endpointAvailable
+                        ? 0L : waitFor(endpointWindow, now);
                 waitNanos = Math.max(
-                        1L, windowNanos - elapsed(oldest, now));
+                        1L, Math.max(globalWait, endpointWait));
             }
             try {
                 waitStrategy.await(Duration.ofNanos(waitNanos));
@@ -131,16 +167,28 @@ public final class TushareTokenRateLimiter {
     public RateLimitSnapshot snapshot() {
         synchronized (monitor) {
             rotateDailyCounts();
-            evictExpired(nanoTimeSource.nanoTime());
+            long now = nanoTimeSource.nanoTime();
+            evictExpired(globalGrantedAt, now);
+            endpointGrantedAt.values().forEach(
+                    values -> evictExpired(values, now));
+            Map<String, Integer> currentEndpointWindows =
+                    new LinkedHashMap<>();
+            TushareEndpointRateLimitPolicy.Endpoint.stream()
+                    .forEach(endpoint -> currentEndpointWindows.put(
+                            endpoint.providerName(),
+                            endpointGrantedAt.get(endpoint).size()));
             return new RateLimitSnapshot(
-                    minuteSafeLimit,
-                    dailySafeLimitPerApi,
-                    window,
+                    policy.globalSafeLimitPerMinute(),
+                    globalGrantedAt.size(),
+                    policy.endpointSafeLimitsPerMinute(),
+                    currentEndpointWindows,
+                    policy.dailySafeLimitPerEndpoint(),
+                    Map.copyOf(dailyEndpointCallCounts),
                     totalCallCount.get(),
-                    grantedAt.size(),
-                    dailyCountDate,
                     Map.copyOf(endpointCallCounts),
-                    Map.copyOf(dailyEndpointCallCounts));
+                    window,
+                    dailyCountDate,
+                    false);
         }
     }
 
@@ -153,11 +201,21 @@ public final class TushareTokenRateLimiter {
         }
     }
 
-    private void evictExpired(long now) {
-        while (!grantedAt.isEmpty()
-                && elapsed(grantedAt.getFirst(), now) >= windowNanos) {
-            grantedAt.removeFirst();
+    private void evictExpired(ArrayDeque<Long> values, long now) {
+        while (!values.isEmpty()
+                && elapsed(values.getFirst(), now) >= windowNanos) {
+            values.removeFirst();
         }
+    }
+
+    private long waitFor(ArrayDeque<Long> values, long now) {
+        if (values.isEmpty()) {
+            throw new QuotaException(
+                    "TUSHARE_ENDPOINT_RATE_POLICY_INVALID");
+        }
+        return Math.max(
+                1L,
+                windowNanos - elapsed(values.getFirst(), now));
     }
 
     private static long elapsed(long start, long end) {
@@ -165,25 +223,40 @@ public final class TushareTokenRateLimiter {
         return elapsed < 0 ? Long.MAX_VALUE : elapsed;
     }
 
-    private static void validateEndpoint(String endpoint) {
-        if (endpoint == null
-                || !endpoint.matches("[a-z][a-z0-9_]{1,63}")) {
-            throw new IllegalArgumentException(
-                    "invalid Tushare endpoint");
-        }
+    private static TushareEndpointRateLimitPolicy testPolicy(
+            int minuteSafeLimit,
+            int dailySafeLimitPerApi
+    ) {
+        Map<TushareEndpointRateLimitPolicy.Endpoint, Integer> limits =
+                new EnumMap<>(
+                        TushareEndpointRateLimitPolicy.Endpoint.class);
+        TushareEndpointRateLimitPolicy.Endpoint.stream()
+                .forEach(endpoint -> limits.put(
+                        endpoint, minuteSafeLimit));
+        return new TushareEndpointRateLimitPolicy(
+                minuteSafeLimit,
+                dailySafeLimitPerApi,
+                limits);
     }
 
     public record RateLimitSnapshot(
-            int safeLimitPerMinute,
+            int globalSafeLimitPerMinute,
+            int currentGlobalWindowCallCount,
+            Map<String, Integer> endpointSafeLimitsPerMinute,
+            Map<String, Integer> currentEndpointWindowCallCounts,
             int dailySafeLimitPerApi,
-            Duration window,
+            Map<String, Long> dailyEndpointCallCounts,
             long totalCallCount,
-            int currentWindowCallCount,
-            LocalDate dailyCountDate,
             Map<String, Long> endpointCallCounts,
-            Map<String, Long> dailyEndpointCallCounts
+            Duration window,
+            LocalDate dailyCountDate,
+            boolean distributedCoordination
     ) {
         public RateLimitSnapshot {
+            endpointSafeLimitsPerMinute =
+                    Map.copyOf(endpointSafeLimitsPerMinute);
+            currentEndpointWindowCallCounts =
+                    Map.copyOf(currentEndpointWindowCallCounts);
             endpointCallCounts = Map.copyOf(endpointCallCounts);
             dailyEndpointCallCounts =
                     Map.copyOf(dailyEndpointCallCounts);

@@ -8,6 +8,7 @@
 - B1 治理复核日期：`2026-07-30`
 - Tushare 量化数据来源书面证据与 F1A 受控联调日期：`2026-07-30`
 - Tushare F1B 官方技术合同复核日期：`2026-07-30`
+- Tushare F1C 本地实现与随机隔离验证日期：`2026-07-30`
 - 候选数量：精确为 3 个：BaoStock、Tushare Pro、同花顺 iFinD。
 - 本矩阵只使用 [Track B 证据登记册](track-b-provider-evidence-register.md) 中的官方资料、已经验收的 F0 直接 Provider 探针事实、B1 固定范围 Tushare 受控权限探针事实、
   Tushare 官方企业微信脱敏书面转录、F1A 固定范围受控联调事实和 F1B 官方
@@ -88,7 +89,7 @@
 
 任何候选都未达到 `V13_LINEAGE_READY` 或 `PROVIDER_PIT_READY`。
 
-### 4.1 Tushare F1B 技术路线
+### 4.1 Tushare F1B 合同与 F1C 隔离运行路线
 
 ```text
 TUSHARE_TECHNICAL_ROUTE_DECISION=REDUCED_RESEARCH_ONLY
@@ -97,21 +98,29 @@ FULL_TECHNICAL_CONTRACT_READY=false
 REDUCED_RESEARCH_CONTRACT_READY=true
 QFQ_FORMULA_QUALIFICATION=VERIFIED
 QFQ_OPERATIONAL_RUNTIME_QUALIFICATION=PARTIAL
+QFQ_REDUCED_RESEARCH_RUNTIME_QUALIFICATION=VERIFIED
+QFQ_FULL_LINEAGE_RUNTIME_QUALIFICATION=PARTIAL
 REDUCED_RESEARCH_RUNTIME_READY=false
+REDUCED_RESEARCH_ISOLATED_MANUAL_RUNTIME_READY=true
+REDUCED_RESEARCH_PRODUCTION_RUNTIME_READY=false
+NORMAL_BUSINESS_DATABASE_RUNTIME_READY=false
 QFQ_OPERATIONAL_BLOCKER=EXISTING_QFQ_ENGINE_REQUIRES_CORPORATE_ACTION_LINEAGE
 OFFICIAL_ENDPOINT_RATE_LIMITS=PARTIAL_CONFLICT_IDENTIFIED
-ENDPOINT_SPECIFIC_RATE_LIMIT_ENFORCED=false
+ENDPOINT_SPECIFIC_RATE_LIMIT_ENFORCED=true
+CONSERVATIVE_ENDPOINT_MINIMUM_POLICY_ENFORCED=true
 PROVIDER_REVISION_AVAILABLE=false
 HISTORICAL_VERSIONS_QUERYABLE=false
 ```
 
-缩减合同已定义同 Provider raw/factor/calendar、请求结束日锚定的研究级 QFQ，以及真实首次
-捕获后的 `SYSTEM_KNOWLEDGE_PIT`，但运行入口尚未实现。现有 `QfqAsOfEngine` 在 factor
-变化时继续要求公司行动 lineage；官方总表与 Endpoint 页面频次值冲突也尚未由
-Endpoint 级限流落实。`dividend` 只作
-`PARTIAL_DIVIDEND_EVIDENCE`，不得进入完整公司行动 lineage；不允许 Provider PIT、
-历史 revision 回放、永久证券身份、跨 Provider QFQ、正常业务库、scheduler 或全市场
-自动采集。
+F1B 缩减合同定义同 Provider raw/factor/calendar、请求结束日锚定的研究级 QFQ，以及
+真实首次捕获后的 `SYSTEM_KNOWLEDGE_PIT`。F1C 只实现随机隔离的单证券、两自然日、
+`daily/adj_factor/trade_cal` 三请求、零重试手工入口；公式级 QFQ 只在内存返回。
+现有 `QfqAsOfEngine` 在 factor 变化时继续要求公司行动 lineage。官方总表与 Endpoint
+页面频次值冲突仍为 `PARTIAL_CONFLICT_IDENTIFIED`，但实现已按所有适用上限的较小值
+执行单进程 Endpoint 级限制；跨进程协调仍不存在。`dividend` 只作
+`PARTIAL_DIVIDEND_EVIDENCE`，不进入 F1C 入口或完整公司行动 lineage；不允许
+Provider PIT、历史 revision 回放、永久证券身份、跨 Provider QFQ、正常业务库、
+scheduler 或全市场自动采集。
 
 FULL 判定使用每一种公司行动的独立 `TechnicalClaim(status,evidenceIds)`，并单独要求
 stable action ID、factor/action、revision、历史版本、永久身份与 Provider PIT 证据。

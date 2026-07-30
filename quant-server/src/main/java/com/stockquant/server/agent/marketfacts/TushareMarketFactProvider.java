@@ -131,7 +131,10 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
         coverage.put(
                 "tushareReducedResearchContract",
                 qualification.reducedResearchContractReady()
-                        ? "CONTRACT_DEFINED_RUNTIME_NOT_READY"
+                        ? qualification
+                        .reducedResearchIsolatedManualRuntimeReady()
+                        ? "CONTRACT_DEFINED_ISOLATED_MANUAL_READY"
+                        : "CONTRACT_DEFINED_RUNTIME_NOT_READY"
                         : "BLOCKED");
         coverage.put(
                 "technicalRouteDecision",
@@ -139,6 +142,19 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
         coverage.put(
                 "reducedResearchRuntimeReady",
                 qualification.reducedResearchRuntimeReady());
+        coverage.put(
+                "reducedResearchIsolatedManualRuntimeReady",
+                qualification
+                        .reducedResearchIsolatedManualRuntimeReady());
+        coverage.put(
+                "reducedResearchProductionRuntimeReady",
+                qualification.reducedResearchProductionRuntimeReady());
+        coverage.put(
+                "normalBusinessDatabaseRuntimeReady",
+                qualification.normalBusinessDatabaseRuntimeReady());
+        coverage.put(
+                "schedulerRuntimeReady",
+                qualification.schedulerRuntimeReady());
         coverage.put(
                 "qfqCalculationMode",
                 qualification.qfqCalculationMode().name());
@@ -151,6 +167,14 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
         coverage.put(
                 "qfqOperationalRuntimeQualification",
                 qualification.qfqOperationalRuntimeQualification().name());
+        coverage.put(
+                "qfqReducedResearchRuntimeQualification",
+                qualification
+                        .qfqReducedResearchRuntimeQualification().name());
+        coverage.put(
+                "qfqFullLineageRuntimeQualification",
+                qualification
+                        .qfqFullLineageRuntimeQualification().name());
         coverage.put(
                 "corporateActionLineageComplete",
                 qualification.corporateActionLineageComplete());
@@ -181,6 +205,13 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
         coverage.put(
                 "endpointSpecificRateLimitEnforced",
                 qualification.endpointSpecificRateLimitEnforced());
+        coverage.put(
+                "conservativeEndpointMinimumPolicyEnforced",
+                qualification
+                        .conservativeEndpointMinimumPolicyEnforced());
+        coverage.put(
+                "isolatedSchemaGuardVerified",
+                qualification.isolatedSchemaGuardVerified());
         coverage.put(
                 "stockCompanyIdentityUse",
                 "ISSUER_IDENTITY_EVIDENCE");
@@ -287,6 +318,10 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
                 "endpointSpecificRateLimitEnforced",
                 qualification.endpointSpecificRateLimitEnforced());
         rateLimit.put(
+                "conservativeEndpointMinimumPolicyEnforced",
+                qualification
+                        .conservativeEndpointMinimumPolicyEnforced());
+        rateLimit.put(
                 "applicableLimitSelection",
                 "MOST_CONSERVATIVE_MINIMUM");
         ObjectNode endpointLimits =
@@ -299,6 +334,24 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
                 "daily",
                 TushareTechnicalQualification
                         .DAILY_OFFICIAL_RATE_LIMIT_PER_MINUTE);
+        endpointLimits.put(
+                "adj_factor",
+                TushareTechnicalQualification
+                        .GENERAL_2000_POINT_RATE_LIMIT_PER_MINUTE);
+        endpointLimits.put(
+                "trade_cal",
+                TushareTechnicalQualification
+                        .GENERAL_2000_POINT_RATE_LIMIT_PER_MINUTE);
+        endpointLimits.put(
+                "dividend",
+                TushareTechnicalQualification
+                        .GENERAL_2000_POINT_RATE_LIMIT_PER_MINUTE);
+        ObjectNode applicationEndpointLimits =
+                rateLimit.putObject("applicationSafePerMinuteByEndpoint");
+        TushareEndpointRateLimitPolicy.frozenF1cPolicy()
+                .endpointSafeLimitsPerMinute()
+                .forEach(applicationEndpointLimits::put);
+        rateLimit.put("distributedCoordination", false);
 
         return new ProviderCapability(
                 PitMarketFactsContracts.PROVIDER_CONTRACT_VERSION,
@@ -350,6 +403,36 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
             MarketFactRequest request,
             TushareManualBoundedSession session
     ) {
+        return fetch(
+                request, QueryMode.CONTROLLED_NO_RETRY, session);
+    }
+
+    /**
+     * Explicit F1C path. It accepts only the three-request isolated-manual
+     * session and never enables retries or the two reference endpoints.
+     */
+    public MarketFactResponse fetchForIsolatedReducedResearch(
+            MarketFactRequest request,
+            TushareManualBoundedSession session
+    ) {
+        if (session == null
+                || session.sessionProfile()
+                != TushareManualBoundedSession.SessionProfile
+                .F1C_ISOLATED_MANUAL
+                || session.maximumBusinessRequests()
+                != TushareManualBoundedSession
+                .F1C_MAX_PROVIDER_BUSINESS_REQUESTS
+                || !session.allowedEndpoints().equals(
+                TushareManualBoundedSession.F1C_ALLOWED_ENDPOINTS)
+                || session.automaticRetryAllowed()) {
+            throw new IllegalArgumentException(
+                    "TUSHARE_REDUCED_RUNTIME_SESSION_INVALID");
+        }
+        if (request == null
+                || !request.factTypes().equals(SUPPORTED_FACT_TYPES)) {
+            throw new IllegalArgumentException(
+                    "TUSHARE_REDUCED_RUNTIME_FACT_SCOPE_INVALID");
+        }
         return fetch(
                 request, QueryMode.CONTROLLED_NO_RETRY, session);
     }
@@ -826,6 +909,8 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
                 session.maximumBusinessRequests());
         metadata.put("sessionConsumedBusinessRequests",
                 session.consumedBusinessRequests());
+        metadata.put("sessionProfile",
+                session.sessionProfile().name());
         metadata.put("automaticRetryAllowed",
                 session.automaticRetryAllowed());
         metadata.put("systemKnowledgeOnly", true);
