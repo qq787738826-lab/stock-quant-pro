@@ -39,7 +39,9 @@ WRITTEN_PERSONAL_BACKTEST_PERMISSION=UNVERIFIED
 WRITTEN_PERSONAL_AGENT_ANALYSIS_PERMISSION=UNVERIFIED
 USER_PERSONAL_USE_IMPLEMENTATION_AUTHORIZATION=CONFIRMED
 F1_LIMITED_PERSONAL_USE_IMPLEMENTATION=APPROVED_BY_USER
-F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE
+F1_ENTRY_READINESS=BLOCKED_MULTIPLE
+BLOCKED_WRITTEN_PERMISSION
+BLOCKED_TECHNICAL_EVIDENCE
 ```
 
 官方书面回复只验证“可作为量化数据来源”，没有逐项确认本地长期存储、策略回测或
@@ -90,8 +92,20 @@ factor:   TUSHARE:ADJ_FACTOR:<ts_code>
 calendar: TUSHARE:TRADE_CAL:<exchange>
 ```
 
-联网只允许显式 `MANUAL_BOUNDED` 会话：最多 10 次业务请求、2 只固定证券、2 个历史
-交易日、SSE/SZSE 和五个冻结 Endpoint；预算在所有 Endpoint 共用的 Gateway 边界计数。
+联网只允许显式 `MANUAL_BOUNDED` 会话：最多 10 次业务请求、2 只固定证券、
+SSE/SZSE 和五个冻结 Endpoint；预算在所有 Endpoint 共用的 Gateway 边界计数。
+`daily/adj_factor/trade_cal` 三个时间序列 Endpoint 另受固定 2 个自然日约束；
+`stock_basic/dividend` 是参考数据 Endpoint，不伪装成“两日数据”，只受固定证券、
+固定 Endpoint、共享会话预算和返回行数硬上限约束：
+
+```text
+MAX_TIME_SERIES_NATURAL_DAYS=2
+STOCK_BASIC_MAX_ROWS=1
+DIVIDEND_EVIDENCE_MAX_ROWS=1000
+```
+
+超过参考数据行数上限必须在生成 DTO 前返回
+`TUSHARE_REFERENCE_ROW_LIMIT_EXCEEDED`，不得截断后冒充完整响应。
 第 11 次在 HTTP 前返回 `TUSHARE_REQUEST_BUDGET_EXHAUSTED`。Adapter 不提供 Controller、
 scheduler 或自动调用入口；普通生产入口在 F1A 仍不可联网。
 
@@ -146,13 +160,22 @@ CONTROLLED_PROBE_MAXIMUM_RETRIES=0
 - 不迁移正常业务库 public；
 - 不回填历史业务数据；
 - 随机隔离 Schema 从 V1 完整迁移至 V13；
-- FORMAL 捕获使用 `PROVIDER_CAPTURE`，但用途仍为 `RESEARCH_ONLY` 且
-  `formalEligible=false`；
+- 通用 `capture(response, observedAt)` 继续拒绝 `FORMAL`；F1A 只能经
+  `captureAuthorizedLimitedPersonalFormal(...)` 和类型化
+  `LimitedPersonalFormalCaptureAuthorization` 进入 `PROVIDER_CAPTURE`；
+- 类型化授权固定 Tushare Provider/Adapter、有限个人研究范围、用户授权、量化数据来源
+  书面证据、三项具体书面许可仍未验证、禁止原始数据再分发、
+  `SYSTEM_KNOWLEDGE_ONLY`、`RESEARCH_ONLY`、`formalEligible=false`，且只接受
+  raw/factor/calendar；
+- capability 同时公开
+  `fullF1EntryReady=false`、
+  `authorizationBasis=USER_APPROVED_LIMITED_PERSONAL_USE` 和
+  `providerWrittenPermissionComplete=false`；
 - `SYSTEM_KNOWLEDGE_ONLY` 的 `knownAt=firstObservedAt`；
 - partial Provider 响应保留审计 batch，但原子地不写事实观察；
 - 随机 Schema 精确删除，测试 public 指纹前后不变。
 
-## 7. 仍未解除的技术阻断
+## 7. 仍未解除的完整 F1 阻断
 
 当前继续保持：
 
@@ -160,10 +183,17 @@ CONTROLLED_PROBE_MAXIMUM_RETRIES=0
 V13_LINEAGE_PARTIAL
 PIT_PARTIAL
 STABLE_SECURITY_ID=PARTIAL
-F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE
+F1_ENTRY_READINESS=BLOCKED_MULTIPLE
+BLOCKED_WRITTEN_PERMISSION
+BLOCKED_TECHNICAL_EVIDENCE
 ```
 
-剩余缺口为：
+`F1_LIMITED_PERSONAL_USE_IMPLEMENTATION=APPROVED_BY_USER` 允许本阶段 Adapter 基础和
+随机隔离验证合入，但不把 Provider 三项具体书面许可升级为 `VERIFIED`，也不授权正常
+业务库、scheduler、Shadow 或后续正式运行。完整 F1 的书面许可阻断仍包括本地长期存储、
+策略回测、内部 Agent 和服务到期留存边界。
+
+剩余技术缺口为：
 
 1. 公司行动完整覆盖；
 2. 稳定 action ID；
@@ -190,12 +220,17 @@ F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE
 - Provider 频率消息优先分类为 `RATE_LIMITED`；
 - raw/factor/calendar 映射、单位、null 与明确 0；
 - stock_basic 普通身份与 dividend 部分证据映射；
+- `stock_basic` 1 行和 `dividend` 1000 行参考数据硬上限，超限不截断；
+- 时间序列两日约束与参考数据历史证据范围严格分离；
 - dividend 不升级完整公司行动；
 - source identity、范围、沪深主板和 unsupported fact 安全门；
 - partial/异常响应；
 - 初始 6 请求只验证 raw/factor/calendar；修复只使用剩余 4 请求验证两证券的
   stock_basic/dividend，阶段总预算精确为 10；
 - PostgreSQL 16 随机 Schema V1→V13、幂等和 partial 原子失败；
+- 通用捕获拒绝 FORMAL、伪 Provider/Adapter/许可/资格绕过拒绝和三类有限 FORMAL
+  类型化授权捕获；
+- TEST/DEMO 旧捕获路径不回退，正常 public 指纹不变；
 - Provider 中立 V2 与 QFQ 18 个黄金向量兼容；
 - quant-core 与 quant-server 回归。
 

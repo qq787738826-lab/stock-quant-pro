@@ -75,7 +75,7 @@
 |---|---|---|---|---|---|---|
 | TS-WP-001 | `2026-07-30` | Tushare 官方企业微信书面文字回复 | W1 | 问：“这个可以用来当量化数据来源吧”；答：“可以” | 可把 Tushare 作为量化数据来源 | 不逐项支持本地长期存储、策略回测、内部 Agent、原始数据再分发、商业数据服务或服务到期留存 |
 | TS-F1A-001 | `2026-07-30` | 两证券、两日、`daily/adj_factor/trade_cal`，精确 6 次、零重试 | R1 | 两只证券的三类响应均非空且日期范围合规；未保存完整响应、CSV、Token 或市场值 fixture | F1A Java HTTPS Adapter、字段映射和受控零重试路径可用 | 不支持公司行动闭环、revision、历史旧版本、永久证券身份或全历史 `DAILY_EXACT` |
-| TS-F1A-002 | `2026-07-30` | 两证券、`stock_basic/dividend`，只用阶段剩余 4 次、零重试 | R1 | stock_basic 为 1/1 行；dividend 为 51/53 行；字段集合与冻结 DTO 一致；未保存完整响应、CSV、Token 或市场值 | 普通身份 DTO 与 dividend 部分证据 DTO 的真实受控路径可用；F1A 总调用数为 10 | 不支持永久身份、稳定 action ID、完整公司行动、factor/action 解释关系、revision 或 Provider PIT |
+| TS-F1A-002 | `2026-07-30` | 两证券、`stock_basic/dividend`，只用阶段剩余 4 次、零重试 | R1 | stock_basic 为 1/1 行；dividend 为固定证券的历史部分证据 51/53 行，不是两日数据；字段集合与冻结 DTO 一致；未保存完整响应、CSV、Token 或市场值 | 普通身份 DTO 与 dividend 部分证据 DTO 的真实受控路径可用；F1A 总调用数为 10 | 不支持永久身份、稳定 action ID、完整公司行动、factor/action 解释关系、revision、Provider PIT 或写入 V13 公司行动表 |
 
 错误转录生成的 SHA-256 已删除；未保存的原始截图不登记新的内容 Hash。原始截图不提交
 Git；不记录联系人、微信 ID、头像、手机号、Token、账号或其他个人信息。

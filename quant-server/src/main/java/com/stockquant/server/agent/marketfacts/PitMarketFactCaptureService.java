@@ -72,27 +72,52 @@ public class PitMarketFactCaptureService {
             MarketFactProvider provider,
             MarketFactRequest request
     ) {
+        rejectGenericFormal(
+                request == null ? null : request.runNamespace());
         MarketFactResponse response = provider.fetch(request);
         Instant observedAt = BacktestCanonicalHashService.microsecondInstant(
                 clock.instant());
         validateResponse(request, provider, response);
         return transactionTemplate.execute(status ->
-                captureWithinTransaction(response, observedAt));
+                captureWithinTransaction(response, observedAt, null));
     }
 
     @Transactional
     public CaptureResult capture(MarketFactResponse response, Instant observedAt) {
-        return captureWithinTransaction(response, observedAt);
+        rejectGenericFormal(
+                response == null ? null : response.runNamespace());
+        return captureWithinTransaction(response, observedAt, null);
+    }
+
+    /**
+     * The only FORMAL capture path authorized in F1A.
+     *
+     * <p>The explicit typed authorization is matched against the response
+     * capability before any dataset, batch or observation is written.</p>
+     */
+    @Transactional
+    public CaptureResult captureAuthorizedLimitedPersonalFormal(
+            MarketFactResponse response,
+            Instant observedAt,
+            LimitedPersonalFormalCaptureAuthorization authorization
+    ) {
+        Objects.requireNonNull(
+                authorization, "limited personal FORMAL authorization");
+        authorization.validateResponse(response);
+        return captureWithinTransaction(
+                response, observedAt, authorization);
     }
 
     private CaptureResult captureWithinTransaction(
             MarketFactResponse response,
-            Instant observedAt
+            Instant observedAt,
+            LimitedPersonalFormalCaptureAuthorization authorization
     ) {
         Instant stableObservedAt =
                 BacktestCanonicalHashService.microsecondInstant(observedAt);
         validateResponse(null, null, response);
-        Qualification qualification = qualification(response);
+        Qualification qualification = qualification(
+                response, authorization);
         List<TypedFact> facts = sortedFacts(response);
         validateObservationTime(facts, stableObservedAt);
 
@@ -340,7 +365,10 @@ public class PitMarketFactCaptureService {
         }
     }
 
-    private Qualification qualification(MarketFactResponse response) {
+    private Qualification qualification(
+            MarketFactResponse response,
+            LimitedPersonalFormalCaptureAuthorization authorization
+    ) {
         List<ProviderVersion> versions = sortedFacts(response).stream()
                 .map(fact -> MarketFactProviderModels.version(fact.value()))
                 .toList();
@@ -363,34 +391,30 @@ public class PitMarketFactCaptureService {
         UsageQualification usageQualification;
         boolean formalEligible;
         if (response.runNamespace() == RunNamespace.FORMAL) {
-            JsonNode licensing = response.capability().licensing();
-            JsonNode usageNode = licensing.get("usageQualification");
-            JsonNode formalNode = licensing.get("formalEligible");
-            if (usageNode == null || !usageNode.isTextual()
-                    || formalNode == null || !formalNode.isBoolean()) {
+            if (authorization == null) {
                 throw new IllegalArgumentException(
-                        "formal provider licensing qualification is incomplete");
+                        "FORMAL_CAPTURE_REQUIRES_LIMITED_PERSONAL_AUTHORIZATION");
             }
-            try {
-                usageQualification = UsageQualification.valueOf(
-                        usageNode.asText());
-            } catch (IllegalArgumentException error) {
-                throw new IllegalArgumentException(
-                        "formal provider usage qualification is invalid",
-                        error);
-            }
-            formalEligible = formalNode.booleanValue();
-            if (usageQualification == UsageQualification.TEST_DEMO_ONLY) {
-                throw new IllegalArgumentException(
-                        "formal provider cannot use TEST_DEMO_ONLY");
-            }
+            usageQualification = authorization.usageQualification();
+            formalEligible = authorization.formalEligible();
         } else {
+            if (authorization != null) {
+                throw new IllegalArgumentException(
+                        "limited personal FORMAL authorization namespace mismatch");
+            }
             usageQualification = UsageQualification.TEST_DEMO_ONLY;
             formalEligible = false;
         }
         return new Qualification(
                 providerDatasetVersion, qualification, assurance,
                 usageQualification, formalEligible);
+    }
+
+    private static void rejectGenericFormal(RunNamespace namespace) {
+        if (namespace == RunNamespace.FORMAL) {
+            throw new IllegalArgumentException(
+                    "FORMAL_CAPTURE_REQUIRES_LIMITED_PERSONAL_AUTHORIZATION");
+        }
     }
 
     private List<TypedFact> sortedFacts(MarketFactResponse response) {

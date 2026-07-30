@@ -44,7 +44,9 @@ PAID_PROVIDER_UPGRADE_DECISION=PENDING
 ```
 
 Tushare 最低成本批准阻断已经解除；官方“可作为量化数据来源”的书面证据和用户有界个人
-实现授权允许 F1A 继续，因此当前准入代码只保留技术证据阻断。个人本地长期存储、回测和
-Agent 三项 Provider 书面许可仍为 `UNVERIFIED`，不得写成已解决；服务到期留存仍为
+实现授权允许 F1A 继续，但完整 F1 仍为
+`F1_ENTRY_READINESS=BLOCKED_MULTIPLE`，包含 `BLOCKED_WRITTEN_PERMISSION` 和
+`BLOCKED_TECHNICAL_EVIDENCE`。个人本地长期存储、回测和 Agent 三项 Provider 书面许可
+仍为 `UNVERIFIED`，不得写成已解决；服务到期留存仍为
 `UNVERIFIED`，原始数据再分发为 `NOT_GRANTED`。`PAID_PROVIDER_UPGRADE_DECISION=PENDING`
 继续控制后续专业付费升级和 iFinD，不因本次低成本权限自动变化。

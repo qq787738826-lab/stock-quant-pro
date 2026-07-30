@@ -13,7 +13,7 @@ TS-WP-001 只书面确认“可以用来当量化数据来源”，没有逐项�
 ```text
 MAX_BUSINESS_REQUESTS=10
 MAX_SYMBOLS=2
-MAX_HISTORICAL_TRADING_DAYS=2
+MAX_TIME_SERIES_NATURAL_DAYS=2
 RETRY_ALLOWED=false
 NORMAL_BUSINESS_DATABASE_WRITE=false
 SCHEDULER_ENABLED=false
@@ -102,7 +102,10 @@ DAY_002_CREATED=false
 
 ## 6. B1 已完成的 Tushare 权限子集
 
-B1 使用相同两只证券，将日期固定为 `20250102`、`20250103`，日历范围固定为 `20250101`—`20250105`。十项请求为两次 `stock_basic`、两次 `trade_cal`、两次 `daily`、两次 `adj_factor` 和两次 `dividend`；全部 `PASS`，无重试、权限错误或网络错误。
+B1 使用相同两只证券；`daily/adj_factor` 日期固定为 `20250102`、`20250103`，日历范围
+固定为 `20250101`—`20250105`。无日期参数的 `stock_basic/dividend` 是参考数据请求，
+不受“两交易日”描述。十项请求为两次 `stock_basic`、两次 `trade_cal`、两次 `daily`、
+两次 `adj_factor` 和两次 `dividend`；全部 `PASS`，无重试、权限错误或网络错误。
 
 本次是用户购买权限后专项授权的最小技术权限检查，但执行前没有取得：
 
@@ -140,7 +143,9 @@ B1 十项探针。初始联调先使用 6 次验证三类 V13 输入；复验修
 TUSHARE_MODE=MANUAL_BOUNDED
 MAX_BUSINESS_REQUESTS=10
 MAX_SYMBOLS=2
-MAX_HISTORICAL_TRADING_DAYS=2
+MAX_TIME_SERIES_NATURAL_DAYS=2
+STOCK_BASIC_MAX_ROWS=1
+DIVIDEND_EVIDENCE_MAX_ROWS=1000
 ALLOWED_ENDPOINTS=stock_basic,trade_cal,daily,adj_factor,dividend
 QUERY_MODE=CONTROLLED_NO_RETRY
 RETRY_COUNT=0
@@ -150,9 +155,11 @@ RETRY_COUNT=0
 
 - `600000.SH` / SSE；
 - `000001.SZ` / SZSE；
-- `2025-01-06`—`2025-01-07`；
+- `2025-01-06`—`2025-01-07` 只约束时间序列 Endpoint；
 - 初始每只证券分别执行 `daily`、`adj_factor`、`trade_cal`，精确 6 次；
 - 修复阶段每只证券分别执行 `stock_basic`、`dividend`，精确 4 次；
+- 参考 Endpoint 在生成 DTO 前执行 1/1000 行硬上限，超限返回
+  `TUSHARE_REFERENCE_ROW_LIMIT_EXCEEDED`，不得截断；
 - 五个 Endpoint 共用同一 10 次会话预算，第 11 次必须在 HTTP 前拒绝。
 
 结果：
@@ -164,8 +171,9 @@ TUSHARE_F1A_RETRY_COUNT=0
 ```
 
 完整响应、CSV、Token 和真实市场值 fixture 均未保存。联调只验证 Java Adapter 的
-HTTPS、五 Endpoint 映射和受控零重试路径。stock_basic 只产生普通身份 DTO，dividend
-只产生不可写入完整公司行动的部分证据 DTO；不验证完整公司行动、revision、旧版本、
+HTTPS、五 Endpoint 映射和受控零重试路径。stock_basic 只产生普通身份 DTO；dividend
+返回的 51/53 行是固定证券历史部分证据，不是两日数据，只产生不可写入 V13 完整公司
+行动的部分证据 DTO；不验证完整公司行动、revision、旧版本、
 永久证券身份或全历史 `DAILY_EXACT`。
 
 正常运行限流合同另固定为：
@@ -200,6 +208,9 @@ WRITTEN_PERSONAL_BACKTEST_PERMISSION=UNVERIFIED
 WRITTEN_PERSONAL_AGENT_ANALYSIS_PERMISSION=UNVERIFIED
 USER_PERSONAL_USE_IMPLEMENTATION_AUTHORIZATION=CONFIRMED
 F1_LIMITED_PERSONAL_USE_IMPLEMENTATION=APPROVED_BY_USER
+F1_ENTRY_READINESS=BLOCKED_MULTIPLE
+BLOCKED_WRITTEN_PERMISSION
+BLOCKED_TECHNICAL_EVIDENCE
 TRACK_B_FULL_EVIDENCE_PROBE_STATUS=PARTIAL_NOT_COMPLETE
 TRACK_B_FULL_PROBE_LEGAL_PREREQUISITES=NOT_MET
 WRITTEN_AUTOMATED_PROBE_PERMISSION=UNVERIFIED

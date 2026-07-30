@@ -6,9 +6,18 @@ import com.fasterxml.jackson.databind.node.DecimalNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 import com.stockquant.server.QuantServerApplication;
+import com.stockquant.server.agent.marketfacts.LimitedPersonalFormalCaptureAuthorization;
+import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.CorporateAction;
+import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.CorporateActionType;
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.FactType;
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.MarketFactRequest;
+import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.MarketFactResponse;
+import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.ProviderCapability;
+import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.ProviderVersion;
+import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.RawDailyBar;
+import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.RevisionQualification;
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.RunNamespace;
+import com.stockquant.server.agent.marketfacts.MockMarketFactProvider;
 import com.stockquant.server.agent.marketfacts.PitMarketFactCaptureService;
 import com.stockquant.server.agent.marketfacts.TushareApiGateway;
 import com.stockquant.server.agent.marketfacts.TushareMarketFactProperties;
@@ -34,6 +43,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @SpringBootTest(classes = QuantServerApplication.class)
@@ -120,7 +130,11 @@ class AgentStage3AR3BF1ATusharePostgresIntegrationTest {
                 request, session());
         assertTrue(response.complete());
         assertEquals(3, response.recordCount());
-        var first = captureService.capture(response, OBSERVED_AT);
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> captureService.capture(response, OBSERVED_AT));
+        var first = captureService.captureAuthorizedLimitedPersonalFormal(
+                response, OBSERVED_AT, authorization());
         assertEquals(3, first.appendedCount());
         assertEquals(0, first.idempotentCount());
 
@@ -168,10 +182,12 @@ class AgentStage3AR3BF1ATusharePostgresIntegrationTest {
                         ORDER BY source_instrument_id
                         """, String.class, first.batchId()));
 
-        var repeated = captureService.capture(
+        var repeated =
+                captureService.captureAuthorizedLimitedPersonalFormal(
                 provider.fetchForControlledAcceptance(
                         request, session()),
-                OBSERVED_AT.plusSeconds(60));
+                OBSERVED_AT.plusSeconds(60),
+                authorization());
         assertEquals(0, repeated.appendedCount());
         assertEquals(3, repeated.idempotentCount());
         assertEquals(3, count("""
@@ -191,8 +207,11 @@ class AgentStage3AR3BF1ATusharePostgresIntegrationTest {
         assertEquals(1, response.recordCount());
         assertEquals(1, response.errors().size());
 
-        var result = captureService.capture(
-                response, OBSERVED_AT.plusSeconds(120));
+        var result =
+                captureService.captureAuthorizedLimitedPersonalFormal(
+                        response,
+                        OBSERVED_AT.plusSeconds(120),
+                        authorization());
         assertFalse(result.complete());
         assertEquals(0, result.appendedCount());
         assertEquals(0, result.idempotentCount());
@@ -200,6 +219,298 @@ class AgentStage3AR3BF1ATusharePostgresIntegrationTest {
                 SELECT count(*) FROM pit_market_fact_observations
                 WHERE batch_id=%d
                 """.formatted(result.batchId())));
+    }
+
+    @Test
+    void rejectsForgedFormalAuthorizationBeforeAnyPersistence() {
+        MarketFactResponse original = provider(new SyntheticGateway())
+                .fetchForControlledAcceptance(request(), session());
+        int before = count("""
+                SELECT count(*) FROM pit_market_fact_batches
+                """);
+
+        assertAuthorizedRejected(fakeProvider(original));
+
+        ObjectNode missingUserAuthorization =
+                original.capability().licensing().deepCopy();
+        missingUserAuthorization.remove(
+                "userPersonalUseImplementationAuthorization");
+        assertAuthorizedRejected(withLicensing(
+                original, missingUserAuthorization));
+
+        assertAuthorizedRejected(withAdapterVersion(
+                original, "FORGED_TUSHARE_ADAPTER"));
+
+        ObjectNode formalEligible =
+                original.capability().licensing().deepCopy();
+        formalEligible.put("formalEligible", true);
+        assertAuthorizedRejected(withLicensing(
+                original, formalEligible));
+
+        for (String invalidUsage :
+                List.of("LICENSED_INTERNAL", "TEST_DEMO_ONLY")) {
+            ObjectNode licensing =
+                    original.capability().licensing().deepCopy();
+            licensing.put("usageQualification", invalidUsage);
+            assertAuthorizedRejected(withLicensing(
+                    original, licensing));
+        }
+
+        assertAuthorizedRejected(withCorporateAction(original));
+        assertAuthorizedRejected(withProviderVerifiedFact(original));
+
+        assertEquals(before, count("""
+                SELECT count(*) FROM pit_market_fact_batches
+                """));
+    }
+
+    @Test
+    void genericCaptureKeepsTestAndDemoFixturePaths() {
+        captureMockFixture(
+                RunNamespace.TEST, "600000", "SSE", OBSERVED_AT);
+        captureMockFixture(
+                RunNamespace.DEMO, "000001", "SZSE",
+                OBSERVED_AT.plusSeconds(30));
+
+        assertEquals(1, count("""
+                SELECT count(*) FROM pit_market_fact_batches
+                WHERE source_code='MOCK_PIT_MARKET_FACTS_V2'
+                  AND run_namespace='TEST'
+                  AND capture_mode='TEST_FIXTURE'
+                """));
+        assertEquals(1, count("""
+                SELECT count(*) FROM pit_market_fact_batches
+                WHERE source_code='MOCK_PIT_MARKET_FACTS_V2'
+                  AND run_namespace='DEMO'
+                  AND capture_mode='DEMO_FIXTURE'
+                """));
+    }
+
+    private void captureMockFixture(
+            RunNamespace namespace,
+            String symbol,
+            String exchange,
+            Instant observedAt
+    ) {
+        MockMarketFactProvider provider = new MockMarketFactProvider(
+                mapper, MockMarketFactProvider.Scenario.NORMAL);
+        MarketFactRequest request = new MarketFactRequest(
+                namespace,
+                MockMarketFactProvider.PROVIDER_CODE,
+                "MOCK:" + symbol + ":" + exchange,
+                symbol,
+                exchange,
+                TRADE_DATE,
+                TRADE_DATE,
+                Set.of(
+                        FactType.RAW_DAILY_BAR,
+                        FactType.ADJUSTMENT_FACTOR,
+                        FactType.TRADING_CALENDAR),
+                Duration.ofSeconds(5));
+        var result = captureService.capture(
+                provider.fetch(request), observedAt);
+        assertTrue(result.complete());
+        assertTrue(result.appendedCount() > 0);
+    }
+
+    private void assertAuthorizedRejected(MarketFactResponse response) {
+        IllegalArgumentException error = assertThrows(
+                IllegalArgumentException.class,
+                () -> captureService
+                        .captureAuthorizedLimitedPersonalFormal(
+                                response,
+                                OBSERVED_AT.plusSeconds(240),
+                                authorization()));
+        assertTrue(error.getMessage().contains(
+                "TUSHARE_LIMITED_PERSONAL_FORMAL_AUTHORIZATION_INVALID"));
+    }
+
+    private MarketFactResponse fakeProvider(MarketFactResponse original) {
+        ProviderCapability capability = copyCapability(
+                original.capability(),
+                "FORGED_PROVIDER",
+                original.adapterVersion(),
+                original.capability().supportedFactTypes(),
+                original.capability().coverage(),
+                original.capability().licensing());
+        return copyResponse(
+                original,
+                "FORGED_PROVIDER",
+                original.adapterVersion(),
+                "FORGED_PROVIDER",
+                capability,
+                original.rawDailyBars(),
+                original.corporateActions());
+    }
+
+    private MarketFactResponse withAdapterVersion(
+            MarketFactResponse original,
+            String adapterVersion
+    ) {
+        ProviderCapability capability = copyCapability(
+                original.capability(),
+                original.providerCode(),
+                adapterVersion,
+                original.capability().supportedFactTypes(),
+                original.capability().coverage(),
+                original.capability().licensing());
+        return copyResponse(
+                original,
+                original.providerCode(),
+                adapterVersion,
+                original.sourceCode(),
+                capability,
+                original.rawDailyBars(),
+                original.corporateActions());
+    }
+
+    private MarketFactResponse withLicensing(
+            MarketFactResponse original,
+            JsonNode licensing
+    ) {
+        ProviderCapability capability = copyCapability(
+                original.capability(),
+                original.providerCode(),
+                original.adapterVersion(),
+                original.capability().supportedFactTypes(),
+                original.capability().coverage(),
+                licensing);
+        return copyResponse(
+                original,
+                original.providerCode(),
+                original.adapterVersion(),
+                original.sourceCode(),
+                capability,
+                original.rawDailyBars(),
+                original.corporateActions());
+    }
+
+    private MarketFactResponse withCorporateAction(
+            MarketFactResponse original
+    ) {
+        CorporateAction action = new CorporateAction(
+                "TUSHARE:FORGED_ACTION:600000.SH",
+                "FORGED_ACTION",
+                "600000",
+                CorporateActionType.CASH_DIVIDEND,
+                TRADE_DATE,
+                TRADE_DATE,
+                mapper.createObjectNode(),
+                systemKnowledgeVersion(),
+                mapper.createObjectNode());
+        return copyResponse(
+                original,
+                original.providerCode(),
+                original.adapterVersion(),
+                original.sourceCode(),
+                original.capability(),
+                original.rawDailyBars(),
+                List.of(action));
+    }
+
+    private MarketFactResponse withProviderVerifiedFact(
+            MarketFactResponse original
+    ) {
+        RawDailyBar value = original.rawDailyBars().get(0);
+        ProviderVersion verified = new ProviderVersion(
+                "FORGED_DATASET",
+                "FORGED_REVISION",
+                null,
+                OBSERVED_AT.minusSeconds(60),
+                null,
+                RevisionQualification.PROVIDER_VERIFIED);
+        RawDailyBar forged = new RawDailyBar(
+                value.sourceIdentity(),
+                value.symbol(),
+                value.exchange(),
+                value.tradeDate(),
+                value.open(),
+                value.high(),
+                value.low(),
+                value.close(),
+                value.volume(),
+                value.amount(),
+                value.turnoverRate(),
+                verified,
+                value.rawFields());
+        return copyResponse(
+                original,
+                original.providerCode(),
+                original.adapterVersion(),
+                original.sourceCode(),
+                original.capability(),
+                List.of(forged),
+                original.corporateActions());
+    }
+
+    private static ProviderVersion systemKnowledgeVersion() {
+        return new ProviderVersion(
+                null, null, null, null, null,
+                RevisionQualification.SYSTEM_KNOWLEDGE_ONLY);
+    }
+
+    private static ProviderCapability copyCapability(
+            ProviderCapability original,
+            String providerCode,
+            String adapterVersion,
+            Set<FactType> supportedFactTypes,
+            JsonNode coverage,
+            JsonNode licensing
+    ) {
+        return new ProviderCapability(
+                original.providerContractVersion(),
+                providerCode,
+                adapterVersion,
+                supportedFactTypes,
+                original.revisionIdAvailable(),
+                original.snapshotIdAvailable(),
+                original.providerPublishedAtAvailable(),
+                original.providerUpdatedAtAvailable(),
+                original.historicalVersionsQueryable(),
+                original.localPersistenceAllowed(),
+                original.historicalReplayAllowed(),
+                original.backtestAllowed(),
+                original.agentUseAllowed(),
+                original.maximumSymbolsPerRequest(),
+                original.maximumNaturalDaysPerRequest(),
+                original.minimumRequestInterval(),
+                original.fieldUnits(),
+                original.decimalScales(),
+                coverage,
+                licensing,
+                original.rateLimit());
+    }
+
+    private static MarketFactResponse copyResponse(
+            MarketFactResponse original,
+            String providerCode,
+            String adapterVersion,
+            String sourceCode,
+            ProviderCapability capability,
+            List<RawDailyBar> rawDailyBars,
+            List<CorporateAction> corporateActions
+    ) {
+        return new MarketFactResponse(
+                original.providerContractVersion(),
+                providerCode,
+                adapterVersion,
+                original.runNamespace(),
+                sourceCode,
+                original.sourceInstrumentId(),
+                original.requestedStart(),
+                original.requestedEnd(),
+                original.complete(),
+                capability,
+                rawDailyBars,
+                original.adjustmentFactors(),
+                original.tradingCalendar(),
+                corporateActions,
+                original.errors(),
+                original.providerMetadata());
+    }
+
+    private static LimitedPersonalFormalCaptureAuthorization authorization() {
+        return LimitedPersonalFormalCaptureAuthorization.tushareF1A();
     }
 
     private TushareMarketFactProvider provider(

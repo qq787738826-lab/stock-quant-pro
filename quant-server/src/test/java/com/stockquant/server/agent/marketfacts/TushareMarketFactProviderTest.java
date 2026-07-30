@@ -82,6 +82,14 @@ class TushareMarketFactProviderTest {
                 capability.licensing()
                         .path("limitedPersonalUseImplementation")
                         .asText());
+        assertFalse(capability.licensing()
+                .path("fullF1EntryReady").asBoolean(true));
+        assertEquals("USER_APPROVED_LIMITED_PERSONAL_USE",
+                capability.licensing()
+                        .path("authorizationBasis").asText());
+        assertFalse(capability.licensing()
+                .path("providerWrittenPermissionComplete")
+                .asBoolean(true));
         assertEquals(200,
                 capability.rateLimit()
                         .path("officialPerMinute").asInt());
@@ -267,6 +275,39 @@ class TushareMarketFactProviderTest {
     }
 
     @Test
+    void referenceRowLimitsRejectWithoutTruncatingOrCreatingDtos() {
+        FixtureGateway stockGateway = new FixtureGateway(mapper);
+        stockGateway.stockBasicRowCount =
+                TushareMarketFactProvider.STOCK_BASIC_MAX_ROWS + 1;
+        GatewayException stockError = assertThrows(
+                GatewayException.class,
+                () -> provider(stockGateway)
+                        .fetchInstrumentIdentityForControlledAcceptance(
+                                "600000",
+                                "SSE",
+                                Duration.ofSeconds(5),
+                                session()));
+        assertEquals(ErrorKind.STRUCTURE_CHANGED, stockError.kind());
+        assertEquals("TUSHARE_REFERENCE_ROW_LIMIT_EXCEEDED",
+                stockError.safeCode());
+
+        FixtureGateway dividendGateway = new FixtureGateway(mapper);
+        dividendGateway.dividendRowCount =
+                TushareMarketFactProvider.DIVIDEND_EVIDENCE_MAX_ROWS + 1;
+        GatewayException dividendError = assertThrows(
+                GatewayException.class,
+                () -> provider(dividendGateway)
+                        .fetchDividendEvidenceForControlledAcceptance(
+                                "600000",
+                                "SSE",
+                                Duration.ofSeconds(5),
+                                session()));
+        assertEquals(ErrorKind.STRUCTURE_CHANGED, dividendError.kind());
+        assertEquals("TUSHARE_REFERENCE_ROW_LIMIT_EXCEEDED",
+                dividendError.safeCode());
+    }
+
+    @Test
     void preservesMissingAndExplicitZeroProviderFields() {
         FixtureGateway gateway = new FixtureGateway(mapper);
         gateway.dailyRows = List.of(List.of(
@@ -408,6 +449,8 @@ class TushareMarketFactProviderTest {
         private final List<Call> calls = new ArrayList<>();
         private List<List<JsonNode>> dailyRows;
         private String failureEndpoint;
+        private int stockBasicRowCount = 1;
+        private int dividendRowCount = 1;
 
         private FixtureGateway(ObjectMapper mapper) {
             this.mapper = mapper;
@@ -480,7 +523,9 @@ class TushareMarketFactProviderTest {
                                                 textNode("20250103"))));
                         case "stock_basic" -> new Table(
                                 fields,
-                                List.of(List.of(
+                                repeated(
+                                        stockBasicRowCount,
+                                        List.of(
                                         textNode("600000.SH"),
                                         textNode("600000"),
                                         textNode("浦发银行"),
@@ -491,7 +536,9 @@ class TushareMarketFactProviderTest {
                                         mapper.nullNode())));
                         case "dividend" -> new Table(
                                 fields,
-                                List.of(List.of(
+                                repeated(
+                                        dividendRowCount,
+                                        List.of(
                                         textNode("600000.SH"),
                                         textNode("20241231"),
                                         textNode("20250301"),
@@ -511,6 +558,13 @@ class TushareMarketFactProviderTest {
                     },
                     1,
                     0);
+        }
+
+        private static List<List<JsonNode>> repeated(
+                int count,
+                List<JsonNode> row
+        ) {
+            return java.util.Collections.nCopies(count, row);
         }
 
         private static JsonNode textNode(String value) {

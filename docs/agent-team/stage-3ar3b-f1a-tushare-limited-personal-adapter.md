@@ -15,7 +15,9 @@ WRITTEN_PERSONAL_BACKTEST_PERMISSION=UNVERIFIED
 WRITTEN_PERSONAL_AGENT_ANALYSIS_PERMISSION=UNVERIFIED
 USER_PERSONAL_USE_IMPLEMENTATION_AUTHORIZATION=CONFIRMED
 F1_LIMITED_PERSONAL_USE_IMPLEMENTATION=APPROVED_BY_USER
-F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE
+F1_ENTRY_READINESS=BLOCKED_MULTIPLE
+BLOCKED_WRITTEN_PERMISSION
+BLOCKED_TECHNICAL_EVIDENCE
 ```
 
 本阶段没有把 Tushare 升级为完整 V13 lineage、Provider PIT 或永久证券身份来源。
@@ -47,8 +49,9 @@ TRACK_B_FULL_EVIDENCE_PROBE_STATUS=PARTIAL_NOT_COMPLETE
 
 - `TushareMarketFactProperties`：显式 `DISABLED/MANUAL_BOUNDED`、官方 HTTPS 主机锁定、
   200/180 分钟限额、100000/90000 每 API 日限额和最多 2 次重试配置；
-- `TushareManualBoundedSession`：五 Endpoint 共用 10 次总预算、2 只证券、2 个交易日、
-  显式零重试；第 11 次在 HTTP 前拒绝；
+- `TushareManualBoundedSession`：五 Endpoint 共用 10 次总预算、2 只证券；
+  `daily/adj_factor/trade_cal` 另受 2 个自然日约束，`stock_basic/dividend` 作为参考
+  Endpoint 不使用“两日”描述；显式零重试，第 11 次在 HTTP 前拒绝；
 - `TushareTokenRateLimiter`：跨 Endpoint/进程内调用方共享的并发安全滑动窗口和单进程
   每 Endpoint 日硬上限；明确不声称跨进程 Token 协调；
 - `TushareApiGateway` 与 `TushareHttpApiGateway`：类型化请求、错误、结构校验、Token 脱敏
@@ -56,12 +59,24 @@ TRACK_B_FULL_EVIDENCE_PROBE_STATUS=PARTIAL_NOT_COMPLETE
 - `TushareMarketFactProvider`：raw daily、adjustment factor、SSE/SZSE calendar 的
   Provider 中立 DTO 映射；
 - `stock_basic` 普通身份 DTO 与 `dividend` 部分证据 DTO；稳定证券身份仍为 `PARTIAL`，
-  dividend 不生成完整公司行动；
+  dividend 不生成完整公司行动；生成 DTO 前分别执行 1 行和 1000 行硬上限，超限返回
+  `TUSHARE_REFERENCE_ROW_LIMIT_EXCEEDED`，不截断；
 - F1A 单元、真实 Provider 和 PostgreSQL 随机 Schema 测试。
 
-扩展既有 V13 捕获服务，使 FORMAL Provider 响应可使用 `PROVIDER_CAPTURE`，同时强制从
-类型化 licensing 读取 `usageQualification/formalEligible`。TEST/DEMO 旧路径仍固定为
-`TEST_DEMO_ONLY/false`。
+通用 `capture(response, observedAt)` 继续拒绝 FORMAL。F1A 新增明确命名的
+`captureAuthorizedLimitedPersonalFormal(...)`，先把响应 capability/licensing 映射为
+`LimitedPersonalFormalCaptureAuthorization`，再严格验证 Tushare Provider、Adapter、
+有限个人范围、用户授权、Provider 书面证据边界、禁止再分发、SYSTEM_KNOWLEDGE_ONLY、
+RESEARCH_ONLY、`formalEligible=false` 和 raw/factor/calendar 白名单，最后才允许使用
+`PROVIDER_CAPTURE`。TEST/DEMO 旧路径仍固定为 `TEST_DEMO_ONLY/false`。
+
+capability 同时固定：
+
+```text
+fullF1EntryReady=false
+authorizationBasis=USER_APPROVED_LIMITED_PERSONAL_USE
+providerWrittenPermissionComplete=false
+```
 
 ## 4. 受控真实联调
 
@@ -101,7 +116,8 @@ Skipped=0
 | `dividend` | `000001.SZ` | PASS | 53 | 同上 |
 
 四项请求重试为 0，未保存完整响应、CSV、Token 或市场值。`stock_basic` 只验证普通身份
-字段；`dividend` 只验证部分证据字段，仍不产生完整公司行动。
+字段；`dividend` 的 51/53 行是固定证券的历史部分证据，不是“两日数据”，不证明完整
+公司行动，也不进入 V13 公司行动表。
 
 Tushare 累计真实业务请求：
 
@@ -123,7 +139,7 @@ PostgreSQL `16.13` 集群和固定本地测试端口 `55432`。临时集群的 p
 
 ```text
 AgentStage3AR3BF1ATusharePostgresIntegrationTest
-Tests=2
+Tests=4
 Failures=0
 Errors=0
 Skipped=0
@@ -131,7 +147,10 @@ Skipped=0
 
 验证：
 
-- FORMAL/PROVIDER_CAPTURE；
+- 通用捕获拒绝 FORMAL，类型化有限个人入口才允许 FORMAL/PROVIDER_CAPTURE；
+- 伪 Provider、Adapter 不匹配、缺失用户授权、`formalEligible=true`、非法用途、
+  CORPORATE_ACTION 和伪造 Provider revision 均在写入前拒绝；
+- TEST/DEMO 通用旧路径保持可用；
 - RESEARCH_ONLY；
 - SYSTEM_KNOWLEDGE_PIT；
 - 三类独立 source identity；
@@ -150,13 +169,13 @@ Skipped=0
 | 命令/组 | 结果 |
 |---|---|
 | `mvn -pl quant-server -am -DskipTests test-compile` | SUCCESS |
-| F1A + Provider V2 + 18 个 QFQ 黄金向量定向组 | 50/0/0/0 |
-| F1A Gateway/Provider/限流离线定向组 | 22/0/0/0 |
+| F1A + Provider V2 + 18 个 QFQ 黄金向量定向组 | 51/0/0/0 |
+| F1A Gateway/Provider/限流离线定向组 | 23/0/0/0 |
 | 初始受控真实联调 | 1/0/0/0，6 请求，Skipped=0 |
 | 修复受控真实联调 | 1/0/0/0，4 请求，Skipped=0 |
-| PostgreSQL 16.13 随机 Schema | 2/0/0/0，Skipped=0 |
+| PostgreSQL 16.13 随机 Schema | 4/0/0/0，Skipped=0 |
 | `mvn -pl quant-core test` | 4/0/0/0 |
-| `mvn -pl quant-server -am test` | quant-core 4/0/0/0；quant-server 454/0/0/92；BUILD SUCCESS |
+| `mvn -pl quant-server -am test` | quant-core 4/0/0/0；quant-server 457/0/0/94；BUILD SUCCESS |
 
 `quant-server` 全量的 92 项跳过均是未提供外部 PostgreSQL、Python、AKShare 或显式
 Tushare Live 门时的既有环境门禁；它们不替代本阶段已经单独真实运行且 `Skipped=0` 的
@@ -171,11 +190,17 @@ F1A PostgreSQL 与两次受控 Tushare 联调。全量回归命令显式关闭 T
 V13_LINEAGE_PARTIAL
 PIT_PARTIAL
 STABLE_SECURITY_ID=PARTIAL
+F1_ENTRY_READINESS=BLOCKED_MULTIPLE
+BLOCKED_WRITTEN_PERMISSION
+BLOCKED_TECHNICAL_EVIDENCE
 FREE_PRODUCT_PREVIEW_GATE=PASS
 FREE_PROVIDER_VALIDATION_GATE=BLOCKED
 PAID_PROVIDER_UPGRADE_DECISION=PENDING
 IFIND_TRIAL_ACTIVATION_GATE=BLOCKED
 ```
+
+F1A 有限个人实现已获用户批准，不等于 Provider 逐项书面许可完成；完整 F1 仍同时受
+书面许可和剩余技术证据阻断。
 
 生产配置默认关闭；没有 Controller、scheduler 或自动入口。正常业务库未访问，V13 未执行；
 F2B/F3、Shadow、Day 002、scheduler、3A-R3B-1、3B、真实交易和自动交易均未开始。

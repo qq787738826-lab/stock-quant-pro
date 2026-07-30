@@ -5,7 +5,9 @@
 ```text
 TRACK_B_PRIMARY_ROUTE=LOW_COST_PROVIDER_FIRST
 TRACK_B_FALLBACK_ROUTE=IFIND
-F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE
+F1_ENTRY_READINESS=BLOCKED_MULTIPLE
+BLOCKED_WRITTEN_PERMISSION
+BLOCKED_TECHNICAL_EVIDENCE
 WRITTEN_QUANT_DATA_SOURCE_USE_PERMISSION=VERIFIED
 WRITTEN_PERSONAL_LOCAL_STORAGE_PERMISSION=UNVERIFIED
 WRITTEN_PERSONAL_BACKTEST_PERMISSION=UNVERIFIED
@@ -60,14 +62,20 @@ F1_ENTRY_READINESS=READY
 
 写入后续独立治理提交。任何单项通过都不得覆盖其他阻断。
 
-## 3. 当前唯一 F1 阻断
+## 3. 当前完整 F1 的两类阻断
 
-当前 `F1_ENTRY_READINESS` 只编码为 `BLOCKED_TECHNICAL_EVIDENCE`，因为量化数据来源用途
-已书面确认且用户批准有界个人实现；这不把本地长期存储、策略回测和内部 Agent 三项
-Provider 书面许可升级为 VERIFIED，也不表示原始数据再分发、商业化或服务到期后留存获批。
+量化数据来源用途已书面确认，且用户批准 F1A 有界个人实现；这允许 Adapter 基础和随机
+隔离验证合入，但不把本地长期存储、策略回测和内部 Agent 三项 Provider 书面许可升级为
+VERIFIED，也不表示原始数据再分发、商业化或服务到期后留存获批。
 
-当前唯一 F1 阻断是 `BLOCKED_TECHNICAL_EVIDENCE`：
+当前完整 F1 的阻断精确为：
 
+1. `BLOCKED_WRITTEN_PERMISSION`：
+   - 本地长期持久化；
+   - 历史回放与回测；
+   - 内部 Agent；
+   - 服务到期后的数据留存/删除。
+2. `BLOCKED_TECHNICAL_EVIDENCE`：
    - 公司行动是否覆盖配股、拆并股和更正/撤回；
    - 稳定 action ID 与 factor 变化的解释关系；
    - revision/snapshot/published/update/旧版本是否确实不可用；
@@ -76,10 +84,12 @@ Provider 书面许可升级为 VERIFIED，也不表示原始数据再分发、�
 
 `BLOCKED_COST_APPROVAL` 已解除：用户已开通 2000 积分，技术权限已验证生效。
 
-因此唯一合法判定是：
+因此当前合法判定是：
 
 ```text
-F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE
+F1_ENTRY_READINESS=BLOCKED_MULTIPLE
+BLOCKED_WRITTEN_PERMISSION
+BLOCKED_TECHNICAL_EVIDENCE
 ```
 
 ## 4. 获得答复后的判定树
@@ -110,11 +120,20 @@ F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE
    90000 次/日；
 4. 所有 Endpoint 和进程内调用入口共享单进程限流器，不声明跨进程 Token 协调；
 5. 默认 `DISABLED`，联网必须显式 `MANUAL_BOUNDED`，五 Endpoint 共用 10 次会话预算；
-6. 正常限流重试可配置且默认最多 2 次，受控验收零重试；
-7. Token 不进入日志、metadata、异常或 fixture；
-8. 正常业务库不迁移，随机隔离 Schema 执行 V1→V13；
-9. partial Provider 响应不写事实观察；
-10. 公司行动、Provider revision 和永久证券身份不实现、不伪造。
+   `daily/adj_factor/trade_cal` 的固定两日约束不扩展到无日期参数的
+   `stock_basic/dividend`；
+6. `stock_basic` 和 `dividend` 在 DTO 生成前分别执行 1 行和 1000 行硬上限，超限返回
+   `TUSHARE_REFERENCE_ROW_LIMIT_EXCEEDED`，不得截断；
+7. 正常限流重试可配置且默认最多 2 次，受控验收零重试；
+8. Token 不进入日志、metadata、异常或 fixture；
+9. 正常业务库不迁移，随机隔离 Schema 执行 V1→V13；
+10. 通用捕获拒绝 FORMAL；只有类型化有限个人授权入口可捕获 Tushare
+    raw/factor/calendar；
+11. capability 明确 `fullF1EntryReady=false`、
+    `authorizationBasis=USER_APPROVED_LIMITED_PERSONAL_USE`、
+    `providerWrittenPermissionComplete=false`；
+12. partial Provider 响应不写事实观察；
+13. 公司行动、Provider revision 和永久证券身份不实现、不伪造。
 
 ## 6. 继续禁止
 

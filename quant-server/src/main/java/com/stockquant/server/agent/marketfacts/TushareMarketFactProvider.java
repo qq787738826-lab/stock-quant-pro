@@ -59,8 +59,10 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
             "TUSHARE_MARKET_FACT_PROVIDER_V1";
     public static final String IMPLEMENTATION_SCOPE =
             "LIMITED_PERSONAL_RESEARCH_USE";
+    public static final int STOCK_BASIC_MAX_ROWS = 1;
+    public static final int DIVIDEND_EVIDENCE_MAX_ROWS = 1_000;
     private static final int MAXIMUM_NATURAL_DAYS =
-            TushareManualBoundedSession.MAX_HISTORICAL_TRADING_DAYS;
+            TushareManualBoundedSession.MAX_TIME_SERIES_NATURAL_DAYS;
     private static final DateTimeFormatter PROVIDER_DATE =
             DateTimeFormatter.BASIC_ISO_DATE;
     private static final Set<FactType> SUPPORTED_FACT_TYPES =
@@ -134,6 +136,11 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
         licensing.put(
                 "limitedPersonalUseImplementation",
                 "APPROVED_BY_USER");
+        licensing.put("fullF1EntryReady", false);
+        licensing.put(
+                "authorizationBasis",
+                "USER_APPROVED_LIMITED_PERSONAL_USE");
+        licensing.put("providerWrittenPermissionComplete", false);
         licensing.put(
                 "postExpiryDataRetentionPermission", "UNVERIFIED");
         licensing.put(
@@ -352,6 +359,8 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
                 timeout,
                 QueryMode.CONTROLLED_NO_RETRY,
                 session);
+        validateReferenceRowLimit(
+                "stock_basic", result, STOCK_BASIC_MAX_ROWS);
         List<InstrumentIdentity> identities =
                 mapInstrumentIdentities(symbol, exchange, result.table());
         return new ReferenceDataResponse<>(
@@ -383,6 +392,8 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
                 timeout,
                 QueryMode.CONTROLLED_NO_RETRY,
                 session);
+        validateReferenceRowLimit(
+                "dividend", result, DIVIDEND_EVIDENCE_MAX_ROWS);
         List<DividendEvidence> evidence =
                 mapDividendEvidence(symbol, exchange, result.table());
         return new ReferenceDataResponse<>(
@@ -392,6 +403,24 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
                 result.providerCallCount(),
                 result.rateLimitRetryCount(),
                 false);
+    }
+
+    private static void validateReferenceRowLimit(
+            String endpoint,
+            QueryResult result,
+            int maximumRows
+    ) {
+        if (result.table().rows().size() <= maximumRows) {
+            return;
+        }
+        throw new GatewayException(
+                ErrorKind.STRUCTURE_CHANGED,
+                "TUSHARE_REFERENCE_ROW_LIMIT_EXCEEDED",
+                "Tushare " + endpoint
+                        + " response exceeds the bounded row limit",
+                result.providerCallCount(),
+                result.rateLimitRetryCount(),
+                null);
     }
 
     private List<InstrumentIdentity> mapInstrumentIdentities(

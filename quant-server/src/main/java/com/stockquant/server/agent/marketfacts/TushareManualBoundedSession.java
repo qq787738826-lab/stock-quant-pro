@@ -23,7 +23,12 @@ public final class TushareManualBoundedSession {
 
     public static final int MAX_PROVIDER_BUSINESS_REQUESTS = 10;
     public static final int MAX_SYMBOLS = 2;
-    public static final int MAX_HISTORICAL_TRADING_DAYS = 2;
+    /**
+     * Natural-day bound for daily, adj_factor and trade_cal only.
+     * Reference endpoints have no date parameters and remain bounded by
+     * symbol, endpoint, row limit and the shared session request budget.
+     */
+    public static final int MAX_TIME_SERIES_NATURAL_DAYS = 2;
     public static final Set<String> F1A_ALLOWED_ENDPOINTS = Set.of(
             "stock_basic", "trade_cal", "daily", "adj_factor", "dividend");
     public static final Set<String> F1A_ALLOWED_SYMBOLS = Set.of(
@@ -85,7 +90,7 @@ public final class TushareManualBoundedSession {
                 || allowedEnd.isBefore(allowedStart)
                 || ChronoUnit.DAYS.between(
                 allowedStart, allowedEnd) + 1
-                > MAX_HISTORICAL_TRADING_DAYS
+                > MAX_TIME_SERIES_NATURAL_DAYS
                 || initiallyConsumedBusinessRequests < 0
                 || initiallyConsumedBusinessRequests
                 > maximumBusinessRequests) {
@@ -171,7 +176,7 @@ public final class TushareManualBoundedSession {
                 || start.isBefore(allowedStart)
                 || end.isAfter(allowedEnd)
                 || ChronoUnit.DAYS.between(start, end) + 1
-                > MAX_HISTORICAL_TRADING_DAYS) {
+                > MAX_TIME_SERIES_NATURAL_DAYS) {
             throw new IllegalArgumentException(
                     "Tushare dates are outside MANUAL_BOUNDED session");
         }
