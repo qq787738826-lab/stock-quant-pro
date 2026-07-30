@@ -6,7 +6,8 @@
 - 冻结集成基线：`284588242443af5ce03b468825f861b29ced5ad0`
 - 任务分支：`codex/1.4.0-stage-3ar3b-track-b1-tushare-probe-review`
 - 目标提交：`docs(agent): record tushare permission probe`
-- 探针执行日期：`2026-07-29`
+- 探针执行日期：`2026-07-30`
+- 探针执行时刻：`PROBE_EXECUTION_TIME=UNKNOWN`
 - 治理记录日期：`2026-07-30`
 - 本治理阶段新增 Provider 调用数：0。
 - Tushare 累计真实业务请求数：10。
@@ -24,6 +25,7 @@
 3. 用户随后实际开通 Tushare 2000 积分权限，并授权一次只读、临时、受控的技术权限探针。
 4. 环境变量存在，但其内容从未输出、记录、复制或写入文件。
 5. 探针完成后临时 venv、缓存和输出已删除；仓库零变化。
+6. 本次是用户购买权限后专项授权的最小技术权限检查；执行前没有取得 Provider 对最小自动 API 探针及响应留存/删除边界的两项书面答复，因此不是完整 Track B 证据探针，也不判定其合法或违法。
 
 ## 3. 探针边界
 
@@ -64,9 +66,13 @@
 
 ```text
 TUSHARE_2000_PERMISSION_PROBE=PASS
+TRACK_B_FULL_EVIDENCE_PROBE_STATUS=PARTIAL_NOT_COMPLETE
+TRACK_B_FULL_PROBE_LEGAL_PREREQUISITES=NOT_MET
+WRITTEN_AUTOMATED_PROBE_PERMISSION=UNVERIFIED
+WRITTEN_RESPONSE_RETENTION_PERMISSION=UNVERIFIED
 ```
 
-该 PASS 只证明当前账号在上述固定范围内具备技术调用权限，不证明数据用途许可、长期稳定性、历史修订能力或 F1 准入。
+该 PASS 只证明当前账号在上述固定范围内具备技术调用权限，不证明数据用途许可、长期稳定性、历史修订能力或 F1 准入。完整探针合同要求的 Provider 书面自动探针许可和临时响应、Hash、摘要、夹具保存/删除边界均未在执行前取得，因此不能宣称完整探针 `SUCCESS`，也不需要且不得为修正文档而重新执行这 10 次请求。
 
 ## 5. 允许升级的技术结论
 
@@ -116,6 +122,8 @@ STABLE_SECURITY_ID=PARTIAL
 
 以下书面许可仍为 `BLOCKED`：
 
+- 最小自动 API 探针；
+- 临时响应、Hash、摘要和夹具的保存/删除范围；
 - 本地长期持久化；
 - 历史回放和回测；
 - 内部 Agent；
@@ -125,6 +133,8 @@ STABLE_SECURITY_ID=PARTIAL
 - 服务到期后的原始数据和衍生结果处理。
 
 技术接口 PASS 不能替代书面许可。
+
+后续任何扩大 Provider 调用的阶段仍必须取得独立用户授权，并先处理完整探针合同要求的书面许可。
 
 ## 8. F1 重新判定
 
@@ -179,11 +189,14 @@ IFIND_TRIAL_ACTIVATION_GATE=BLOCKED
 
 验收必须证明：
 
-1. 十项状态、行数、字段和日期范围一致；
-2. `TUSHARE_2000_PERMISSION_PROBE=PASS` 只有技术权限含义；
-3. `DAILY_EXACT` 只升级为最小样例 `VERIFIED`；
-4. `V13_LINEAGE_PARTIAL`、`PIT_PARTIAL` 和稳定证券 ID `PARTIAL` 保持不变；
-5. F1 当前仅由书面许可和剩余技术证据阻断；
-6. 成本批准阻断已解除；
-7. 四项正式门禁保持不变；
-8. 本治理阶段没有新增 Provider 调用、代码或数据库变化。
+1. B1 真实探针日期为 `2026-07-30`，执行时刻只能为 `UNKNOWN`；
+2. 十项状态、行数、字段和日期范围一致；
+3. `TUSHARE_2000_PERMISSION_PROBE=PASS` 只有技术权限含义；
+4. `TRACK_B_FULL_EVIDENCE_PROBE_STATUS=PARTIAL_NOT_COMPLETE`；
+5. `TRACK_B_FULL_PROBE_LEGAL_PREREQUISITES=NOT_MET`，两项书面许可均为 `UNVERIFIED`；
+6. `DAILY_EXACT` 只升级为最小样例 `VERIFIED`；
+7. `V13_LINEAGE_PARTIAL`、`PIT_PARTIAL` 和稳定证券 ID `PARTIAL` 保持不变；
+8. F1 当前仅由书面许可和剩余技术证据阻断；
+9. 成本批准阻断已解除；
+10. 四项正式门禁保持不变；
+11. 本治理阶段没有新增 Provider 调用、代码或数据库变化。

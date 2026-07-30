@@ -2,15 +2,23 @@
 
 ## 1. 阶段结果
 
-本阶段只记录 `2026-07-29` 已完成的 Tushare 受控权限探针，不再次调用 Provider。十项请求均为 `PASS`：
+本阶段只记录 `2026-07-30` 已完成的 Tushare 受控权限探针，不再次调用 Provider。精确执行时刻没有可靠证据，统一记录为 `PROBE_EXECUTION_TIME=UNKNOWN`。十项请求均为 `PASS`：
 
 ```text
+PROBE_EXECUTION_DATE=2026-07-30
+PROBE_EXECUTION_TIME=UNKNOWN
 TUSHARE_2000_PERMISSION_PROBE=PASS
 TUSHARE_REAL_BUSINESS_CALL_COUNT=10
 TUSHARE_RETRY_COUNT=0
 TUSHARE_PERMISSION_ERROR_COUNT=0
 TUSHARE_NETWORK_ERROR_COUNT=0
+TRACK_B_FULL_EVIDENCE_PROBE_STATUS=PARTIAL_NOT_COMPLETE
+TRACK_B_FULL_PROBE_LEGAL_PREREQUISITES=NOT_MET
+WRITTEN_AUTOMATED_PROBE_PERMISSION=UNVERIFIED
+WRITTEN_RESPONSE_RETENTION_PERMISSION=UNVERIFIED
 ```
+
+本次是用户购买权限后专项授权的最小技术权限检查。执行前未取得 Provider 对最小自动 API 探针和临时响应、Hash、摘要、夹具保存/删除边界的两项书面答复，因此不是完整 Track B 证据探针，不能宣称完整探针 `SUCCESS`；该记录不判定本次调用合法或违法。
 
 当前 F1 结论仍为：
 
@@ -41,6 +49,8 @@ F1_ENTRY_READINESS=BLOCKED_MULTIPLE
 - 固定证券：`600000.SH`、`000001.SZ`
 - 固定交易日：`20250102`、`20250103`
 - 日历范围：`20250101`—`20250105`
+- 探针日期：`2026-07-30`
+- 探针时刻：`UNKNOWN`
 - 业务请求：10
 - 重试：0
 - 全市场调用：0
@@ -64,6 +74,24 @@ F1_ENTRY_READINESS=BLOCKED_MULTIPLE
 | 10 | `dividend` | `000001.SZ` | `PASS` | 53 | 同上 | 无 `trade_date` |
 
 没有保存实际市场值、完整响应、Token、认证头、订单或支付信息。
+
+### 3.3 完整合同前置复核
+
+完整 Track B 探针合同要求的两项 Provider 书面前置在执行前未满足：
+
+1. Provider 书面允许本次最小自动 API 探针；
+2. Provider 书面确认临时响应、Hash、摘要和夹具的保存/删除范围。
+
+因此固定为：
+
+```text
+TRACK_B_FULL_EVIDENCE_PROBE_STATUS=PARTIAL_NOT_COMPLETE
+TRACK_B_FULL_PROBE_LEGAL_PREREQUISITES=NOT_MET
+WRITTEN_AUTOMATED_PROBE_PERMISSION=UNVERIFIED
+WRITTEN_RESPONSE_RETENTION_PERMISSION=UNVERIFIED
+```
+
+技术权限 PASS 不解除本地保存、回测、Agent、备份或服务到期留存阻断。不需要且不得重新执行这 10 次请求；后续扩大 Provider 调用前仍需独立授权并先处理书面许可。
 
 ## 4. 技术资格变化
 

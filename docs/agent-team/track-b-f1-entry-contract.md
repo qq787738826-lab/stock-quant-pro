@@ -8,9 +8,11 @@ TRACK_B_FALLBACK_ROUTE=IFIND
 F1_ENTRY_READINESS=BLOCKED_MULTIPLE
 ```
 
-主要路线的具体 Provider 是 Tushare Pro。用户已开通 2000 积分且 B1 技术权限探针通过；这不批准追加购买、再次调用、Adapter、V13 业务库迁移或 F1 实施。
+主要路线的具体 Provider 是 Tushare Pro。用户已开通 2000 积分且 `2026-07-30` B1 技术权限探针通过，精确执行时刻为 `PROBE_EXECUTION_TIME=UNKNOWN`；这不批准追加购买、再次调用、Adapter、V13 业务库迁移或 F1 实施。
 
 Tushare Pro 当前资格固定为 `V13_LINEAGE_PARTIAL`、`PIT_PARTIAL`，稳定证券 ID 固定为 `PARTIAL`。B1 已把 raw、factor、SSE/SZSE calendar、普通证券身份、dividend 字段和两证券两日 `DAILY_EXACT` 最小样例验证为 `VERIFIED`，但这不表示当前可合法落库，也不确认永久 instrument identity、完整 action 或历史版本。
+
+完整 Track B 证据探针状态仍固定为 `TRACK_B_FULL_EVIDENCE_PROBE_STATUS=PARTIAL_NOT_COMPLETE`。执行前没有取得 Provider 对最小自动 API 探针和响应留存/删除范围的书面答复，因此 `TRACK_B_FULL_PROBE_LEGAL_PREREQUISITES=NOT_MET`、`WRITTEN_AUTOMATED_PROBE_PERMISSION=UNVERIFIED`、`WRITTEN_RESPONSE_RETENTION_PERMISSION=UNVERIFIED`。该状态不判定本次调用合法或违法，但继续阻断用途许可和后续扩大调用。
 
 ## 2. F1 READY 的全部条件
 
@@ -41,6 +43,7 @@ F1_ENTRY_READINESS=READY
 ## 3. 当前 BLOCKED_MULTIPLE 的具体组成
 
 1. `BLOCKED_WRITTEN_PERMISSION`
+   - 最小自动 API 探针及响应、Hash、摘要、夹具保存/删除边界；
    - 本地长期保存；
    - 历史回放和回测；
    - 内部 Agent 与派生指标；

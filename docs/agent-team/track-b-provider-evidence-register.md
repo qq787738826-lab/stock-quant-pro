@@ -2,7 +2,7 @@
 
 ## 1. 证据规则
 
-- 访问日期统一为 `2026-07-29`。
+- 官方资料访问日期统一为 `2026-07-29`。
 - 官方证据共 **28 条**：BaoStock 4 条、Tushare Pro 17 条、同花顺 iFinD 7 条。
 - 另有 1 条已经验收的 F0 直接 Provider 探针记录 `BS-005`；它不计入 28 条官方页面数量。
 - 另有 10 条 B1 Tushare 受控权限探针摘要 `TS-PB-001`—`TS-PB-010`；它们不计入官方页面数量，不包含完整响应或实际市场值。
@@ -49,7 +49,7 @@
 
 ### 3.1 Tushare B1 受控权限探针
 
-探针日期为 `2026-07-29`，运行环境为 Python `3.11.9`、tushare `1.4.29`、pandas `3.0.5`。环境变量只确认存在，内容未输出或保存。精确执行 10 次业务请求，无重试、权限错误或网络错误；没有保存完整响应、CSV 或 Token，临时环境残留为 0。详细边界见 [B1 阶段记录](stage-3ar3b-track-b1-tushare-probe-review.md)。
+真实探针日期为 `2026-07-30`，精确时刻为 `PROBE_EXECUTION_TIME=UNKNOWN`；运行环境为 Python `3.11.9`、tushare `1.4.29`、pandas `3.0.5`。环境变量只确认存在，内容未输出或保存。精确执行 10 次业务请求，无重试、权限错误或网络错误；没有保存完整响应、CSV 或 Token，临时环境残留为 0。详细边界见 [B1 阶段记录](stage-3ar3b-track-b1-tushare-probe-review.md)。
 
 | evidenceId | Endpoint | 范围 | 状态 | 行数 | 字段/日期结论 | 不支持的结论 |
 |---|---|---|---|---:|---|---|
@@ -64,7 +64,7 @@
 | TS-PB-009 | `dividend` | `600000.SH` | `PASS` | 51 | 接口可调用，返回公告/登记/除权/实施及现金送转字段 | 不证明配股、拆并股、更正/撤回、稳定事件 ID 或 revision |
 | TS-PB-010 | `dividend` | `000001.SZ` | `PASS` | 53 | 同上 | 同上 |
 
-综合技术权限结论为 `TUSHARE_2000_PERMISSION_PROBE=PASS`。该结论不支持长期本地保存、回测、Agent、Provider PIT、F1 READY 或任何正式门禁升级。
+综合技术权限结论为 `TUSHARE_2000_PERMISSION_PROBE=PASS`。但执行前未取得 Provider 对最小自动 API 探针及临时响应、Hash、摘要、夹具保存/删除范围的书面答复，因此 `TRACK_B_FULL_EVIDENCE_PROBE_STATUS=PARTIAL_NOT_COMPLETE`、`TRACK_B_FULL_PROBE_LEGAL_PREREQUISITES=NOT_MET`、`WRITTEN_AUTOMATED_PROBE_PERMISSION=UNVERIFIED`、`WRITTEN_RESPONSE_RETENTION_PERMISSION=UNVERIFIED`。这不判定本次调用合法或违法，也不支持长期本地保存、回测、Agent、Provider PIT、F1 READY 或任何正式门禁升级。
 
 ## 4. 同花顺 iFinD
 

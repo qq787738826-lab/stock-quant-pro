@@ -318,15 +318,16 @@
 
 #### 3A-R3B-TRACK-B1：Tushare 2000 积分受控权限探针与 F1 准入复核（任务分支已完成，待验收）
 
-- 性质：只记录 `2026-07-29` 已完成的固定范围真实探针，并复核 F1；不再次调用 Provider，不开发 Adapter，不访问数据库。
+- 性质：只记录 `2026-07-30` 已完成的固定范围真实探针，并复核 F1；精确执行时刻固定为 `PROBE_EXECUTION_TIME=UNKNOWN`，不再次调用 Provider，不开发 Adapter，不访问数据库。
 - 交付：[B1任务书](tasks/3ar3b-track-b1-tushare-probe-review.md)和[B1阶段记录](stage-3ar3b-track-b1-tushare-probe-review.md)，并同步候选矩阵、证据登记册、成本模型、F1 准入合同和试用探针合同。
 - 探针边界：Python `3.11.9`、tushare `1.4.29`、pandas `3.0.5`；固定 `600000.SH/000001.SZ`、`20250102/20250103`，日历范围 `20250101`—`20250105`；精确 10 次业务请求，无重试、全市场、数据库或完整响应留存，临时环境残留为 0。
 - 探针结果：两次 `stock_basic`、两次 SSE/SZSE `trade_cal`、两次 `daily`、两次 `adj_factor` 和两次 `dividend` 全部 `PASS`，权限错误和网络错误均为 0；`TUSHARE_2000_PERMISSION_PROBE=PASS`。
+- 完整合同前置：本次是用户购买权限后专项授权的最小技术权限检查；执行前未取得 Provider 对最小自动 API 探针及响应留存/删除边界的书面答复。因此 `TRACK_B_FULL_EVIDENCE_PROBE_STATUS=PARTIAL_NOT_COMPLETE`、`TRACK_B_FULL_PROBE_LEGAL_PREREQUISITES=NOT_MET`、`WRITTEN_AUTOMATED_PROBE_PERMISSION=UNVERIFIED`、`WRITTEN_RESPONSE_RETENTION_PERMISSION=UNVERIFIED`。不判定本次调用合法或违法，不需要也不得重新执行 10 次请求。
 - 技术升级：2000 积分核心接口权限、raw/factor/calendar/普通身份/dividend 字段和两证券两日 `DAILY_EXACT` 最小样例为 `VERIFIED`。
 - 保持部分：`V13_LINEAGE_PARTIAL`、`PIT_PARTIAL` 和稳定证券 ID `PARTIAL` 不变；公司行动完整覆盖/身份/解释关系、revision/snapshot/published/update/旧版本和永久证券身份仍未验证。
 - 成本复核：用户已开通 2000 积分，`BLOCKED_COST_APPROVAL` 解除；不记录支付隐私。`PAID_PROVIDER_UPGRADE_DECISION=PENDING` 继续控制后续专业付费升级和 iFinD。
 - F1 复核：`F1_ENTRY_READINESS=BLOCKED_MULTIPLE` 不变，但当前阻断从“书面许可 + 技术证据 + 成本批准”缩小为“书面许可 + 剩余技术证据”。
-- 当前边界：B1 治理任务待 ChatGPT 实际 Git 验收且尚未合入；本治理阶段新增 Provider 调用为 0，Tushare 累计真实业务请求为 10，iFinD 为 0。F1 未获得实施授权。
+- 当前边界：B1 治理任务待 ChatGPT 实际 Git 验收且尚未合入；本治理阶段新增 Provider 调用为 0，Tushare 累计真实业务请求为 10，iFinD 为 0。技术权限 PASS 不解除本地保存、回测、Agent、备份或到期留存阻断；后续扩大 Provider 调用前仍需独立授权和书面许可处理。F1 未获得实施授权。
 
 #### 3A-R3B-F1：选定 Provider Adapter 与 V13 接入（未开始）
 

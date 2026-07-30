@@ -130,7 +130,7 @@
 - 3A-R3B-TRACK-B0 当前状态：有界官方资料调查、三候选统一资格矩阵、成本模型、书面许可请求包、F1 准入合同和未来试用探针合同已通过 ChatGPT 对实际 Git 提交的最终复验，经用户批准纯 fast-forward 合入；本地和远程集成分支一致，ahead/behind 为 `0/0`。主要路线为 `TRACK_B_PRIMARY_ROUTE=LOW_COST_PROVIDER_FIRST`（Tushare Pro），备用路线为 `TRACK_B_FALLBACK_ROUTE=IFIND`。
 - 3A-R3B-TRACK-B1 冻结基线：`284588242443af5ce03b468825f861b29ced5ad0`
 - 3A-R3B-TRACK-B1 任务分支：`codex/1.4.0-stage-3ar3b-track-b1-tushare-probe-review`
-- 3A-R3B-TRACK-B1 当前状态：`2026-07-29` 已完成的 Tushare 2000 积分十项受控权限探针已在任务分支形成治理记录；十项均为 `PASS`，`TUSHARE_2000_PERMISSION_PROBE=PASS`，Tushare 累计真实业务请求为 10、重试/权限错误/网络错误均为 0。本治理阶段未新增 Provider 调用。最小 raw、factor、SSE/SZSE calendar、普通身份、dividend 字段及两证券两日 `DAILY_EXACT` 样例已验证；`V13_LINEAGE_PARTIAL`、`PIT_PARTIAL`、稳定证券 ID `PARTIAL` 不变。F1 仍为 `BLOCKED_MULTIPLE`，当前只剩书面许可和剩余技术证据阻断；待 ChatGPT 基于实际 Git 提交验收，尚未合入。
+- 3A-R3B-TRACK-B1 当前状态：`2026-07-30` 已完成的 Tushare 2000 积分十项受控权限探针已在任务分支形成治理记录，精确执行时刻为 `PROBE_EXECUTION_TIME=UNKNOWN`；十项均为 `PASS`，`TUSHARE_2000_PERMISSION_PROBE=PASS`，Tushare 累计真实业务请求为 10、重试/权限错误/网络错误均为 0。本治理阶段未新增 Provider 调用。该技术权限检查执行前未取得完整探针合同要求的两项 Provider 书面答复，因此 `TRACK_B_FULL_EVIDENCE_PROBE_STATUS=PARTIAL_NOT_COMPLETE`、`TRACK_B_FULL_PROBE_LEGAL_PREREQUISITES=NOT_MET`，自动探针及响应留存书面许可均为 `UNVERIFIED`；这不判定本次调用合法或违法。最小 raw、factor、SSE/SZSE calendar、普通身份、dividend 字段及两证券两日 `DAILY_EXACT` 样例已验证；`V13_LINEAGE_PARTIAL`、`PIT_PARTIAL`、稳定证券 ID `PARTIAL` 不变。F1 仍为 `BLOCKED_MULTIPLE`，当前只剩书面许可和剩余技术证据阻断；待 ChatGPT 基于实际 Git 提交验收，尚未合入。
 - 3A-R3B-F2A 任务书 / 阶段记录：[tasks/3ar3b-f2a-research-preview-product.md](tasks/3ar3b-f2a-research-preview-product.md) / [stage-3ar3b-f2a-research-preview-product.md](stage-3ar3b-f2a-research-preview-product.md)。
 - 3A-R3B-F2A-R1 任务书 / 阶段记录：[tasks/3ar3b-f2a-r1-preview-ux-convergence.md](tasks/3ar3b-f2a-r1-preview-ux-convergence.md) / [stage-3ar3b-f2a-r1-preview-ux-convergence.md](stage-3ar3b-f2a-r1-preview-ux-convergence.md)。
 - 3A-R3B-F2A-R1A 任务书 / 阶段记录：[tasks/3ar3b-f2a-r1a-visual-semantics-fix.md](tasks/3ar3b-f2a-r1a-visual-semantics-fix.md) / [stage-3ar3b-f2a-r1a-visual-semantics-fix.md](stage-3ar3b-f2a-r1a-visual-semantics-fix.md)。
@@ -261,9 +261,13 @@ SSE/SZSE trade calendar 和 dividend 等公开 API 使其成为个人开发现�
 闭环的候选，但官方服务协议与缓存、回测、AI 文档之间仍存在用途边界歧义，且公司行动完整性、
 稳定身份生命周期和 revision/published/历史版本语义仍需书面答复或后续受控证据。
 
-用户已开通 Tushare 2000 积分权限。`2026-07-29` 的固定两证券、两交易日、10 次无重试
+用户已开通 Tushare 2000 积分权限。`2026-07-30` 的固定两证券、两交易日、10 次无重试
 探针全部 `PASS`，验证了 raw daily、adjustment factor、SSE/SZSE calendar、stock_basic
 普通身份字段、dividend 公开字段和最小 `DAILY_EXACT`。该技术权限 PASS 不是用途许可：
+精确执行时刻为 `UNKNOWN`，完整证据探针仍为 `PARTIAL_NOT_COMPLETE`；执行前没有取得
+Provider 对最小自动 API 探针和响应留存/删除边界的两项书面答复，故完整合同法律前置为
+`NOT_MET`，两项书面许可均为 `UNVERIFIED`。该状态不判定本次调用合法或违法，也不要求
+重新执行 10 次请求。
 Tushare 当前仍为 `V13_LINEAGE_PARTIAL`、`PIT_PARTIAL`，稳定证券 ID 为 `PARTIAL`；
 本地保存、回放、回测、Agent、UI、备份及服务到期数据处理继续等待书面许可，公司行动完整
 覆盖/稳定事件 ID/factor 解释关系、revision/snapshot/published/update/旧版本及永久证券
@@ -417,6 +421,6 @@ DATA_QUALITY 只作门禁和 confidence 上限，MARKET_REGIME V1 权重为 0 �
 
 完整阶段 2D、完整阶段 2D-2 和完整阶段 2D-2B 仍处于进行中。阶段 2D-2A、2D-2B-1A、文档阶段 2D-2B-1B-0 与 TEST/DEMO 实现阶段 2D-2B-1B-1 已完成；该工作线的唯一入口只是解决 2D-2B-1B-2 的外部前置决策，不是立即开始 adapter、2D-2B-2 或 Universe 实现。阶段 2E-1 已完成独立复审并合入，但没有自动批准或开始任何 2E 后续任务。
 
-**在智能体规则能力工作线上，3A-R3B-0、免费优先治理规划、F0 审计、F0.5 双轨治理、F2A/R1/R1A/R1B、产品门治理与 Track B0 均已验收并合入；集成 HEAD 为 `284588242443af5ce03b468825f861b29ced5ad0`。F0 最终结论为 `F0_AUDIT_RESULT=PARTIAL`。用户于 `2026-07-29 16:44 +08:00` 明确认可产品形态，当前 `FREE_PRODUCT_PREVIEW_GATE=PASS`，Track A 正式完成。Track B0 主要路线为 Tushare Pro，备用为 iFinD。用户已开通 Tushare 2000 积分；十项受控业务请求均 PASS，最低成本和最小 raw/factor/calendar/身份/dividend/`DAILY_EXACT` 技术样例阻断已解除。B1 治理记录已在任务分支完成，待实际 Git 验收且尚未合入；`F1_ENTRY_READINESS=BLOCKED_MULTIPLE` 继续由书面许可和剩余技术证据阻断。** Day 001 已形成 1 个真实受控 Shadow 批次和 3 个 item，均以 `BLOCKED_BY_DATA_QUALITY` 安全终结并完成正式人工复核；后续受控行情更新形成的 780 条 V9 观察全部 `sourceRevision=NULL`。当前 Tencent 来源资格仍是 `PROVIDER_REVISION_UNVERIFIED`，`version=18` 不得作为 revision。F0 没有找到可单独承担完整 V13/QFQ lineage 的免费来源。Tushare 当前也仍为 `V13_LINEAGE_PARTIAL/PIT_PARTIAL`，稳定证券 ID 为 `PARTIAL`；技术权限 PASS 不允许合法落库或启动 F1。`FREE_PRODUCT_PREVIEW_GATE=PASS` 与 `FREE_PROVIDER_VALIDATION_GATE=BLOCKED` 相互独立。Tushare 累计真实业务请求为 10，iFinD 调用数为 0，scheduler 关闭，Day 002 未创建。Codex 不得自行开始 F1/F2B/F3、激活或调用 iFinD、恢复长期观察、开始 3B 或其他阶段。
+**在智能体规则能力工作线上，3A-R3B-0、免费优先治理规划、F0 审计、F0.5 双轨治理、F2A/R1/R1A/R1B、产品门治理与 Track B0 均已验收并合入；集成 HEAD 为 `284588242443af5ce03b468825f861b29ced5ad0`。F0 最终结论为 `F0_AUDIT_RESULT=PARTIAL`。用户于 `2026-07-29 16:44 +08:00` 明确认可产品形态，当前 `FREE_PRODUCT_PREVIEW_GATE=PASS`，Track A 正式完成。Track B0 主要路线为 Tushare Pro，备用为 iFinD。用户已开通 Tushare 2000 积分；`2026-07-30` 十项受控业务请求均 PASS，最低成本和最小 raw/factor/calendar/身份/dividend/`DAILY_EXACT` 技术样例阻断已解除。B1 治理记录已在任务分支完成，待实际 Git 验收且尚未合入；精确探针时刻为 `UNKNOWN`，完整证据探针为 `PARTIAL_NOT_COMPLETE`，完整法律前置为 `NOT_MET`，两项 Provider 书面许可均为 `UNVERIFIED`；`F1_ENTRY_READINESS=BLOCKED_MULTIPLE` 继续由书面许可和剩余技术证据阻断。** Day 001 已形成 1 个真实受控 Shadow 批次和 3 个 item，均以 `BLOCKED_BY_DATA_QUALITY` 安全终结并完成正式人工复核；后续受控行情更新形成的 780 条 V9 观察全部 `sourceRevision=NULL`。当前 Tencent 来源资格仍是 `PROVIDER_REVISION_UNVERIFIED`，`version=18` 不得作为 revision。F0 没有找到可单独承担完整 V13/QFQ lineage 的免费来源。Tushare 当前也仍为 `V13_LINEAGE_PARTIAL/PIT_PARTIAL`，稳定证券 ID 为 `PARTIAL`；技术权限 PASS 不允许合法落库或启动 F1。`FREE_PRODUCT_PREVIEW_GATE=PASS` 与 `FREE_PROVIDER_VALIDATION_GATE=BLOCKED` 相互独立。Tushare 累计真实业务请求为 10，iFinD 调用数为 0，scheduler 关闭，Day 002 未创建。Codex 不得自行开始 F1/F2B/F3、激活或调用 iFinD、恢复长期观察、开始 3B 或其他阶段。
 
 阻断项包括正式证券状态来源、数据许可、本地持久化权利、历史回放权利、稳定 source instrument ID、revision 语义以及 published/effective 时间语义。当前免费聚合源和 `securities` 当前态投影均不得被视为正式来源；2G 的研究级 AKShare/CNINFO 公告来源同样不得用于解除这些门禁。当前仍未实现正式 source adapter、FORMAL 摄取、PROVIDER_PIT_VERIFIED、`SECURITY_STATUS_EVENT_V2`、`security_status_history` 正式投影、正式 Provider trading calendar、Universe snapshot、`MARKET_BREADTH_V2`、完整 MARKET_REGIME、公告 PDF 语义分析或生产扫描切换。3A-R3B-0 的 raw/factor/calendar/action、2F V2 和 Shadow 已作为 TEST/DEMO 离线能力合入，但不能替代真实来源资格；正常业务库尚未执行 V13。阶段 2F、2G、2H、2I、3A-1、3A-R1、3A-R3A、3A-R3B 规划、3A-R3B-0、免费优先治理规划、F0 审计、F0.5 以及 F2A/R1/R1A/R1B 产品链均已完成并合入；产品形态门当前为 PASS，但 F1、F2B、F3、3A-R3B-1 至 R3B-3 均未开始。当前只有 1 个有效观察日和 3 个 shadow item，尚未达到 20 个有效观察日、200 个 item、主要原因人工复核和正式观察报告门槛，因此完整 3A 未完成，3B 未开始。阶段 2D-2B 禁止外部行情补数、LLM 权威决策、投资建议和交易写操作。

@@ -3,7 +3,8 @@
 ## 1. 范围与状态词
 
 - 官方资料调查日期：`2026-07-29`
-- Tushare 受控权限探针日期：`2026-07-29`
+- Tushare 受控权限探针日期：`2026-07-30`
+- Tushare 探针执行时刻：`PROBE_EXECUTION_TIME=UNKNOWN`
 - B1 治理复核日期：`2026-07-30`
 - 候选数量：精确为 3 个：BaoStock、Tushare Pro、同花顺 iFinD。
 - 本矩阵只使用 [Track B 证据登记册](track-b-provider-evidence-register.md) 中的官方资料、已经验收的 F0 直接 Provider 探针事实，以及 B1 固定范围 Tushare 受控权限探针事实。
@@ -80,6 +81,8 @@
 | 同花顺 iFinD | `V13_LINEAGE_UNVERIFIED` | 公共文档证明接口广度，但核心指标名、字段、四类事实是否同一授权、身份及事件关系只能在试用/书面材料中验证 | `PIT_UNVERIFIED` | 更新时点与复权语义有公开说明，但 revision/snapshot/published/effective/旧版本及留存权利均需试用和合同证据 |
 
 任何候选都未达到 `V13_LINEAGE_READY` 或 `PROVIDER_PIT_READY`。
+
+B1 的 `TUSHARE_2000_PERMISSION_PROBE=PASS` 只升级最小技术样例；完整 Track B 证据探针仍为 `PARTIAL_NOT_COMPLETE`。Provider 对最小自动 API 探针及响应留存/删除范围的书面许可均为 `UNVERIFIED`，完整合同法律前置为 `NOT_MET`，因此不得从技术 PASS 推导合法落库、用途许可、F1 READY 或正式门禁升级。
 
 ## 5. 加权评分
 

@@ -2,7 +2,7 @@
 
 ## 1. 适用范围
 
-本合同冻结 Track B 最小技术探针的一般边界。`2026-07-29` 已按用户专项授权执行 Tushare 2000 积分权限子集探针；该子集没有完成本合同要求的 revision、稳定复取和全部用途许可验证。iFinD 探针仍未执行。
+本合同冻结 Track B 最小技术探针的一般边界。`2026-07-30` 已按用户专项授权执行 Tushare 2000 积分权限子集探针，精确执行时刻统一记录为 `PROBE_EXECUTION_TIME=UNKNOWN`。执行前没有取得本合同第 2、3 项 Provider 书面前置，因此该子集不是完整 Track B 证据探针，也没有完成 revision、稳定复取和全部用途许可验证。iFinD 探针仍未执行。
 
 ```text
 MAX_BUSINESS_REQUESTS=10
@@ -98,6 +98,13 @@ DAY_002_CREATED=false
 
 B1 使用相同两只证券，将日期固定为 `20250102`、`20250103`，日历范围固定为 `20250101`—`20250105`。十项请求为两次 `stock_basic`、两次 `trade_cal`、两次 `daily`、两次 `adj_factor` 和两次 `dividend`；全部 `PASS`，无重试、权限错误或网络错误。
 
+本次是用户购买权限后专项授权的最小技术权限检查，但执行前没有取得：
+
+1. Provider 书面允许本次最小自动 API 探针；
+2. Provider 书面确认临时响应、Hash、摘要和夹具的保存/删除范围。
+
+这只表示完整合同法律/许可前置未满足，不对本次调用作合法或违法判断。技术结果保留，不需要也不得重新执行 10 次请求；后续扩大调用前仍需独立授权和书面许可处理。
+
 该子集已经验证：
 
 - 2000 积分核心接口技术权限；
@@ -116,10 +123,15 @@ B1 使用相同两只证券，将日期固定为 `20250102`、`20250103`，日�
 ## 7. 当前状态
 
 ```text
+PROBE_EXECUTION_DATE=2026-07-30
+PROBE_EXECUTION_TIME=UNKNOWN
 TUSHARE_2000_PERMISSION_PROBE=PASS
 TUSHARE_PROVIDER_REAL_BUSINESS_CALL_COUNT=10
 TUSHARE_RETRY_COUNT=0
 TRACK_B_FULL_EVIDENCE_PROBE_STATUS=PARTIAL_NOT_COMPLETE
+TRACK_B_FULL_PROBE_LEGAL_PREREQUISITES=NOT_MET
+WRITTEN_AUTOMATED_PROBE_PERMISSION=UNVERIFIED
+WRITTEN_RESPONSE_RETENTION_PERMISSION=UNVERIFIED
 IFIND_TRIAL_PROBE_STATUS=NOT_EXECUTED
 IFIND_REAL_CALL_COUNT=0
 IFIND_TRIAL_ACTIVATION_GATE=BLOCKED
