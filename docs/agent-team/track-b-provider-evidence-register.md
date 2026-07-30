@@ -5,6 +5,7 @@
 - 访问日期统一为 `2026-07-29`。
 - 官方证据共 **28 条**：BaoStock 4 条、Tushare Pro 17 条、同花顺 iFinD 7 条。
 - 另有 1 条已经验收的 F0 直接 Provider 探针记录 `BS-005`；它不计入 28 条官方页面数量。
+- 另有 10 条 B1 Tushare 受控权限探针摘要 `TS-PB-001`—`TS-PB-010`；它们不计入官方页面数量，不包含完整响应或实际市场值。
 - 证据等级：
   - `C1`：官方合同、服务协议或许可条款；
   - `P1`：官方价格、权限或额度页面；
@@ -45,6 +46,25 @@
 | TS-015 | Tushare 与 AI 工作流 | https://tushare.pro/document/1?doc_id=473 | A2 | 官方展示 AI/多智能体、回测及本地缓存工作流 | 产品示例不能覆盖 TS-002 合同限制 | 是 |
 | TS-016 | 旧版数据存储说明 | https://tushare.pro/document/2?doc_id=302 | A2 | 文档描述可保存到 Excel/关系库，强调该段为旧 Org 版语境 | 不能作为当前 Pro 数据的优先合同授权；与 TS-002 存在适用范围冲突 | 是 |
 | TS-017 | API 服务 | https://tushare.pro/document/1?doc_id=11 | D1 | 官方向机构和个人提供 API 需求定制与数据咨询，并公布联系邮箱 `waditu@163.com` | 联系入口不证明任何用途许可、套餐覆盖或服务承诺 | 是 |
+
+### 3.1 Tushare B1 受控权限探针
+
+探针日期为 `2026-07-29`，运行环境为 Python `3.11.9`、tushare `1.4.29`、pandas `3.0.5`。环境变量只确认存在，内容未输出或保存。精确执行 10 次业务请求，无重试、权限错误或网络错误；没有保存完整响应、CSV 或 Token，临时环境残留为 0。详细边界见 [B1 阶段记录](stage-3ar3b-track-b1-tushare-probe-review.md)。
+
+| evidenceId | Endpoint | 范围 | 状态 | 行数 | 字段/日期结论 | 不支持的结论 |
+|---|---|---|---|---:|---|---|
+| TS-PB-001 | `stock_basic` | `600000.SH` | `PASS` | 1 | 普通证券身份、交易所、上市/退市字段返回 | 不证明永久 identity、换码、迁板或重上市 |
+| TS-PB-002 | `stock_basic` | `000001.SZ` | `PASS` | 1 | 同上 | 同上 |
+| TS-PB-003 | `trade_cal` | SSE，`20250101`—`20250105` | `PASS` | 5 | `exchange,cal_date,is_open,pretrade_date` | 不证明历史修订版本 |
+| TS-PB-004 | `trade_cal` | SZSE，`20250101`—`20250105` | `PASS` | 5 | 同上 | 同上 |
+| TS-PB-005 | `daily` | `600000.SH`，`20250102`—`20250103` | `PASS` | 2 | raw daily 请求字段和两个交易日返回 | 不证明全历史覆盖、revision 或用途许可 |
+| TS-PB-006 | `daily` | `000001.SZ`，`20250102`—`20250103` | `PASS` | 2 | 同上 | 同上 |
+| TS-PB-007 | `adj_factor` | `600000.SH`，`20250102`—`20250103` | `PASS` | 2 | 每个请求交易日存在同日因子 | 不证明全历史 `DAILY_EXACT`、修订或 action 关系 |
+| TS-PB-008 | `adj_factor` | `000001.SZ`，`20250102`—`20250103` | `PASS` | 2 | 同上 | 同上 |
+| TS-PB-009 | `dividend` | `600000.SH` | `PASS` | 51 | 接口可调用，返回公告/登记/除权/实施及现金送转字段 | 不证明配股、拆并股、更正/撤回、稳定事件 ID 或 revision |
+| TS-PB-010 | `dividend` | `000001.SZ` | `PASS` | 53 | 同上 | 同上 |
+
+综合技术权限结论为 `TUSHARE_2000_PERMISSION_PROBE=PASS`。该结论不支持长期本地保存、回测、Agent、Provider PIT、F1 READY 或任何正式门禁升级。
 
 ## 4. 同花顺 iFinD
 

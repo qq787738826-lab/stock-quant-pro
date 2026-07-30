@@ -172,10 +172,20 @@
 
 102. **Tushare Pro 的服务协议与缓存、回测、AI 文档之间必须取得书面用途澄清**：官方服务协议把服务描述为个人、不可转让、非商业、可撤销、限时并仅供个人查看；官方缓存/回测/AI 文档同时展示本地缓存、回测和智能体使用路径。页面存在并不自动授予本项目长期本地持久化、历史回放、回测、内部 Agent、衍生指标或本地 UI 展示权。F1 前必须由官方书面确认上述具体用途、终止后的数据处理、禁止再分发边界与相应套餐；“页面没有禁止”不得解释为允许。
 
-103. **F1 当前准入判断固定为多重阻断**：`F1_ENTRY_READINESS=BLOCKED_MULTIPLE`。阻断一是 Tushare Pro 本地持久化、回测、内部 Agent、长期保存和本地展示的书面许可；阻断二是公司行动完整性、`DAILY_EXACT` 实样、证券身份生命周期和修订/发布时间等技术证据；阻断三是官方 2000 积分个人价格人民币 200 元/年虽已公开，但用户尚未批准任何成本。取得书面答复、必要样例或受控试用证据并获得用户成本批准后，仍须经独立 Git 验收与用户单独授权，才能实施 F1；Track B0 合入本身不授权 F1。
+103. **Track B0 时点的 F1 准入判断为三类多重阻断**：Track B0 固定 `F1_ENTRY_READINESS=BLOCKED_MULTIPLE`。当时阻断一是 Tushare Pro 本地持久化、回测、内部 Agent、长期保存和本地展示的书面许可；阻断二是公司行动完整性、`DAILY_EXACT` 实样、证券身份生命周期和修订/发布时间等技术证据；阻断三是官方 2000 积分个人价格虽已公开但用户当时尚未批准成本。B1 后续探针与成本复核可以缩小阻断组成，但 Track B0 合入本身始终不授权 F1。
 
 104. **iFinD 只作为专业备用路线，当前不启动 15 天试用**：官方资料已证明其提供多语言 SDK/HTTP、历史数据、复权因子、交易日历、公告与调用额度等专业能力，但个人购买资格、API 授权范围、本地保存/回测/Agent 权利、试用结束后的数据处理、正式价格、V13 四类事实字段和 Provider revision/历史版本语义均需官方报价、书面确认和未来受控探针。Track A 通过只证明产品形态，不证明策略价值、数据瓶颈或付费升级收益；因此 `PAID_PROVIDER_UPGRADE_DECISION=PENDING` 与 `IFIND_TRIAL_ACTIVATION_GATE=BLOCKED` 保持不变，Codex 不得申请、激活或调用 iFinD。
 
-105. **未来试用探针固定为最小、隔离且不持久化业务库**：低成本 Provider 或 iFinD 只有在法律与账户前置满足后，才允许针对两只非敏感测试股票、两个历史交易日，在最多 10 次业务请求内验证 raw daily、adjustment factor、trading calendar、corporate action、security identity 和 published/effective/revision 字段。禁止全市场抓取、scheduler、Day 002、正常业务库写入和自动重试；原始响应只能进入临时隔离目录，并必须形成删除或经许可保留的明确记录。该合同只冻结未来证据方法，不构成试用或调用授权。
+105. **Track B 技术探针固定为最小、隔离且不持久化业务库**：低成本 Provider 或 iFinD 只有在法律、账户和用户专项授权前置满足后，才允许针对两只非敏感测试股票、两个历史交易日，在最多 10 次业务请求内验证 raw daily、adjustment factor、trading calendar、corporate action、security identity 和 published/effective/revision 字段。禁止全市场抓取、scheduler、Day 002、正常业务库写入和自动重试；原始响应只能进入临时隔离环境并在结束后按边界清理。B1 已执行其中的 Tushare 技术权限子集，但没有完成稳定复取、revision 或用途许可验证；iFinD 探针仍未执行。
 
 106. **Track B0 不改变四项正式门禁或 Track A 结果**：当前继续保持 `FREE_PRODUCT_PREVIEW_GATE=PASS`、`FREE_PROVIDER_VALIDATION_GATE=BLOCKED`、`PAID_PROVIDER_UPGRADE_DECISION=PENDING`、`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`。主要路线选择不等于免费 Provider 验证通过，不等于付费升级决定为 PROCEED，也不批准 V13 正常业务库迁移、F2B、F3、Day 002、scheduler、3A-R3B-1、3B、投资建议或真实/自动交易。
+
+107. **Tushare 2000 积分十项受控权限探针只升级最小技术样例**：用户已开通 Tushare 2000 积分权限；`2026-07-29` 使用 Python `3.11.9`、tushare `1.4.29`、pandas `3.0.5`，对 `600000.SH/000001.SZ` 和固定两交易日执行精确 10 次无重试业务请求。两次 `stock_basic`、两次 SSE/SZSE `trade_cal`、两次 `daily`、两次 `adj_factor` 和两次 `dividend` 全部 `PASS`，权限错误与网络错误均为 0，综合为 `TUSHARE_2000_PERMISSION_PROBE=PASS`。完整响应、CSV、Token 和支付隐私没有留存，临时环境残留为 0。该 PASS 只证明当前技术接口权限，不证明用途许可或长期服务能力。
+
+108. **B1 验证 raw/factor/calendar/普通身份/dividend 和最小 DAILY_EXACT，但不升级 V13、PIT 或永久身份**：两证券、两日 raw daily 和同日 adjustment factor、SSE/SZSE 日历、stock_basic 普通身份字段及 dividend 公开字段取得真实最小样例，因此这些最小样例为 `VERIFIED`。`dividend` 仍未证明配股、拆并股、更正/撤回、稳定事件 ID 或 factor/action 解释关系；没有 revision/snapshot/published/update/旧版本证据，也没有换码、迁板、重新上市或历史身份映射。因此当前继续为 `V13_LINEAGE_PARTIAL`、`PIT_PARTIAL`、稳定证券 ID `PARTIAL`，不得合法落库或声明 `PROVIDER_PIT_READY`。
+
+109. **Tushare 最低成本批准阻断解除，但专业付费升级决定不变**：用户已实际开通 2000 积分，受控探针证明权限生效；不记录订单号、手机号、支付渠道或其他隐私。因此 `BLOCKED_COST_APPROVAL` 不再是 Tushare F1 当前阻断。`PAID_PROVIDER_UPGRADE_DECISION=PENDING` 仍控制后续专业付费升级和 iFinD，不因本次低成本权限自动变为 `PROCEED`。
+
+110. **B1 后 F1 仍为两类多重阻断**：当前继续为 `F1_ENTRY_READINESS=BLOCKED_MULTIPLE`，但组成缩小为 `BLOCKED_WRITTEN_PERMISSION + BLOCKED_TECHNICAL_EVIDENCE`。书面许可必须覆盖本地长期保存、历史回放/回测、内部 Agent、派生指标、本地 UI、备份/脱敏 fixture 和服务到期数据处理；技术证据必须补齐公司行动完整范围和稳定身份、factor/action 关系、修订/版本语义及永久证券身份。全部完成后仍须用户单独批准 F1；B1、成本投入或技术权限 PASS 均不自动启动 Adapter、V13、F2B 或 F3。
+
+111. **B1 不改变正式门禁和后续阶段边界**：当前继续保持 `FREE_PRODUCT_PREVIEW_GATE=PASS`、`FREE_PROVIDER_VALIDATION_GATE=BLOCKED`、`PAID_PROVIDER_UPGRADE_DECISION=PENDING`、`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`。Tushare 累计真实业务请求为 10，本治理阶段新增 Provider 调用为 0，iFinD 调用为 0；正常业务库 V13 未执行，F1/F2B/F3、Day 002、scheduler、3A-R3B-1、3B、真实交易和自动交易均未启动或授权。

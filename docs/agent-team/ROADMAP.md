@@ -269,7 +269,7 @@
 - 既有规划状态：iFinD 里程碑规划提交 `23baf11ed3a236800b5f3feba8681d261a71d9f9` 已通过 ChatGPT 对实际 Git 提交的验收，并经用户批准纯 fast-forward 合入。精确验收和批准时间无仓库证据，记为 `UNKNOWN`。
 - 免费优先更新：最终提交 `c47b88e586f6751563fe210f40137a3b7ce5e576` 已通过 ChatGPT 对实际 Git 提交的验收，并经用户批准纯 fast-forward 合入。系统先用免费数据验证产品形态和效果；只有系统显示可重复使用价值、数据成为可量化主要瓶颈，且同范围免费/付费 A/B 方案和成本意愿均明确后，才考虑 iFinD 或其他付费 Provider。
 - 日期边界：iFinD 试用不得绑定 `2026-08-31`、2026 年 8 月 31 日或任何其他固定日期。日历日期只能作为非权威临时估算，不属于路线图依赖，不得因预计日期临近而降低验收标准。
-- 当前集成 HEAD：`8b6a6bf39a40e44062a3f7aeb315e17e9b62e199`。当前状态：`F0_AUDIT_RESULT=PARTIAL`、`FREE_IMPLEMENTATION_PATH=RESEARCH_PREVIEW_FIRST`、`FREE_PRODUCT_PREVIEW_GATE=PASS`、`FREE_PROVIDER_VALIDATION_GATE=BLOCKED`、`PAID_PROVIDER_UPGRADE_DECISION=PENDING`、`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`。真实 Provider 尚未接入，正常业务库 V13 未执行，试用尚未启动，真实 Provider 与 iFinD 调用数均为 0；F2A、R1、R1A、R1B 与产品门治理均已验收并纯 fast-forward 合入，Track A 正式完成。Track B0 已在任务分支完成有界官方资料调查和路线推荐，待实际 Git 验收且尚未合入；F1/F2B/F3 均未开始，Day 002 未创建，scheduler 关闭，3B 未开始。
+- 当前集成 HEAD：`284588242443af5ce03b468825f861b29ced5ad0`。当前状态：`F0_AUDIT_RESULT=PARTIAL`、`FREE_IMPLEMENTATION_PATH=RESEARCH_PREVIEW_FIRST`、`FREE_PRODUCT_PREVIEW_GATE=PASS`、`FREE_PROVIDER_VALIDATION_GATE=BLOCKED`、`PAID_PROVIDER_UPGRADE_DECISION=PENDING`、`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`。正常业务库 V13 未执行，iFinD 调用数为 0；Track A 与 Track B0 均已验收并纯 fast-forward 合入。用户已开通 Tushare 2000 积分，十项受控权限探针均 PASS；B1 治理记录已在任务分支完成，待实际 Git 验收且尚未合入。F1/F2B/F3 均未开始，Day 002 未创建，scheduler 关闭，3B 未开始。
 
 #### 3A-R3B-0：Provider 中立离线闭环与试用准备（已完成并合入）
 
@@ -304,17 +304,29 @@
 - 资格隔离：轨道 A 的产品可见性不能代替轨道 B 的许可、事实身份、`DAILY_EXACT`、knowledge-time 或 Provider 资格。
 - 后续入口：用户已在 F0.5 合入后另行授权 F2A；F1 仍未开始。
 
-#### 3A-R3B-TRACK-B0：真实数据 Provider 路线决策与 F1 准入合同（任务分支已完成，待验收）
+#### 3A-R3B-TRACK-B0：真实数据 Provider 路线决策与 F1 准入合同（已完成并合入）
 
 - 性质：Track B 的唯一入口决策阶段；只调查 BaoStock、Tushare Pro 和同花顺 iFinD 三条路线，只使用官方资料，不开发 Adapter、不调用 Provider。
 - 交付：[任务书](tasks/3ar3b-track-b0-provider-route-decision.md)、[阶段记录](stage-3ar3b-track-b0-provider-route-decision.md)、[候选矩阵](track-b-provider-candidate-matrix.md)、[证据登记册](track-b-provider-evidence-register.md)、[成本模型](track-b-provider-cost-model.md)、[许可请求包](track-b-permission-request-pack.md)、[F1 准入合同](track-b-f1-entry-contract.md)和[试用探针合同](track-b-trial-probe-contract.md)。
 - 决策：`TRACK_B_PRIMARY_ROUTE=LOW_COST_PROVIDER_FIRST`，具体候选为 Tushare Pro；`TRACK_B_FALLBACK_ROUTE=IFIND`。BaoStock 保留免费研究辅助与许可候选角色，不作为当前备用路线。
+- 当前状态：最终提交 `284588242443af5ce03b468825f861b29ced5ad0` 已通过 ChatGPT 对实际 Git 提交的最终复验，经用户批准纯 fast-forward 合入；本地与远程集成分支一致，ahead/behind 为 `0/0`。
 - 评分：按法律与用途 30%、V13/QFQ 25%、PIT 15%、覆盖与稳定性 15%、个人成本 10%、接入复杂度 5% 计算，BaoStock 为 `1.98/5`、Tushare Pro 为 `2.95/5`、iFinD 为 `2.10/5`。Tushare 六项分为 `2.0/3.5/2.0/3.5/4.5/4.0`，加权过程为 `0.600+0.875+0.300+0.525+0.450+0.200=2.950`；排名不变，硬性许可和事实门禁仍优先于总分。
-- 技术结论：Tushare Pro 已公开 raw daily、独立 `adj_factor`、SSE/SZSE `trade_cal`、`dividend` 与跨核心接口使用的 `ts_code`，判为 `V13_LINEAGE_PARTIAL`、`PIT_PARTIAL`，稳定证券 ID 为 `PARTIAL`；未证明完整公司行动/修订关系、`DAILY_EXACT` 实样、永久 instrument identity 生命周期或 Provider revision/published/历史版本，不能判 READY。只有书面许可通过并完成最小样例复核后，才可由独立治理阶段讨论升级为 `FORWARD_PIT_BUILDABLE`。
-- 许可与成本结论：Tushare Pro 官方服务协议的个人查看/非商业限制，与官方缓存、回测和 AI 文档存在需书面澄清的用途边界；2000 积分官方个人价格为人民币 200 元/年，但用户尚未批准购买。因此 `F1_ENTRY_READINESS=BLOCKED_MULTIPLE`，具体为书面许可、技术证据和成本批准三类阻断。
+- B0 时点技术结论：Tushare Pro 已公开 raw daily、独立 `adj_factor`、SSE/SZSE `trade_cal`、`dividend` 与跨核心接口使用的 `ts_code`，判为 `V13_LINEAGE_PARTIAL`、`PIT_PARTIAL`，稳定证券 ID 为 `PARTIAL`；完整公司行动/修订关系、`DAILY_EXACT` 实样、永久 instrument identity 生命周期和 Provider revision/published/历史版本当时仍需后续证据。
+- B0 时点准入结论：`F1_ENTRY_READINESS=BLOCKED_MULTIPLE`，由书面许可、技术证据和成本批准三类阻断；B1 已对该组成进行后续复核。
 - iFinD 定位：官方资料显示其 SDK/HTTP、数据覆盖和额度能力适合作为专业备用，但个人资格、授权、价格、V13 字段与 revision 语义必须由官方报价、书面许可和未来受控试用验证；Track A 通过不表示现在应启动 15 天试用。
-- 用户外部动作：优先向 Tushare Pro 官方发送许可与接口确认问题，取得可留档书面答复及准确套餐范围；若答复不能满足硬门禁，则按备用路线向 iFinD 获取正式报价、个人资格与试用授权范围。不得自行注册、购买、激活或调用。
-- 当前边界：该任务分支待 ChatGPT 实际 Git 验收，尚未合入；即使后续合入也不自动授权 F1。四项正式门禁不变，Provider/iFinD 真实调用数为 0。
+- 当前边界：B0 合入不自动授权 F1。四项正式门禁不变。
+
+#### 3A-R3B-TRACK-B1：Tushare 2000 积分受控权限探针与 F1 准入复核（任务分支已完成，待验收）
+
+- 性质：只记录 `2026-07-29` 已完成的固定范围真实探针，并复核 F1；不再次调用 Provider，不开发 Adapter，不访问数据库。
+- 交付：[B1任务书](tasks/3ar3b-track-b1-tushare-probe-review.md)和[B1阶段记录](stage-3ar3b-track-b1-tushare-probe-review.md)，并同步候选矩阵、证据登记册、成本模型、F1 准入合同和试用探针合同。
+- 探针边界：Python `3.11.9`、tushare `1.4.29`、pandas `3.0.5`；固定 `600000.SH/000001.SZ`、`20250102/20250103`，日历范围 `20250101`—`20250105`；精确 10 次业务请求，无重试、全市场、数据库或完整响应留存，临时环境残留为 0。
+- 探针结果：两次 `stock_basic`、两次 SSE/SZSE `trade_cal`、两次 `daily`、两次 `adj_factor` 和两次 `dividend` 全部 `PASS`，权限错误和网络错误均为 0；`TUSHARE_2000_PERMISSION_PROBE=PASS`。
+- 技术升级：2000 积分核心接口权限、raw/factor/calendar/普通身份/dividend 字段和两证券两日 `DAILY_EXACT` 最小样例为 `VERIFIED`。
+- 保持部分：`V13_LINEAGE_PARTIAL`、`PIT_PARTIAL` 和稳定证券 ID `PARTIAL` 不变；公司行动完整覆盖/身份/解释关系、revision/snapshot/published/update/旧版本和永久证券身份仍未验证。
+- 成本复核：用户已开通 2000 积分，`BLOCKED_COST_APPROVAL` 解除；不记录支付隐私。`PAID_PROVIDER_UPGRADE_DECISION=PENDING` 继续控制后续专业付费升级和 iFinD。
+- F1 复核：`F1_ENTRY_READINESS=BLOCKED_MULTIPLE` 不变，但当前阻断从“书面许可 + 技术证据 + 成本批准”缩小为“书面许可 + 剩余技术证据”。
+- 当前边界：B1 治理任务待 ChatGPT 实际 Git 验收且尚未合入；本治理阶段新增 Provider 调用为 0，Tushare 累计真实业务请求为 10，iFinD 为 0。F1 未获得实施授权。
 
 #### 3A-R3B-F1：选定 Provider Adapter 与 V13 接入（未开始）
 
@@ -322,7 +334,7 @@
 - 历史用途：`RESEARCH_HISTORICAL_UNVERIFIED` 仅用于产品、演示、探索性历史回测、覆盖研究和交叉校验；不声明 Provider PIT、历史无前视、正式商业资格或历史修订版本。
 - 前向用途：只有真实首次捕获之后，满足 append-only、`firstObservedAt`、`knownAt`、cutoff 和许可门禁的事实才能成为 `SYSTEM_KNOWLEDGE_PIT`；它不证明首次捕获前 Provider 的发布时间或修订。
 - 边界：不得把任一候选升级为 `PROVIDER_PIT_VERIFIED`，不得绕过 V13 用途许可、跨 Provider 拼接 QFQ、自动全市场抓取、开启 scheduler、创建 Day 002 或自动交易。
-- 当前阻断：`F1_ENTRY_READINESS=BLOCKED_MULTIPLE`。Tushare Pro 缺书面许可、关键技术证据与用户成本批准；BaoStock 继续为 `PENDING_WRITTEN_PERMISSION`；iFinD 仍需报价、授权和未来试用证据。三者均不得提升为 `APPROVED_ADAPTER`、`PROVIDER_PIT_VERIFIED` 或 `FORMAL`。
+- 当前阻断：`F1_ENTRY_READINESS=BLOCKED_MULTIPLE`。Tushare Pro 的最低成本和最小技术样例阻断已部分解除，但仍缺书面用途许可、完整公司行动/稳定事件身份/factor 解释关系、修订和历史版本语义及永久证券身份边界；BaoStock 继续为 `PENDING_WRITTEN_PERMISSION`，iFinD 仍需报价、授权和未来试用证据。三者均不得提升为 `APPROVED_ADAPTER`、`PROVIDER_PIT_VERIFIED` 或 `FORMAL`。
 
 #### 3A-R3B-F2A：免费研究预览产品（技术与用户产品形态验收均完成）
 

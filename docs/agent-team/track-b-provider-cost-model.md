@@ -5,7 +5,7 @@
 - 币种：人民币。
 - 只记录官方公开价格；无公开价格时写“需要官方报价，不估算具体金额”。
 - 价格状态只允许：`OFFICIAL_CONFIRMED`、`OFFICIAL_CONTACT_REQUIRED`、`NOT_PUBLIC`、`UNVERIFIED`。
-- 本模型不构成购买批准；本阶段没有注册、购买、试用或调用。
+- Track B0 本身不构成购买批准。其后用户已实际开通 Tushare 2000 积分权限，并完成一次受控技术权限探针；本模型不记录订单号、手机号、支付渠道或其他隐私。
 
 ## 2. 统一成本表
 
@@ -22,14 +22,14 @@
 | 终端额外费用 | 无 | 无终端要求；API Token 账号模式 | FAQ 称免费接口账号与终端产品有关，专项 API/终端关系需报价确认 |
 | API 是否单独收费 | 无公开付费 API | 积分 API 与独立权限 API 分开计费 | 数据接口为 iFinD 数据库衍生产品；是否与终端捆绑需官方报价 |
 | 超量费用 | 未公开 | 通过积分/独立权限升级；没有逐次超量单价 | 未公开 |
-| 正式开发前最低可能成本 | 0 元，但不能解除许可和 lineage 阻断 | **200 元/年**可取得 2000 积分核心技术权限；只有用户批准且书面用途许可满足后才可发生 | 需要官方报价，不估算具体金额 |
+| 正式开发前最低可能成本 | 0 元，但不能解除许可和 lineage 阻断 | 用户已开通 2000 积分，核心技术权限经 B1 探针生效；书面用途许可仍未满足 | 需要官方报价，不估算具体金额 |
 | 试用条件 | 不适用 | 没有本阶段所需公开匿名试用；需账号/Token | 官方试用申请并由运营联系；本阶段不申请、不激活 |
 | 价格状态 | `OFFICIAL_CONFIRMED`（访问费 0；不等于许可确认） | `OFFICIAL_CONFIRMED`（公开积分和独立权限价） | `OFFICIAL_CONTACT_REQUIRED` |
 
 ## 3. 个人开发判断
 
 1. BaoStock 的货币成本最低，但许可、逐日因子、交易所日历身份和公司行动版本缺口会把成本转移为不确定的等待与返工。
-2. Tushare Pro 的 2000 积分档是当前唯一有官方公开个人价格且技术上覆盖 V13 四类核心输入的低成本路线；200 元/年是“可能的最低技术门槛”，不是采购批准，也不是用途许可。
+2. Tushare Pro 的 2000 积分档是当前唯一有官方公开个人价格且技术上覆盖 V13 四类核心输入的低成本路线；用户已开通该权限，B1 十项探针证明核心接口技术权限生效，但购买和接口可用仍不是用途许可。
 3. iFinD 的专业能力上限较高，但价格、个人资格、API 授权、试用数据留存和 V13 字段均需销售/合同确认。Track A 只证明产品形态，尚无 F3 效果与数据瓶颈证据，因此现在消耗有限试用窗口不划算。
 
 ## 4. 当前成本结论
@@ -37,8 +37,10 @@
 ```text
 BAOSTOCK_COST_STATUS=OFFICIAL_CONFIRMED
 LOW_COST_PROVIDER_COST_STATUS=OFFICIAL_CONFIRMED
+TUSHARE_2000_ACCESS_STATUS=ACTIVE_VERIFIED
+TUSHARE_MINIMUM_COST_APPROVAL_BLOCKER=RESOLVED
 IFIND_COST_STATUS=OFFICIAL_CONTACT_REQUIRED
 PAID_PROVIDER_UPGRADE_DECISION=PENDING
 ```
 
-用户当前无需支付任何费用。下一外部动作是先取得 Tushare 对本地保存、回测、Agent、留存和 V13 四类接口同一授权范围的书面答复，再决定是否批准 200 元/年的最小积分成本。
+Tushare 最低成本批准不再是 F1 当前阻断。下一外部动作是取得 Tushare 对本地保存、回测、Agent、留存和 V13 四类接口同一授权范围的书面答复，并补齐公司行动、版本和永久身份技术证据。`PAID_PROVIDER_UPGRADE_DECISION=PENDING` 继续控制后续专业付费升级和 iFinD，不因本次低成本权限自动变化。

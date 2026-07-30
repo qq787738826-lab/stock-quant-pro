@@ -8,9 +8,9 @@ TRACK_B_FALLBACK_ROUTE=IFIND
 F1_ENTRY_READINESS=BLOCKED_MULTIPLE
 ```
 
-主要路线的具体 Provider 是 Tushare Pro。该选择只确定下一项外部取证顺序，不批准购买、账号、调用、Adapter、V13 业务库迁移或 F1 实施。
+主要路线的具体 Provider 是 Tushare Pro。用户已开通 2000 积分且 B1 技术权限探针通过；这不批准追加购买、再次调用、Adapter、V13 业务库迁移或 F1 实施。
 
-Tushare Pro 当前资格固定为 `PIT_PARTIAL`，稳定证券 ID 固定为 `PARTIAL`。前者不表示当前可合法落库；后者只确认 `ts_code`、交易所及上市/退市普通字段存在，不确认永久 instrument identity、换码、迁板、重新上市或历史映射。
+Tushare Pro 当前资格固定为 `V13_LINEAGE_PARTIAL`、`PIT_PARTIAL`，稳定证券 ID 固定为 `PARTIAL`。B1 已把 raw、factor、SSE/SZSE calendar、普通证券身份、dividend 字段和两证券两日 `DAILY_EXACT` 最小样例验证为 `VERIFIED`，但这不表示当前可合法落库，也不确认永久 instrument identity、完整 action 或历史版本。
 
 ## 2. F1 READY 的全部条件
 
@@ -21,13 +21,13 @@ Tushare Pro 当前资格固定为 `PIT_PARTIAL`，稳定证券 ID 固定为 `PAR
 | 历史回放与回测 | 明确允许 cutoff 回放、回测和保存结果 | BLOCKED | 官方回测示例不是合同授权 |
 | 内部 Agent | 明确允许本地 AI/Agent 分析和内部派生指标 | BLOCKED | 官方 AI 示例不是合同授权 |
 | 终止后数据 | 明确保留/删除范围和期限 | BLOCKED | 未公开 |
-| 同 Provider raw | 正式字段、单位、精度、null/0 语义和最小响应样例 | PARTIAL | `daily` 文档充分，仍需响应样例 |
-| 同 Provider factor | `ts_code + trade_date` 精确自然键、正数因子、日覆盖和单位 | PARTIAL | 文档支持逐日返回；需最小探针验证 `DAILY_EXACT` |
-| 同 Provider calendar | SSE/SZSE 稳定身份与精确日期 | PARTIAL | 文档充分；需最小响应样例验证 |
-| 同 Provider action | 事件自然键、类型、公告/生效/修订时间及覆盖清单 | BLOCKED | `dividend` 只形成部分公司行动闭环 |
-| 稳定证券身份 | `ts_code` 生命周期、换码/迁板/重新上市/退市及历史映射 | PARTIAL | `ts_code`、exchange、list/delist 字段存在；永久 identity 与生命周期未获官方保证或样例 |
+| 同 Provider raw | 正式字段、单位、精度、null/0 语义和最小响应样例 | PARTIAL | B1 最小样例已验证；完整单位/null/0 合同和长期稳定性仍需冻结 |
+| 同 Provider factor | `ts_code + trade_date` 精确自然键、正数因子、日覆盖和单位 | PARTIAL | B1 两证券、两日 `DAILY_EXACT` 最小样例已验证；全历史覆盖和修订仍未证明 |
+| 同 Provider calendar | SSE/SZSE 稳定身份与精确日期 | PARTIAL | B1 两交易所最小样例已验证；临时休市修订和旧版本仍未证明 |
+| 同 Provider action | 事件自然键、类型、公告/生效/修订时间及覆盖清单 | BLOCKED | B1 证明 `dividend` 可调用；配股、拆并股、更正/撤回、稳定 ID 和 factor 解释关系未闭合 |
+| 稳定证券身份 | `ts_code` 生命周期、换码/迁板/重新上市/退市及历史映射 | PARTIAL | B1 验证普通字段；永久 identity 与生命周期仍未获官方保证或样例 |
 | 前向 PIT | 允许重复捕获并以真实首次接收建立 `SYSTEM_KNOWLEDGE_PIT` | BLOCKED | 当前 `PIT_PARTIAL`；技术基础存在，但保存、重复捕获、回放、Agent、备份和终止后留存许可未闭合 |
-| 成本 | 套餐、费用和所需接口范围明确，用户明确批准 | BLOCKED | 200 元/年核心积分价公开，但用户未批准购买 |
+| 成本 | 套餐、费用和所需接口范围明确，用户明确批准 | PASS | 用户已开通 2000 积分，B1 十项探针证明权限生效；不记录支付隐私 |
 | 实现范围 | Adapter、DTO 映射、调用预算、错误/限流、数据清理、V13 迁移边界冻结 | PARTIAL | Provider 中立基础已完成；真实字段和许可尚未冻结 |
 
 只有上述所有条件均通过，才能把：
@@ -49,12 +49,11 @@ F1_ENTRY_READINESS=READY
 2. `BLOCKED_TECHNICAL_EVIDENCE`
    - 公司行动是否覆盖配股、拆并股和更正/撤回；
    - 稳定 action ID 与 factor 变化的解释关系；
-   - `DAILY_EXACT` 的真实响应验证；
    - revision/snapshot/published/update/旧版本是否确实不可用；
-   - 证券身份生命周期和字段 null/0 语义样例。
-3. `BLOCKED_COST_APPROVAL`
-   - 2000 积分 200 元/年的官方价格已知；
-   - 用户尚未批准注册、购买或发生任何成本。
+   - 证券身份生命周期；
+   - raw/factor/calendar/action 的完整字段资格、null/0、长期稳定和全历史覆盖。
+
+`BLOCKED_COST_APPROVAL` 已解除：用户已开通 2000 积分，技术权限已验证生效。
 
 因此唯一合法判定是：
 
@@ -64,8 +63,8 @@ F1_ENTRY_READINESS=BLOCKED_MULTIPLE
 
 ## 4. 获得答复后的判定树
 
-1. Tushare 明确允许全部用途，且最小样例满足四类事实：
-   - 用户另行批准最小成本和 F1；
+1. Tushare 明确允许全部用途，且剩余技术合同满足四类事实：
+   - 用户另行批准 F1；
    - Codex 可规划 `3A-R3B-F1-TUSHARE`，只实现受控 Adapter、V13 隔离接入和测试；
    - 不自动迁移正常业务库，不启动 scheduler、F2B 或 F3。
 2. 许可允许，但公司行动闭环不足：
@@ -96,7 +95,7 @@ F1_ENTRY_READINESS=BLOCKED_MULTIPLE
 
 ## 6. 继续禁止
 
-- 不注册、购买或调用 Tushare；
+- 不追加购买或再次调用 Tushare；
 - 不申请、激活或调用 iFinD；
 - 不开发任何真实 Adapter；
 - 不迁移正常业务库 V13；

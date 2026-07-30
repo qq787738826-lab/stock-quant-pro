@@ -2,7 +2,7 @@
 
 ## 1. 适用范围
 
-本合同只供未来 Tushare 或 iFinD 在书面许可、成本和用户激活批准后使用。本阶段不执行。
+本合同冻结 Track B 最小技术探针的一般边界。`2026-07-29` 已按用户专项授权执行 Tushare 2000 积分权限子集探针；该子集没有完成本合同要求的 revision、稳定复取和全部用途许可验证。iFinD 探针仍未执行。
 
 ```text
 MAX_BUSINESS_REQUESTS=10
@@ -19,7 +19,7 @@ DAY_002_CREATED=false
 - `600000.SH`
 - `000001.SZ`
 
-固定日期：
+一般合同固定日期：
 
 - `T1`、`T2`：由候选 Provider 的官方交易日历在执行前确认的两个连续历史交易日；
 - 在合同、字段和额度书面确认前不把具体日期或函数名猜成事实。
@@ -94,11 +94,33 @@ DAY_002_CREATED=false
 7. 不写正常业务库，不执行 V13 public migrate，不启动应用 scheduler；
 8. 不创建 Day 002、Agent 任务、Shadow 或交易记录。
 
-## 6. 当前状态
+## 6. B1 已完成的 Tushare 权限子集
+
+B1 使用相同两只证券，将日期固定为 `20250102`、`20250103`，日历范围固定为 `20250101`—`20250105`。十项请求为两次 `stock_basic`、两次 `trade_cal`、两次 `daily`、两次 `adj_factor` 和两次 `dividend`；全部 `PASS`，无重试、权限错误或网络错误。
+
+该子集已经验证：
+
+- 2000 积分核心接口技术权限；
+- raw/factor/calendar/普通证券身份/dividend 公开字段；
+- 两证券、两交易日 `DAILY_EXACT` 最小样例。
+
+该子集没有验证：
+
+- 稳定复取；
+- revision/snapshot/published/update/历史旧版本；
+- 公司行动完整覆盖和稳定事件 ID；
+- factor/action 解释关系；
+- 永久证券身份；
+- 本地保存、回测、Agent、备份或服务到期留存许可。
+
+## 7. 当前状态
 
 ```text
-TRIAL_PROBE_STATUS=NOT_EXECUTED
-PROVIDER_REAL_CALL_COUNT=0
+TUSHARE_2000_PERMISSION_PROBE=PASS
+TUSHARE_PROVIDER_REAL_BUSINESS_CALL_COUNT=10
+TUSHARE_RETRY_COUNT=0
+TRACK_B_FULL_EVIDENCE_PROBE_STATUS=PARTIAL_NOT_COMPLETE
+IFIND_TRIAL_PROBE_STATUS=NOT_EXECUTED
 IFIND_REAL_CALL_COUNT=0
 IFIND_TRIAL_ACTIVATION_GATE=BLOCKED
 ```

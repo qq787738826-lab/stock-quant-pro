@@ -2,9 +2,11 @@
 
 ## 1. 范围与状态词
 
-- 调查日期：`2026-07-29`
+- 官方资料调查日期：`2026-07-29`
+- Tushare 受控权限探针日期：`2026-07-29`
+- B1 治理复核日期：`2026-07-30`
 - 候选数量：精确为 3 个：BaoStock、Tushare Pro、同花顺 iFinD。
-- 本矩阵只使用 [Track B 官方证据登记册](track-b-provider-evidence-register.md) 中的官方资料，以及已经验收的 F0 直接 Provider 探针事实。
+- 本矩阵只使用 [Track B 证据登记册](track-b-provider-evidence-register.md) 中的官方资料、已经验收的 F0 直接 Provider 探针事实，以及 B1 固定范围 Tushare 受控权限探针事实。
 - 不以搜索摘要、博客、论坛、第三方 GitHub、代理报价或未确认身份的聊天记录支撑结论。
 - “没有写禁止”不等于允许；许可不明确时使用 `PENDING_WRITTEN_CONFIRMATION` 或 `UNVERIFIED`。
 
@@ -43,20 +45,20 @@
 
 | 技术维度 | BaoStock | Tushare Pro | 同花顺 iFinD |
 |---|---|---|---|
-| 1. 日线原始行情 | `VERIFIED`：F0 直接探针观察到未复权日线；终态完整性仍为 `UNVERIFIED`（BS-003/005） | `VERIFIED`：`daily` 明确为未复权，含 OHLC、手、千元单位（TS-004） | `VERIFIED`：官方 HTTP 历史行情示例公开 OHLC（IF-004） |
+| 1. 日线原始行情 | `VERIFIED`：F0 直接探针观察到未复权日线；终态完整性仍为 `UNVERIFIED`（BS-003/005） | `VERIFIED`：官方文档明确 `daily` 为未复权并给出单位；B1 两证券、两交易日最小样例各返回 2 行（TS-004、TS-PB-005/006） | `VERIFIED`：官方 HTTP 历史行情示例公开 OHLC（IF-004） |
 | 2. 前复权行情 | `VERIFIED`：公开 API 与 F0 探针均存在 QFQ（BS-003/005） | `VERIFIED`：`pro_bar` 动态计算 QFQ（TS-008） | `PARTIAL`：官方 FAQ 描述复权算法，但实际指标需账号内工具确认（IF-002） |
-| 3. 独立复权因子 | `PARTIAL`：公开因子语义存在，F0 两个证券短区间查询均为 0 行（BS-004/005） | `VERIFIED`：`adj_factor(ts_code, trade_date, adj_factor)`，按交易日返回（TS-005） | `PARTIAL`：公开 FAQ 说明累计复权因子，字段名、精度和取数函数需试用确认（IF-002） |
-| 4. 公司行动 | `PARTIAL`：分红/送转入口与一次 F0 观察存在，稳定事件 ID、修订关系不明（BS-003/005） | `PARTIAL`：`dividend` 覆盖现金、送股、转增及多类日期；配股、拆并股和修订关系未形成完整证明（TS-007） | `REQUIRES_TRIAL_PROBE`：基础数据可覆盖公司资料/重组，但 V13 所需事件函数与字段未公开列全（IF-003） |
+| 3. 独立复权因子 | `PARTIAL`：公开因子语义存在，F0 两个证券短区间查询均为 0 行（BS-004/005） | `VERIFIED`：`adj_factor(ts_code,trade_date,adj_factor)` 按交易日返回；B1 两证券、两交易日均返回同日因子，最小 `DAILY_EXACT` 样例通过（TS-005、TS-PB-007/008） | `PARTIAL`：公开 FAQ 说明累计复权因子，字段名、精度和取数函数需试用确认（IF-002） |
+| 4. 公司行动 | `PARTIAL`：分红/送转入口与一次 F0 观察存在，稳定事件 ID、修订关系不明（BS-003/005） | `PARTIAL`：B1 证明两证券 `dividend` 可调用并返回公开字段，但配股、拆并股、更正/撤回、稳定事件 ID、factor 解释关系和修订链仍未证明（TS-007、TS-PB-009/010） | `REQUIRES_TRIAL_PROBE`：基础数据可覆盖公司资料/重组，但 V13 所需事件函数与字段未公开列全（IF-003） |
 | 5. 除权除息 | `PARTIAL`（BS-004/005） | `VERIFIED`：`record_date/ex_date/imp_ann_date` 等字段公开（TS-007） | `PARTIAL`：FAQ 说明除权日维护因子，具体事件字段需探针（IF-002） |
 | 6. 停复牌 | `PARTIAL`：历史行情含交易状态，但独立事件能力未充分证明 | `VERIFIED`：`suspend_d`（TS-010） | `REQUIRES_TRIAL_PROBE` |
-| 7. 上市/退市状态 | `PARTIAL` | `VERIFIED`：`stock_basic` 提供 `list_status/list_date/delist_date`（TS-009） | `PARTIAL`：公开文档说明可取在市/退市代码列表，时态字段需探针（IF-002） |
+| 7. 上市/退市状态 | `PARTIAL` | `VERIFIED`：`stock_basic` 提供且 B1 实样返回 `list_status/list_date/delist_date`（TS-009、TS-PB-001/002） | `PARTIAL`：公开文档说明可取在市/退市代码列表，时态字段需探针（IF-002） |
 | 8. ST 状态 | `VERIFIED`：历史行情含 `isST`（BS-003） | `VERIFIED`：`stock_st` 提供逐交易日历史，但需 3000 积分（TS-011） | `REQUIRES_TRIAL_PROBE` |
-| 9. 精确交易日历 | `PARTIAL`：通用日历缺交易所身份（BS-005） | `VERIFIED`：`trade_cal` 显式区分 SSE/SZSE（TS-006） | `VERIFIED`：官方 HTTP 示例按 marketCode 查询交易日（IF-004） |
+| 9. 精确交易日历 | `PARTIAL`：通用日历缺交易所身份（BS-005） | `VERIFIED`：`trade_cal` 显式区分 SSE/SZSE；B1 两个交易所最小样例各返回 5 个日历日（TS-006、TS-PB-003/004） | `VERIFIED`：官方 HTTP 示例按 marketCode 查询交易日（IF-004） |
 | 10. 指数成分 | `PARTIAL`：只见有限指数集合 | `VERIFIED`：`index_weight`（TS-013） | `VERIFIED`：官方数据池/板块成分示例（IF-003/004） |
 | 11. 指数行情 | `PARTIAL` | `VERIFIED`：`index_daily`（TS-012） | `VERIFIED`：历史行情/日期序列支持指数（IF-002/003） |
 | 12. 公告元数据 | `NOT_SUPPORTED` | `VERIFIED`：独立公告权限包含标题和 PDF 链接（TS-003） | `VERIFIED`：`report_query` 返回日期、标题、ctime、PDF URL、seq（IF-003/004） |
 | 13. 公告正文或 PDF | `NOT_SUPPORTED` | `VERIFIED`：独立公告权限，需另购（TS-003） | `VERIFIED`：公告查询与下载额度公开（IF-001/004） |
-| 14. 稳定证券 ID | `PARTIAL`：`sh.600000` 等身份稳定性未有合同/版本保证 | `PARTIAL`：`ts_code` 含交易所后缀并贯穿核心接口，`stock_basic` 有上市、退市和交易所字段；永久 instrument identity、换码、迁板、重新上市及历史映射没有官方保证或样例（TS-004/005/006/007/009） | `PARTIAL`：`thscode` 跨接口公开，但生命周期/换码语义需探针（IF-003/004） |
+| 14. 稳定证券 ID | `PARTIAL`：`sh.600000` 等身份稳定性未有合同/版本保证 | `PARTIAL`：B1 验证 `ts_code`、交易所、上市/退市普通字段，但永久 instrument identity、换码、迁板、重新上市及历史映射仍没有官方保证或样例（TS-004/005/006/007/009、TS-PB-001/002） | `PARTIAL`：`thscode` 跨接口公开，但生命周期/换码语义需探针（IF-003/004） |
 | 15. Provider revision/version | `NOT_SUPPORTED` | `NOT_SUPPORTED`：公开核心字段没有 revision/snapshot | `REQUIRES_TRIAL_PROBE` |
 | 16. published time | `NOT_SUPPORTED` | `PARTIAL`：有接口更新时点和公告日，不等于逐版本 publishedAt（TS-004/005/007） | `REQUIRES_TRIAL_PROBE`：FAQ 有总体入库时点，不等于逐事实 publishedAt（IF-002） |
 | 17. effective time | `PARTIAL`：交易日/除权日存在，语义链不完整 | `PARTIAL`：trade/ex/record/implementation dates 存在，统一事件有效时点需映射验证（TS-005/007） | `REQUIRES_TRIAL_PROBE` |
@@ -74,7 +76,7 @@
 | 候选 | V13/QFQ 状态 | 依据 | PIT 状态 | 依据 |
 |---|---|---|---|---|
 | BaoStock | `V13_LINEAGE_BLOCKED` | raw 可用，但独立因子结果、`DAILY_EXACT`、交易所日历身份、公司行动版本和用途许可均未满足；禁止跨来源补齐 | `PIT_PARTIAL` | 技术上可在获准后从真实首次捕获建立系统知识链，但当前本地保存/回放/Agent 权利未确认，也无 Provider revision |
-| Tushare Pro | `V13_LINEAGE_PARTIAL` | 同一 Provider 已公开 raw、逐交易日 factor、SSE/SZSE calendar、dividend 和统一 `ts_code`；公司行动完整范围、修订关系、永久证券身份和合法存储/回测/Agent 用途尚未闭合 | `PIT_PARTIAL` | 技术上具备从首次真实捕获建立前向 PIT 的基础，但无公开历史 revision，且本地保存、重复捕获、历史回放、Agent、备份和服务终止后留存均待书面许可；许可通过并完成最小样例复核后，才可由独立治理阶段讨论升级为 `FORWARD_PIT_BUILDABLE` |
+| Tushare Pro | `V13_LINEAGE_PARTIAL` | B1 已验证两证券、两日 raw/factor `DAILY_EXACT`、SSE/SZSE calendar、普通证券身份和 dividend 字段；公司行动完整范围/身份/解释关系、永久证券身份和合法存储/回测/Agent 用途尚未闭合 | `PIT_PARTIAL` | 技术上具备从首次真实捕获建立前向 PIT 的基础，但无公开历史 revision，且本地保存、重复捕获、历史回放、Agent、备份和服务终止后留存均待书面许可；B1 技术权限 PASS 不改变当前 PIT 资格 |
 | 同花顺 iFinD | `V13_LINEAGE_UNVERIFIED` | 公共文档证明接口广度，但核心指标名、字段、四类事实是否同一授权、身份及事件关系只能在试用/书面材料中验证 | `PIT_UNVERIFIED` | 更新时点与复权语义有公开说明，但 revision/snapshot/published/effective/旧版本及留存权利均需试用和合同证据 |
 
 任何候选都未达到 `V13_LINEAGE_READY` 或 `PROVIDER_PIT_READY`。
@@ -92,6 +94,7 @@
 评分解释：
 
 - Tushare Pro 重新计算过程：`2.0×30% + 3.5×25% + 2.0×15% + 3.5×15% + 4.5×10% + 4.0×5% = 0.600 + 0.875 + 0.300 + 0.525 + 0.450 + 0.200 = 2.950`。PIT/版本从 2.5 降为 2.0，原因是当前只能判 `PIT_PARTIAL`；覆盖/稳定性从 4.0 降为 3.5，原因是永久证券身份生命周期尚未验证。
+- B1 不重新调整加权分：最小样例消除了部分技术不确定性，但 `V13_LINEAGE_PARTIAL`、`PIT_PARTIAL`、稳定证券 ID `PARTIAL` 和书面许可状态均未升级；成本维度原本已经按官方 2000 积分价格计分。
 - 调整后排名仍为 Tushare Pro、iFinD、BaoStock。Tushare Pro 不是因为需要维持主路线而反向调分，而是重新计算后仍以核心四事实、交易所日历、逐日因子、个人公开价格和 HTTP 接入形成最短的可验证闭环。
 - Tushare Pro 仍被硬门禁阻断：本地保存、回测、Agent、长期留存需书面确认，公司行动完整性和版本语义需样例。
 - iFinD 作为备用是因为其专业数据和多语言接口上限高于 BaoStock，但必须先取得报价、合同和试用字段证据；当前不启动试用。
@@ -105,4 +108,4 @@ TRACK_B_FALLBACK_ROUTE=IFIND
 F1_ENTRY_READINESS=BLOCKED_MULTIPLE
 ```
 
-主要路线具体指 Tushare Pro，不表示批准 Adapter、购买积分、注册账号或发起调用。备用路线具体指 iFinD，仅在 Tushare 书面许可或最小技术样例不能满足 F1 合同时再进入付费路线决策；它不表示现在启动 15 天试用。
+主要路线具体指 Tushare Pro。用户已开通 2000 积分且 B1 技术权限探针通过，但这不表示批准 Adapter、再次调用或开始 F1。备用路线具体指 iFinD，仅在 Tushare 书面许可或剩余技术合同不能满足 F1 时再进入专业付费路线决策；它不表示现在启动 15 天试用。
