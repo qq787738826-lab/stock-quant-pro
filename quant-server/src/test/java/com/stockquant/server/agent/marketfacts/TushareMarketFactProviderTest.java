@@ -58,6 +58,76 @@ class TushareMarketFactProviderTest {
         assertEquals("PARTIAL_NOT_V13_ELIGIBLE",
                 capability.coverage()
                         .path("dividendEvidence").asText());
+        assertEquals("REDUCED_RESEARCH_ONLY",
+                capability.coverage()
+                        .path("technicalRouteDecision").asText());
+        assertFalse(capability.coverage()
+                .path("fullTechnicalContractReady").asBoolean(true));
+        assertTrue(capability.coverage()
+                .path("reducedResearchContractReady").asBoolean());
+        assertEquals("READY",
+                capability.coverage()
+                        .path("tushareReducedResearchContract")
+                        .asText());
+        assertEquals("RAW_FACTOR_END_DATE_ANCHORED",
+                capability.coverage()
+                        .path("qfqCalculationMode").asText());
+        assertEquals("REQUESTED_END_DATE_FACTOR",
+                capability.coverage()
+                        .path("qfqAnchorSemantics").asText());
+        assertFalse(capability.coverage()
+                .path("corporateActionLineageComplete")
+                .asBoolean(true));
+        assertFalse(capability.coverage()
+                .path("permanentSecurityIdentityVerified")
+                .asBoolean(true));
+        assertFalse(capability.coverage()
+                .path("providerRevisionAvailable").asBoolean(true));
+        assertFalse(capability.coverage()
+                .path("historicalVersionsQueryable")
+                .asBoolean(true));
+        assertEquals("UNVERIFIED",
+                capability.coverage()
+                        .path("fullHistoryDailyExactQualification")
+                        .asText());
+        assertEquals("NOT_SUPPORTED",
+                capability.coverage()
+                        .path("providerPitQualification").asText());
+        assertTrue(capability.coverage()
+                .path("forwardSystemKnowledgePitBuildable")
+                .asBoolean());
+        assertEquals("ISSUER_IDENTITY_EVIDENCE",
+                capability.coverage()
+                        .path("stockCompanyIdentityUse").asText());
+        assertEquals("SECURITY_NAME_HISTORY_EVIDENCE",
+                capability.coverage()
+                        .path("namechangeUse").asText());
+        assertEquals(
+                "HISTORICAL_SECURITY_LIST_PERMISSION_INSUFFICIENT",
+                capability.coverage()
+                        .path("historicalSecurityList").asText());
+        assertEquals("PARTIAL",
+                capability.coverage()
+                        .path("corporateActionCoverage")
+                        .path("CASH_DIVIDEND").asText());
+        assertEquals("NOT_SUPPORTED",
+                capability.coverage()
+                        .path("corporateActionCoverage")
+                        .path("WITHDRAWAL").asText());
+        assertTrue(capability.coverage()
+                .path("technicalBlockers").isArray());
+        assertTrue(capability.coverage()
+                .path("technicalEvidenceIds").isArray());
+        assertEquals(
+                provider.technicalQualification().routeDecision().name(),
+                capability.coverage()
+                        .path("technicalRouteDecision").asText());
+        assertEquals(
+                provider.technicalQualification()
+                        .reducedResearchContractReady(),
+                capability.coverage()
+                        .path("reducedResearchContractReady")
+                        .asBoolean());
         assertEquals("VERIFIED",
                 capability.licensing()
                         .path("writtenQuantDataSourceUsePermission")
@@ -82,6 +152,8 @@ class TushareMarketFactProviderTest {
                 capability.licensing()
                         .path("limitedPersonalUseImplementation")
                         .asText());
+        assertFalse(capability.licensing()
+                .path("formalEligible").asBoolean(true));
         assertFalse(capability.licensing()
                 .path("fullF1EntryReady").asBoolean(true));
         assertEquals("USER_APPROVED_LIMITED_PERSONAL_USE",

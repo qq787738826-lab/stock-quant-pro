@@ -89,6 +89,9 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
             new ProviderVersion(
                     null, null, null, null, null,
                     RevisionQualification.SYSTEM_KNOWLEDGE_ONLY);
+    private static final TushareTechnicalQualification
+            TECHNICAL_QUALIFICATION =
+            TushareTechnicalQualification.current2000PointAssessment();
 
     private final ObjectMapper objectMapper;
     private final TushareMarketFactProperties properties;
@@ -106,6 +109,8 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
 
     @Override
     public ProviderCapability capability() {
+        TushareTechnicalQualification qualification =
+                technicalQualification();
         ObjectNode coverage = objectMapper.createObjectNode();
         coverage.put("implementationScope", IMPLEMENTATION_SCOPE);
         coverage.put("rawDaily", "MINIMUM_SAMPLE_VERIFIED");
@@ -117,6 +122,72 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
         coverage.put("stableSecurityIdentity", "PARTIAL");
         coverage.put("v13Lineage", "PARTIAL");
         coverage.put("pitQualification", "PIT_PARTIAL");
+        coverage.put(
+                "fullTechnicalContractReady",
+                qualification.fullTechnicalContractReady());
+        coverage.put(
+                "reducedResearchContractReady",
+                qualification.reducedResearchContractReady());
+        coverage.put(
+                "tushareReducedResearchContract",
+                qualification.reducedResearchContractReady()
+                        ? "READY" : "BLOCKED");
+        coverage.put(
+                "technicalRouteDecision",
+                qualification.routeDecision().name());
+        coverage.put(
+                "qfqCalculationMode",
+                qualification.qfqCalculationMode().name());
+        coverage.put(
+                "qfqAnchorSemantics",
+                qualification.qfqAnchorSemantics().name());
+        coverage.put(
+                "corporateActionLineageComplete",
+                qualification.corporateActionLineageComplete());
+        coverage.put(
+                "permanentSecurityIdentityVerified",
+                qualification.permanentSecurityIdentityVerified());
+        coverage.put(
+                "providerRevisionAvailable",
+                qualification.providerRevisionAvailable());
+        coverage.put(
+                "historicalVersionsQueryable",
+                qualification.historicalVersionsQueryable());
+        coverage.put(
+                "fullHistoryDailyExactQualification",
+                qualification.fullHistoryDailyExactQualification().name());
+        coverage.put(
+                "providerPitQualification",
+                qualification.providerPitQualification().name());
+        coverage.put(
+                "forwardSystemKnowledgePitBuildable",
+                qualification.forwardSystemKnowledgePitBuildable());
+        coverage.put(
+                "stockCompanyIdentityUse",
+                "ISSUER_IDENTITY_EVIDENCE");
+        coverage.put(
+                "namechangeUse",
+                "SECURITY_NAME_HISTORY_EVIDENCE");
+        coverage.put(
+                "historicalSecurityList",
+                "HISTORICAL_SECURITY_LIST_PERMISSION_INSUFFICIENT");
+        ObjectNode corporateActionCoverage =
+                coverage.putObject("corporateActionCoverage");
+        qualification.corporateActionCoverage().entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .forEach(entry -> corporateActionCoverage.put(
+                        entry.getKey().name(),
+                        entry.getValue().name()));
+        ArrayNode technicalBlockers =
+                coverage.putArray("technicalBlockers");
+        qualification.blockers().stream()
+                .sorted()
+                .forEach(value -> technicalBlockers.add(value.name()));
+        ArrayNode technicalEvidenceIds =
+                coverage.putArray("technicalEvidenceIds");
+        qualification.evidenceIds().stream()
+                .sorted()
+                .forEach(technicalEvidenceIds::add);
 
         ObjectNode licensing = objectMapper.createObjectNode();
         licensing.put("usageQualification", "RESEARCH_ONLY");
@@ -207,6 +278,10 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
                 coverage,
                 licensing,
                 rateLimit);
+    }
+
+    public TushareTechnicalQualification technicalQualification() {
+        return TECHNICAL_QUALIFICATION;
     }
 
     @Override

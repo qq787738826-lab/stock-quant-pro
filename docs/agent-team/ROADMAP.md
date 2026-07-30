@@ -269,7 +269,7 @@
 - 既有规划状态：iFinD 里程碑规划提交 `23baf11ed3a236800b5f3feba8681d261a71d9f9` 已通过 ChatGPT 对实际 Git 提交的验收，并经用户批准纯 fast-forward 合入。精确验收和批准时间无仓库证据，记为 `UNKNOWN`。
 - 免费优先更新：最终提交 `c47b88e586f6751563fe210f40137a3b7ce5e576` 已通过 ChatGPT 对实际 Git 提交的验收，并经用户批准纯 fast-forward 合入。系统先用免费数据验证产品形态和效果；只有系统显示可重复使用价值、数据成为可量化主要瓶颈，且同范围免费/付费 A/B 方案和成本意愿均明确后，才考虑 iFinD 或其他付费 Provider。
 - 日期边界：iFinD 试用不得绑定 `2026-08-31`、2026 年 8 月 31 日或任何其他固定日期。日历日期只能作为非权威临时估算，不属于路线图依赖，不得因预计日期临近而降低验收标准。
-- 当前集成 HEAD：`d223fdf9ff997ca256f2d0f651c99542e817dfee`。当前状态：`F0_AUDIT_RESULT=PARTIAL`、`FREE_IMPLEMENTATION_PATH=RESEARCH_PREVIEW_FIRST`、`FREE_PRODUCT_PREVIEW_GATE=PASS`、`FREE_PROVIDER_VALIDATION_GATE=BLOCKED`、`PAID_PROVIDER_UPGRADE_DECISION=PENDING`、`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`。正常业务库 V13 未执行，iFinD 调用数为 0；Track A、Track B0 与 Track B1 均已验收并纯 fast-forward 合入。用户已开通 Tushare 2000 积分，十项 B1 受控权限探针均 PASS；官方书面只确认可作为量化数据来源，未逐项确认本地长期存储、回测和 Agent。用户已批准个人自用有限实现。F1A 有限 Adapter 修复已在任务分支完成，待实际 Git 验收且尚未合入；完整 F1 仍同时受书面许可与技术证据阻断，F2B/F3 均未开始，Day 002 未创建，scheduler 关闭，3B 未开始。
+- 当前集成 HEAD：`1ad039038829f6e752ce6ecea6da0a3d88882df7`。当前状态：`F0_AUDIT_RESULT=PARTIAL`、`FREE_IMPLEMENTATION_PATH=RESEARCH_PREVIEW_FIRST`、`FREE_PRODUCT_PREVIEW_GATE=PASS`、`FREE_PROVIDER_VALIDATION_GATE=BLOCKED`、`PAID_PROVIDER_UPGRADE_DECISION=PENDING`、`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`。正常业务库 V13 未执行，iFinD 调用数为 0；Track A、Track B0、Track B1 与 F1A 均已验收并纯 fast-forward 合入。用户已开通 Tushare 2000 积分，十项 B1 受控权限探针均 PASS；官方书面只确认可作为量化数据来源，未逐项确认本地长期存储、回测和 Agent。F1B 正在任务分支收敛完整技术合同与缩减研究路线，尚未合入；完整 F1 仍同时受书面许可与技术证据阻断，F2B/F3 均未开始，Day 002 未创建，scheduler 关闭，3B 未开始。
 
 #### 3A-R3B-0：Provider 中立离线闭环与试用准备（已完成并合入）
 
@@ -329,7 +329,7 @@
 - B1 时点 F1 复核：`F1_ENTRY_READINESS=BLOCKED_MULTIPLE`，当时阻断从“书面许可 + 技术证据 + 成本批准”缩小为“书面许可 + 剩余技术证据”。这是 B1 的历史状态，后续 F1A 书面证据已再次复核。
 - 合入状态：提交链 `39ec0411a10e1ea6ada9d34da4a20aee04382c92` → `d223fdf9ff997ca256f2d0f651c99542e817dfee` 已通过 ChatGPT 实际 Git 最终复验，经用户批准纯 fast-forward 合入。本治理阶段新增 Provider 调用为 0，B1 时点 Tushare 累计真实业务请求为 10，iFinD 为 0。
 
-#### 3A-R3B-F1A：Tushare 有限个人用途 Adapter（任务分支已完成，待验收）
+#### 3A-R3B-F1A：Tushare 有限个人用途 Adapter（已完成并合入）
 
 - 交付：[F1A 任务书](tasks/3ar3b-f1a-tushare-limited-personal-adapter.md)和[F1A 阶段记录](stage-3ar3b-f1a-tushare-limited-personal-adapter.md)。
 - 书面证据：`2026-07-30`，Tushare 官方企业微信精确脱敏文字为“问：这个可以用来当量化数据来源吧；答：可以”。因此只固定 `WRITTEN_QUANT_DATA_SOURCE_USE_PERMISSION=VERIFIED`；`WRITTEN_PERSONAL_LOCAL_STORAGE_PERMISSION/WRITTEN_PERSONAL_BACKTEST_PERMISSION/WRITTEN_PERSONAL_AGENT_ANALYSIS_PERMISSION` 均为 `UNVERIFIED`。用户另行固定 `USER_PERSONAL_USE_IMPLEMENTATION_AUTHORIZATION=CONFIRMED`、`F1_LIMITED_PERSONAL_USE_IMPLEMENTATION=APPROVED_BY_USER`，且不分发、转售或商业化原始数据。服务到期留存仍为 `UNVERIFIED`，原始数据再分发为 `NOT_GRANTED`。
@@ -337,7 +337,16 @@
 - 运行边界：生产默认 `TUSHARE_MODE=DISABLED`，联网只允许显式 `MANUAL_BOUNDED` 会话；五 Endpoint 共用 10 次会话预算，第 11 次在 HTTP 前拒绝。`daily/adj_factor/trade_cal` 受固定两日约束；无日期参数的 stock_basic/dividend 只受固定证券、Endpoint、总预算及 1/1000 行硬上限，不得称为“两日数据”或截断。官方限额为 200 次/分钟、每 API 100000 次/日，应用单进程安全值为 180 次/分钟、每 API 90000 次/日。所有 Endpoint 和进程内调用入口共享限流器，但不声称跨进程 Token 全局协调；普通限流重试默认最多 2 次，受控验收重试为 0。
 - 验证：初始固定两证券的 daily/factor/calendar 联调新增 6 次；复验修复仅使用剩余 4 次验证两证券 stock_basic/dividend，均零重试，F1A 总预算精确为 10。dividend 的 51/53 行是固定证券的历史部分证据，不是两日数据，也不进入 V13 公司行动表。随机隔离 PostgreSQL 16 Schema 从 V1 迁移到 V13，正常业务数据库和 public 未迁移。Tushare 累计真实业务请求为 20，iFinD 为 0。
 - 当前准入：`F1_ENTRY_READINESS=BLOCKED_MULTIPLE`，精确包含 `BLOCKED_WRITTEN_PERMISSION` 与 `BLOCKED_TECHNICAL_EVIDENCE`。用户批准的有限实现不把本地长期存储、回测和 Agent 三项 Provider 书面许可升级为 VERIFIED；剩余技术证据包括公司行动完整覆盖/稳定 action ID/factor-action 关系、revision/snapshot/published/update/旧版本、永久证券身份和全历史 `DAILY_EXACT`。继续保持 `V13_LINEAGE_PARTIAL`、`PIT_PARTIAL`、稳定证券 ID `PARTIAL`。两类缺口不阻止本阶段有限 Adapter 与个人用途隔离联调，但禁止升级为完整 lineage、Provider PIT、永久身份资格、正常业务库或正式运行。
-- 当前状态：F1A 技术实现与 Codex 本地验证已在 `codex/1.4.0-stage-3ar3b-f1a-tushare-adapter` 完成，待 ChatGPT 基于实际 Git 提交验收，尚未合入；不自动启动 F2B/F3、Shadow、scheduler、Day 002、3A-R3B-1、3B 或交易。
+- 当前状态：三提交链 `fc076821173407205e838b9512ee3a97e7afd3a6` → `e588e08533ddeefc161266eaf93a12e128748a47` → `1ad039038829f6e752ce6ecea6da0a3d88882df7` 已通过 ChatGPT 对实际 Git 提交的最终复验，经用户批准纯 fast-forward 合入；不自动启动 F2B/F3、Shadow、scheduler、Day 002、3A-R3B-1、3B 或交易。
+
+#### 3A-R3B-F1B：Tushare 技术合同收敛与缩减研究路线冻结（任务分支已完成，待验收）
+
+- 交付：[F1B 任务书](tasks/3ar3b-f1b-tushare-technical-contract.md)和[F1B 阶段记录](stage-3ar3b-f1b-tushare-technical-contract.md)。
+- 官方技术复核：只使用 Tushare 官方 `stock_basic/stock_company/namechange/bak_basic/adj_factor/pro_bar/dividend/trade_cal`、积分权限和 ChangeLog；本阶段不调用 Provider、不检查 Token、不访问数据库。
+- 路线结论：`TUSHARE_TECHNICAL_ROUTE_DECISION=REDUCED_RESEARCH_ONLY`、`TUSHARE_REDUCED_RESEARCH_CONTRACT=READY`、`fullTechnicalContractReady=false`、`reducedResearchContractReady=true`。raw/factor/calendar 和请求结束日锚定的研究级 QFQ 可用；完整公司行动、Provider revision/旧版本、永久证券身份及全历史 `DAILY_EXACT` 不满足完整 F1。
+- 缩减能力：只允许手工有界 raw/factor/calendar、研究级 QFQ、首次真实捕获后的 `SYSTEM_KNOWLEDGE_PIT`、普通 `stock_basic` 身份和 dividend 解释证据。禁止 Provider PIT、完整公司行动、历史 revision、永久身份、跨 Provider QFQ、正常业务库、scheduler 和全市场采集。
+- 本地验证：Java 编译通过；F1B 定向 `21/0/0/0`；F1A/F1B、Provider V2 与 QFQ 联合回归 `62/0/0/0`，其中 18 个 QFQ 黄金向量全部通过；`quant-core` `4/0/0/0`；显式排除 Tushare Live 且关闭外部服务门后的 `quant-server` 安全全量 `466/0/0/93`。本阶段没有持久化修改，未运行 PostgreSQL、未检查 Token、未新增 Provider 调用。
+- 当前状态：类型化资格模型、capability 投影、QFQ/路线离线验证及治理文档已在 `codex/1.4.0-stage-3ar3b-f1b-tushare-technical-contract` 完成，待 ChatGPT 基于实际 Git 提交验收，尚未合入。下一阶段“受控本地研究摄取实现”只有在 F1B 验收、用户批准合入和用户单独授权后才可开始。
 
 #### 3A-R3B-F1：完整 Provider Adapter 与 V13 闭环（书面许可与技术证据仍阻断）
 

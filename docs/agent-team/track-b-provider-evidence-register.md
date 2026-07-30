@@ -2,12 +2,14 @@
 
 ## 1. 证据规则
 
-- 官方资料访问日期统一为 `2026-07-29`。
-- 官方证据共 **28 条**：BaoStock 4 条、Tushare Pro 17 条、同花顺 iFinD 7 条。
-- 另有 1 条已经验收的 F0 直接 Provider 探针记录 `BS-005`；它不计入 28 条官方页面数量。
+- Track B0 官方资料访问日期为 `2026-07-29`；F1B 对 Tushare
+  `TS-003/004/005/006/007/008/009` 的复核及新增
+  `TS-018/019/020/021` 的访问日期为 `2026-07-30`。
+- 官方证据共 **32 条**：BaoStock 4 条、Tushare Pro 21 条、同花顺 iFinD 7 条。
+- 另有 1 条已经验收的 F0 直接 Provider 探针记录 `BS-005`；它不计入 32 条官方页面数量。
 - 另有 10 条 B1 Tushare 受控权限探针摘要 `TS-PB-001`—`TS-PB-010`；它们不计入官方页面数量，不包含完整响应或实际市场值。
-- 另有 1 条 Tushare 官方企业微信脱敏书面转录 `TS-WP-001` 和 1 条 F1A
-  受控联调记录 `TS-F1A-001`；原始截图、完整响应和个人信息均不进入 Git。
+- 另有 1 条 Tushare 官方企业微信脱敏书面转录 `TS-WP-001` 和 2 条 F1A
+  受控联调记录 `TS-F1A-001/002`；原始截图、完整响应和个人信息均不进入 Git。
 - 证据等级：
   - `C1`：官方合同、服务协议或许可条款；
   - `P1`：官方价格、权限或额度页面；
@@ -49,6 +51,15 @@
 | TS-015 | Tushare 与 AI 工作流 | https://tushare.pro/document/1?doc_id=473 | A2 | 官方展示 AI/多智能体、回测及本地缓存工作流 | 产品示例不能覆盖 TS-002 合同限制 | 是 |
 | TS-016 | 旧版数据存储说明 | https://tushare.pro/document/2?doc_id=302 | A2 | 文档描述可保存到 Excel/关系库，强调该段为旧 Org 版语境 | 不能作为当前 Pro 数据的优先合同授权；与 TS-002 存在适用范围冲突 | 是 |
 | TS-017 | API 服务 | https://tushare.pro/document/1?doc_id=11 | D1 | 官方向机构和个人提供 API 需求定制与数据咨询，并公布联系邮箱 `waditu@163.com` | 联系入口不证明任何用途许可、套餐覆盖或服务承诺 | 是 |
+| TS-018 | 上市公司基本信息 | https://tushare.pro/document/2?doc_id=112 | A1 | `stock_company` 至少 120 积分，单次 4500 行；`com_id` 是统一社会信用代码，可作发行主体辅助证据 | 不能把发行主体代码当永久 instrument ID，也不证明换码、迁板或重新上市连续性 | 否 |
+| TS-019 | 股票曾用名 | https://tushare.pro/document/2?doc_id=100 | A1 | `namechange` 提供 `ts_code/name/start_date/end_date/ann_date/change_reason`，可作证券名称历史证据；页面未公开积分、更新说明或单次行限 | 名称历史不能证明代码变更或上市生命周期连续性 | 否 |
+| TS-020 | 股票历史列表 | https://tushare.pro/document/1?doc_id=262 | A1/P1 | `bak_basic` 数据从 2016 年开始，单次 7000 行，正式权限要求 5000 积分 | 当前 2000 积分不满足正式权限；历史每日列表也不是永久工具身份映射 | 否 |
+| TS-021 | 数据上新与变更动态（ChangeLog） | https://tushare.pro/document/1?doc_id=9 | A2 | 记录平台接口、字段、SDK 与产品能力的发布和变更，例如 `20260706` 日线新增盘后字段 | 平台 ChangeLog 不是单条事实 revision、snapshot、publishedAt，也不提供旧数据版本查询 | 否 |
+
+F1B 官方页面逐项输入、输出、积分、更新时间、单次行限及
+`OFFICIAL_EVIDENCE_UNAVAILABLE` 维度见
+[F1B 任务书](tasks/3ar3b-f1b-tushare-technical-contract.md)。F1B 只读取官方文档，
+没有调用任何数据 Endpoint。
 
 ### 3.1 Tushare B1 受控权限探针
 

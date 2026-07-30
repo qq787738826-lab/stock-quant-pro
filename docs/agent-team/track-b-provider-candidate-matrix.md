@@ -7,9 +7,11 @@
 - Tushare 探针执行时刻：`PROBE_EXECUTION_TIME=UNKNOWN`
 - B1 治理复核日期：`2026-07-30`
 - Tushare 量化数据来源书面证据与 F1A 受控联调日期：`2026-07-30`
+- Tushare F1B 官方技术合同复核日期：`2026-07-30`
 - 候选数量：精确为 3 个：BaoStock、Tushare Pro、同花顺 iFinD。
 - 本矩阵只使用 [Track B 证据登记册](track-b-provider-evidence-register.md) 中的官方资料、已经验收的 F0 直接 Provider 探针事实、B1 固定范围 Tushare 受控权限探针事实、
-  Tushare 官方企业微信脱敏书面转录和 F1A 固定范围受控联调事实。
+  Tushare 官方企业微信脱敏书面转录、F1A 固定范围受控联调事实和 F1B 官方
+  `stock_company/namechange/bak_basic/ChangeLog` 证据。
 - 不以搜索摘要、博客、论坛、第三方 GitHub、代理报价或未确认身份的聊天记录支撑结论。
 - “没有写禁止”不等于允许；许可不明确时使用 `PENDING_WRITTEN_CONFIRMATION` 或 `UNVERIFIED`。
 
@@ -63,11 +65,11 @@
 | 11. 指数行情 | `PARTIAL` | `VERIFIED`：`index_daily`（TS-012） | `VERIFIED`：历史行情/日期序列支持指数（IF-002/003） |
 | 12. 公告元数据 | `NOT_SUPPORTED` | `VERIFIED`：独立公告权限包含标题和 PDF 链接（TS-003） | `VERIFIED`：`report_query` 返回日期、标题、ctime、PDF URL、seq（IF-003/004） |
 | 13. 公告正文或 PDF | `NOT_SUPPORTED` | `VERIFIED`：独立公告权限，需另购（TS-003） | `VERIFIED`：公告查询与下载额度公开（IF-001/004） |
-| 14. 稳定证券 ID | `PARTIAL`：`sh.600000` 等身份稳定性未有合同/版本保证 | `PARTIAL`：B1 验证 `ts_code`、交易所、上市/退市普通字段，但永久 instrument identity、换码、迁板、重新上市及历史映射仍没有官方保证或样例（TS-004/005/006/007/009、TS-PB-001/002） | `PARTIAL`：`thscode` 跨接口公开，但生命周期/换码语义需探针（IF-003/004） |
+| 14. 稳定证券 ID | `PARTIAL`：`sh.600000` 等身份稳定性未有合同/版本保证 | `PARTIAL`：B1 验证 `ts_code`、交易所、上市/退市普通字段；F1B 进一步确认 `stock_company.com_id` 只能作发行主体证据，`namechange` 只能作名称历史，`bak_basic` 正式权限要求 5000 积分。永久 instrument identity、换码、迁板、重新上市及历史映射仍没有官方保证或样例（TS-009/018/019/020、TS-PB-001/002） | `PARTIAL`：`thscode` 跨接口公开，但生命周期/换码语义需探针（IF-003/004） |
 | 15. Provider revision/version | `NOT_SUPPORTED` | `NOT_SUPPORTED`：公开核心字段没有 revision/snapshot | `REQUIRES_TRIAL_PROBE` |
 | 16. published time | `NOT_SUPPORTED` | `PARTIAL`：有接口更新时点和公告日，不等于逐版本 publishedAt（TS-004/005/007） | `REQUIRES_TRIAL_PROBE`：FAQ 有总体入库时点，不等于逐事实 publishedAt（IF-002） |
 | 17. effective time | `PARTIAL`：交易日/除权日存在，语义链不完整 | `PARTIAL`：trade/ex/record/implementation dates 存在，统一事件有效时点需映射验证（TS-005/007） | `REQUIRES_TRIAL_PROBE` |
-| 18. 历史修订识别 | `NOT_SUPPORTED` | `UNVERIFIED` | `REQUIRES_TRIAL_PROBE` |
+| 18. 历史修订识别 | `NOT_SUPPORTED` | `NOT_SUPPORTED`：F1B 复核核心 API 字段与官方 ChangeLog；ChangeLog 只证明接口/字段演进，不是单条数据 revision，也没有旧版本查询（TS-021） | `REQUIRES_TRIAL_PROBE` |
 | 19. 分页和增量 | `PARTIAL`：游标结果存在，稳定增量合同不明 | `VERIFIED`：日期/证券参数、行限和全日抓取模式明确（TS-004/005/006） | `PARTIAL`：函数和数据量限制公开，增量游标语义需确认（IF-001/003） |
 | 20. 全市场批量 | `PARTIAL`：F0 禁止执行全市场探针 | `VERIFIED`：按交易日可获取全市场日线/因子，股票基础信息单次覆盖全市场（TS-004/005/009） | `VERIFIED`：板块成分与多代码接口公开（IF-003/004） |
 | 21. 调用频率 | `UNVERIFIED` | `VERIFIED`：积分等级对应每分钟频次（TS-003） | `VERIFIED`：单函数 QPS 10、账号总 QPS 20（IF-002） |
@@ -81,10 +83,40 @@
 | 候选 | V13/QFQ 状态 | 依据 | PIT 状态 | 依据 |
 |---|---|---|---|---|
 | BaoStock | `V13_LINEAGE_BLOCKED` | raw 可用，但独立因子结果、`DAILY_EXACT`、交易所日历身份、公司行动版本和用途许可均未满足；禁止跨来源补齐 | `PIT_PARTIAL` | 技术上可在获准后从真实首次捕获建立系统知识链，但当前本地保存/回放/Agent 权利未确认，也无 Provider revision |
-| Tushare Pro | `V13_LINEAGE_PARTIAL` | B1 已验证两证券、两日 raw/factor `DAILY_EXACT`、SSE/SZSE calendar、普通证券身份和 dividend 字段；TS-WP-001 只确认可作为量化数据来源，三项具体 Provider 书面许可仍未验证；公司行动完整范围/身份/解释关系及永久证券身份仍未闭合 | `PIT_PARTIAL` | F1A 只在用户有界个人实现授权下验证首次捕获后的隔离 `SYSTEM_KNOWLEDGE_ONLY` 路径；无公开历史 revision，三项具体许可、完整证据探针、备份/fixture 和服务到期后留存仍未闭合；不得升级为 Provider PIT |
+| Tushare Pro | `V13_LINEAGE_PARTIAL` | B1 已验证两证券、两日 raw/factor `DAILY_EXACT`、SSE/SZSE calendar、普通证券身份和 dividend 字段；F1B 确认 2000 积分路线只达到 `REDUCED_RESEARCH_ONLY`。公司行动缺稳定事件 ID、配股/拆并股/更正/撤回及 factor 解释关系，永久证券身份和全历史 `DAILY_EXACT` 未闭合；三项具体 Provider 书面许可仍未验证 | `PIT_PARTIAL` | F1A 只在用户有界个人实现授权下验证首次捕获后的隔离 `SYSTEM_KNOWLEDGE_ONLY` 路径；F1B 确认核心字段无 Provider revision、snapshot 或旧版本查询，ChangeLog 不能替代单条数据版本；不得升级为 Provider PIT |
 | 同花顺 iFinD | `V13_LINEAGE_UNVERIFIED` | 公共文档证明接口广度，但核心指标名、字段、四类事实是否同一授权、身份及事件关系只能在试用/书面材料中验证 | `PIT_UNVERIFIED` | 更新时点与复权语义有公开说明，但 revision/snapshot/published/effective/旧版本及留存权利均需试用和合同证据 |
 
 任何候选都未达到 `V13_LINEAGE_READY` 或 `PROVIDER_PIT_READY`。
+
+### 4.1 Tushare F1B 技术路线
+
+```text
+TUSHARE_TECHNICAL_ROUTE_DECISION=REDUCED_RESEARCH_ONLY
+TUSHARE_REDUCED_RESEARCH_CONTRACT=READY
+FULL_TECHNICAL_CONTRACT_READY=false
+REDUCED_RESEARCH_CONTRACT_READY=true
+PROVIDER_REVISION_AVAILABLE=false
+HISTORICAL_VERSIONS_QUERYABLE=false
+```
+
+缩减路线允许同 Provider raw/factor/calendar、请求结束日锚定的研究级 QFQ，以及真实首次
+捕获后的 `SYSTEM_KNOWLEDGE_PIT`。`dividend` 只作
+`PARTIAL_DIVIDEND_EVIDENCE`，不得进入完整公司行动 lineage；不允许 Provider PIT、
+历史 revision 回放、永久证券身份、跨 Provider QFQ、正常业务库、scheduler 或全市场
+自动采集。
+
+公司行动逐项状态固定为：
+
+| 类型 | 状态 |
+|---|---|
+| `CASH_DIVIDEND` | `PARTIAL` |
+| `STOCK_DIVIDEND` | `PARTIAL` |
+| `CAPITALIZATION` | `PARTIAL` |
+| `RIGHTS_ISSUE` | `NOT_SUPPORTED` |
+| `SPLIT` | `NOT_SUPPORTED` |
+| `REVERSE_SPLIT` | `NOT_SUPPORTED` |
+| `CORRECTION` | `NOT_SUPPORTED` |
+| `WITHDRAWAL` | `NOT_SUPPORTED` |
 
 B1 的 `TUSHARE_2000_PERMISSION_PROBE=PASS` 只升级最小技术样例；完整 Track B
 证据探针仍为 `PARTIAL_NOT_COMPLETE`。TS-WP-001 后续只确认可作为量化数据来源，没有

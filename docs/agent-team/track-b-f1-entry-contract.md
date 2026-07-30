@@ -14,6 +14,10 @@ WRITTEN_PERSONAL_BACKTEST_PERMISSION=UNVERIFIED
 WRITTEN_PERSONAL_AGENT_ANALYSIS_PERMISSION=UNVERIFIED
 USER_PERSONAL_USE_IMPLEMENTATION_AUTHORIZATION=CONFIRMED
 F1_LIMITED_PERSONAL_USE_IMPLEMENTATION=APPROVED_BY_USER
+TUSHARE_TECHNICAL_ROUTE_DECISION=REDUCED_RESEARCH_ONLY
+TUSHARE_REDUCED_RESEARCH_CONTRACT=READY
+FULL_TECHNICAL_CONTRACT_READY=false
+REDUCED_RESEARCH_CONTRACT_READY=true
 ```
 
 主要路线的具体 Provider 是 Tushare Pro。用户已开通 2000 积分且 `2026-07-30`
@@ -27,7 +31,8 @@ Tushare Pro 当前资格仍固定为 `V13_LINEAGE_PARTIAL`、`PIT_PARTIAL`，稳
 字段和两证券两日 `DAILY_EXACT` 最小样例验证为 `VERIFIED`；F1A 只允许 raw、factor 和
 calendar 以 `RESEARCH_ONLY/SYSTEM_KNOWLEDGE_PIT/formalEligible=false` 进入随机隔离
 Schema。stock_basic 只作为普通身份 DTO，dividend 只作为部分证据 DTO，不进入完整
-公司行动。永久 instrument identity、完整 action、历史版本和 Provider PIT 均未确认。
+公司行动。F1B 官方技术合同复核把该路线明确判为 `REDUCED_RESEARCH_ONLY`：永久
+instrument identity、完整 action、历史版本和 Provider PIT 均未确认。
 
 完整 Track B 证据探针状态仍固定为 `TRACK_B_FULL_EVIDENCE_PROBE_STATUS=PARTIAL_NOT_COMPLETE`。执行前没有取得 Provider 对最小自动 API 探针和响应留存/删除范围的书面答复，因此 `TRACK_B_FULL_PROBE_LEGAL_PREREQUISITES=NOT_MET`、`WRITTEN_AUTOMATED_PROBE_PERMISSION=UNVERIFIED`、`WRITTEN_RESPONSE_RETENTION_PERMISSION=UNVERIFIED`。该历史状态不判定本次调用合法或违法，也不支持把 B1 追认为完整证据探针；F1A 由后续 `TS-WP-001` 的量化数据来源用途证据和用户有界个人实现授权共同支持，后续扩大调用仍需用户专项授权并遵守 180 次/分钟安全预算。
 
@@ -45,14 +50,14 @@ Schema。stock_basic 只作为普通身份 DTO，dividend 只作为部分证据 
 | 历史回放与回测 | 明确允许 cutoff 回放、回测和保存结果 | UNVERIFIED | TS-WP-001 未逐项确认；有限研究实现不等于 Provider 正式许可 |
 | 内部 Agent | 明确允许本地 AI/Agent 分析 | UNVERIFIED | TS-WP-001 未逐项确认；不对外提供数据服务 |
 | 终止后数据 | 明确保留/删除范围和期限 | UNVERIFIED_NON_EXPANSION | F1A 不据此承诺到期后永久留存 |
-| 同 Provider raw | 正式字段、单位、精度、null/0 语义和最小响应样例 | PARTIAL | B1 最小样例已验证；完整单位/null/0 合同和长期稳定性仍需冻结 |
-| 同 Provider factor | `ts_code + trade_date` 精确自然键、正数因子、日覆盖和单位 | PARTIAL | B1 两证券、两日 `DAILY_EXACT` 最小样例已验证；全历史覆盖和修订仍未证明 |
-| 同 Provider calendar | SSE/SZSE 稳定身份与精确日期 | PARTIAL | B1 两交易所最小样例已验证；临时休市修订和旧版本仍未证明 |
+| 同 Provider raw | 正式字段、单位、精度、null/0 语义和最小响应样例 | PARTIAL | F1 READY 仍缺全历史 null/0 与长期稳定；F1B 缩减技术模型的 raw 维度为 `VERIFIED` |
+| 同 Provider factor | `ts_code + trade_date` 精确自然键、正数因子、日覆盖和单位 | PARTIAL | F1 READY 仍缺全历史覆盖和修订；F1B 缩减技术模型的 factor 维度为 `VERIFIED` |
+| 同 Provider calendar | SSE/SZSE 稳定身份与精确日期 | PARTIAL | F1 READY 仍缺临时休市修订和旧版本；F1B 缩减技术模型的 calendar 维度为 `VERIFIED` |
 | 同 Provider action | 事件自然键、类型、公告/生效/修订时间及覆盖清单 | BLOCKED | B1 证明 `dividend` 可调用；配股、拆并股、更正/撤回、稳定 ID 和 factor 解释关系未闭合 |
 | 稳定证券身份 | `ts_code` 生命周期、换码/迁板/重新上市/退市及历史映射 | PARTIAL | B1 验证普通字段；永久 identity 与生命周期仍未获官方保证或样例 |
 | 前向 PIT | 允许重复捕获并以真实首次接收建立 `SYSTEM_KNOWLEDGE_PIT` | PARTIAL | F1A 可在个人用途隔离范围建立 SYSTEM_KNOWLEDGE 链；无历史 revision、完整 action 和到期留存结论，禁止升级 Provider PIT |
 | 成本 | 套餐、费用和所需接口范围明确，用户明确批准 | PASS | 用户已开通 2000 积分，B1 十项探针证明权限生效；不记录支付隐私 |
-| 实现范围 | Adapter、DTO 映射、调用预算、错误/限流、数据清理、V13 迁移边界冻结 | F1A_IMPLEMENTED | 五 Endpoint、显式 MANUAL_BOUNDED、10 次共享预算、分钟/每日限额、随机 Schema 和受控 10 调用已在 F1A 任务分支完成；dividend 仍不升级完整 action |
+| 实现范围 | Adapter、DTO 映射、调用预算、错误/限流、数据清理、V13 迁移边界冻结 | F1A_ACCEPTED_AND_MERGED | 五 Endpoint、显式 MANUAL_BOUNDED、10 次共享预算、分钟/每日限额、随机 Schema 和受控 10 调用已通过实际 Git 最终复验并纯 fast-forward 合入；dividend 仍不升级完整 action |
 
 只有上述所有条件均通过，才能把：
 
@@ -84,6 +89,11 @@ VERIFIED，也不表示原始数据再分发、商业化或服务到期后留存
 
 `BLOCKED_COST_APPROVAL` 已解除：用户已开通 2000 积分，技术权限已验证生效。
 
+F1B 已把技术阻断从“是否存在可用路线”收敛为“完整合同仍不成立”：当前
+`TUSHARE_REDUCED_RESEARCH_CONTRACT=READY`，允许在后续独立授权阶段实现受控本地研究
+摄取；但完整 F1 仍缺公司行动 lineage、Provider revision/旧版本、永久证券身份和
+全历史 `DAILY_EXACT`，所以 `BLOCKED_TECHNICAL_EVIDENCE` 不解除。
+
 因此当前合法判定是：
 
 ```text
@@ -110,6 +120,19 @@ BLOCKED_TECHNICAL_EVIDENCE
 4. 若技术合同长期无法满足：
    - 保持 iFinD 为备用路线；
    - 仍需用户单独批准报价或试用，不因 F1A 自动激活。
+
+### 4.1 缩减研究合同与完整 F1 的隔离
+
+```text
+TUSHARE_TECHNICAL_ROUTE_DECISION=REDUCED_RESEARCH_ONLY
+TUSHARE_REDUCED_RESEARCH_CONTRACT=READY
+F1_ENTRY_READINESS=BLOCKED_MULTIPLE
+```
+
+缩减合同只允许手工有界 raw/factor/calendar、结束日因子锚定的研究级 QFQ、普通
+`stock_basic` 身份、`dividend` 解释性部分证据和首次捕获后的
+`SYSTEM_KNOWLEDGE_PIT`。它不允许完整公司行动、Provider PIT、历史 revision、永久
+证券身份、跨 Provider QFQ、正常业务库、scheduler、Shadow 或全市场采集。
 
 ## 5. F1A 已冻结技术范围
 
