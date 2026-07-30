@@ -1,14 +1,10 @@
 package com.stockquant.server.agent.marketfacts;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.FactType;
-import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.MarketFactRequest;
-import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.RunNamespace;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 
 import java.time.Duration;
-import java.time.LocalDate;
 import java.util.List;
 import java.util.Set;
 
@@ -17,24 +13,22 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Explicit six-call adapter acceptance. It stores no provider response and
- * never retries.
+ * One-shot F1A repair probe. It intentionally excludes the six already
+ * executed daily/factor/calendar calls and permits exactly four new calls.
  */
 @EnabledIfEnvironmentVariable(
-        named = "TUSHARE_F1A_LIVE_ENABLED", matches = "true")
+        named = "TUSHARE_F1A_REPAIR_LIVE_ENABLED", matches = "true")
 @EnabledIfEnvironmentVariable(
         named = "TUSHARE_TOKEN", matches = ".+")
 class TushareMarketFactProviderLiveIntegrationTest {
 
-    private static final LocalDate START = LocalDate.of(2025, 1, 6);
-    private static final LocalDate END = LocalDate.of(2025, 1, 7);
-
     @Test
-    void mapsTwoExchangesWithExactlySixNoRetryCalls() {
+    void verifiesStockBasicAndDividendWithExactlyFourNoRetryCalls() {
         String token = System.getenv("TUSHARE_TOKEN");
         TushareMarketFactProperties properties =
                 new TushareMarketFactProperties();
-        properties.setEnabled(true);
+        properties.setMode(
+                TushareMarketFactProperties.Mode.MANUAL_BOUNDED);
         properties.setToken(token);
         properties.setReadTimeout(Duration.ofSeconds(20));
         ObjectMapper mapper = new ObjectMapper();
@@ -46,63 +40,93 @@ class TushareMarketFactProviderLiveIntegrationTest {
                         properties,
                         new TushareHttpApiGateway(
                                 mapper, properties, limiter));
-
-        for (Instrument instrument : List.of(
+        TushareManualBoundedSession session =
+                TushareManualBoundedSession.f1aAcceptance(6);
+        List<Instrument> instruments = List.of(
                 new Instrument("600000", "SSE"),
-                new Instrument("000001", "SZSE"))) {
-            var response = provider.fetchForControlledAcceptance(
-                    request(instrument));
-            assertTrue(response.complete());
-            assertFalse(response.rawDailyBars().isEmpty());
-            assertFalse(response.adjustmentFactors().isEmpty());
-            assertFalse(response.tradingCalendar().isEmpty());
-            assertTrue(response.corporateActions().isEmpty());
-            assertTrue(response.rawDailyBars().stream()
-                    .allMatch(bar ->
-                            !bar.tradeDate().isBefore(START)
-                                    && !bar.tradeDate().isAfter(END)));
-            assertTrue(response.adjustmentFactors().stream()
-                    .allMatch(factor ->
-                            !factor.factorEffectiveTradeDate()
-                                    .isBefore(START)
-                                    && !factor.factorEffectiveTradeDate()
-                                    .isAfter(END)));
-            assertEquals(3,
-                    response.providerMetadata()
-                            .path("providerCallCount").asInt());
-            assertEquals(0,
-                    response.providerMetadata()
-                            .path("rateLimitRetryCount").asInt());
-            assertFalse(response.toString().contains(token));
+                new Instrument("000001", "SZSE"));
+
+        for (Instrument instrument : instruments) {
+            var result =
+                    provider.fetchInstrumentIdentityForControlledAcceptance(
+                            instrument.symbol(),
+                            instrument.exchange(),
+                            Duration.ofSeconds(20),
+                            session);
+            assertEquals(1, result.providerCallCount());
+            assertEquals(0, result.rateLimitRetryCount());
+            assertEquals(1, result.values().size());
+            assertEquals(Set.of(
+                            "ts_code", "symbol", "name", "market",
+                            "exchange", "list_status", "list_date",
+                            "delist_date"),
+                    Set.copyOf(result.responseFields()));
+            assertFalse(result.toString().contains(token));
+            printSafeResult(
+                    "stock_basic",
+                    instrument.tsCode(),
+                    result.values().size(),
+                    result.responseFields());
         }
 
+        for (Instrument instrument : instruments) {
+            var result =
+                    provider.fetchDividendEvidenceForControlledAcceptance(
+                            instrument.symbol(),
+                            instrument.exchange(),
+                            Duration.ofSeconds(20),
+                            session);
+            assertEquals(1, result.providerCallCount());
+            assertEquals(0, result.rateLimitRetryCount());
+            assertFalse(result.values().isEmpty());
+            assertEquals(Set.of(
+                            "ts_code", "end_date", "ann_date",
+                            "div_proc", "stk_div", "stk_bo_rate",
+                            "stk_co_rate", "cash_div", "cash_div_tax",
+                            "record_date", "ex_date", "pay_date",
+                            "div_listdate", "imp_ann_date"),
+                    Set.copyOf(result.responseFields()));
+            assertFalse(result.v13CorporateActionEligible());
+            assertFalse(result.toString().contains(token));
+            printSafeResult(
+                    "dividend",
+                    instrument.tsCode(),
+                    result.values().size(),
+                    result.responseFields());
+        }
+
+        assertEquals(10, session.consumedBusinessRequests());
         var snapshot = limiter.snapshot();
-        assertEquals(6, snapshot.totalCallCount());
+        assertEquals(4, snapshot.totalCallCount());
         assertEquals(
                 java.util.Map.of(
-                        "daily", 2L,
-                        "adj_factor", 2L,
-                        "trade_cal", 2L),
+                        "stock_basic", 2L,
+                        "dividend", 2L),
                 snapshot.endpointCallCounts());
+        assertTrue(snapshot.dailyEndpointCallCounts()
+                .equals(snapshot.endpointCallCounts()));
+        System.out.println("F1A_REAL_CALL_COUNT=10");
+        System.out.println(
+                "TUSHARE_TOTAL_REAL_BUSINESS_CALL_COUNT=20");
     }
 
-    private static MarketFactRequest request(Instrument instrument) {
-        return new MarketFactRequest(
-                RunNamespace.FORMAL,
-                TushareMarketFactProvider.PROVIDER_CODE,
-                TushareMarketFactProvider.sourceInstrumentId(
-                        instrument.symbol(), instrument.exchange()),
-                instrument.symbol(),
-                instrument.exchange(),
-                START,
-                END,
-                Set.of(
-                        FactType.RAW_DAILY_BAR,
-                        FactType.ADJUSTMENT_FACTOR,
-                        FactType.TRADING_CALENDAR),
-                Duration.ofSeconds(20));
+    private static void printSafeResult(
+            String endpoint,
+            String tsCode,
+            int rowCount,
+            List<String> fields
+    ) {
+        System.out.println(
+                "endpoint=" + endpoint
+                        + " target=" + tsCode
+                        + " status=PASS"
+                        + " rowCount=" + rowCount
+                        + " fields=" + String.join(",", fields));
     }
 
     private record Instrument(String symbol, String exchange) {
+        private String tsCode() {
+            return symbol + ("SSE".equals(exchange) ? ".SH" : ".SZ");
+        }
     }
 }

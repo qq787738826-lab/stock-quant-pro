@@ -15,29 +15,36 @@ import java.time.Duration;
 public class TushareMarketFactProperties {
 
     public static final int FROZEN_OFFICIAL_RATE_LIMIT_PER_MINUTE = 200;
+    public static final int FROZEN_OFFICIAL_DAILY_LIMIT_PER_API = 100_000;
     public static final int DEFAULT_APPLICATION_SAFE_LIMIT_PER_MINUTE = 180;
+    public static final int DEFAULT_APPLICATION_DAILY_SAFE_LIMIT_PER_API =
+            90_000;
     public static final int DEFAULT_MAXIMUM_RATE_LIMIT_RETRIES = 2;
     public static final String OFFICIAL_API_HOST = "api.tushare.pro";
 
-    private boolean enabled;
+    private Mode mode = Mode.DISABLED;
     private String baseUrl = "https://" + OFFICIAL_API_HOST;
     private String token;
     private int officialRateLimitPerMinute =
             FROZEN_OFFICIAL_RATE_LIMIT_PER_MINUTE;
+    private int officialDailyLimitPerApi =
+            FROZEN_OFFICIAL_DAILY_LIMIT_PER_API;
     private int applicationSafeLimitPerMinute =
             DEFAULT_APPLICATION_SAFE_LIMIT_PER_MINUTE;
+    private int applicationDailySafeLimitPerApi =
+            DEFAULT_APPLICATION_DAILY_SAFE_LIMIT_PER_API;
     private int maximumRateLimitRetries =
             DEFAULT_MAXIMUM_RATE_LIMIT_RETRIES;
     private Duration connectTimeout = Duration.ofSeconds(5);
     private Duration readTimeout = Duration.ofSeconds(30);
     private Duration retryBackoff = Duration.ofSeconds(1);
 
-    public boolean isEnabled() {
-        return enabled;
+    public Mode getMode() {
+        return mode;
     }
 
-    public void setEnabled(boolean enabled) {
-        this.enabled = enabled;
+    public void setMode(Mode mode) {
+        this.mode = mode;
     }
 
     public String getBaseUrl() {
@@ -77,6 +84,27 @@ public class TushareMarketFactProperties {
                 applicationSafeLimitPerMinute;
     }
 
+    public int getOfficialDailyLimitPerApi() {
+        return officialDailyLimitPerApi;
+    }
+
+    public void setOfficialDailyLimitPerApi(
+            int officialDailyLimitPerApi
+    ) {
+        this.officialDailyLimitPerApi = officialDailyLimitPerApi;
+    }
+
+    public int getApplicationDailySafeLimitPerApi() {
+        return applicationDailySafeLimitPerApi;
+    }
+
+    public void setApplicationDailySafeLimitPerApi(
+            int applicationDailySafeLimitPerApi
+    ) {
+        this.applicationDailySafeLimitPerApi =
+                applicationDailySafeLimitPerApi;
+    }
+
     public int getMaximumRateLimitRetries() {
         return maximumRateLimitRetries;
     }
@@ -113,8 +141,8 @@ public class TushareMarketFactProperties {
         return token != null && !token.isBlank();
     }
 
-    String requireToken() {
-        if (!enabled) {
+    String requireManualBoundedToken() {
+        if (mode != Mode.MANUAL_BOUNDED) {
             throw new IllegalStateException(
                     "TUSHARE_PROVIDER_DISABLED");
         }
@@ -144,17 +172,31 @@ public class TushareMarketFactProperties {
         return uri;
     }
 
-    void validateRateLimits() {
+    void validateFrozenContract() {
+        if (mode == null) {
+            throw new IllegalArgumentException(
+                    "Tushare mode is required");
+        }
         if (officialRateLimitPerMinute
                 != FROZEN_OFFICIAL_RATE_LIMIT_PER_MINUTE) {
             throw new IllegalArgumentException(
                     "Tushare official rate limit must remain 200/minute");
         }
-        if (applicationSafeLimitPerMinute <= 0
-                || applicationSafeLimitPerMinute
-                > officialRateLimitPerMinute) {
+        if (officialDailyLimitPerApi
+                != FROZEN_OFFICIAL_DAILY_LIMIT_PER_API) {
             throw new IllegalArgumentException(
-                    "invalid Tushare application safe rate limit");
+                    "Tushare official daily limit must remain 100000/API");
+        }
+        if (applicationSafeLimitPerMinute
+                != DEFAULT_APPLICATION_SAFE_LIMIT_PER_MINUTE) {
+            throw new IllegalArgumentException(
+                    "Tushare application safe rate must remain 180/minute");
+        }
+        if (applicationDailySafeLimitPerApi
+                != DEFAULT_APPLICATION_DAILY_SAFE_LIMIT_PER_API) {
+            throw new IllegalArgumentException(
+                    "Tushare application daily safe limit must remain "
+                            + "90000/API");
         }
         if (maximumRateLimitRetries < 0
                 || maximumRateLimitRetries > 2) {
@@ -164,6 +206,11 @@ public class TushareMarketFactProperties {
         requirePositive(connectTimeout, "connectTimeout");
         requirePositive(readTimeout, "readTimeout");
         requireNonNegative(retryBackoff, "retryBackoff");
+    }
+
+    public enum Mode {
+        DISABLED,
+        MANUAL_BOUNDED
     }
 
     private static void requirePositive(Duration value, String field) {

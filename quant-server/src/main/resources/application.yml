@@ -67,11 +67,13 @@ stockquant:
       enabled: false
       activation-gate: BLOCKED
     tushare:
-      enabled: ${TUSHARE_MARKET_FACTS_ENABLED:false}
+      mode: ${TUSHARE_MODE:DISABLED}
       base-url: https://api.tushare.pro
       token: ${TUSHARE_TOKEN:}
       official-rate-limit-per-minute: 200
+      official-daily-limit-per-api: 100000
       application-safe-limit-per-minute: 180
+      application-daily-safe-limit-per-api: 90000
       maximum-rate-limit-retries: 2
       connect-timeout: 5s
       read-timeout: 30s

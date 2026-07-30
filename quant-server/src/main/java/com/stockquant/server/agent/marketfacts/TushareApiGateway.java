@@ -14,7 +14,8 @@ public interface TushareApiGateway {
             ObjectNode parameters,
             List<String> fields,
             Duration timeout,
-            QueryMode mode
+            QueryMode mode,
+            TushareManualBoundedSession session
     );
 
     enum QueryMode {

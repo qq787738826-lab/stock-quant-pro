@@ -41,8 +41,8 @@ BaoStock 未书面回答前保持 `PENDING_WRITTEN_PERMISSION`，不进入 F1。
 ## 3. Tushare Pro 模板（主要路线）
 
 官方联系：`waditu@163.com`（TS-017）、Tushare 权限中心（TS-003）和已确认的官方企业
-微信。`2026-07-30` 的官方企业微信书面回复已经解决 2000 积分个人用户的本地存储、
-策略回测和智能体分析三项有限用途；不以群聊口头答复或无法确认主体的截图作为证据。
+微信。`2026-07-30` 的官方企业微信书面回复只确认“可以用来当量化数据来源”；没有逐项
+确认本地长期存储、策略回测和智能体分析。不以群聊口头答复或无法确认主体的截图作为证据。
 
 **主题：确认个人 Tushare Pro 账号用于本地 PIT 研究、回测与内部 Agent 的授权范围**
 
@@ -68,16 +68,19 @@ BaoStock 未书面回答前保持 `PENDING_WRITTEN_PERMISSION`，不进入 F1。
 当前答复状态：
 
 ```text
-WRITTEN_PERSONAL_LOCAL_STORAGE_PERMISSION=VERIFIED
-WRITTEN_PERSONAL_BACKTEST_PERMISSION=VERIFIED
-WRITTEN_PERSONAL_AGENT_ANALYSIS_PERMISSION=VERIFIED
+WRITTEN_QUANT_DATA_SOURCE_USE_PERMISSION=VERIFIED
+WRITTEN_PERSONAL_LOCAL_STORAGE_PERMISSION=UNVERIFIED
+WRITTEN_PERSONAL_BACKTEST_PERMISSION=UNVERIFIED
+WRITTEN_PERSONAL_AGENT_ANALYSIS_PERMISSION=UNVERIFIED
+USER_PERSONAL_USE_IMPLEMENTATION_AUTHORIZATION=CONFIRMED
+F1_LIMITED_PERSONAL_USE_IMPLEMENTATION=APPROVED_BY_USER
 POST_EXPIRY_DATA_RETENTION_PERMISSION=UNVERIFIED
 RAW_DATA_REDISTRIBUTION_PERMISSION=NOT_GRANTED
 ```
 
-不再重复询问已经明确允许的三项用途。若后续需要扩大 F1A 范围，只继续询问服务到期后
-处理、备份/脱敏 fixture、公司行动完整性、事件身份、版本语义和永久证券身份；不得把
-有限个人用途答复解释为转售、第三方分发、共享 Token/账号或商业数据服务许可。
+上述未验证项不阻止已由用户批准的 F1A 个人自用有限实现，本阶段不得等待新的邮件或企业
+微信确认。问题模板保留给未来正式许可或扩大用途的独立治理，不由 Codex 自动发送；不得
+把量化数据来源回复或用户授权解释为转售、第三方分发、共享 Token/账号或商业数据服务许可。
 
 ## 4. 同花顺 iFinD 模板（备用路线）
 
@@ -104,7 +107,8 @@ RAW_DATA_REDISTRIBUTION_PERMISSION=NOT_GRANTED
 
 ## 5. 答复验收
 
-以下形式才可以解除书面许可阻断：
+以下形式才可以把本地长期存储、回放/回测和内部 Agent 等具体 Provider 书面许可从
+`UNVERIFIED` 升级为 `VERIFIED`：
 
 1. Provider 官方域名邮件、正式工单、盖章合同、可确认主体的技术/商务附件，或可确认
    Provider 官方主体的企业微信书面文字回复；

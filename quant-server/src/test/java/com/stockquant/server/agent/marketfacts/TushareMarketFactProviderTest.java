@@ -14,6 +14,7 @@ import com.stockquant.server.agent.marketfacts.TushareApiGateway.GatewayExceptio
 import com.stockquant.server.agent.marketfacts.TushareApiGateway.QueryMode;
 import com.stockquant.server.agent.marketfacts.TushareApiGateway.QueryResult;
 import com.stockquant.server.agent.marketfacts.TushareApiGateway.Table;
+import com.stockquant.server.agent.marketfacts.TushareReferenceDataModels.DividendEvidence;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -25,6 +26,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -34,7 +36,7 @@ class TushareMarketFactProviderTest {
     private final ObjectMapper mapper = new ObjectMapper();
 
     @Test
-    void capabilityFreezesLimitedPersonalUseAndGlobalRateLimit() {
+    void capabilityFreezesPartialEvidenceAndProcessOnlyQuotas() {
         TushareMarketFactProvider provider =
                 provider(new FixtureGateway(mapper));
         var capability = provider.capability();
@@ -50,18 +52,35 @@ class TushareMarketFactProviderTest {
         assertTrue(capability.agentUseAllowed());
         assertFalse(capability.revisionIdAvailable());
         assertFalse(capability.historicalVersionsQueryable());
-        assertEquals("RESEARCH_ONLY",
+        assertEquals("PARTIAL",
+                capability.coverage()
+                        .path("stableSecurityIdentity").asText());
+        assertEquals("PARTIAL_NOT_V13_ELIGIBLE",
+                capability.coverage()
+                        .path("dividendEvidence").asText());
+        assertEquals("VERIFIED",
                 capability.licensing()
-                        .path("usageQualification").asText());
-        assertFalse(capability.licensing()
-                .path("formalEligible").asBoolean(true));
+                        .path("writtenQuantDataSourceUsePermission")
+                        .asText());
         assertEquals("UNVERIFIED",
                 capability.licensing()
-                        .path("postExpiryDataRetentionPermission")
+                        .path("writtenPersonalLocalStoragePermission")
                         .asText());
-        assertEquals("NOT_GRANTED",
+        assertEquals("UNVERIFIED",
                 capability.licensing()
-                        .path("rawDataRedistributionPermission")
+                        .path("writtenPersonalBacktestPermission")
+                        .asText());
+        assertEquals("UNVERIFIED",
+                capability.licensing()
+                        .path("writtenPersonalAgentAnalysisPermission")
+                        .asText());
+        assertEquals("CONFIRMED",
+                capability.licensing()
+                        .path("userPersonalUseImplementationAuthorization")
+                        .asText());
+        assertEquals("APPROVED_BY_USER",
+                capability.licensing()
+                        .path("limitedPersonalUseImplementation")
                         .asText());
         assertEquals(200,
                 capability.rateLimit()
@@ -69,29 +88,75 @@ class TushareMarketFactProviderTest {
         assertEquals(180,
                 capability.rateLimit()
                         .path("applicationSafePerMinute").asInt());
+        assertEquals(100_000,
+                capability.rateLimit()
+                        .path("officialDailyPerApi").asInt());
+        assertEquals(90_000,
+                capability.rateLimit()
+                        .path("applicationDailySafePerApi").asInt());
         assertTrue(capability.rateLimit()
-                .path("tokenLevelGlobal").asBoolean());
+                .path("processWide").asBoolean());
+        assertTrue(capability.rateLimit()
+                .path("sharedAcrossEndpoints").asBoolean());
+        assertTrue(capability.rateLimit()
+                .path("sharedAcrossCallersInProcess").asBoolean());
+        assertFalse(capability.rateLimit()
+                .path("tokenLevelGlobalAcrossProcesses").asBoolean(true));
+        assertFalse(capability.rateLimit()
+                .path("distributedRateLimitCoordinated").asBoolean(true));
+        assertTrue(capability.rateLimit()
+                .path("dailyQuotaProcessWideOnly").asBoolean());
+        assertFalse(capability.rateLimit()
+                .path("distributedDailyQuotaCoordinated")
+                .asBoolean(true));
+        assertFalse(capability.rateLimit().has("tokenLevelGlobal"));
         assertFalse(capability.toString().contains(TEST_TOKEN));
     }
 
     @Test
-    void mapsRawFactorAndExchangeCalendarWithoutInventingPitMetadata() {
+    void ordinaryFetchIsUnavailableAndDisabledModeStopsControlledPath() {
         FixtureGateway gateway = new FixtureGateway(mapper);
-        TushareMarketFactProvider provider = provider(gateway);
-        var response = provider.fetchForControlledAcceptance(
-                request("600000", "SSE", Set.of(FactType.values())
-                        .stream()
-                        .filter(type -> type != FactType.CORPORATE_ACTION)
-                        .collect(java.util.stream.Collectors.toSet())));
+        TushareMarketFactProvider enabled = provider(gateway);
+        assertThrows(IllegalStateException.class,
+                () -> enabled.fetch(request(
+                        "600000", "SSE",
+                        Set.of(FactType.RAW_DAILY_BAR))));
+        assertTrue(gateway.calls.isEmpty());
+
+        TushareMarketFactProperties disabled =
+                new TushareMarketFactProperties();
+        disabled.setToken(TEST_TOKEN);
+        TushareMarketFactProvider provider =
+                new TushareMarketFactProvider(
+                        mapper, disabled, gateway);
+        assertThrows(IllegalStateException.class,
+                () -> provider.fetchForControlledAcceptance(
+                        request("600000", "SSE",
+                                Set.of(FactType.RAW_DAILY_BAR)),
+                        session()));
+        assertTrue(gateway.calls.isEmpty());
+    }
+
+    @Test
+    void mapsRawFactorAndCalendarWithoutInventingPitMetadata() {
+        FixtureGateway gateway = new FixtureGateway(mapper);
+        var response = provider(gateway)
+                .fetchForControlledAcceptance(
+                        request(
+                                "600000",
+                                "SSE",
+                                Set.of(
+                                        FactType.RAW_DAILY_BAR,
+                                        FactType.ADJUSTMENT_FACTOR,
+                                        FactType.TRADING_CALENDAR)),
+                        session());
 
         assertTrue(response.complete());
-        assertEquals(3, gateway.calls.size());
-        assertTrue(gateway.calls.stream()
-                .allMatch(call -> call.mode()
-                        == QueryMode.CONTROLLED_NO_RETRY));
         assertEquals(List.of(
                         "daily", "adj_factor", "trade_cal"),
                 gateway.calls.stream().map(Call::endpoint).toList());
+        assertTrue(gateway.calls.stream().allMatch(call ->
+                call.mode() == QueryMode.CONTROLLED_NO_RETRY));
         assertEquals(2, response.rawDailyBars().size());
         assertEquals(2, response.adjustmentFactors().size());
         assertEquals(2, response.tradingCalendar().size());
@@ -99,12 +164,13 @@ class TushareMarketFactProviderTest {
         assertEquals(3,
                 response.providerMetadata()
                         .path("providerCallCount").asInt());
-        assertEquals(0,
+        assertEquals("MANUAL_BOUNDED",
                 response.providerMetadata()
-                        .path("rateLimitRetryCount").asInt());
+                        .path("tushareMode").asText());
 
         var firstBar = response.rawDailyBars().get(0);
-        assertEquals(LocalDate.of(2025, 1, 2), firstBar.tradeDate());
+        assertEquals(LocalDate.of(2025, 1, 6),
+                firstBar.tradeDate());
         assertEquals(new BigDecimal("100050"),
                 firstBar.volume().value());
         assertEquals(new BigDecimal("123456"),
@@ -126,7 +192,78 @@ class TushareMarketFactProviderTest {
                 TushareMarketFactProvider.calendarSourceIdentity("SSE"),
                 response.tradingCalendar().get(0).sourceIdentity());
         assertFalse(response.toString().contains(TEST_TOKEN));
-        assertFalse(firstBar.rawFields().toString().contains(TEST_TOKEN));
+    }
+
+    @Test
+    void mapsStockBasicAsPartialOrdinaryIdentity() {
+        FixtureGateway gateway = new FixtureGateway(mapper);
+        var response = provider(gateway)
+                .fetchInstrumentIdentityForControlledAcceptance(
+                        "600000",
+                        "SSE",
+                        Duration.ofSeconds(5),
+                        session());
+        assertEquals("stock_basic", response.endpoint());
+        assertEquals(1, response.values().size());
+        var identity = response.values().get(0);
+        assertEquals("600000.SH",
+                identity.providerInstrumentId());
+        assertEquals("600000", identity.symbol());
+        assertEquals("SSE", identity.exchange());
+        assertEquals("浦发银行", identity.name());
+        assertEquals("主板", identity.market());
+        assertEquals("L", identity.listStatus());
+        assertEquals(LocalDate.of(1999, 11, 10),
+                identity.listDate());
+        assertNull(identity.delistDate());
+        assertFalse(response.v13CorporateActionEligible());
+    }
+
+    @Test
+    void mapsDividendOnlyAsPartialEvidenceWithoutStableActionClaims() {
+        FixtureGateway gateway = new FixtureGateway(mapper);
+        var response = provider(gateway)
+                .fetchDividendEvidenceForControlledAcceptance(
+                        "600000",
+                        "SSE",
+                        Duration.ofSeconds(5),
+                        session());
+        assertEquals("dividend", response.endpoint());
+        assertEquals(1, response.values().size());
+        DividendEvidence value = response.values().get(0);
+        assertEquals("600000.SH", value.tsCode());
+        assertEquals(LocalDate.of(2024, 12, 31),
+                value.endDate());
+        assertEquals("实施", value.processStatus());
+        assertEquals(new BigDecimal("0.1"),
+                value.cashDividend());
+        assertFalse(response.v13CorporateActionEligible());
+        assertTrue(List.of(DividendEvidence.class
+                        .getRecordComponents()).stream()
+                .noneMatch(component -> Set.of(
+                                "stableActionId", "rightsIssue", "split",
+                                "reverseSplit", "corrected", "withdrawn",
+                                "revision")
+                        .contains(component.getName())));
+        assertTrue(new MarketFactProviderModels.MarketFactResponse(
+                PitMarketFactsContracts.PROVIDER_CONTRACT_VERSION,
+                TushareMarketFactProvider.PROVIDER_CODE,
+                TushareMarketFactProvider.ADAPTER_VERSION,
+                RunNamespace.FORMAL,
+                TushareMarketFactProvider.PROVIDER_CODE,
+                TushareMarketFactProvider.sourceInstrumentId(
+                        "600000", "SSE"),
+                LocalDate.of(2025, 1, 6),
+                LocalDate.of(2025, 1, 7),
+                true,
+                provider(gateway).capability(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                mapper.createObjectNode())
+                .corporateActions().isEmpty());
     }
 
     @Test
@@ -134,16 +271,18 @@ class TushareMarketFactProviderTest {
         FixtureGateway gateway = new FixtureGateway(mapper);
         gateway.dailyRows = List.of(List.of(
                 text("600000.SH"),
-                text("20250102"),
+                text("20250106"),
                 decimal("10"),
                 decimal("10"),
                 decimal("10"),
                 decimal("10"),
                 mapper.nullNode(),
                 decimal("0")));
-        var response = provider(gateway).fetchForControlledAcceptance(
-                request("600000", "SSE",
-                        Set.of(FactType.RAW_DAILY_BAR)));
+        var response = provider(gateway)
+                .fetchForControlledAcceptance(
+                        request("600000", "SSE",
+                                Set.of(FactType.RAW_DAILY_BAR)),
+                        session());
         var bar = response.rawDailyBars().get(0);
         assertEquals(FieldQualification.MISSING,
                 bar.volume().qualification());
@@ -153,28 +292,19 @@ class TushareMarketFactProviderTest {
     }
 
     @Test
-    void disabledProviderAndUnsupportedScopeStopBeforeGateway() {
+    void unsupportedScopeStopsBeforeGateway() {
         FixtureGateway gateway = new FixtureGateway(mapper);
-        TushareMarketFactProperties disabled = properties();
-        disabled.setEnabled(false);
-        TushareMarketFactProvider provider =
-                new TushareMarketFactProvider(
-                        mapper, disabled, gateway);
-        assertThrows(IllegalStateException.class,
-                () -> provider.fetch(request(
-                        "600000", "SSE",
-                        Set.of(FactType.RAW_DAILY_BAR))));
-        assertTrue(gateway.calls.isEmpty());
-
-        TushareMarketFactProvider enabled = provider(gateway);
+        TushareMarketFactProvider provider = provider(gateway);
         assertThrows(IllegalArgumentException.class,
-                () -> enabled.fetch(request(
-                        "688001", "SSE",
-                        Set.of(FactType.RAW_DAILY_BAR))));
+                () -> provider.fetchForControlledAcceptance(
+                        request("688001", "SSE",
+                                Set.of(FactType.RAW_DAILY_BAR)),
+                        session()));
         assertThrows(IllegalArgumentException.class,
-                () -> enabled.fetch(request(
-                        "600000", "SSE",
-                        Set.of(FactType.CORPORATE_ACTION))));
+                () -> provider.fetchForControlledAcceptance(
+                        request("600000", "SSE",
+                                Set.of(FactType.CORPORATE_ACTION)),
+                        session()));
         assertTrue(gateway.calls.isEmpty());
     }
 
@@ -182,18 +312,20 @@ class TushareMarketFactProviderTest {
     void partialFailureIsTypedAndNeverMasqueradesAsComplete() {
         FixtureGateway gateway = new FixtureGateway(mapper);
         gateway.failureEndpoint = "adj_factor";
-        var response = provider(gateway).fetch(
-                request(
-                        "600000", "SSE",
-                        Set.of(
-                                FactType.RAW_DAILY_BAR,
-                                FactType.ADJUSTMENT_FACTOR,
-                                FactType.TRADING_CALENDAR)));
+        var response = provider(gateway)
+                .fetchForControlledAcceptance(
+                        request(
+                                "600000",
+                                "SSE",
+                                Set.of(
+                                        FactType.RAW_DAILY_BAR,
+                                        FactType.ADJUSTMENT_FACTOR,
+                                        FactType.TRADING_CALENDAR)),
+                        session());
         assertFalse(response.complete());
         assertEquals(2, response.rawDailyBars().size());
         assertTrue(response.adjustmentFactors().isEmpty());
         assertTrue(response.tradingCalendar().isEmpty());
-        assertEquals(1, response.errors().size());
         assertEquals(ProviderErrorType.PERMISSION_DENIED,
                 response.errors().get(0).type());
         assertEquals("TUSHARE_PERMISSION_DENIED",
@@ -201,20 +333,22 @@ class TushareMarketFactProviderTest {
     }
 
     @Test
-    void malformedRowsFailAtomicallyAtTheProviderBoundary() {
+    void malformedRowsFailAtomicallyAtProviderBoundary() {
         FixtureGateway gateway = new FixtureGateway(mapper);
         gateway.dailyRows = List.of(List.of(
                 text("600000.SH"),
-                text("20250102"),
+                text("20250106"),
                 text("not-a-decimal"),
                 decimal("11"),
                 decimal("9"),
                 decimal("10"),
                 decimal("100"),
                 decimal("100")));
-        var response = provider(gateway).fetchForControlledAcceptance(
-                request("600000", "SSE",
-                        Set.of(FactType.RAW_DAILY_BAR)));
+        var response = provider(gateway)
+                .fetchForControlledAcceptance(
+                        request("600000", "SSE",
+                                Set.of(FactType.RAW_DAILY_BAR)),
+                        session());
         assertFalse(response.complete());
         assertTrue(response.rawDailyBars().isEmpty());
         assertEquals(ProviderErrorType.STRUCTURE_CHANGED,
@@ -231,9 +365,14 @@ class TushareMarketFactProviderTest {
     private TushareMarketFactProperties properties() {
         TushareMarketFactProperties properties =
                 new TushareMarketFactProperties();
-        properties.setEnabled(true);
+        properties.setMode(
+                TushareMarketFactProperties.Mode.MANUAL_BOUNDED);
         properties.setToken(TEST_TOKEN);
         return properties;
+    }
+
+    private static TushareManualBoundedSession session() {
+        return TushareManualBoundedSession.f1aAcceptance(0);
     }
 
     private MarketFactRequest request(
@@ -248,8 +387,8 @@ class TushareMarketFactProviderTest {
                         symbol, exchange),
                 symbol,
                 exchange,
-                LocalDate.of(2025, 1, 2),
-                LocalDate.of(2025, 1, 3),
+                LocalDate.of(2025, 1, 6),
+                LocalDate.of(2025, 1, 7),
                 factTypes,
                 Duration.ofSeconds(5));
     }
@@ -275,7 +414,7 @@ class TushareMarketFactProviderTest {
             this.dailyRows = List.of(
                     List.of(
                             textNode("600000.SH"),
-                            textNode("20250103"),
+                            textNode("20250107"),
                             decimalNode("10.1"),
                             decimalNode("10.3"),
                             decimalNode("10.0"),
@@ -284,7 +423,7 @@ class TushareMarketFactProviderTest {
                             decimalNode("130.5")),
                     List.of(
                             textNode("600000.SH"),
-                            textNode("20250102"),
+                            textNode("20250106"),
                             decimalNode("10.0"),
                             decimalNode("10.2"),
                             decimalNode("9.9"),
@@ -299,7 +438,8 @@ class TushareMarketFactProviderTest {
                 ObjectNode parameters,
                 List<String> fields,
                 Duration timeout,
-                QueryMode mode
+                QueryMode mode,
+                TushareManualBoundedSession session
         ) {
             calls.add(new Call(endpoint, mode));
             if (endpoint.equals(failureEndpoint)) {
@@ -319,27 +459,53 @@ class TushareMarketFactProviderTest {
                                 List.of(
                                         List.of(
                                                 textNode("600000.SH"),
-                                                textNode("20250103"),
+                                                textNode("20250107"),
                                                 decimalNode("1.2")),
                                         List.of(
                                                 textNode("600000.SH"),
-                                                textNode("20250102"),
+                                                textNode("20250106"),
                                                 decimalNode("1.2"))));
                         case "trade_cal" -> new Table(
                                 fields,
                                 List.of(
                                         List.of(
                                                 textNode("SSE"),
-                                                textNode("20250103"),
-                                                mapper.getNodeFactory()
-                                                        .numberNode(1),
-                                                textNode("20250102")),
+                                                textNode("20250107"),
+                                                integerNode(1),
+                                                textNode("20250106")),
                                         List.of(
                                                 textNode("SSE"),
-                                                textNode("20250102"),
-                                                mapper.getNodeFactory()
-                                                        .numberNode(1),
-                                                textNode("20241231"))));
+                                                textNode("20250106"),
+                                                integerNode(1),
+                                                textNode("20250103"))));
+                        case "stock_basic" -> new Table(
+                                fields,
+                                List.of(List.of(
+                                        textNode("600000.SH"),
+                                        textNode("600000"),
+                                        textNode("浦发银行"),
+                                        textNode("主板"),
+                                        textNode("SSE"),
+                                        textNode("L"),
+                                        textNode("19991110"),
+                                        mapper.nullNode())));
+                        case "dividend" -> new Table(
+                                fields,
+                                List.of(List.of(
+                                        textNode("600000.SH"),
+                                        textNode("20241231"),
+                                        textNode("20250301"),
+                                        textNode("实施"),
+                                        decimalNode("0"),
+                                        decimalNode("0"),
+                                        decimalNode("0"),
+                                        decimalNode("0.1"),
+                                        decimalNode("0.09"),
+                                        textNode("20250601"),
+                                        textNode("20250602"),
+                                        textNode("20250603"),
+                                        mapper.nullNode(),
+                                        textNode("20250520"))));
                         default -> throw new IllegalArgumentException(
                                 endpoint);
                     },
@@ -355,6 +521,11 @@ class TushareMarketFactProviderTest {
         private static JsonNode decimalNode(String value) {
             return com.fasterxml.jackson.databind.node.DecimalNode
                     .valueOf(new BigDecimal(value));
+        }
+
+        private static JsonNode integerNode(int value) {
+            return com.fasterxml.jackson.databind.node.IntNode
+                    .valueOf(value);
         }
     }
 

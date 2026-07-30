@@ -3,6 +3,7 @@ package com.stockquant.server.agent.marketfacts;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.stockquant.server.agent.marketfacts.TushareApiGateway.ErrorKind;
 import com.stockquant.server.agent.marketfacts.TushareApiGateway.GatewayException;
 import com.stockquant.server.agent.marketfacts.TushareApiGateway.QueryMode;
@@ -29,7 +30,7 @@ import java.util.Set;
 public final class TushareHttpApiGateway implements TushareApiGateway {
 
     private static final Set<String> ALLOWED_ENDPOINTS = Set.of(
-            "daily", "adj_factor", "trade_cal");
+            "stock_basic", "trade_cal", "daily", "adj_factor", "dividend");
 
     private final ObjectMapper objectMapper;
     private final TushareMarketFactProperties properties;
@@ -81,7 +82,7 @@ public final class TushareHttpApiGateway implements TushareApiGateway {
                 httpExchangeStrategy, "httpExchangeStrategy");
         this.retryWaitStrategy = Objects.requireNonNull(
                 retryWaitStrategy, "retryWaitStrategy");
-        properties.validateRateLimits();
+        properties.validateFrozenContract();
     }
 
     @Override
@@ -90,15 +91,28 @@ public final class TushareHttpApiGateway implements TushareApiGateway {
             ObjectNode parameters,
             List<String> fields,
             Duration timeout,
-            QueryMode mode
+            QueryMode mode,
+            TushareManualBoundedSession session
     ) {
-        validateRequest(endpoint, parameters, fields, timeout, mode);
+        validateRequest(
+                endpoint, parameters, fields, timeout, mode, session);
+        properties.requireManualBoundedToken();
         int maximumRetries = mode == QueryMode.CONTROLLED_NO_RETRY
+                || !session.automaticRetryAllowed()
                 ? 0 : properties.getMaximumRateLimitRetries();
         int calls = 0;
         int retries = 0;
         while (true) {
-            rateLimiter.acquire(endpoint);
+            session.authorizeAndReserve(endpoint, parameters);
+            try {
+                rateLimiter.acquire(endpoint);
+            } catch (TushareTokenRateLimiter.QuotaException error) {
+                throw failure(
+                        ErrorKind.RATE_LIMITED,
+                        error.safeCode(),
+                        "Tushare application quota is exhausted",
+                        error);
+            }
             calls++;
             try {
                 JsonNode response = execute(
@@ -124,42 +138,28 @@ public final class TushareHttpApiGateway implements TushareApiGateway {
     ) {
         ObjectNode body = objectMapper.createObjectNode();
         body.put("api_name", endpoint);
-        body.put("token", properties.requireToken());
+        body.put("token", properties.requireManualBoundedToken());
         body.set("params", parameters.deepCopy());
         body.put("fields", String.join(",", fields));
+        String requestBody;
+        try {
+            requestBody = objectMapper.writeValueAsString(body);
+        } catch (JsonProcessingException error) {
+            throw failure(
+                    ErrorKind.API_ERROR,
+                    "TUSHARE_REQUEST_JSON_INVALID",
+                    "Tushare request could not be serialized",
+                    error);
+        }
+        HttpExchangeResult exchange;
         try {
             Duration effectiveTimeout = timeout.compareTo(
                     properties.getReadTimeout()) <= 0
                     ? timeout : properties.getReadTimeout();
-            HttpExchangeResult exchange = httpExchangeStrategy.post(
+            exchange = httpExchangeStrategy.post(
                     baseUri,
-                    objectMapper.writeValueAsString(body),
+                    requestBody,
                     effectiveTimeout);
-            if (exchange.statusCode() == 429) {
-                throw failure(
-                        ErrorKind.RATE_LIMITED,
-                        "TUSHARE_HTTP_429",
-                        "Tushare rate limit reached",
-                        null);
-            }
-            if (exchange.statusCode() < 200
-                    || exchange.statusCode() >= 300) {
-                throw failure(
-                        ErrorKind.NETWORK_ERROR,
-                        "TUSHARE_HTTP_ERROR",
-                        "Tushare HTTP request failed with status "
-                                + exchange.statusCode(),
-                        null);
-            }
-            JsonNode response = objectMapper.readTree(exchange.body());
-            if (response == null) {
-                throw failure(
-                        ErrorKind.STRUCTURE_CHANGED,
-                        "TUSHARE_NULL_RESPONSE",
-                        "Tushare returned an empty response envelope",
-                        null);
-            }
-            return response;
         } catch (HttpTimeoutException error) {
             throw failure(
                     ErrorKind.TIMEOUT,
@@ -180,6 +180,40 @@ public final class TushareHttpApiGateway implements TushareApiGateway {
                     "Tushare network request failed",
                     error);
         }
+        if (exchange.statusCode() == 429) {
+            throw failure(
+                    ErrorKind.RATE_LIMITED,
+                    "TUSHARE_HTTP_429",
+                    "Tushare rate limit reached",
+                    null);
+        }
+        if (exchange.statusCode() < 200
+                || exchange.statusCode() >= 300) {
+            throw failure(
+                    ErrorKind.NETWORK_ERROR,
+                    "TUSHARE_HTTP_ERROR",
+                    "Tushare HTTP request failed with status "
+                            + exchange.statusCode(),
+                    null);
+        }
+        JsonNode response;
+        try {
+            response = objectMapper.readTree(exchange.body());
+        } catch (JsonProcessingException error) {
+            throw failure(
+                    ErrorKind.STRUCTURE_CHANGED,
+                    "TUSHARE_RESPONSE_JSON_INVALID",
+                    "Tushare response JSON is invalid",
+                    error);
+        }
+        if (response == null) {
+            throw failure(
+                    ErrorKind.STRUCTURE_CHANGED,
+                    "TUSHARE_NULL_RESPONSE",
+                    "Tushare returned an empty response envelope",
+                    null);
+        }
+        return response;
     }
 
     private Table parse(JsonNode response) {
@@ -195,18 +229,18 @@ public final class TushareHttpApiGateway implements TushareApiGateway {
         if (code != 0) {
             String message = safeProviderMessage(
                     response.path("msg").asText("provider error"));
+            if (code == 429 || isRateLimitMessage(message)) {
+                throw failure(
+                        ErrorKind.RATE_LIMITED,
+                        "TUSHARE_API_RATE_LIMITED",
+                        message,
+                        null);
+            }
             if (code == 2002) {
                 throw failure(
                         ErrorKind.PERMISSION_DENIED,
                         "TUSHARE_PERMISSION_DENIED",
                         message,
-                        null);
-            }
-            if (code == 429) {
-                throw failure(
-                        ErrorKind.RATE_LIMITED,
-                        "TUSHARE_API_RATE_LIMITED",
-                        "Tushare rate limit reached",
                         null);
             }
             throw failure(
@@ -294,12 +328,21 @@ public final class TushareHttpApiGateway implements TushareApiGateway {
         return safe.length() > 256 ? safe.substring(0, 256) : safe;
     }
 
+    private static boolean isRateLimitMessage(String message) {
+        String normalized = message == null
+                ? "" : message.toLowerCase(java.util.Locale.ROOT);
+        return normalized.contains("每分钟最多访问")
+                || normalized.contains("频次限制")
+                || normalized.contains("rate limit");
+    }
+
     private static void validateRequest(
             String endpoint,
             ObjectNode parameters,
             List<String> fields,
             Duration timeout,
-            QueryMode mode
+            QueryMode mode,
+            TushareManualBoundedSession session
     ) {
         if (!ALLOWED_ENDPOINTS.contains(endpoint)) {
             throw new IllegalArgumentException(
@@ -308,6 +351,7 @@ public final class TushareHttpApiGateway implements TushareApiGateway {
         Objects.requireNonNull(parameters, "parameters");
         Objects.requireNonNull(fields, "fields");
         Objects.requireNonNull(mode, "mode");
+        Objects.requireNonNull(session, "session");
         if (fields.isEmpty()
                 || fields.stream().anyMatch(field ->
                 field == null

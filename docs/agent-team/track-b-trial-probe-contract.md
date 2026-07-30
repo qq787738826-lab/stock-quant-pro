@@ -6,8 +6,9 @@
 Tushare 2000 积分权限子集探针，精确执行时刻统一记录为
 `PROBE_EXECUTION_TIME=UNKNOWN`。执行前没有取得本合同第 2、3 项 Provider 书面前置，
 因此该子集不是完整 Track B 证据探针，也没有完成 revision 或稳定复取。后续同日
-TS-WP-001 已书面允许有限个人本地存储、策略回测和智能体分析；它不回溯改变完整探针
-执行前的法律前置事实。iFinD 探针仍未执行。
+TS-WP-001 只书面确认“可以用来当量化数据来源”，没有逐项确认个人本地长期存储、策略
+回测或智能体分析；用户另行批准有界个人实现。两者均不回溯改变完整探针执行前的法律
+前置事实。iFinD 探针仍未执行。
 
 ```text
 MAX_BUSINESS_REQUESTS=10
@@ -123,19 +124,24 @@ B1 使用相同两只证券，将日期固定为 `20250102`、`20250103`，日�
 - 公司行动完整覆盖和稳定事件 ID；
 - factor/action 解释关系；
 - 永久证券身份；
-   - 在该次探针时点，本地保存、回测、Agent、备份或服务到期留存许可。
+- 在该次探针时点，本地保存、回测、Agent、备份或服务到期留存许可。
 
-后续 TS-WP-001 已独立验证本地存储、策略回测和智能体分析；备份/脱敏 fixture 与服务
-到期留存仍未验证。
+后续 TS-WP-001 只独立验证量化数据来源用途；个人本地长期存储、策略回测、智能体分析、
+备份/脱敏 fixture 与服务到期留存仍未取得逐项 Provider 书面确认。用户有界个人实现
+授权允许 F1A 隔离联调，不等于上述 Provider 许可已经 VERIFIED。
 
 ## 7. F1A 受控 Adapter 联调
 
-F1A 在取得 TS-WP-001 后执行一次单独授权的 Adapter 联调，不重复 B1 十项探针：
+F1A 在取得 TS-WP-001 和用户有界个人实现授权后执行单独授权的 Adapter 联调，不重复
+B1 十项探针。初始联调先使用 6 次验证三类 V13 输入；复验修复只使用阶段剩余 4 次验证
+普通身份和 dividend 部分证据：
 
 ```text
-MAX_BUSINESS_REQUESTS=6
+TUSHARE_MODE=MANUAL_BOUNDED
+MAX_BUSINESS_REQUESTS=10
 MAX_SYMBOLS=2
-FACT_TYPES=RAW_DAILY_BAR,ADJUSTMENT_FACTOR,TRADING_CALENDAR
+MAX_HISTORICAL_TRADING_DAYS=2
+ALLOWED_ENDPOINTS=stock_basic,trade_cal,daily,adj_factor,dividend
 QUERY_MODE=CONTROLLED_NO_RETRY
 RETRY_COUNT=0
 ```
@@ -145,30 +151,38 @@ RETRY_COUNT=0
 - `600000.SH` / SSE；
 - `000001.SZ` / SZSE；
 - `2025-01-06`—`2025-01-07`；
-- 每只证券分别执行 `daily`、`adj_factor`、`trade_cal`。
+- 初始每只证券分别执行 `daily`、`adj_factor`、`trade_cal`，精确 6 次；
+- 修复阶段每只证券分别执行 `stock_basic`、`dividend`，精确 4 次；
+- 五个 Endpoint 共用同一 10 次会话预算，第 11 次必须在 HTTP 前拒绝。
 
 结果：
 
 ```text
 TUSHARE_F1A_CONTROLLED_INTEGRATION=PASS
-TUSHARE_F1A_REAL_BUSINESS_CALL_COUNT=6
+TUSHARE_F1A_REAL_BUSINESS_CALL_COUNT=10
 TUSHARE_F1A_RETRY_COUNT=0
 ```
 
 完整响应、CSV、Token 和真实市场值 fixture 均未保存。联调只验证 Java Adapter 的
-HTTPS、映射和受控零重试路径；不验证公司行动、revision、旧版本、永久证券身份或全历史
-`DAILY_EXACT`。
+HTTPS、五 Endpoint 映射和受控零重试路径。stock_basic 只产生普通身份 DTO，dividend
+只产生不可写入完整公司行动的部分证据 DTO；不验证完整公司行动、revision、旧版本、
+永久证券身份或全历史 `DAILY_EXACT`。
 
 正常运行限流合同另固定为：
 
 ```text
 TUSHARE_OFFICIAL_RATE_LIMIT_PER_MINUTE=200
+TUSHARE_OFFICIAL_DAILY_LIMIT_PER_API=100000
 TUSHARE_APPLICATION_SAFE_LIMIT_PER_MINUTE=180
+TUSHARE_APPLICATION_DAILY_SAFE_LIMIT_PER_API=90000
 TUSHARE_NORMAL_MAXIMUM_RATE_LIMIT_RETRIES=2
 ```
 
-所有 Endpoint 和所有入口共享同一个 Token 级进程内全局限流器；达到安全预算后等待下一
-窗口，并发不能绕过。计数不记录 Token，禁止无限重试。
+所有 Endpoint 和所有进程内入口共享同一个单进程限流器；分钟安全预算耗尽后等待下一
+窗口，并发不能绕过。每个 Endpoint 的单进程日计数达到安全上限后立即返回
+`TUSHARE_DAILY_API_BUDGET_EXHAUSTED`，不得等待到次日。当前不声明跨进程 Token 全局
+协调或分布式日额度协调；多实例或 scheduler 启用前必须另行实现。计数不记录 Token，
+禁止无限重试。
 
 ## 8. 当前状态
 
@@ -176,9 +190,16 @@ TUSHARE_NORMAL_MAXIMUM_RATE_LIMIT_RETRIES=2
 PROBE_EXECUTION_DATE=2026-07-30
 PROBE_EXECUTION_TIME=UNKNOWN
 TUSHARE_2000_PERMISSION_PROBE=PASS
-TUSHARE_PROVIDER_REAL_BUSINESS_CALL_COUNT=16
+TUSHARE_F1A_REAL_BUSINESS_CALL_COUNT=10
+TUSHARE_PROVIDER_REAL_BUSINESS_CALL_COUNT=20
 TUSHARE_RETRY_COUNT=0
 TUSHARE_F1A_CONTROLLED_INTEGRATION=PASS
+WRITTEN_QUANT_DATA_SOURCE_USE_PERMISSION=VERIFIED
+WRITTEN_PERSONAL_LOCAL_STORAGE_PERMISSION=UNVERIFIED
+WRITTEN_PERSONAL_BACKTEST_PERMISSION=UNVERIFIED
+WRITTEN_PERSONAL_AGENT_ANALYSIS_PERMISSION=UNVERIFIED
+USER_PERSONAL_USE_IMPLEMENTATION_AUTHORIZATION=CONFIRMED
+F1_LIMITED_PERSONAL_USE_IMPLEMENTATION=APPROVED_BY_USER
 TRACK_B_FULL_EVIDENCE_PROBE_STATUS=PARTIAL_NOT_COMPLETE
 TRACK_B_FULL_PROBE_LEGAL_PREREQUISITES=NOT_MET
 WRITTEN_AUTOMATED_PROBE_PERMISSION=UNVERIFIED

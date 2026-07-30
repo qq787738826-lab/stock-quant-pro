@@ -13,6 +13,7 @@ import com.stockquant.server.agent.marketfacts.PitMarketFactCaptureService;
 import com.stockquant.server.agent.marketfacts.TushareApiGateway;
 import com.stockquant.server.agent.marketfacts.TushareMarketFactProperties;
 import com.stockquant.server.agent.marketfacts.TushareMarketFactProvider;
+import com.stockquant.server.agent.marketfacts.TushareManualBoundedSession;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
@@ -69,8 +70,8 @@ class AgentStage3AR3BF1ATusharePostgresIntegrationTest {
                 "stockquant.announcement.akshare.enabled",
                 () -> false);
         registry.add(
-                "stockquant.market-facts.tushare.enabled",
-                () -> false);
+                "stockquant.market-facts.tushare.mode",
+                () -> "DISABLED");
     }
 
     private static void bootstrapEphemeralPublicV12() {
@@ -115,7 +116,8 @@ class AgentStage3AR3BF1ATusharePostgresIntegrationTest {
         TushareMarketFactProvider provider = provider(gateway);
         MarketFactRequest request = request();
 
-        var response = provider.fetchForControlledAcceptance(request);
+        var response = provider.fetchForControlledAcceptance(
+                request, session());
         assertTrue(response.complete());
         assertEquals(3, response.recordCount());
         var first = captureService.capture(response, OBSERVED_AT);
@@ -167,7 +169,8 @@ class AgentStage3AR3BF1ATusharePostgresIntegrationTest {
                         """, String.class, first.batchId()));
 
         var repeated = captureService.capture(
-                provider.fetchForControlledAcceptance(request),
+                provider.fetchForControlledAcceptance(
+                        request, session()),
                 OBSERVED_AT.plusSeconds(60));
         assertEquals(0, repeated.appendedCount());
         assertEquals(3, repeated.idempotentCount());
@@ -182,7 +185,8 @@ class AgentStage3AR3BF1ATusharePostgresIntegrationTest {
         SyntheticGateway gateway = new SyntheticGateway();
         gateway.failFactor = true;
         TushareMarketFactProvider provider = provider(gateway);
-        var response = provider.fetchForControlledAcceptance(request());
+        var response = provider.fetchForControlledAcceptance(
+                request(), session());
         assertFalse(response.complete());
         assertEquals(1, response.recordCount());
         assertEquals(1, response.errors().size());
@@ -203,7 +207,8 @@ class AgentStage3AR3BF1ATusharePostgresIntegrationTest {
     ) {
         TushareMarketFactProperties properties =
                 new TushareMarketFactProperties();
-        properties.setEnabled(true);
+        properties.setMode(
+                TushareMarketFactProperties.Mode.MANUAL_BOUNDED);
         properties.setToken("synthetic-integration-token");
         return new TushareMarketFactProvider(
                 mapper, properties, gateway);
@@ -226,6 +231,18 @@ class AgentStage3AR3BF1ATusharePostgresIntegrationTest {
                 Duration.ofSeconds(5));
     }
 
+    private static TushareManualBoundedSession session() {
+        return new TushareManualBoundedSession(
+                10,
+                Set.of("600000.SH"),
+                Set.of("SSE"),
+                TRADE_DATE,
+                TRADE_DATE,
+                Set.of("daily", "adj_factor", "trade_cal"),
+                false,
+                0);
+    }
+
     private int count(String sql) {
         return jdbc.queryForObject(sql, Integer.class);
     }
@@ -240,7 +257,8 @@ class AgentStage3AR3BF1ATusharePostgresIntegrationTest {
                 ObjectNode parameters,
                 List<String> fields,
                 Duration timeout,
-                QueryMode mode
+                QueryMode mode,
+                TushareManualBoundedSession session
         ) {
             if (failFactor && "adj_factor".equals(endpoint)) {
                 throw new GatewayException(

@@ -9,9 +9,12 @@ import org.junit.jupiter.api.Test;
 
 import java.net.URI;
 import java.time.Duration;
+import java.time.LocalDate;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -23,26 +26,46 @@ class TushareHttpApiGatewayTest {
     private final ObjectMapper mapper = new ObjectMapper();
 
     @Test
-    void sendsTheOfficialEnvelopeAndParsesRowsWithoutLeakingToken()
+    void disabledIsTheDefaultAndStopsBeforeHttp() {
+        TushareMarketFactProperties properties =
+                new TushareMarketFactProperties();
+        properties.setToken(TEST_TOKEN);
+        Fixture fixture = fixture(properties, 180, 90_000);
+        fixture.exchange.respond(200, successEmpty());
+
+        assertThrows(IllegalStateException.class, () ->
+                fixture.gateway.query(
+                        "daily",
+                        datedSecurityParameters(),
+                        List.of("ts_code"),
+                        Duration.ofSeconds(5),
+                        QueryMode.CONTROLLED_NO_RETRY,
+                        session(0, false)));
+        assertEquals(0, fixture.exchange.requests.size());
+    }
+
+    @Test
+    void manualBoundedSendsOfficialEnvelopeWithoutLeakingToken()
             throws Exception {
-        Fixture fixture = fixture(180, 2);
+        Fixture fixture = fixture(properties(), 180, 90_000);
         fixture.exchange.respond(200, """
                 {
                   "code":0,
                   "msg":null,
                   "data":{
                     "fields":["ts_code","trade_date"],
-                    "items":[["600000.SH","20250102"]]
+                    "items":[["600000.SH","20250106"]]
                   }
                 }
                 """);
 
         var result = fixture.gateway.query(
                 "daily",
-                parameters("ts_code", "600000.SH"),
+                datedSecurityParameters(),
                 List.of("ts_code", "trade_date"),
                 Duration.ofSeconds(5),
-                QueryMode.CONTROLLED_NO_RETRY);
+                QueryMode.CONTROLLED_NO_RETRY,
+                session(0, false));
 
         assertEquals(1, result.providerCallCount());
         assertEquals(0, result.rateLimitRetryCount());
@@ -64,52 +87,69 @@ class TushareHttpApiGatewayTest {
     }
 
     @Test
-    void requestTimeoutIsCappedByTheConfiguredReadTimeout() {
-        Fixture fixture = fixture(180, 2);
-        fixture.exchange.respond(200, successEmpty());
-        fixture.gateway.query(
-                "trade_cal",
-                mapper.createObjectNode(),
-                List.of("exchange"),
-                Duration.ofMinutes(1),
-                QueryMode.CONTROLLED_NO_RETRY);
-        assertEquals(Duration.ofSeconds(30),
-                fixture.exchange.requests.get(0).timeout());
+    void sharedSessionBudgetRejectsEleventhBeforeHttp() {
+        Fixture fixture = fixture(properties(), 180, 90_000);
+        TushareManualBoundedSession session = session(0, false);
+        for (int index = 0; index < 10; index++) {
+            fixture.exchange.respond(200, successEmpty());
+            fixture.gateway.query(
+                    "stock_basic",
+                    stockParameters(),
+                    List.of("ts_code"),
+                    Duration.ofSeconds(5),
+                    QueryMode.CONTROLLED_NO_RETRY,
+                    session);
+        }
+        GatewayException error = assertThrows(
+                GatewayException.class,
+                () -> fixture.gateway.query(
+                        "stock_basic",
+                        stockParameters(),
+                        List.of("ts_code"),
+                        Duration.ofSeconds(5),
+                        QueryMode.CONTROLLED_NO_RETRY,
+                        session));
+        assertEquals("TUSHARE_REQUEST_BUDGET_EXHAUSTED",
+                error.safeCode());
+        assertEquals(10, session.consumedBusinessRequests());
+        assertEquals(10, fixture.exchange.requests.size());
+        assertEquals(10,
+                fixture.limiter.snapshot().totalCallCount());
     }
 
     @Test
-    void normalRateLimitRetryIsFiniteAndDefaultsToTwo() {
-        Fixture fixture = fixture(180, 2);
+    void retryRequiresNormalModeAndExplicitSessionPermission() {
+        Fixture fixture = fixture(properties(), 180, 90_000);
         fixture.exchange.respond(429, "");
         fixture.exchange.respond(429, "");
         fixture.exchange.respond(200, successEmpty());
 
         var result = fixture.gateway.query(
                 "trade_cal",
-                mapper.createObjectNode(),
+                calendarParameters(),
                 List.of("exchange"),
                 Duration.ofSeconds(5),
-                QueryMode.NORMAL);
+                QueryMode.NORMAL,
+                session(0, true));
         assertEquals(3, result.providerCallCount());
         assertEquals(2, result.rateLimitRetryCount());
-        assertEquals(3,
-                fixture.limiter.snapshot().totalCallCount());
         assertEquals(3, fixture.exchange.requests.size());
     }
 
     @Test
     void controlledModeNeverRetries() {
-        Fixture fixture = fixture(180, 2);
+        Fixture fixture = fixture(properties(), 180, 90_000);
         fixture.exchange.respond(429, "");
 
         GatewayException error = assertThrows(
                 GatewayException.class,
                 () -> fixture.gateway.query(
                         "adj_factor",
-                        mapper.createObjectNode(),
+                        datedSecurityParameters(),
                         List.of("ts_code"),
                         Duration.ofSeconds(5),
-                        QueryMode.CONTROLLED_NO_RETRY));
+                        QueryMode.CONTROLLED_NO_RETRY,
+                        session(0, true)));
         assertEquals(ErrorKind.RATE_LIMITED, error.kind());
         assertEquals(1, error.providerCallCount());
         assertEquals(0, error.rateLimitRetryCount());
@@ -117,24 +157,46 @@ class TushareHttpApiGatewayTest {
     }
 
     @Test
-    void permissionAndProviderMessagesAreSafelyClassified() {
-        Fixture fixture = fixture(180, 2);
-        fixture.exchange.respond(200, """
+    void providerRateMessagesOverrideCode2002PermissionDefault() {
+        for (String message : List.of(
+                "每分钟最多访问200次",
+                "接口频次限制",
+                "Rate Limit reached")) {
+            Fixture fixture = fixture(properties(), 180, 90_000);
+            fixture.exchange.respond(200, """
+                    {"code":2002,"msg":"%s","data":null}
+                    """.formatted(message));
+            GatewayException error = assertThrows(
+                    GatewayException.class,
+                    () -> fixture.gateway.query(
+                            "daily",
+                            datedSecurityParameters(),
+                            List.of("ts_code"),
+                            Duration.ofSeconds(5),
+                            QueryMode.CONTROLLED_NO_RETRY,
+                            session(0, false)));
+            assertEquals(ErrorKind.RATE_LIMITED, error.kind());
+            assertEquals("TUSHARE_API_RATE_LIMITED",
+                    error.safeCode());
+        }
+
+        Fixture permission = fixture(properties(), 180, 90_000);
+        permission.exchange.respond(200, """
                 {
                   "code":2002,
                   "msg":"token=unit-test-secret username=example-user permission denied",
                   "data":null
                 }
                 """);
-
         GatewayException error = assertThrows(
                 GatewayException.class,
-                () -> fixture.gateway.query(
+                () -> permission.gateway.query(
                         "daily",
-                        mapper.createObjectNode(),
+                        datedSecurityParameters(),
                         List.of("ts_code"),
                         Duration.ofSeconds(5),
-                        QueryMode.CONTROLLED_NO_RETRY));
+                        QueryMode.CONTROLLED_NO_RETRY,
+                        session(0, false)));
         assertEquals(ErrorKind.PERMISSION_DENIED, error.kind());
         assertEquals("TUSHARE_PERMISSION_DENIED", error.safeCode());
         assertFalse(error.getMessage().contains(TEST_TOKEN));
@@ -142,8 +204,55 @@ class TushareHttpApiGatewayTest {
     }
 
     @Test
+    void invalidJsonIsStructureChangedRatherThanNetworkError() {
+        Fixture fixture = fixture(properties(), 180, 90_000);
+        fixture.exchange.respond(200, "{not-json");
+        GatewayException error = assertThrows(
+                GatewayException.class,
+                () -> fixture.gateway.query(
+                        "daily",
+                        datedSecurityParameters(),
+                        List.of("ts_code"),
+                        Duration.ofSeconds(5),
+                        QueryMode.CONTROLLED_NO_RETRY,
+                        session(0, false)));
+        assertEquals(ErrorKind.STRUCTURE_CHANGED, error.kind());
+        assertEquals("TUSHARE_RESPONSE_JSON_INVALID",
+                error.safeCode());
+    }
+
+    @Test
+    void perApiDailyBudgetHardStopsBeforeThirdHttp() {
+        Fixture fixture = fixture(properties(), 180, 2);
+        TushareManualBoundedSession session = session(0, false);
+        fixture.exchange.respond(200, successEmpty());
+        fixture.exchange.respond(200, successEmpty());
+        for (int index = 0; index < 2; index++) {
+            fixture.gateway.query(
+                    "dividend",
+                    stockParameters(),
+                    List.of("ts_code"),
+                    Duration.ofSeconds(5),
+                    QueryMode.CONTROLLED_NO_RETRY,
+                    session);
+        }
+        GatewayException error = assertThrows(
+                GatewayException.class,
+                () -> fixture.gateway.query(
+                        "dividend",
+                        stockParameters(),
+                        List.of("ts_code"),
+                        Duration.ofSeconds(5),
+                        QueryMode.CONTROLLED_NO_RETRY,
+                        session));
+        assertEquals("TUSHARE_DAILY_API_BUDGET_EXHAUSTED",
+                error.safeCode());
+        assertEquals(2, fixture.exchange.requests.size());
+    }
+
+    @Test
     void rejectsChangedRowShape() {
-        Fixture fixture = fixture(180, 2);
+        Fixture fixture = fixture(properties(), 180, 90_000);
         fixture.exchange.respond(200, """
                 {
                   "code":0,
@@ -158,22 +267,29 @@ class TushareHttpApiGatewayTest {
                 GatewayException.class,
                 () -> fixture.gateway.query(
                         "daily",
-                        mapper.createObjectNode(),
+                        datedSecurityParameters(),
                         List.of("ts_code"),
                         Duration.ofSeconds(5),
-                        QueryMode.CONTROLLED_NO_RETRY));
+                        QueryMode.CONTROLLED_NO_RETRY,
+                        session(0, false)));
         assertEquals(ErrorKind.STRUCTURE_CHANGED, error.kind());
     }
 
-    private Fixture fixture(int safeLimit, int maximumRetries) {
-        TushareMarketFactProperties properties =
-                new TushareMarketFactProperties();
-        properties.setEnabled(true);
-        properties.setToken(TEST_TOKEN);
-        properties.setApplicationSafeLimitPerMinute(safeLimit);
-        properties.setMaximumRateLimitRetries(maximumRetries);
+    private Fixture fixture(
+            TushareMarketFactProperties properties,
+            int minuteLimit,
+            int dailyLimit
+    ) {
+        AtomicLong now = new AtomicLong();
         TushareTokenRateLimiter limiter =
-                new TushareTokenRateLimiter(properties);
+                new TushareTokenRateLimiter(
+                        minuteLimit,
+                        dailyLimit,
+                        Duration.ofMinutes(1),
+                        now::get,
+                        () -> LocalDate.of(2026, 7, 30),
+                        duration -> now.addAndGet(
+                                duration.toNanos()));
         FakeHttpExchange exchange = new FakeHttpExchange();
         TushareHttpApiGateway gateway =
                 new TushareHttpApiGateway(
@@ -188,10 +304,49 @@ class TushareHttpApiGatewayTest {
         return new Fixture(exchange, limiter, gateway);
     }
 
-    private ObjectNode parameters(String field, String value) {
+    private TushareMarketFactProperties properties() {
+        TushareMarketFactProperties properties =
+                new TushareMarketFactProperties();
+        properties.setMode(
+                TushareMarketFactProperties.Mode.MANUAL_BOUNDED);
+        properties.setToken(TEST_TOKEN);
+        return properties;
+    }
+
+    private ObjectNode stockParameters() {
         ObjectNode result = mapper.createObjectNode();
-        result.put(field, value);
+        result.put("ts_code", "600000.SH");
         return result;
+    }
+
+    private ObjectNode datedSecurityParameters() {
+        ObjectNode result = stockParameters();
+        result.put("start_date", "20250106");
+        result.put("end_date", "20250107");
+        return result;
+    }
+
+    private ObjectNode calendarParameters() {
+        ObjectNode result = mapper.createObjectNode();
+        result.put("exchange", "SSE");
+        result.put("start_date", "20250106");
+        result.put("end_date", "20250107");
+        return result;
+    }
+
+    private static TushareManualBoundedSession session(
+            int consumed,
+            boolean retry
+    ) {
+        return new TushareManualBoundedSession(
+                10,
+                Set.of("600000.SH", "000001.SZ"),
+                Set.of("SSE", "SZSE"),
+                LocalDate.of(2025, 1, 6),
+                LocalDate.of(2025, 1, 7),
+                TushareManualBoundedSession.F1A_ALLOWED_ENDPOINTS,
+                retry,
+                consumed);
     }
 
     private static String successEmpty() {

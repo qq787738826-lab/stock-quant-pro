@@ -25,6 +25,9 @@ import com.stockquant.server.agent.marketfacts.TushareApiGateway.GatewayExceptio
 import com.stockquant.server.agent.marketfacts.TushareApiGateway.QueryMode;
 import com.stockquant.server.agent.marketfacts.TushareApiGateway.QueryResult;
 import com.stockquant.server.agent.marketfacts.TushareApiGateway.Table;
+import com.stockquant.server.agent.marketfacts.TushareReferenceDataModels.DividendEvidence;
+import com.stockquant.server.agent.marketfacts.TushareReferenceDataModels.InstrumentIdentity;
+import com.stockquant.server.agent.marketfacts.TushareReferenceDataModels.ReferenceDataResponse;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -56,7 +59,8 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
             "TUSHARE_MARKET_FACT_PROVIDER_V1";
     public static final String IMPLEMENTATION_SCOPE =
             "LIMITED_PERSONAL_RESEARCH_USE";
-    private static final int MAXIMUM_NATURAL_DAYS = 366;
+    private static final int MAXIMUM_NATURAL_DAYS =
+            TushareManualBoundedSession.MAX_HISTORICAL_TRADING_DAYS;
     private static final DateTimeFormatter PROVIDER_DATE =
             DateTimeFormatter.BASIC_ISO_DATE;
     private static final Set<FactType> SUPPORTED_FACT_TYPES =
@@ -71,6 +75,14 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
             "ts_code", "trade_date", "adj_factor");
     private static final List<String> CALENDAR_FIELDS = List.of(
             "exchange", "cal_date", "is_open", "pretrade_date");
+    private static final List<String> STOCK_BASIC_FIELDS = List.of(
+            "ts_code", "symbol", "name", "market", "exchange",
+            "list_status", "list_date", "delist_date");
+    private static final List<String> DIVIDEND_FIELDS = List.of(
+            "ts_code", "end_date", "ann_date", "div_proc", "stk_div",
+            "stk_bo_rate", "stk_co_rate", "cash_div", "cash_div_tax",
+            "record_date", "ex_date", "pay_date", "div_listdate",
+            "imp_ann_date");
     private static final ProviderVersion SYSTEM_KNOWLEDGE_VERSION =
             new ProviderVersion(
                     null, null, null, null, null,
@@ -97,7 +109,9 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
         coverage.put("rawDaily", "MINIMUM_SAMPLE_VERIFIED");
         coverage.put("adjustmentFactor", "MINIMUM_DAILY_EXACT_VERIFIED");
         coverage.put("tradingCalendar", "SSE_SZSE_MINIMUM_SAMPLE_VERIFIED");
-        coverage.put("corporateAction", "NOT_IMPLEMENTED_TECHNICAL_GAP");
+        coverage.put("stockBasicIdentity", "PARTIAL");
+        coverage.put("dividendEvidence", "PARTIAL_NOT_V13_ELIGIBLE");
+        coverage.put("corporateAction", "INCOMPLETE_TECHNICAL_BLOCKER");
         coverage.put("stableSecurityIdentity", "PARTIAL");
         coverage.put("v13Lineage", "PARTIAL");
         coverage.put("pitQualification", "PIT_PARTIAL");
@@ -107,11 +121,19 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
         licensing.put("formalEligible", false);
         licensing.put("personalUseOnly", true);
         licensing.put(
-                "writtenPersonalLocalStoragePermission", "VERIFIED");
+                "writtenQuantDataSourceUsePermission", "VERIFIED");
         licensing.put(
-                "writtenPersonalBacktestPermission", "VERIFIED");
+                "writtenPersonalLocalStoragePermission", "UNVERIFIED");
         licensing.put(
-                "writtenPersonalAgentAnalysisPermission", "VERIFIED");
+                "writtenPersonalBacktestPermission", "UNVERIFIED");
+        licensing.put(
+                "writtenPersonalAgentAnalysisPermission", "UNVERIFIED");
+        licensing.put(
+                "userPersonalUseImplementationAuthorization",
+                "CONFIRMED");
+        licensing.put(
+                "limitedPersonalUseImplementation",
+                "APPROVED_BY_USER");
         licensing.put(
                 "postExpiryDataRetentionPermission", "UNVERIFIED");
         licensing.put(
@@ -124,13 +146,26 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
         rateLimit.put(
                 "applicationSafePerMinute",
                 properties.getApplicationSafeLimitPerMinute());
-        rateLimit.put("tokenLevelGlobal", true);
+        rateLimit.put(
+                "officialDailyPerApi",
+                properties.getOfficialDailyLimitPerApi());
+        rateLimit.put(
+                "applicationDailySafePerApi",
+                properties.getApplicationDailySafeLimitPerApi());
+        rateLimit.put("processWide", true);
         rateLimit.put("sharedAcrossEndpoints", true);
-        rateLimit.put("sharedAcrossCallers", true);
+        rateLimit.put("sharedAcrossCallersInProcess", true);
+        rateLimit.put("tokenLevelGlobalAcrossProcesses", false);
+        rateLimit.put("distributedRateLimitCoordinated", false);
+        rateLimit.put("dailyQuotaProcessWideOnly", true);
+        rateLimit.put("distributedDailyQuotaCoordinated", false);
         rateLimit.put(
                 "normalMaximumRateLimitRetries",
                 properties.getMaximumRateLimitRetries());
         rateLimit.put("controlledProbeMaximumRetries", 0);
+        rateLimit.put(
+                "manualBoundedMaximumBusinessRequests",
+                TushareManualBoundedSession.MAX_PROVIDER_BUSINESS_REQUESTS);
 
         return new ProviderCapability(
                 PitMarketFactsContracts.PROVIDER_CONTRACT_VERSION,
@@ -169,22 +204,30 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
 
     @Override
     public MarketFactResponse fetch(MarketFactRequest request) {
-        return fetch(request, QueryMode.NORMAL);
+        throw new IllegalStateException(
+                "TUSHARE_MANUAL_BOUNDED_SESSION_REQUIRED");
     }
 
     /** Explicit acceptance path: exactly one attempt per requested endpoint. */
     public MarketFactResponse fetchForControlledAcceptance(
-            MarketFactRequest request
+            MarketFactRequest request,
+            TushareManualBoundedSession session
     ) {
-        return fetch(request, QueryMode.CONTROLLED_NO_RETRY);
+        return fetch(
+                request, QueryMode.CONTROLLED_NO_RETRY, session);
     }
 
     private MarketFactResponse fetch(
             MarketFactRequest request,
-            QueryMode mode
+            QueryMode mode,
+            TushareManualBoundedSession session
     ) {
         validateRequest(request);
-        properties.requireToken();
+        properties.requireManualBoundedToken();
+        if (session == null) {
+            throw new IllegalArgumentException(
+                    "Tushare MANUAL_BOUNDED session is required");
+        }
         List<RawDailyBar> rawDailyBars = new ArrayList<>();
         List<AdjustmentFactor> adjustmentFactors = new ArrayList<>();
         List<TradingCalendar> tradingCalendar = new ArrayList<>();
@@ -195,9 +238,12 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
         for (FactType type : request.factTypes().stream().sorted().toList()) {
             try {
                 QueryResult result = switch (type) {
-                    case RAW_DAILY_BAR -> queryDaily(request, mode);
-                    case ADJUSTMENT_FACTOR -> queryFactor(request, mode);
-                    case TRADING_CALENDAR -> queryCalendar(request, mode);
+                    case RAW_DAILY_BAR ->
+                            queryDaily(request, mode, session);
+                    case ADJUSTMENT_FACTOR ->
+                            queryFactor(request, mode, session);
+                    case TRADING_CALENDAR ->
+                            queryCalendar(request, mode, session);
                     case CORPORATE_ACTION -> throw new IllegalArgumentException(
                             "Tushare corporate actions remain outside F1A");
                 };
@@ -245,31 +291,36 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
                 errors,
                 providerCalls,
                 retryCount,
-                mode);
+                mode,
+                session);
     }
 
     private QueryResult queryDaily(
             MarketFactRequest request,
-            QueryMode mode
+            QueryMode mode,
+            TushareManualBoundedSession session
     ) {
         ObjectNode parameters = baseSecurityParameters(request);
         return gateway.query(
-                "daily", parameters, DAILY_FIELDS, request.timeout(), mode);
+                "daily", parameters, DAILY_FIELDS, request.timeout(), mode,
+                session);
     }
 
     private QueryResult queryFactor(
             MarketFactRequest request,
-            QueryMode mode
+            QueryMode mode,
+            TushareManualBoundedSession session
     ) {
         ObjectNode parameters = baseSecurityParameters(request);
         return gateway.query(
                 "adj_factor", parameters, FACTOR_FIELDS,
-                request.timeout(), mode);
+                request.timeout(), mode, session);
     }
 
     private QueryResult queryCalendar(
             MarketFactRequest request,
-            QueryMode mode
+            QueryMode mode,
+            TushareManualBoundedSession session
     ) {
         ObjectNode parameters = objectMapper.createObjectNode();
         parameters.put("exchange", request.exchange());
@@ -277,7 +328,155 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
         parameters.put("end_date", providerDate(request.rangeEnd()));
         return gateway.query(
                 "trade_cal", parameters, CALENDAR_FIELDS,
-                request.timeout(), mode);
+                request.timeout(), mode, session);
+    }
+
+    /**
+     * Reads ordinary provider identity fields. The result is explicitly
+     * PARTIAL and does not assert a permanent security identity.
+     */
+    public ReferenceDataResponse<InstrumentIdentity>
+    fetchInstrumentIdentityForControlledAcceptance(
+            String symbol,
+            String exchange,
+            Duration timeout,
+            TushareManualBoundedSession session
+    ) {
+        validateReferenceRequest(symbol, exchange, timeout, session);
+        ObjectNode parameters = objectMapper.createObjectNode();
+        parameters.put("ts_code", tsCode(symbol, exchange));
+        QueryResult result = gateway.query(
+                "stock_basic",
+                parameters,
+                STOCK_BASIC_FIELDS,
+                timeout,
+                QueryMode.CONTROLLED_NO_RETRY,
+                session);
+        List<InstrumentIdentity> identities =
+                mapInstrumentIdentities(symbol, exchange, result.table());
+        return new ReferenceDataResponse<>(
+                "stock_basic",
+                result.table().fields(),
+                identities,
+                result.providerCallCount(),
+                result.rateLimitRetryCount(),
+                false);
+    }
+
+    /**
+     * Reads partial dividend evidence without creating a V13 corporate action.
+     */
+    public ReferenceDataResponse<DividendEvidence>
+    fetchDividendEvidenceForControlledAcceptance(
+            String symbol,
+            String exchange,
+            Duration timeout,
+            TushareManualBoundedSession session
+    ) {
+        validateReferenceRequest(symbol, exchange, timeout, session);
+        ObjectNode parameters = objectMapper.createObjectNode();
+        parameters.put("ts_code", tsCode(symbol, exchange));
+        QueryResult result = gateway.query(
+                "dividend",
+                parameters,
+                DIVIDEND_FIELDS,
+                timeout,
+                QueryMode.CONTROLLED_NO_RETRY,
+                session);
+        List<DividendEvidence> evidence =
+                mapDividendEvidence(symbol, exchange, result.table());
+        return new ReferenceDataResponse<>(
+                "dividend",
+                result.table().fields(),
+                evidence,
+                result.providerCallCount(),
+                result.rateLimitRetryCount(),
+                false);
+    }
+
+    private List<InstrumentIdentity> mapInstrumentIdentities(
+            String symbol,
+            String exchange,
+            Table table
+    ) {
+        List<RowView> rows = rows(table, STOCK_BASIC_FIELDS);
+        if (rows.size() > 1) {
+            throw new IllegalArgumentException(
+                    "duplicate Tushare stock_basic identity");
+        }
+        List<InstrumentIdentity> values = new ArrayList<>();
+        for (RowView row : rows) {
+            String expectedTsCode = tsCode(symbol, exchange);
+            if (!expectedTsCode.equals(row.text("ts_code"))
+                    || !symbol.equals(row.text("symbol"))
+                    || !exchange.equals(row.text("exchange"))) {
+                throw new IllegalArgumentException(
+                        "Tushare stock_basic identity mismatch");
+            }
+            values.add(new InstrumentIdentity(
+                    expectedTsCode,
+                    symbol,
+                    exchange,
+                    row.text("name"),
+                    row.text("market"),
+                    row.text("list_status"),
+                    row.nullableDate("list_date"),
+                    row.nullableDate("delist_date")));
+        }
+        return List.copyOf(values);
+    }
+
+    private List<DividendEvidence> mapDividendEvidence(
+            String symbol,
+            String exchange,
+            Table table
+    ) {
+        List<RowView> rows = rows(table, DIVIDEND_FIELDS);
+        List<DividendEvidence> values = new ArrayList<>();
+        String expectedTsCode = tsCode(symbol, exchange);
+        for (RowView row : rows) {
+            if (!expectedTsCode.equals(row.text("ts_code"))) {
+                throw new IllegalArgumentException(
+                        "Tushare dividend identity mismatch");
+            }
+            values.add(new DividendEvidence(
+                    expectedTsCode,
+                    row.nullableDate("end_date"),
+                    row.nullableDate("ann_date"),
+                    row.nullableDate("imp_ann_date"),
+                    row.nullableText("div_proc"),
+                    row.nullableDecimal("stk_div"),
+                    row.nullableDecimal("stk_bo_rate"),
+                    row.nullableDecimal("stk_co_rate"),
+                    row.nullableDecimal("cash_div"),
+                    row.nullableDecimal("cash_div_tax"),
+                    row.nullableDate("record_date"),
+                    row.nullableDate("ex_date"),
+                    row.nullableDate("pay_date"),
+                    row.nullableDate("div_listdate")));
+        }
+        return List.copyOf(values);
+    }
+
+    private void validateReferenceRequest(
+            String symbol,
+            String exchange,
+            Duration timeout,
+            TushareManualBoundedSession session
+    ) {
+        properties.requireManualBoundedToken();
+        if (!isMainBoard(symbol, exchange)) {
+            throw new IllegalArgumentException(
+                    "Tushare F1A is restricted to main-board securities");
+        }
+        if (timeout == null || timeout.isZero() || timeout.isNegative()) {
+            throw new IllegalArgumentException(
+                    "invalid Tushare reference timeout");
+        }
+        if (session == null) {
+            throw new IllegalArgumentException(
+                    "Tushare MANUAL_BOUNDED session is required");
+        }
     }
 
     private ObjectNode baseSecurityParameters(MarketFactRequest request) {
@@ -454,13 +653,22 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
             List<ProviderError> errors,
             int providerCalls,
             int retryCount,
-            QueryMode mode
+            QueryMode mode,
+            TushareManualBoundedSession session
     ) {
         ObjectNode metadata = objectMapper.createObjectNode();
         metadata.put("implementationScope", IMPLEMENTATION_SCOPE);
         metadata.put("providerCallCount", providerCalls);
         metadata.put("rateLimitRetryCount", retryCount);
         metadata.put("queryMode", mode.name());
+        metadata.put("tushareMode",
+                TushareMarketFactProperties.Mode.MANUAL_BOUNDED.name());
+        metadata.put("sessionMaximumBusinessRequests",
+                session.maximumBusinessRequests());
+        metadata.put("sessionConsumedBusinessRequests",
+                session.consumedBusinessRequests());
+        metadata.put("automaticRetryAllowed",
+                session.automaticRetryAllowed());
         metadata.put("systemKnowledgeOnly", true);
         metadata.put("formalEligible", false);
         metadata.put("corporateActionLineageComplete", false);
@@ -654,8 +862,21 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
         }
 
         private String text(String field) {
+            String value = nullableText(field);
+            if (value == null) {
+                throw new IllegalArgumentException(
+                        "invalid Tushare text field " + field);
+            }
+            return value;
+        }
+
+        private String nullableText(String field) {
             JsonNode value = value(field);
-            if (!value.isTextual() || value.asText().isBlank()) {
+            if (value.isNull()
+                    || value.isTextual() && value.asText().isBlank()) {
+                return null;
+            }
+            if (!value.isTextual()) {
                 throw new IllegalArgumentException(
                         "invalid Tushare text field " + field);
             }
@@ -675,6 +896,7 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
             JsonNode value = value(field);
             if (value.isNull()) return null;
             if (value.isNumber()) return value.decimalValue();
+            if (value.isTextual() && value.asText().isBlank()) return null;
             if (value.isTextual()
                     && value.asText().matches(
                     "-?[0-9]+(?:\\.[0-9]+)?")) {
@@ -694,8 +916,21 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
         }
 
         private LocalDate date(String field) {
+            LocalDate value = nullableDate(field);
+            if (value == null) {
+                throw new IllegalArgumentException(
+                        "missing Tushare date field " + field);
+            }
+            return value;
+        }
+
+        private LocalDate nullableDate(String field) {
+            String value = nullableText(field);
+            if (value == null) {
+                return null;
+            }
             try {
-                return LocalDate.parse(text(field), PROVIDER_DATE);
+                return LocalDate.parse(value, PROVIDER_DATE);
             } catch (DateTimeParseException error) {
                 throw new IllegalArgumentException(
                         "invalid Tushare date field " + field, error);
