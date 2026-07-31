@@ -10,6 +10,7 @@
 - Tushare F1B 官方技术合同复核日期：`2026-07-30`
 - Tushare F1C 本地实现与随机隔离验证日期：`2026-07-30`
 - Tushare `TS-WP-002` 七项书面回复转录接收时间：`2026-07-31T11:07:00+08:00`
+- Tushare F1E 专用本地研究实现日期：`2026-07-31`
 - 候选数量：精确为 3 个：BaoStock、Tushare Pro、同花顺 iFinD。
 - 本矩阵只使用 [Track B 证据登记册](track-b-provider-evidence-register.md) 中的官方资料、已经验收的 F0 直接 Provider 探针事实、B1 固定范围 Tushare 受控权限探针事实、
   Tushare 官方企业微信脱敏书面转录、F1A 固定范围受控联调事实和 F1B 官方
@@ -104,6 +105,9 @@ QFQ_REDUCED_RESEARCH_RUNTIME_QUALIFICATION=VERIFIED
 QFQ_FULL_LINEAGE_RUNTIME_QUALIFICATION=PARTIAL
 REDUCED_RESEARCH_RUNTIME_READY=false
 REDUCED_RESEARCH_ISOLATED_MANUAL_RUNTIME_READY=true
+REDUCED_RESEARCH_LOCAL_RUNTIME_IMPLEMENTATION_READY=true
+REDUCED_RESEARCH_CONTROLLED_ACCEPTANCE_READY=true
+REDUCED_RESEARCH_OPERATIONAL_READY=false
 REDUCED_RESEARCH_PRODUCTION_RUNTIME_READY=false
 NORMAL_BUSINESS_DATABASE_RUNTIME_READY=false
 QFQ_OPERATIONAL_BLOCKER=EXISTING_QFQ_ENGINE_REQUIRES_CORPORATE_ACTION_LINEAGE
@@ -117,6 +121,9 @@ HISTORICAL_VERSIONS_QUERYABLE=false
 F1B 缩减合同定义同 Provider raw/factor/calendar、请求结束日锚定的研究级 QFQ，以及
 真实首次捕获后的 `SYSTEM_KNOWLEDGE_PIT`。F1C 只实现随机隔离的单证券、两自然日、
 `daily/adj_factor/trade_cal` 三请求、零重试手工入口；公式级 QFQ 只在内存返回。
+F1E 进一步实现本机专用 `stock_quant_research/tushare_research` 目标的单日 1—3
+证券原子批次，但当前只把实现和受控验收合同设为 ready，operational 与 production
+仍为 false。
 现有 `QfqAsOfEngine` 在 factor 变化时继续要求公司行动 lineage。官方总表与 Endpoint
 页面频次值冲突仍为 `PARTIAL_CONFLICT_IDENTIFIED`，但实现已按所有适用上限的较小值
 执行单进程 Endpoint 级限制；跨进程协调仍不存在。`dividend` 只作

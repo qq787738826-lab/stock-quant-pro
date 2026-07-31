@@ -120,6 +120,9 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
     public ProviderCapability capability() {
         TushareTechnicalQualification qualification =
                 technicalQualification();
+        TushareReducedResearchAdmissionQualification admission =
+                TushareReducedResearchAdmissionQualification
+                        .currentF1eAssessment();
         ObjectNode coverage = objectMapper.createObjectNode();
         coverage.put("implementationScope", IMPLEMENTATION_SCOPE);
         coverage.put("rawDaily", "MINIMUM_SAMPLE_VERIFIED");
@@ -161,6 +164,22 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
         coverage.put(
                 "normalBusinessDatabaseRuntimeReady",
                 qualification.normalBusinessDatabaseRuntimeReady());
+        coverage.put(
+                "reducedResearchRouteDecision",
+                admission.admissionDecision().name());
+        coverage.put(
+                "reducedResearchLocalRuntimeImplementationReady",
+                admission
+                        .reducedResearchLocalRuntimeImplementationReady());
+        coverage.put(
+                "reducedResearchControlledAcceptanceReady",
+                admission.reducedResearchControlledAcceptanceReady());
+        coverage.put(
+                "reducedResearchOperationalReady",
+                admission.reducedResearchOperationalReady());
+        coverage.put(
+                "dedicatedLocalResearchDatabaseRequired",
+                true);
         coverage.put(
                 "schedulerRuntimeReady",
                 qualification.schedulerRuntimeReady());
@@ -569,6 +588,41 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
                 || !request.factTypes().equals(SUPPORTED_FACT_TYPES)) {
             throw new IllegalArgumentException(
                     "TUSHARE_REDUCED_RUNTIME_FACT_SCOPE_INVALID");
+        }
+        return fetch(
+                request, QueryMode.CONTROLLED_NO_RETRY, session);
+    }
+
+    /**
+     * Explicit F1E path. A single shared session covers one to three
+     * securities for exactly one natural day, with three calls per security
+     * and no retry.
+     */
+    public MarketFactResponse fetchForDedicatedReducedResearch(
+            MarketFactRequest request,
+            TushareManualBoundedSession session
+    ) {
+        if (session == null
+                || session.sessionProfile()
+                != TushareManualBoundedSession.SessionProfile
+                .F1E_DEDICATED_LOCAL_MANUAL
+                || session.maximumBusinessRequests()
+                != session.allowedSymbols().size() * 3
+                || session.maximumBusinessRequests()
+                > TushareManualBoundedSession
+                .F1E_MAX_PROVIDER_BUSINESS_REQUESTS
+                || !session.allowedEndpoints().equals(
+                TushareManualBoundedSession.F1E_ALLOWED_ENDPOINTS)
+                || session.automaticRetryAllowed()
+                || !session.allowedStart().equals(session.allowedEnd())) {
+            throw new IllegalArgumentException(
+                    "TUSHARE_DEDICATED_RESEARCH_SESSION_INVALID");
+        }
+        if (request == null
+                || !request.factTypes().equals(SUPPORTED_FACT_TYPES)
+                || !request.rangeStart().equals(request.rangeEnd())) {
+            throw new IllegalArgumentException(
+                    "TUSHARE_DEDICATED_RESEARCH_FACT_SCOPE_INVALID");
         }
         return fetch(
                 request, QueryMode.CONTROLLED_NO_RETRY, session);

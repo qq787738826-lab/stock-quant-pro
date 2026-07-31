@@ -80,6 +80,21 @@ class TushareMarketFactProviderTest {
         assertFalse(capability.coverage()
                 .path("normalBusinessDatabaseRuntimeReady")
                 .asBoolean(true));
+        assertEquals("DEDICATED_LOCAL_RESEARCH_PATH",
+                capability.coverage()
+                        .path("reducedResearchRouteDecision").asText());
+        assertTrue(capability.coverage()
+                .path("reducedResearchLocalRuntimeImplementationReady")
+                .asBoolean());
+        assertTrue(capability.coverage()
+                .path("reducedResearchControlledAcceptanceReady")
+                .asBoolean());
+        assertFalse(capability.coverage()
+                .path("reducedResearchOperationalReady")
+                .asBoolean(true));
+        assertTrue(capability.coverage()
+                .path("dedicatedLocalResearchDatabaseRequired")
+                .asBoolean());
         assertFalse(capability.coverage()
                 .path("schedulerRuntimeReady").asBoolean(true));
         assertFalse(capability.coverage()

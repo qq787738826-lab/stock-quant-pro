@@ -50,6 +50,8 @@ public class PitMarketFactCaptureService {
     private final TemporalMarketFoundationService temporalFoundation;
     private final TushareReducedResearchPersistenceGuard
             tushareReducedResearchPersistenceGuard;
+    private final TushareDedicatedResearchPersistenceGuard
+            tushareDedicatedResearchPersistenceGuard;
     private final Clock clock;
     private final TransactionTemplate transactionTemplate;
 
@@ -60,6 +62,8 @@ public class PitMarketFactCaptureService {
             TemporalMarketFoundationService temporalFoundation,
             TushareReducedResearchPersistenceGuard
                     tushareReducedResearchPersistenceGuard,
+            TushareDedicatedResearchPersistenceGuard
+                    tushareDedicatedResearchPersistenceGuard,
             Clock clock,
             PlatformTransactionManager transactionManager
     ) {
@@ -71,6 +75,10 @@ public class PitMarketFactCaptureService {
                 Objects.requireNonNull(
                         tushareReducedResearchPersistenceGuard,
                         "tushareReducedResearchPersistenceGuard");
+        this.tushareDedicatedResearchPersistenceGuard =
+                Objects.requireNonNull(
+                        tushareDedicatedResearchPersistenceGuard,
+                        "tushareDedicatedResearchPersistenceGuard");
         this.clock = clock;
         this.transactionTemplate = new TransactionTemplate(
                 transactionManager);
@@ -157,6 +165,71 @@ public class PitMarketFactCaptureService {
                 .verifySameTransactionalConnection(before, after);
         return new F1cIsolatedCaptureResult(
                 captureResult, before, after);
+    }
+
+    /**
+     * F1E-only atomic batch capture. All responses are validated before the
+     * first write, and every symbol is persisted on one transaction-bound
+     * dedicated research connection.
+     */
+    @Transactional
+    public F1eDedicatedCaptureResult
+    captureAuthorizedDedicatedResearchBatch(
+            List<MarketFactResponse> responses,
+            Instant observedAt,
+            TushareDedicatedResearchBatchAuthorization authorization,
+            TushareDedicatedResearchPersistenceGuard.Verification
+                    preProviderVerification
+    ) {
+        Objects.requireNonNull(
+                authorization, "dedicated research authorization")
+                .validateFrozen();
+        Objects.requireNonNull(
+                preProviderVerification, "preProviderVerification");
+        List<MarketFactResponse> stableResponses =
+                List.copyOf(Objects.requireNonNull(
+                        responses, "responses"));
+        if (stableResponses.isEmpty()
+                || stableResponses.size()
+                > authorization.maximumSymbols()) {
+            throw new IllegalArgumentException(
+                    "TUSHARE_DEDICATED_RESEARCH_CAPTURE_BATCH_INVALID");
+        }
+        LimitedPersonalFormalCaptureAuthorization formalAuthorization =
+                LimitedPersonalFormalCaptureAuthorization.tushareF1A();
+        for (MarketFactResponse response : stableResponses) {
+            formalAuthorization.validateResponse(response);
+            if (!response.complete()
+                    || !response.errors().isEmpty()
+                    || response.rawDailyBars().size() != 1
+                    || response.adjustmentFactors().size() != 1
+                    || response.tradingCalendar().size() != 1
+                    || !response.corporateActions().isEmpty()
+                    || response.recordCount() != 3) {
+                throw new IllegalArgumentException(
+                        "TUSHARE_DEDICATED_RESEARCH_CAPTURE_BATCH_INVALID");
+            }
+        }
+
+        TushareDedicatedResearchPersistenceGuard.Verification before =
+                tushareDedicatedResearchPersistenceGuard
+                        .verifyTransactional();
+        tushareDedicatedResearchPersistenceGuard.verifySameTarget(
+                preProviderVerification, before);
+        List<CaptureResult> results = new ArrayList<>();
+        for (MarketFactResponse response : stableResponses) {
+            CaptureResult result = captureWithinTransaction(
+                    response, observedAt, formalAuthorization);
+            validateF1cCaptureResult(result, 3);
+            results.add(result);
+        }
+        TushareDedicatedResearchPersistenceGuard.Verification after =
+                tushareDedicatedResearchPersistenceGuard
+                        .verifyTransactional();
+        tushareDedicatedResearchPersistenceGuard
+                .verifySameTransactionalConnection(before, after);
+        return new F1eDedicatedCaptureResult(
+                results, before, after);
     }
 
     private CaptureResult captureWithinTransaction(
@@ -324,6 +397,38 @@ public class PitMarketFactCaptureService {
                     != afterVerification.backendPid()) {
                 throw new IllegalArgumentException(
                         "TUSHARE_REDUCED_RUNTIME_TRANSACTION_CONNECTION_REQUIRED");
+            }
+        }
+    }
+
+    public record F1eDedicatedCaptureResult(
+            List<CaptureResult> captureResults,
+            TushareDedicatedResearchPersistenceGuard.Verification
+                    beforeVerification,
+            TushareDedicatedResearchPersistenceGuard.Verification
+                    afterVerification
+    ) {
+        public F1eDedicatedCaptureResult {
+            captureResults = List.copyOf(Objects.requireNonNull(
+                    captureResults, "captureResults"));
+            Objects.requireNonNull(
+                    beforeVerification, "beforeVerification");
+            Objects.requireNonNull(
+                    afterVerification, "afterVerification");
+            if (captureResults.isEmpty()
+                    || captureResults.size() > 3
+                    || captureResults.stream().anyMatch(result ->
+                    result == null
+                            || !result.complete()
+                            || result.receivedCount() != 3
+                            || result.appendedCount()
+                            + result.idempotentCount() != 3)
+                    || !beforeVerification.transactionBound()
+                    || !afterVerification.transactionBound()
+                    || beforeVerification.backendPid()
+                    != afterVerification.backendPid()) {
+                throw new IllegalArgumentException(
+                        "TUSHARE_DEDICATED_RESEARCH_CAPTURE_RESULT_INVALID");
             }
         }
     }

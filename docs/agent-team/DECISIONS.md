@@ -229,3 +229,15 @@
 130. **书面许可 PASS 不开放任何生产或后续运行入口**：Capability 从类型化许可/F1 模型投影，但继续保持 `formalEligible=false`、`reducedResearchProductionRuntimeReady=false`、`normalBusinessDatabaseRuntimeReady=false`、`schedulerRuntimeReady=false`、Agent/回测/F2B/F3 runtime 均为 false。F1C 隔离手工运行 READY 仍只适用于随机隔离 Schema。B1 的 `PARTIAL_NOT_COMPLETE/NOT_MET` 与两项事前书面许可 `UNVERIFIED` 是执行时点历史事实，不被 F1D 追认或重跑。四项正式门禁保持 `PASS/BLOCKED/PENDING/BLOCKED`。
 
 131. **TS-WP-002 后重新计算 Tushare 路线评分但不改变路线排名**：法律与用途项从历史 `2.5` 调整为 `4.0`，其余 V13/QFQ、PIT/版本、覆盖/稳定、个人成本和接入复杂度保持 `3.5/2.0/3.5/4.5/4.0`。加权结果为 `4.0×30% + 3.5×25% + 2.0×15% + 3.5×15% + 4.5×10% + 4.0×5% = 3.55`。不记满分是因为再分发、商业数据服务和 Token/账号共享仍不授权；技术和 PIT 分数不因许可闭环上调。主要路线仍为 Tushare，备用仍为 iFinD。
+
+132. **F1D 书面许可闭环已经验收合入，但完整 F1 仍只有技术证据阻断**：F1D 三提交链 `349856ea6e9e3dc423fc1ad9115886cfc8858159` → `049c750026fa00dad70c12667fad732af07d60ce` → `01024df465afcfa34dfd4efdbef7d56d32419aa1` 已通过 ChatGPT 对实际 Git 的最终复验并经用户批准纯 fast-forward 合入。类型化模型同时验证证据 provenance、Claim 主题和 Evidence 支持范围，TS-WP-001 只支持量化数据来源，TS-WP-002 只支持已登记的七项个人用途；不允许跨主题借证。当前 `WRITTEN_PERMISSION_GATE=PASS`、`F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE`，唯一粗粒度阻断是 `BLOCKED_TECHNICAL_EVIDENCE`。原始数据再分发、商业数据服务和 Token/账号共享仍为 `NOT_GRANTED`，生产和后续运行能力不因许可 PASS 自动开放。
+
+133. **F1E 专用本地研究路线只把实现和受控验收合同设为 READY**：准入决策固定为 `REDUCED_RESEARCH_ROUTE_DECISION=DEDICATED_LOCAL_RESEARCH_PATH`。F1E 可以把 `REDUCED_RESEARCH_LOCAL_RUNTIME_IMPLEMENTATION_READY` 与 `REDUCED_RESEARCH_CONTROLLED_ACCEPTANCE_READY` 设为 true，但在真实受控验收由用户另行接受前，`REDUCED_RESEARCH_OPERATIONAL_READY=false`。这三个状态不得合并为模糊的“运行 READY”，也不改变 `fullF1EntryReady=false`、`fullTechnicalContractReady=false` 或 `formalEligible=false`。
+
+134. **F1E 持久化只允许专用数据库身份，安全 Schema 名本身不足以授权**：唯一目标固定为本机数据库 `stock_quant_research`、用户 `stock_quant_research`、用途 `TUSHARE_DEDICATED_LOCAL_RESEARCH`、唯一 Schema/search path `tushare_research` 和精确 V1—V13。Provider 调用前只读预检，捕获事务前后必须在同一事务连接上重验数据库身份、Schema、search path、迁移和 backend PID。public、正常业务库、通用测试库、其他 Schema、public 回退、迁移不完整或目标变化必须拒绝；不得修改 Flyway V1—V13 或 Repository SQL。
+
+135. **F1E 批次采用单日 1—3 证券、共享 3×N 请求预算和全有或全无捕获**：唯一授权工厂只允许个人 2000 积分、`RESEARCH_ONLY/DEDICATED_LOCAL_MANUAL`、SSE/SZSE、一个自然日和 1—3 只不重复证券。每只证券只调用 `daily/adj_factor/trade_cal`，一个批次共用同一会话，精确消耗 3/6/9 次，最大 9，重试为 0。必须先验证全部响应与 limiter/session 计数，再以一个 Spring 事务捕获全部 raw/factor/calendar；任一 Provider、响应、闭合、守卫或写入失败都整体回滚，不能保留部分证券事实。
+
+136. **F1E QFQ 仍是内存公式级降级结果，不替代权威完整 lineage 引擎**：专用运行只调用共享 `QfqPriceMath`，返回 `REDUCED_RESEARCH_FORMULA_ONLY` 和 `systemKnowledgeOnly=true`；Provider PIT、公司行动 lineage、永久证券身份、完整 QFQ、生产、Agent、回测、投资建议及交易资格都为 false。QFQ 结果、stock_basic、dividend、公司行动和 Provider revision 不写入；`QfqAsOfEngine` 的公司行动 lineage、factor predecessor、cutoff、用途与 Provider 一致性门禁以及黄金向量不得放宽。
+
+137. **F1E 不改变完整 F1、正式门禁或后续阶段**：当前继续保持 `F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE`、`V13_LINEAGE_PARTIAL`、`PIT_PARTIAL` 和稳定证券 ID `PARTIAL`。`FREE_PRODUCT_PREVIEW_GATE=PASS`、`FREE_PROVIDER_VALIDATION_GATE=BLOCKED`、`PAID_PROVIDER_UPGRADE_DECISION=PENDING`、`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED` 不变。生产、正常业务库、scheduler、Agent、回测、Shadow、Day 002、F2B、F3、3A-R3B-1、3B 和交易都不启动；F1E 使用合成 Gateway，新增 Provider 调用为 0，Tushare 累计真实业务请求仍为 20，iFinD 为 0。

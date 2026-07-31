@@ -202,6 +202,32 @@ Shadow、Agent、回测、全市场采集或交易。
 6. F1C 只把随机隔离手工运行设为 READY，生产、正常业务库、scheduler、Agent、回测、
    Shadow、F2B/F3 和交易继续不就绪。
 
+### 5.2 F1E 专用本地研究实现与完整 F1 的隔离
+
+F1E 在 F1D 书面许可门 PASS 后建立类型化准入，但没有解除完整技术证据阻断：
+
+```text
+REDUCED_RESEARCH_ROUTE_DECISION=DEDICATED_LOCAL_RESEARCH_PATH
+REDUCED_RESEARCH_LOCAL_RUNTIME_IMPLEMENTATION_READY=true
+REDUCED_RESEARCH_CONTROLLED_ACCEPTANCE_READY=true
+REDUCED_RESEARCH_OPERATIONAL_READY=false
+REDUCED_RESEARCH_PRODUCTION_RUNTIME_READY=false
+NORMAL_BUSINESS_DATABASE_RUNTIME_READY=false
+F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE
+```
+
+专用入口只接受本机 `stock_quant_research` 数据库与用户、唯一
+`tushare_research` search path 和完整 V1—V13。手工命令只允许精确一个自然日、
+1—3 只 SSE/SZSE 证券；每只证券调用 `daily/adj_factor/trade_cal` 三次，一个批次共用
+同一会话并精确消耗 3/6/9 次，零重试。全部响应验证完成后才能在一个事务保存
+raw/factor/calendar；任一失败整体回滚。
+
+F1E 的公式级 QFQ 只在内存返回，不进入完整 QFQ 或公司行动表。它不证明完整公司
+行动、稳定 action ID、factor/action 解释关系、Provider revision/旧版本、永久证券
+身份、全历史 `DAILY_EXACT` 或完整 lineage，因此当前唯一粗粒度 blocker 继续是
+`BLOCKED_TECHNICAL_EVIDENCE`。运行验收尚未接受，不得把 implementation/acceptance
+ready 改写为 operational ready。
+
 ## 6. 继续禁止
 
 - F1A 验收完成后不追加无授权 Tushare 调用；

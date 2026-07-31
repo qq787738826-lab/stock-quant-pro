@@ -234,3 +234,17 @@ ACTIVE_F1_BLOCKER=BLOCKED_TECHNICAL_EVIDENCE
 
 F1C 的技术和运行边界没有改变：`fullF1EntryReady=false`、生产/正常业务库/scheduler/
 Agent/回测/F2B/F3 均未开放，四项正式门禁不变。
+
+## 10. F1E 后续专用本地研究状态
+
+F1E 不回写 F1C 完成时的随机 Schema 历史。它在 F1D 许可闭环后新增专用本地
+`stock_quant_research/tushare_research` 目标、单日 1—3 证券共享会话和全批次原子
+捕获。当前只允许：
+
+```text
+REDUCED_RESEARCH_LOCAL_RUNTIME_IMPLEMENTATION_READY=true
+REDUCED_RESEARCH_CONTROLLED_ACCEPTANCE_READY=true
+REDUCED_RESEARCH_OPERATIONAL_READY=false
+```
+
+完整 F1、生产、正常业务库、scheduler、Agent、回测、Shadow、F2B/F3 和交易门禁不变。

@@ -269,7 +269,7 @@
 - 既有规划状态：iFinD 里程碑规划提交 `23baf11ed3a236800b5f3feba8681d261a71d9f9` 已通过 ChatGPT 对实际 Git 提交的验收，并经用户批准纯 fast-forward 合入。精确验收和批准时间无仓库证据，记为 `UNKNOWN`。
 - 免费优先更新：最终提交 `c47b88e586f6751563fe210f40137a3b7ce5e576` 已通过 ChatGPT 对实际 Git 提交的验收，并经用户批准纯 fast-forward 合入。系统先用免费数据验证产品形态和效果；只有系统显示可重复使用价值、数据成为可量化主要瓶颈，且同范围免费/付费 A/B 方案和成本意愿均明确后，才考虑 iFinD 或其他付费 Provider。
 - 日期边界：iFinD 试用不得绑定 `2026-08-31`、2026 年 8 月 31 日或任何其他固定日期。日历日期只能作为非权威临时估算，不属于路线图依赖，不得因预计日期临近而降低验收标准。
-- 当前集成 HEAD：`6b34e0f730d8f70fb5894c78e692062ae5fb303d`。当前状态：`F0_AUDIT_RESULT=PARTIAL`、`FREE_IMPLEMENTATION_PATH=RESEARCH_PREVIEW_FIRST`、`FREE_PRODUCT_PREVIEW_GATE=PASS`、`FREE_PROVIDER_VALIDATION_GATE=BLOCKED`、`PAID_PROVIDER_UPGRADE_DECISION=PENDING`、`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`。正常业务库 V13 未执行，iFinD 调用数为 0；Track A、Track B0、Track B1、F1A、F1B 与 F1C 均已验收并纯 fast-forward 合入。用户已开通 Tushare 2000 积分，十项 B1 受控权限探针均 PASS；TS-WP-001/002 已闭环当前个人研究书面许可。F1C 隔离手工运行不等于生产或正常业务库运行。F1D 在任务分支把当前准入收敛为 `F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE`；完整 F1 仍受技术证据阻断，F2B/F3 均未开始，Day 002 未创建，scheduler 关闭，3B 未开始。
+- 当前集成 HEAD：`01024df465afcfa34dfd4efdbef7d56d32419aa1`。当前状态：`F0_AUDIT_RESULT=PARTIAL`、`FREE_IMPLEMENTATION_PATH=RESEARCH_PREVIEW_FIRST`、`FREE_PRODUCT_PREVIEW_GATE=PASS`、`FREE_PROVIDER_VALIDATION_GATE=BLOCKED`、`PAID_PROVIDER_UPGRADE_DECISION=PENDING`、`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`。正常业务库 V13 未执行，iFinD 调用数为 0；Track A、Track B0、Track B1、F1A、F1B、F1C 与 F1D 均已验收并纯 fast-forward 合入。用户已开通 Tushare 2000 积分，十项 B1 受控权限探针均 PASS；TS-WP-001/002 已闭环当前个人研究书面许可。当前准入为 `F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE`，完整 F1 仍受技术证据阻断。F1E 在任务分支实现专用本地研究运行代码，但 operational 未接受；F2B/F3 均未开始，Day 002 未创建，scheduler 关闭，3B 未开始。
 
 #### 3A-R3B-0：Provider 中立离线闭环与试用准备（已完成并合入）
 
@@ -359,14 +359,24 @@
 - 验证：171 个生产源码干净编译通过；F1A/F1B/F1C 定向 `87/0/0/0`，加入 Provider V2 后联合回归 `97/0/0/0`；`quant-core` `4/0/0/0`；命令级排除外部集成类的 `quant-server` 安全全量 `388/0/0/0`；PostgreSQL 16.13 临时实例中的 F1A FORMAL 绕过回归 `4/0/0/0` 与 F1C 随机 Schema V1—V13 `3/0/0/0` 均 `Skipped=0`。F1C 覆盖同一事务连接及数据库触发的真实 `search_path` TOCTOU 回滚；public 结构、数据、Flyway 指纹不变且 Schema、端口、目录残留为 0。
 - 当前状态：双提交链 `0d806e975985038e8d8c617ce1ce4c56e1dc80dd` → `6b34e0f730d8f70fb5894c78e692062ae5fb303d` 已通过 ChatGPT 对实际 Git 提交的最终复验，经用户批准纯 fast-forward 合入。本阶段没有读取 Token、调用 Provider 或访问正常业务数据库；Tushare 累计真实业务请求仍为 20。不得自动升级为生产运行或开始 F2B/F3。
 
-#### 3A-R3B-F1D：Tushare 书面许可闭环与 F1 单阻断收敛（任务分支已完成，待验收）
+#### 3A-R3B-F1D：Tushare 书面许可闭环与 F1 单阻断收敛（已完成并合入）
 
 - 交付：[F1D 任务书](tasks/3ar3b-f1d-tushare-written-permission-closure.md)和[F1D 阶段记录](stage-3ar3b-f1d-tushare-written-permission-closure.md)。
+- 提交链：`349856ea6e9e3dc423fc1ad9115886cfc8858159` → `049c750026fa00dad70c12667fad732af07d60ce` → `01024df465afcfa34dfd4efdbef7d56d32419aa1`；已通过实际 Git 最终复验，经用户批准纯 fast-forward 合入。
 - 证据：新增 `TS-WP-002` 用户提供的 Tushare 官方七项逐条精确脱敏转录；接收时间为 `2026-07-31T11:07:00+08:00`，官方回复时间为 `UNKNOWN`。用户证明来源为官方回复；原件未入库、截图未由 Codex 查看、来源未独立认证。
 - 许可模型：量化数据来源、本地保存、回测/历史回放、本地 AI/Agent、自动调用/定时更新、技术审计元数据留存、到期后继续本地保存和个人 2000 积分账号范围均为 `VERIFIED`；再分发、商业数据服务和 Token 共享为 `NOT_GRANTED`。当前 `personalResearchPermissionComplete=true`、`providerWrittenPermissionComplete=true`、`WRITTEN_PERMISSION_GATE=PASS`。
 - 准入模型：当前 `F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE`，唯一粗粒度 blocker 为 `BLOCKED_TECHNICAL_EVIDENCE`。完整公司行动、稳定 action ID、factor/action、Provider revision/旧版本、永久证券身份、全历史 `DAILY_EXACT` 与完整 QFQ lineage 仍未闭合，因此 `fullF1EntryReady=false`。
 - 运行边界：书面门 PASS 不启用生产、正常业务库、scheduler、Agent、回测、Shadow、F2B/F3 或交易。F1C 隔离手工入口保持 READY；`formalEligible=false`、`REDUCED_RESEARCH_PRODUCTION_RUNTIME_READY=false`、`NORMAL_BUSINESS_DATABASE_RUNTIME_READY=false`。
 - 历史边界：B1 的 `PARTIAL_NOT_COMPLETE/NOT_MET` 与两项事前书面许可 `UNVERIFIED` 仍是探针执行时点的历史事实；F1D 不追认完整证据探针，也不重跑。
+
+#### 3A-R3B-F1E：缩减研究准入与专用本地前向数据闭环（任务分支已完成，待验收）
+
+- 交付：[F1E 任务书](tasks/3ar3b-f1e-dedicated-research-runtime.md)和[F1E 阶段记录](stage-3ar3b-f1e-dedicated-research-runtime.md)。
+- 准入：类型化模型固定 `REDUCED_RESEARCH_ROUTE_DECISION=DEDICATED_LOCAL_RESEARCH_PATH`、`REDUCED_RESEARCH_LOCAL_RUNTIME_IMPLEMENTATION_READY=true`、`REDUCED_RESEARCH_CONTROLLED_ACCEPTANCE_READY=true`，但 `REDUCED_RESEARCH_OPERATIONAL_READY=false`；实现完成不替代后续人工受控验收。
+- 专用目标：只接受本机 `stock_quant_research` 数据库与用户、唯一 `tushare_research` search path 和精确 V1—V13；Provider 前及捕获事务前后重验目标与 backend PID。public、正常业务库、通用测试库和迁移不完整目标全部拒绝。
+- 批次：手工单日 1—3 只 SSE/SZSE 证券，每只只调用 `daily/adj_factor/trade_cal`，共享会话精确消耗 3/6/9 次，零重试。全部响应先验证，再在一个事务捕获 raw/factor/calendar；任一失败全批次回滚。
+- QFQ：只复用 `QfqPriceMath` 在内存返回 `REDUCED_RESEARCH_FORMULA_ONLY`，不写 QFQ 或公司行动；`QfqAsOfEngine` 完整 lineage/cutoff 门禁不变。
+- 继续关闭：生产、正常业务库、scheduler、Agent、回测、Shadow、F2B、F3、投资建议与交易全部为 false。完整 F1 继续 `BLOCKED_TECHNICAL_EVIDENCE`，F1E 不调用 Provider 或读取 Token。
 - 当前状态：实现与治理文档已在任务分支完成，待 ChatGPT 基于实际 Git 提交验收，尚未合入。本阶段 Provider 新增调用为 0，不检查 Token、不访问数据库、不执行 V13。
 
 #### 3A-R3B-F1：完整 Provider Adapter 与 V13 闭环（当前仅技术证据阻断）

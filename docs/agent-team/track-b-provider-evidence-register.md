@@ -147,6 +147,10 @@ Provider 技术事实继续只由上述 Tushare 官方页面和已验收的 B1/F
 | `JAVA-F1C-ENDPOINT-RATE-POLICY-V1` | F1C Endpoint 策略与并发离线回归 | 五 Endpoint 使用保守较小值；全局分钟、Endpoint 分钟和 Endpoint 每日额度在单进程原子登记 | 官方频次冲突消失、跨进程或分布式 Token 协调 |
 | `JAVA-F1C-ISOLATED-RUNTIME-V1` | F1C 授权、守卫、三请求与公式级 QFQ 离线回归 | 随机隔离手工运行入口及失败前不捕获边界可执行 | 生产运行、正常业务库、完整 QFQ lineage、Agent/回测 |
 | `PG-F1C-ISOLATED-V13-V1` | PostgreSQL 16.13 临时实例随机 Schema V1—V13 回归 | raw/factor/calendar 捕获幂等、缩减 QFQ 不落库、public 指纹不变且残留为 0 | 正常业务数据库可用或 public 已执行 V13 |
+| `TS-F1E-DEDICATED-DATABASE-GUARD-001` | F1E 专用数据库身份与事务守卫离线/临时 PostgreSQL 回归 | 只接受本机 `stock_quant_research`、用户 `stock_quant_research`、唯一 `tushare_research` search path 和 V1—V13；事务前后保持同一目标与 backend PID | 正常业务数据库、public、跨主机或生产目标已获授权 |
+| `TS-F1E-MANUAL-BATCH-CONTRACT-001` | F1E 类型化授权、命令、共享会话和合成 Gateway 回归 | 单日 1—3 证券、每证券三 Endpoint、共享 3/6/9 次预算和零重试边界可执行 | 全市场、scheduler、Agent、回测、真实 Provider 运行已获接受 |
+| `TS-F1E-FULL-F1-ISOLATION-001` | F1E 准入模型及负向不变量回归 | implementation/controlled acceptance ready 与 operational/production/full F1 false 被类型化隔离 | 完整技术合同、Provider PIT、永久身份或正式生产资格 |
+| `PG-F1E-DEDICATED-V13-V1` | 全新临时 PostgreSQL 的 F1E 专用数据库闭环 | 1/2/3 证券原子捕获、失败回滚、search path TOCTOU、防部分写、幂等/append-only 和临时 public 指纹不变 | 既有数据库已访问、正常 public 已执行 V13 或真实 Provider 已调用 |
 
 强资格必须使用 `TechnicalClaim(status,evidenceIds)`。八种公司行动分别持有 claim；
 一个泛化公司行动 evidenceId 不能覆盖全部类型，稳定 action ID、factor/action 关系、

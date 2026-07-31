@@ -228,5 +228,12 @@ IFIND_REAL_CALL_COUNT=0
 ```
 
 本阶段不访问数据库，不执行正常业务库 V13。F2B/F3、scheduler、Shadow、Day 002、
-3A-R3B-1、3B 和交易均未开始。F1D 技术与治理实现已在任务分支完成，待 ChatGPT
-基于实际 Git 提交验收；尚未合入，不自动开始下一阶段。
+3A-R3B-1、3B 和交易均未开始。F1D 三提交链
+`349856ea6e9e3dc423fc1ad9115886cfc8858159` →
+`049c750026fa00dad70c12667fad732af07d60ce` →
+`01024df465afcfa34dfd4efdbef7d56d32419aa1`
+已通过 ChatGPT 对实际 Git 的最终复验，经用户批准纯 fast-forward 合入。
+
+后续 F1E 只在此许可边界内实现专用本地研究数据库守卫和单日 1—3 证券原子批次。
+它不更改七项转录、禁止用途或完整 F1 单一技术证据阻断；实现/受控验收合同 ready
+也不等于 operational 或 production ready。

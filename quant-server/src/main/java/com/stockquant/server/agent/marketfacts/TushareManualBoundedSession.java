@@ -23,8 +23,12 @@ public final class TushareManualBoundedSession {
 
     public static final int MAX_PROVIDER_BUSINESS_REQUESTS = 10;
     public static final int MAX_SYMBOLS = 2;
+    private static final int MAX_SESSION_SYMBOLS = 3;
     public static final int F1C_MAX_PROVIDER_BUSINESS_REQUESTS = 3;
     public static final int F1C_MAX_SYMBOLS = 1;
+    public static final int F1E_MAX_PROVIDER_BUSINESS_REQUESTS = 9;
+    public static final int F1E_MAX_SYMBOLS = 3;
+    public static final int F1E_MAX_NATURAL_DAYS = 1;
     /**
      * Natural-day bound for daily, adj_factor and trade_cal only.
      * Reference endpoints have no date parameters and remain bounded by
@@ -35,6 +39,8 @@ public final class TushareManualBoundedSession {
             "stock_basic", "trade_cal", "daily", "adj_factor", "dividend");
     public static final Set<String> F1C_ALLOWED_ENDPOINTS = Set.of(
             "trade_cal", "daily", "adj_factor");
+    public static final Set<String> F1E_ALLOWED_ENDPOINTS =
+            F1C_ALLOWED_ENDPOINTS;
     public static final Set<String> F1A_ALLOWED_SYMBOLS = Set.of(
             "600000.SH", "000001.SZ");
     public static final Set<String> F1A_ALLOWED_EXCHANGES = Set.of(
@@ -109,7 +115,7 @@ public final class TushareManualBoundedSession {
         this.sessionProfile = Objects.requireNonNull(
                 sessionProfile, "sessionProfile");
         if (this.allowedSymbols.isEmpty()
-                || this.allowedSymbols.size() > MAX_SYMBOLS
+                || this.allowedSymbols.size() > MAX_SESSION_SYMBOLS
                 || this.allowedExchanges.isEmpty()
                 || !F1A_ALLOWED_EXCHANGES.containsAll(
                 this.allowedExchanges)
@@ -169,6 +175,42 @@ public final class TushareManualBoundedSession {
                 false,
                 0,
                 SessionProfile.F1C_ISOLATED_MANUAL);
+    }
+
+    public static TushareManualBoundedSession
+    f1eDedicatedLocalManual(
+            java.util.List<TushareDedicatedResearchBatchCommand
+                    .SecuritySelection> securities,
+            LocalDate tradeDate
+    ) {
+        Objects.requireNonNull(securities, "securities");
+        Objects.requireNonNull(tradeDate, "tradeDate");
+        if (securities.isEmpty()
+                || securities.size() > F1E_MAX_SYMBOLS) {
+            throw new IllegalArgumentException(
+                    "invalid Tushare F1E session profile");
+        }
+        Set<String> symbols = new java.util.LinkedHashSet<>();
+        Set<String> exchanges = new java.util.LinkedHashSet<>();
+        securities.forEach(security -> {
+            Objects.requireNonNull(security, "security");
+            symbols.add(security.providerInstrumentId());
+            exchanges.add(security.exchange());
+        });
+        if (symbols.size() != securities.size()) {
+            throw new IllegalArgumentException(
+                    "invalid Tushare F1E session profile");
+        }
+        return new TushareManualBoundedSession(
+                securities.size() * 3,
+                Set.copyOf(symbols),
+                Set.copyOf(exchanges),
+                tradeDate,
+                tradeDate,
+                F1E_ALLOWED_ENDPOINTS,
+                false,
+                0,
+                SessionProfile.F1E_DEDICATED_LOCAL_MANUAL);
     }
 
     /**
@@ -312,23 +354,55 @@ public final class TushareManualBoundedSession {
             }
             return;
         }
-        if (maximumBusinessRequests
-                != F1C_MAX_PROVIDER_BUSINESS_REQUESTS
-                || allowedSymbols.size() != F1C_MAX_SYMBOLS
-                || allowedExchanges.size() != 1
-                || !allowedEndpoints.equals(F1C_ALLOWED_ENDPOINTS)
+        if (sessionProfile == SessionProfile.F1C_ISOLATED_MANUAL) {
+            if (maximumBusinessRequests
+                    != F1C_MAX_PROVIDER_BUSINESS_REQUESTS
+                    || allowedSymbols.size() != F1C_MAX_SYMBOLS
+                    || allowedExchanges.size() != 1
+                    || !allowedEndpoints.equals(F1C_ALLOWED_ENDPOINTS)
+                    || automaticRetryAllowed
+                    || initiallyConsumedBusinessRequests != 0) {
+                throw new IllegalArgumentException(
+                        "invalid Tushare F1C session profile");
+            }
+            String tsCode = allowedSymbols.iterator().next();
+            String exchange = allowedExchanges.iterator().next();
+            if (!tsCode.equals(f1cTsCode(
+                    tsCode.substring(0, 6), exchange))) {
+                throw new IllegalArgumentException(
+                        "invalid Tushare F1C symbol identity");
+            }
+            return;
+        }
+        if (sessionProfile
+                != SessionProfile.F1E_DEDICATED_LOCAL_MANUAL
+                || maximumBusinessRequests != allowedSymbols.size() * 3
+                || maximumBusinessRequests
+                > F1E_MAX_PROVIDER_BUSINESS_REQUESTS
+                || allowedSymbols.isEmpty()
+                || allowedSymbols.size() > F1E_MAX_SYMBOLS
+                || allowedExchanges.isEmpty()
+                || !F1A_ALLOWED_EXCHANGES.containsAll(allowedExchanges)
+                || !allowedEndpoints.equals(F1E_ALLOWED_ENDPOINTS)
                 || automaticRetryAllowed
                 || initiallyConsumedBusinessRequests != 0) {
             throw new IllegalArgumentException(
-                    "invalid Tushare F1C session profile");
+                    "invalid Tushare F1E session profile");
         }
-        String tsCode = allowedSymbols.iterator().next();
-        String exchange = allowedExchanges.iterator().next();
-        if (!tsCode.equals(f1cTsCode(
-                tsCode.substring(0, 6), exchange))) {
-            throw new IllegalArgumentException(
-                    "invalid Tushare F1C symbol identity");
-        }
+        allowedSymbols.forEach(tsCode -> {
+            String suffix = tsCode.substring(6);
+            String exchange = switch (suffix) {
+                case ".SH" -> "SSE";
+                case ".SZ" -> "SZSE";
+                default -> "";
+            };
+            if (!allowedExchanges.contains(exchange)
+                    || !tsCode.equals(f1cTsCode(
+                    tsCode.substring(0, 6), exchange))) {
+                throw new IllegalArgumentException(
+                        "invalid Tushare F1E symbol identity");
+            }
+        });
     }
 
     private static String f1cTsCode(String symbol, String exchange) {
@@ -350,6 +424,7 @@ public final class TushareManualBoundedSession {
 
     public enum SessionProfile {
         F1A_ACCEPTANCE,
-        F1C_ISOLATED_MANUAL
+        F1C_ISOLATED_MANUAL,
+        F1E_DEDICATED_LOCAL_MANUAL
     }
 }
