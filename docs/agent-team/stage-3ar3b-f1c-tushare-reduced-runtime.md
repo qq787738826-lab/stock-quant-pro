@@ -9,6 +9,8 @@ TASK_BRANCH=codex/1.4.0-stage-3ar3b-f1c-tushare-reduced-runtime
 TARGET_COMMIT_MESSAGE=feat(agent): add isolated tushare reduced research runtime
 FIRST_IMPLEMENTATION_COMMIT=0d806e975985038e8d8c617ce1ce4c56e1dc80dd
 REPAIR_TARGET_COMMIT_MESSAGE=fix(agent): bind f1c runtime safety
+FINAL_COMMIT=6b34e0f730d8f70fb5894c78e692062ae5fb303d
+MERGE_STATUS=PURE_FAST_FORWARD_COMPLETE
 ```
 
 开始前，本地和远程集成分支均精确位于冻结基线，ahead/behind 为 `0/0`；已跟踪
@@ -189,7 +191,7 @@ formalEligible=false
 两组 PostgreSQL 测试只连接新建的本地临时实例，运行后停止并删除。F1C 修复没有
 读取 Token、发起 Provider 请求或连接正常业务数据库。
 
-## 8. 阶段结论与未解除门禁
+## 8. 阶段结论与 F1C 完成时门禁
 
 F1C 只证明随机隔离、人工调用的缩减公式运行链可用。它不表示：
 
@@ -199,7 +201,7 @@ F1C 只证明随机隔离、人工调用的缩减公式运行链可用。它不�
 - `QfqAsOfEngine` 完整 lineage 已通过；
 - Agent、回测、scheduler、Shadow、Day 002、F2B、F3 或交易可启动。
 
-完整 F1 继续保持：
+F1C 完成时完整 F1 保持（历史状态）：
 
 ```text
 F1_ENTRY_READINESS=BLOCKED_MULTIPLE
@@ -217,5 +219,18 @@ IFIND_TRIAL_ACTIVATION_GATE=BLOCKED
 ```
 
 本阶段 Provider 新增调用为 0，Tushare 累计真实业务请求仍为 20，iFinD 为 0。
-F1C 技术实现已在任务分支完成，待 ChatGPT 基于实际 Git 提交验收，尚未合入；
-不得自动开始任何下一阶段。
+双提交链已通过 ChatGPT 对实际 Git 提交的最终复验，经用户批准纯 fast-forward
+合入。F1C 不自动开始任何下一阶段。
+
+## 9. F1D 后续许可状态
+
+F1D 收到 `TS-WP-002` 后只更新当前许可与准入聚合，不回写 F1C 完成时的历史状态：
+
+```text
+WRITTEN_PERMISSION_GATE=PASS
+F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE
+ACTIVE_F1_BLOCKER=BLOCKED_TECHNICAL_EVIDENCE
+```
+
+F1C 的技术和运行边界没有改变：`fullF1EntryReady=false`、生产/正常业务库/scheduler/
+Agent/回测/F2B/F3 均未开放，四项正式门禁不变。

@@ -8,7 +8,7 @@
 - 官方证据共 **32 条**：BaoStock 4 条、Tushare Pro 21 条、同花顺 iFinD 7 条。
 - 另有 1 条已经验收的 F0 直接 Provider 探针记录 `BS-005`；它不计入 32 条官方页面数量。
 - 另有 10 条 B1 Tushare 受控权限探针摘要 `TS-PB-001`—`TS-PB-010`；它们不计入官方页面数量，不包含完整响应或实际市场值。
-- 另有 1 条 Tushare 官方企业微信脱敏书面转录 `TS-WP-001` 和 2 条 F1A
+- 另有 2 条 Tushare 官方企业微信脱敏书面转录 `TS-WP-001/002` 和 2 条 F1A
   受控联调记录 `TS-F1A-001/002`；原始截图、完整响应和个人信息均不进入 Git。
 - 证据等级：
   - `C1`：官方合同、服务协议或许可条款；
@@ -78,35 +78,54 @@ F1B 官方页面逐项输入、输出、积分、更新时间、单次行限及
 | TS-PB-009 | `dividend` | `600000.SH` | `PASS` | 51 | 接口可调用，返回公告/登记/除权/实施及现金送转字段 | 不证明配股、拆并股、更正/撤回、稳定事件 ID 或 revision |
 | TS-PB-010 | `dividend` | `000001.SZ` | `PASS` | 53 | 同上 | 同上 |
 
-综合技术权限结论为 `TUSHARE_2000_PERMISSION_PROBE=PASS`。但执行前未取得 Provider 对最小自动 API 探针及临时响应、Hash、摘要、夹具保存/删除范围的书面答复，因此 `TRACK_B_FULL_EVIDENCE_PROBE_STATUS=PARTIAL_NOT_COMPLETE`、`TRACK_B_FULL_PROBE_LEGAL_PREREQUISITES=NOT_MET`、`WRITTEN_AUTOMATED_PROBE_PERMISSION=UNVERIFIED`、`WRITTEN_RESPONSE_RETENTION_PERMISSION=UNVERIFIED`。B1 技术权限证据本身不判定本次调用合法或违法，也不独立支持长期本地保存、回测、Agent、Provider PIT、F1 READY 或任何正式门禁升级；后续 `TS-WP-001` 只支持量化数据来源用途，三项具体许可仍未验证。
+综合技术权限结论为 `TUSHARE_2000_PERMISSION_PROBE=PASS`。但执行前未取得 Provider 对最小自动 API 探针及临时响应、Hash、摘要、夹具保存/删除范围的书面答复，因此 `TRACK_B_FULL_EVIDENCE_PROBE_STATUS=PARTIAL_NOT_COMPLETE`、`TRACK_B_FULL_PROBE_LEGAL_PREREQUISITES=NOT_MET`、`WRITTEN_AUTOMATED_PROBE_PERMISSION=UNVERIFIED`、`WRITTEN_RESPONSE_RETENTION_PERMISSION=UNVERIFIED`。这些是 B1 执行时点的历史状态；后续 `TS-WP-001/002` 不把 B1 追认为完整证据探针，也不要求重跑。
 
 ### 3.2 Tushare 个人用途书面许可与 F1A 联调
 
 | evidenceId | 日期 | 来源/范围 | 等级 | 脱敏内容或结果 | 支持的结论 | 不支持的结论 |
 |---|---|---|---|---|---|---|
 | TS-WP-001 | `2026-07-30` | Tushare 官方企业微信书面文字回复 | W1 | 问：“这个可以用来当量化数据来源吧”；答：“可以” | 可把 Tushare 作为量化数据来源 | 不逐项支持本地长期存储、策略回测、内部 Agent、原始数据再分发、商业数据服务或服务到期留存 |
+| TS-WP-002 | 转录接收 `2026-07-31T11:07:00+08:00`；官方回复时刻 `UNKNOWN` | 用户提供的 Tushare 官方回复精确脱敏文字转录；原件未入库、截图未由 Codex 查看、来源未独立认证 | W1 | “本地数据库保存：允许；策略回测/历史回放：允许；本地AI或智能体分析：允许；程序自动调用/定时更新：允许；字段结构、Hash、摘要和错误日志留存：允许；可以一直保存到本地；适用于个人Tushare Pro 2000积分账号” | 个人 2000 积分账号的本地保存、回测/回放、Agent、自动更新、技术审计元数据留存与持续本地保存 | 不支持原始数据再分发、商业数据服务、Token/账号共享、完整技术合同、Provider PIT 或生产运行 |
 | TS-F1A-001 | `2026-07-30` | 两证券、两日、`daily/adj_factor/trade_cal`，精确 6 次、零重试 | R1 | 两只证券的三类响应均非空且日期范围合规；未保存完整响应、CSV、Token 或市场值 fixture | F1A Java HTTPS Adapter、字段映射和受控零重试路径可用 | 不支持公司行动闭环、revision、历史旧版本、永久证券身份或全历史 `DAILY_EXACT` |
 | TS-F1A-002 | `2026-07-30` | 两证券、`stock_basic/dividend`，只用阶段剩余 4 次、零重试 | R1 | stock_basic 为 1/1 行；dividend 为固定证券的历史部分证据 51/53 行，不是两日数据；字段集合与冻结 DTO 一致；未保存完整响应、CSV、Token 或市场值 | 普通身份 DTO 与 dividend 部分证据 DTO 的真实受控路径可用；F1A 总调用数为 10 | 不支持永久身份、稳定 action ID、完整公司行动、factor/action 解释关系、revision、Provider PIT 或写入 V13 公司行动表 |
+
+`TS-WP-002` provenance 固定为：
+
+```text
+SOURCE=TUSHARE_OFFICIAL_REPLY
+PROVENANCE=USER_PROVIDED_EXACT_OFFICIAL_TRANSCRIPTION
+USER_ATTESTED_OFFICIAL_SOURCE=true
+ORIGINAL_ARTIFACT_STORED=false
+SCREENSHOT_REVIEWED=false
+INDEPENDENT_SOURCE_AUTHENTICITY_REVIEWED=false
+```
 
 错误转录生成的 SHA-256 已删除；未保存的原始截图不登记新的内容 Hash。原始截图不提交
 Git；不记录联系人、微信 ID、头像、手机号、Token、账号或其他个人信息。
 
-据此，有限个人用途当前状态为：
+据此，个人研究书面许可当前状态为：
 
 ```text
 WRITTEN_QUANT_DATA_SOURCE_USE_PERMISSION=VERIFIED
-WRITTEN_PERSONAL_LOCAL_STORAGE_PERMISSION=UNVERIFIED
-WRITTEN_PERSONAL_BACKTEST_PERMISSION=UNVERIFIED
-WRITTEN_PERSONAL_AGENT_ANALYSIS_PERMISSION=UNVERIFIED
+WRITTEN_PERSONAL_LOCAL_STORAGE_PERMISSION=VERIFIED
+WRITTEN_PERSONAL_BACKTEST_PERMISSION=VERIFIED
+WRITTEN_PERSONAL_AGENT_ANALYSIS_PERMISSION=VERIFIED
+WRITTEN_AUTOMATED_API_UPDATE_PERMISSION=VERIFIED
+WRITTEN_TECHNICAL_AUDIT_METADATA_RETENTION_PERMISSION=VERIFIED
+POST_EXPIRY_DATA_RETENTION_PERMISSION=VERIFIED
+PERSONAL_2000_POINT_ACCOUNT_SCOPE_PERMISSION=VERIFIED
 USER_PERSONAL_USE_IMPLEMENTATION_AUTHORIZATION=CONFIRMED
 F1_LIMITED_PERSONAL_USE_IMPLEMENTATION=APPROVED_BY_USER
+RAW_DATA_REDISTRIBUTION_PERMISSION=NOT_GRANTED
+COMMERCIAL_DATA_SERVICE_PERMISSION=NOT_GRANTED
+TOKEN_SHARING_PERMISSION=NOT_GRANTED
+personalResearchPermissionComplete=true
+providerWrittenPermissionComplete=true
 ```
 
 上述结论不回溯改变 B1 完整证据探针在执行前的法律前置事实，故继续保持：
 
 ```text
-POST_EXPIRY_DATA_RETENTION_PERMISSION=UNVERIFIED
-RAW_DATA_REDISTRIBUTION_PERMISSION=NOT_GRANTED
 TRACK_B_FULL_EVIDENCE_PROBE_STATUS=PARTIAL_NOT_COMPLETE
 TRACK_B_FULL_PROBE_LEGAL_PREREQUISITES=NOT_MET
 WRITTEN_AUTOMATED_PROBE_PERMISSION=UNVERIFIED

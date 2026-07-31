@@ -82,6 +82,19 @@ class TushareMarketFactProviderTest {
                 .asBoolean(true));
         assertFalse(capability.coverage()
                 .path("schedulerRuntimeReady").asBoolean(true));
+        assertFalse(capability.coverage()
+                .path("agentDecisionRuntimeReady").asBoolean(true));
+        assertFalse(capability.coverage()
+                .path("backtestExecutionRuntimeReady").asBoolean(true));
+        assertFalse(capability.coverage()
+                .path("f2bRuntimeReady").asBoolean(true));
+        assertFalse(capability.coverage()
+                .path("f3RuntimeReady").asBoolean(true));
+        assertFalse(capability.coverage()
+                .path("normalBusinessDatabaseRuntimeReady")
+                .asBoolean(true));
+        assertFalse(capability.coverage()
+                .path("schedulerRuntimeReady").asBoolean(true));
         assertEquals("RAW_FACTOR_END_DATE_ANCHORED",
                 capability.coverage()
                         .path("qfqCalculationMode").asText());
@@ -185,17 +198,33 @@ class TushareMarketFactProviderTest {
                 capability.licensing()
                         .path("writtenQuantDataSourceUsePermission")
                         .asText());
-        assertEquals("UNVERIFIED",
+        assertEquals("VERIFIED",
                 capability.licensing()
                         .path("writtenPersonalLocalStoragePermission")
                         .asText());
-        assertEquals("UNVERIFIED",
+        assertEquals("VERIFIED",
                 capability.licensing()
                         .path("writtenPersonalBacktestPermission")
                         .asText());
-        assertEquals("UNVERIFIED",
+        assertEquals("VERIFIED",
                 capability.licensing()
                         .path("writtenPersonalAgentAnalysisPermission")
+                        .asText());
+        assertEquals("VERIFIED",
+                capability.licensing()
+                        .path("writtenAutomatedApiUpdatePermission")
+                        .asText());
+        assertEquals("VERIFIED",
+                capability.licensing()
+                        .path("writtenTechnicalAuditMetadataRetentionPermission")
+                        .asText());
+        assertEquals("VERIFIED",
+                capability.licensing()
+                        .path("postExpiryDataRetentionPermission")
+                        .asText());
+        assertEquals("VERIFIED",
+                capability.licensing()
+                        .path("personal2000PointAccountScopePermission")
                         .asText());
         assertEquals("CONFIRMED",
                 capability.licensing()
@@ -212,9 +241,49 @@ class TushareMarketFactProviderTest {
         assertEquals("USER_APPROVED_LIMITED_PERSONAL_USE",
                 capability.licensing()
                         .path("authorizationBasis").asText());
-        assertFalse(capability.licensing()
+        assertTrue(capability.licensing()
+                .path("personalResearchPermissionComplete")
+                .asBoolean());
+        assertTrue(capability.licensing()
                 .path("providerWrittenPermissionComplete")
+                .asBoolean());
+        assertEquals("PASS",
+                capability.licensing()
+                        .path("writtenPermissionGate").asText());
+        assertEquals("BLOCKED",
+                capability.licensing()
+                        .path("technicalEvidenceGate").asText());
+        assertEquals("BLOCKED_TECHNICAL_EVIDENCE",
+                capability.licensing()
+                        .path("f1EntryReadiness").asText());
+        assertEquals(1, capability.licensing()
+                .path("activeF1Blockers").size());
+        assertEquals("BLOCKED_TECHNICAL_EVIDENCE",
+                capability.licensing()
+                        .path("activeF1Blockers").path(0).asText());
+        assertEquals("NOT_GRANTED",
+                capability.licensing()
+                        .path("rawDataRedistributionPermission").asText());
+        assertEquals("NOT_GRANTED",
+                capability.licensing()
+                        .path("commercialDataServicePermission").asText());
+        assertEquals("NOT_GRANTED",
+                capability.licensing()
+                        .path("tokenSharingPermission").asText());
+        JsonNode wp002 = capability.licensing()
+                .path("writtenPermissionEvidenceProvenance")
+                .path("TS-WP-002");
+        assertEquals("USER_PROVIDED_EXACT_OFFICIAL_TRANSCRIPTION",
+                wp002.path("provenance").asText());
+        assertEquals("2026-07-31T11:07:00+08:00",
+                wp002.path("transcriptionReceivedAt").asText());
+        assertEquals("UNKNOWN", wp002.path("officialReplyAt").asText());
+        assertTrue(wp002.path("userAttestedOfficialSource").asBoolean());
+        assertFalse(wp002.path("originalArtifactStored").asBoolean(true));
+        assertFalse(wp002.path("screenshotReviewed").asBoolean(true));
+        assertFalse(wp002.path("independentSourceAuthenticityReviewed")
                 .asBoolean(true));
+        assertFalse(capability.toString().contains(TEST_TOKEN));
         assertEquals(200,
                 capability.rateLimit()
                         .path("officialPerMinute").asInt());

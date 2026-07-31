@@ -92,6 +92,15 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
     private static final TushareTechnicalQualification
             TECHNICAL_QUALIFICATION =
             TushareTechnicalQualification.current2000PointAssessment();
+    private static final TushareWrittenPermissionQualification
+            WRITTEN_PERMISSION_QUALIFICATION =
+            TushareWrittenPermissionQualification
+                    .currentPersonal2000PointAssessment();
+    private static final TushareF1EntryQualification
+            F1_ENTRY_QUALIFICATION =
+            TushareF1EntryQualification.assess(
+                    WRITTEN_PERMISSION_QUALIFICATION,
+                    TECHNICAL_QUALIFICATION);
 
     private final ObjectMapper objectMapper;
     private final TushareMarketFactProperties properties;
@@ -155,6 +164,10 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
         coverage.put(
                 "schedulerRuntimeReady",
                 qualification.schedulerRuntimeReady());
+        coverage.put("agentDecisionRuntimeReady", false);
+        coverage.put("backtestExecutionRuntimeReady", false);
+        coverage.put("f2bRuntimeReady", false);
+        coverage.put("f3RuntimeReady", false);
         coverage.put(
                 "qfqCalculationMode",
                 qualification.qfqCalculationMode().name());
@@ -257,32 +270,132 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
                 .forEach(technicalEvidenceIds::add);
 
         ObjectNode licensing = objectMapper.createObjectNode();
+        TushareWrittenPermissionQualification writtenPermission =
+                writtenPermissionQualification();
+        TushareF1EntryQualification f1Entry =
+                f1EntryQualification();
         licensing.put("usageQualification", "RESEARCH_ONLY");
         licensing.put("formalEligible", false);
         licensing.put("personalUseOnly", true);
         licensing.put(
-                "writtenQuantDataSourceUsePermission", "VERIFIED");
+                "writtenQuantDataSourceUsePermission",
+                writtenPermission.quantDataSourceUsePermission()
+                        .status().name());
         licensing.put(
-                "writtenPersonalLocalStoragePermission", "UNVERIFIED");
+                "writtenPersonalLocalStoragePermission",
+                writtenPermission.personalLocalStoragePermission()
+                        .status().name());
         licensing.put(
-                "writtenPersonalBacktestPermission", "UNVERIFIED");
+                "writtenPersonalBacktestPermission",
+                writtenPermission.personalBacktestPermission()
+                        .status().name());
         licensing.put(
-                "writtenPersonalAgentAnalysisPermission", "UNVERIFIED");
+                "writtenPersonalAgentAnalysisPermission",
+                writtenPermission.personalAgentAnalysisPermission()
+                        .status().name());
+        licensing.put(
+                "writtenAutomatedApiUpdatePermission",
+                writtenPermission.automatedApiUpdatePermission()
+                        .status().name());
+        licensing.put(
+                "writtenTechnicalAuditMetadataRetentionPermission",
+                writtenPermission
+                        .technicalAuditMetadataRetentionPermission()
+                        .status().name());
+        licensing.put(
+                "postExpiryDataRetentionPermission",
+                writtenPermission.postExpiryDataRetentionPermission()
+                        .status().name());
+        licensing.put(
+                "personal2000PointAccountScopePermission",
+                writtenPermission
+                        .personal2000PointAccountScopePermission()
+                        .status().name());
         licensing.put(
                 "userPersonalUseImplementationAuthorization",
                 "CONFIRMED");
         licensing.put(
                 "limitedPersonalUseImplementation",
                 "APPROVED_BY_USER");
-        licensing.put("fullF1EntryReady", false);
+        licensing.put(
+                "fullF1EntryReady",
+                f1Entry.fullF1EntryReady());
         licensing.put(
                 "authorizationBasis",
                 "USER_APPROVED_LIMITED_PERSONAL_USE");
-        licensing.put("providerWrittenPermissionComplete", false);
         licensing.put(
-                "postExpiryDataRetentionPermission", "UNVERIFIED");
+                "personalResearchPermissionComplete",
+                writtenPermission.personalResearchPermissionComplete());
         licensing.put(
-                "rawDataRedistributionPermission", "NOT_GRANTED");
+                "providerWrittenPermissionComplete",
+                writtenPermission.personalResearchPermissionComplete());
+        licensing.put(
+                "writtenPermissionGate",
+                f1Entry.writtenPermissionGate().name());
+        licensing.put(
+                "technicalEvidenceGate",
+                f1Entry.technicalEvidenceGate().name());
+        licensing.put(
+                "f1EntryReadiness",
+                f1Entry.entryReadiness().name());
+        licensing.put(
+                "rawDataRedistributionPermission",
+                writtenPermission.redistributionPermission()
+                        .status().name());
+        licensing.put(
+                "commercialDataServicePermission",
+                writtenPermission.commercialDataServicePermission()
+                        .status().name());
+        licensing.put(
+                "tokenSharingPermission",
+                writtenPermission.tokenSharingPermission()
+                        .status().name());
+        ArrayNode activeF1Blockers =
+                licensing.putArray("activeF1Blockers");
+        f1Entry.activeBlockers().stream()
+                .sorted()
+                .forEach(value -> activeF1Blockers.add(value.name()));
+        ArrayNode permissionEvidenceIds =
+                licensing.putArray("writtenPermissionEvidenceIds");
+        writtenPermission.evidenceIds().stream()
+                .sorted()
+                .forEach(permissionEvidenceIds::add);
+        ArrayNode permissionBlockers =
+                licensing.putArray("writtenPermissionBlockers");
+        writtenPermission.permissionBlockers().stream()
+                .sorted()
+                .forEach(value -> permissionBlockers.add(value.name()));
+        ObjectNode permissionEvidenceProvenance =
+                licensing.putObject("writtenPermissionEvidenceProvenance");
+        writtenPermission.evidenceProvenance().entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .forEach(entry -> {
+                    ObjectNode evidence =
+                            permissionEvidenceProvenance.putObject(
+                                    entry.getKey());
+                    var metadata = entry.getValue();
+                    evidence.put(
+                            "provenance",
+                            metadata.evidenceProvenance().name());
+                    evidence.put(
+                            "transcriptionReceivedAt",
+                            metadata.transcriptionReceivedAt().toString());
+                    evidence.put(
+                            "officialReplyAt",
+                            metadata.officialReplyAt());
+                    evidence.put(
+                            "userAttestedOfficialSource",
+                            metadata.userAttestedOfficialSource());
+                    evidence.put(
+                            "originalArtifactStored",
+                            metadata.originalArtifactStored());
+                    evidence.put(
+                            "screenshotReviewed",
+                            metadata.screenshotReviewed());
+                    evidence.put(
+                            "independentSourceAuthenticityReviewed",
+                            metadata.independentSourceAuthenticityReviewed());
+                });
 
         ObjectNode rateLimit = objectMapper.createObjectNode();
         rateLimit.put(
@@ -390,6 +503,15 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
 
     public TushareTechnicalQualification technicalQualification() {
         return TECHNICAL_QUALIFICATION;
+    }
+
+    public TushareWrittenPermissionQualification
+    writtenPermissionQualification() {
+        return WRITTEN_PERMISSION_QUALIFICATION;
+    }
+
+    public TushareF1EntryQualification f1EntryQualification() {
+        return F1_ENTRY_QUALIFICATION;
     }
 
     public F1cRateLimitedGateway.F1cRateLimitedGatewayContract

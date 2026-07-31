@@ -16,10 +16,12 @@ import java.util.Set;
 /**
  * Typed, exact authorization boundary for the only F1A FORMAL capture path.
  *
- * <p>This record does not turn user authorization into provider-written
- * permission. It binds the limited personal implementation to one provider,
- * one adapter, SYSTEM_KNOWLEDGE_ONLY facts and the three research fact types
- * that were explicitly approved for isolated F1A validation.</p>
+ * <p>This record projects the typed personal-research written-permission
+ * qualification without widening the runtime boundary. It binds the limited
+ * implementation to one provider, one adapter, SYSTEM_KNOWLEDGE_ONLY facts
+ * and the three research fact types approved for isolated validation.
+ * Complete personal-use permission does not make the response FORMAL-eligible
+ * or make the full F1 technical contract ready.</p>
  */
 public record LimitedPersonalFormalCaptureAuthorization(
         String providerCode,
@@ -32,12 +34,19 @@ public record LimitedPersonalFormalCaptureAuthorization(
         PermissionEvidence writtenPersonalLocalStoragePermission,
         PermissionEvidence writtenPersonalBacktestPermission,
         PermissionEvidence writtenPersonalAgentAnalysisPermission,
+        PermissionEvidence writtenAutomatedApiUpdatePermission,
+        PermissionEvidence writtenTechnicalAuditMetadataRetentionPermission,
+        PermissionEvidence postExpiryDataRetentionPermission,
+        PermissionEvidence personal2000PointAccountScopePermission,
         UserAuthorization userPersonalUseImplementationAuthorization,
         LimitedImplementation limitedPersonalUseImplementation,
         AuthorizationBasis authorizationBasis,
+        boolean personalResearchPermissionComplete,
         boolean fullF1EntryReady,
         boolean providerWrittenPermissionComplete,
         RedistributionPermission rawDataRedistributionPermission,
+        CommercialDataServicePermission commercialDataServicePermission,
+        TokenSharingPermission tokenSharingPermission,
         RevisionQualification revisionQualification,
         Set<FactType> supportedFactTypes
 ) {
@@ -68,6 +77,19 @@ public record LimitedPersonalFormalCaptureAuthorization(
         writtenPersonalAgentAnalysisPermission = Objects.requireNonNull(
                 writtenPersonalAgentAnalysisPermission,
                 "writtenPersonalAgentAnalysisPermission");
+        writtenAutomatedApiUpdatePermission = Objects.requireNonNull(
+                writtenAutomatedApiUpdatePermission,
+                "writtenAutomatedApiUpdatePermission");
+        writtenTechnicalAuditMetadataRetentionPermission =
+                Objects.requireNonNull(
+                        writtenTechnicalAuditMetadataRetentionPermission,
+                        "writtenTechnicalAuditMetadataRetentionPermission");
+        postExpiryDataRetentionPermission = Objects.requireNonNull(
+                postExpiryDataRetentionPermission,
+                "postExpiryDataRetentionPermission");
+        personal2000PointAccountScopePermission = Objects.requireNonNull(
+                personal2000PointAccountScopePermission,
+                "personal2000PointAccountScopePermission");
         userPersonalUseImplementationAuthorization = Objects.requireNonNull(
                 userPersonalUseImplementationAuthorization,
                 "userPersonalUseImplementationAuthorization");
@@ -79,6 +101,12 @@ public record LimitedPersonalFormalCaptureAuthorization(
         rawDataRedistributionPermission = Objects.requireNonNull(
                 rawDataRedistributionPermission,
                 "rawDataRedistributionPermission");
+        commercialDataServicePermission = Objects.requireNonNull(
+                commercialDataServicePermission,
+                "commercialDataServicePermission");
+        tokenSharingPermission = Objects.requireNonNull(
+                tokenSharingPermission,
+                "tokenSharingPermission");
         revisionQualification = Objects.requireNonNull(
                 revisionQualification, "revisionQualification");
         supportedFactTypes = Set.copyOf(Objects.requireNonNull(
@@ -94,15 +122,22 @@ public record LimitedPersonalFormalCaptureAuthorization(
                 UsageQualification.RESEARCH_ONLY,
                 false,
                 PermissionEvidence.VERIFIED,
-                PermissionEvidence.UNVERIFIED,
-                PermissionEvidence.UNVERIFIED,
-                PermissionEvidence.UNVERIFIED,
+                PermissionEvidence.VERIFIED,
+                PermissionEvidence.VERIFIED,
+                PermissionEvidence.VERIFIED,
+                PermissionEvidence.VERIFIED,
+                PermissionEvidence.VERIFIED,
+                PermissionEvidence.VERIFIED,
+                PermissionEvidence.VERIFIED,
                 UserAuthorization.CONFIRMED,
                 LimitedImplementation.APPROVED_BY_USER,
                 AuthorizationBasis.USER_APPROVED_LIMITED_PERSONAL_USE,
+                true,
                 false,
-                false,
+                true,
                 RedistributionPermission.NOT_GRANTED,
+                CommercialDataServicePermission.NOT_GRANTED,
+                TokenSharingPermission.NOT_GRANTED,
                 RevisionQualification.SYSTEM_KNOWLEDGE_ONLY,
                 F1A_FACT_TYPES);
     }
@@ -164,6 +199,22 @@ public record LimitedPersonalFormalCaptureAuthorization(
                         PermissionEvidence.class),
                 enumValue(
                         licensing,
+                        "writtenAutomatedApiUpdatePermission",
+                        PermissionEvidence.class),
+                enumValue(
+                        licensing,
+                        "writtenTechnicalAuditMetadataRetentionPermission",
+                        PermissionEvidence.class),
+                enumValue(
+                        licensing,
+                        "postExpiryDataRetentionPermission",
+                        PermissionEvidence.class),
+                enumValue(
+                        licensing,
+                        "personal2000PointAccountScopePermission",
+                        PermissionEvidence.class),
+                enumValue(
+                        licensing,
                         "userPersonalUseImplementationAuthorization",
                         UserAuthorization.class),
                 enumValue(
@@ -174,12 +225,21 @@ public record LimitedPersonalFormalCaptureAuthorization(
                         licensing,
                         "authorizationBasis",
                         AuthorizationBasis.class),
+                bool(licensing, "personalResearchPermissionComplete"),
                 bool(licensing, "fullF1EntryReady"),
                 bool(licensing, "providerWrittenPermissionComplete"),
                 enumValue(
                         licensing,
                         "rawDataRedistributionPermission",
                         RedistributionPermission.class),
+                enumValue(
+                        licensing,
+                        "commercialDataServicePermission",
+                        CommercialDataServicePermission.class),
+                enumValue(
+                        licensing,
+                        "tokenSharingPermission",
+                        TokenSharingPermission.class),
                 uniformRevisionQualification(response),
                 response.capability().supportedFactTypes());
     }
@@ -287,6 +347,14 @@ public record LimitedPersonalFormalCaptureAuthorization(
     }
 
     public enum RedistributionPermission {
+        NOT_GRANTED
+    }
+
+    public enum CommercialDataServicePermission {
+        NOT_GRANTED
+    }
+
+    public enum TokenSharingPermission {
         NOT_GRANTED
     }
 }

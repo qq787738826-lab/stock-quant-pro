@@ -5,13 +5,18 @@
 ```text
 TRACK_B_PRIMARY_ROUTE=LOW_COST_PROVIDER_FIRST
 TRACK_B_FALLBACK_ROUTE=IFIND
-F1_ENTRY_READINESS=BLOCKED_MULTIPLE
-BLOCKED_WRITTEN_PERMISSION
+F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE
 BLOCKED_TECHNICAL_EVIDENCE
 WRITTEN_QUANT_DATA_SOURCE_USE_PERMISSION=VERIFIED
-WRITTEN_PERSONAL_LOCAL_STORAGE_PERMISSION=UNVERIFIED
-WRITTEN_PERSONAL_BACKTEST_PERMISSION=UNVERIFIED
-WRITTEN_PERSONAL_AGENT_ANALYSIS_PERMISSION=UNVERIFIED
+WRITTEN_PERSONAL_LOCAL_STORAGE_PERMISSION=VERIFIED
+WRITTEN_PERSONAL_BACKTEST_PERMISSION=VERIFIED
+WRITTEN_PERSONAL_AGENT_ANALYSIS_PERMISSION=VERIFIED
+WRITTEN_AUTOMATED_API_UPDATE_PERMISSION=VERIFIED
+WRITTEN_TECHNICAL_AUDIT_METADATA_RETENTION_PERMISSION=VERIFIED
+POST_EXPIRY_DATA_RETENTION_PERMISSION=VERIFIED
+PERSONAL_2000_POINT_ACCOUNT_SCOPE_PERMISSION=VERIFIED
+WRITTEN_PERMISSION_GATE=PASS
+TECHNICAL_EVIDENCE_GATE=BLOCKED
 USER_PERSONAL_USE_IMPLEMENTATION_AUTHORIZATION=CONFIRMED
 F1_LIMITED_PERSONAL_USE_IMPLEMENTATION=APPROVED_BY_USER
 TUSHARE_TECHNICAL_ROUTE_DECISION=REDUCED_RESEARCH_ONLY
@@ -33,9 +38,11 @@ CONSERVATIVE_ENDPOINT_MINIMUM_POLICY_ENFORCED=true
 
 主要路线的具体 Provider 是 Tushare Pro。用户已开通 2000 积分且 `2026-07-30`
 B1 技术权限探针通过，精确执行时刻为 `PROBE_EXECUTION_TIME=UNKNOWN`。同日 Tushare
-官方企业微信书面只确认“可以用来当量化数据来源”，没有逐项确认本地长期存储、策略回测
-和智能体分析。F1A 真实 Adapter 的有限个人实现授权来自用户明确批准，并绑定不分发、
-不转售、不共享 Token/账号和不商业化原始数据的边界。
+官方企业微信先书面确认“可以用来当量化数据来源”。`2026-07-31T11:07:00+08:00`
+又收到用户提供的 Tushare 官方七项逐条精确脱敏转录，明确允许个人 2000 积分账号本地
+数据库保存、策略回测/历史回放、本地 AI/Agent、程序自动调用/定时更新、字段结构/Hash/
+摘要/错误日志留存及持续本地保存。用户证明来源为官方回复；仓库不保存原件，Codex 未
+查看截图，也未独立认证来源。再分发、商业数据服务和 Token/账号共享仍为 `NOT_GRANTED`。
 
 Tushare Pro 当前资格仍固定为 `V13_LINEAGE_PARTIAL`、`PIT_PARTIAL`，稳定证券 ID
 固定为 `PARTIAL`。B1 已把 raw、factor、SSE/SZSE calendar、普通证券身份、dividend
@@ -47,20 +54,20 @@ instrument identity、完整 action、历史版本和 Provider PIT 均未确认�
 
 完整 Track B 证据探针状态仍固定为 `TRACK_B_FULL_EVIDENCE_PROBE_STATUS=PARTIAL_NOT_COMPLETE`。执行前没有取得 Provider 对最小自动 API 探针和响应留存/删除范围的书面答复，因此 `TRACK_B_FULL_PROBE_LEGAL_PREREQUISITES=NOT_MET`、`WRITTEN_AUTOMATED_PROBE_PERMISSION=UNVERIFIED`、`WRITTEN_RESPONSE_RETENTION_PERMISSION=UNVERIFIED`。该历史状态不判定本次调用合法或违法，也不支持把 B1 追认为完整证据探针；F1A 由后续 `TS-WP-001` 的量化数据来源用途证据和用户有界个人实现授权共同支持。后续扩大调用仍需用户专项授权，并在总表、Endpoint 页面存在多个上限时采用最保守的较小值。
 
-完整探针前置的历史状态与后续量化数据来源书面证据必须分开：TS-WP-001 没有解决
-本地长期存储、回测和 Agent 的逐项 Provider 许可，也不回溯宣称 B1 完整探针在执行前
-满足全部法律前置。用户授权只支持有界个人实现，不授权无界调用、原始数据再分发或服务
-到期后永久留存。
+完整探针前置的历史状态与后续许可证据必须分开：`TS-WP-002` 解决当前个人研究用途的
+书面许可门，但不回溯宣称 B1 完整探针在执行前满足全部法律前置，也不把 B1 追认为
+完整证据探针。当前许可同样不授权原始数据再分发、商业数据服务或 Token/账号共享。
 
 ## 2. F1 READY 的全部条件
 
 | 门禁 | READY 证据 | 当前状态 | 当前 finding |
 |---|---|---|---|
-| 个人用途 | 官方书面许可适用于个人非商业研究 | PASS_RESTRICTED | 只限用户本人、2000 积分服务、非商业内部用途；不转售、不分发、不共享账号 |
-| 本地持久化 | 明确允许 raw/factor/calendar/action、metadata、Hash、lineage 本地保存 | UNVERIFIED | TS-WP-001 未逐项确认；用户只批准个人自用有界实现，不对外分发 |
-| 历史回放与回测 | 明确允许 cutoff 回放、回测和保存结果 | UNVERIFIED | TS-WP-001 未逐项确认；有限研究实现不等于 Provider 正式许可 |
-| 内部 Agent | 明确允许本地 AI/Agent 分析 | UNVERIFIED | TS-WP-001 未逐项确认；不对外提供数据服务 |
-| 终止后数据 | 明确保留/删除范围和期限 | UNVERIFIED_NON_EXPANSION | F1A 不据此承诺到期后永久留存 |
+| 个人用途 | 官方书面许可适用于个人非商业研究 | PASS_RESTRICTED | TS-WP-001/002；只限用户本人 2000 积分账号，不转售、不分发、不共享账号 |
+| 本地持久化 | 明确允许个人账号数据本地保存及技术审计元数据留存 | PASS_RESTRICTED | TS-WP-002 明确允许本地数据库保存及字段结构、Hash、摘要和错误日志留存；不授权分发 |
+| 历史回放与回测 | 明确允许策略回测/历史回放 | PASS_RESTRICTED | TS-WP-002 逐项明确允许 |
+| 内部 Agent | 明确允许本地 AI/Agent 分析 | PASS_RESTRICTED | TS-WP-002 逐项明确允许 |
+| 自动更新 | 明确允许程序自动调用/定时更新 | PASS_RESTRICTED | TS-WP-002 逐项明确允许；运行仍受代码门禁、限流和阶段授权 |
+| 终止后数据 | 明确允许持续本地保存 | PASS_RESTRICTED | TS-WP-002 原文“可以一直保存到本地”；不扩张为再分发或商业服务 |
 | 同 Provider raw | 正式字段、单位、精度、null/0 语义和最小响应样例 | PARTIAL | F1 READY 仍缺全历史 null/0 与长期稳定；F1B 缩减技术模型的 raw 维度为 `VERIFIED` |
 | 同 Provider factor | `ts_code + trade_date` 精确自然键、正数因子、日覆盖和单位 | PARTIAL | F1 READY 仍缺全历史覆盖和修订；F1B 缩减技术模型的 factor 维度为 `VERIFIED` |
 | 同 Provider calendar | SSE/SZSE 稳定身份与精确日期 | PARTIAL | F1 READY 仍缺临时休市修订和旧版本；F1B 缩减技术模型的 calendar 维度为 `VERIFIED` |
@@ -80,20 +87,16 @@ F1_ENTRY_READINESS=READY
 
 写入后续独立治理提交。任何单项通过都不得覆盖其他阻断。
 
-## 3. 当前完整 F1 的两类阻断
+## 3. 当前完整 F1 的单一粗粒度阻断
 
-量化数据来源用途已书面确认，且用户批准 F1A 有界个人实现；这允许 Adapter 基础和随机
-隔离验证合入，但不把本地长期存储、策略回测和内部 Agent 三项 Provider 书面许可升级为
-VERIFIED，也不表示原始数据再分发、商业化或服务到期后留存获批。
+个人 2000 积分账号的量化数据来源、本地保存、策略回测/历史回放、本地 AI/Agent、
+程序自动调用/定时更新、技术审计元数据留存及持续本地保存均已有逐项书面回复，因此
+当前 `BLOCKED_WRITTEN_PERMISSION` 已解决。原始数据再分发、商业数据服务和 Token/
+账号共享仍未获授权。
 
 当前完整 F1 的阻断精确为：
 
-1. `BLOCKED_WRITTEN_PERMISSION`：
-   - 本地长期持久化；
-   - 历史回放与回测；
-   - 内部 Agent；
-   - 服务到期后的数据留存/删除。
-2. `BLOCKED_TECHNICAL_EVIDENCE`：
+1. `BLOCKED_TECHNICAL_EVIDENCE`：
    - 公司行动是否覆盖配股、拆并股和更正/撤回；
    - 稳定 action ID 与 factor 变化的解释关系；
    - revision/snapshot/published/update/旧版本是否确实不可用；
@@ -113,8 +116,7 @@ lineage 门禁仍在；完整 F1 仍缺公司行动 lineage、Provider revision/
 因此当前合法判定是：
 
 ```text
-F1_ENTRY_READINESS=BLOCKED_MULTIPLE
-BLOCKED_WRITTEN_PERMISSION
+F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE
 BLOCKED_TECHNICAL_EVIDENCE
 ```
 
@@ -150,7 +152,7 @@ REDUCED_RESEARCH_RUNTIME_READY=false
 REDUCED_RESEARCH_ISOLATED_MANUAL_RUNTIME_READY=true
 REDUCED_RESEARCH_PRODUCTION_RUNTIME_READY=false
 NORMAL_BUSINESS_DATABASE_RUNTIME_READY=false
-F1_ENTRY_READINESS=BLOCKED_MULTIPLE
+F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE
 ```
 
 F1C 已实现一个严格更窄的随机隔离运行入口：只允许单证券、最多两自然日、
@@ -181,7 +183,8 @@ Shadow、Agent、回测、全市场采集或交易。
     raw/factor/calendar；
 11. capability 明确 `fullF1EntryReady=false`、
     `authorizationBasis=USER_APPROVED_LIMITED_PERSONAL_USE`、
-    `providerWrittenPermissionComplete=false`；
+    `providerWrittenPermissionComplete=true`、`writtenPermissionGate=PASS` 与
+    `technicalEvidenceGate=BLOCKED`；书面许可完整不得被误读为生产运行就绪；
 12. partial Provider 响应不写事实观察；
 13. 公司行动、Provider revision 和永久证券身份不实现、不伪造。
 

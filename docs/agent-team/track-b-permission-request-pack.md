@@ -41,8 +41,11 @@ BaoStock 未书面回答前保持 `PENDING_WRITTEN_PERMISSION`，不进入 F1。
 ## 3. Tushare Pro 模板（主要路线）
 
 官方联系：`waditu@163.com`（TS-017）、Tushare 权限中心（TS-003）和已确认的官方企业
-微信。`2026-07-30` 的官方企业微信书面回复只确认“可以用来当量化数据来源”；没有逐项
-确认本地长期存储、策略回测和智能体分析。不以群聊口头答复或无法确认主体的截图作为证据。
+微信。`2026-07-30` 的官方企业微信书面回复确认“可以用来当量化数据来源”；
+`2026-07-31T11:07:00+08:00` 又收到用户提供的官方七项逐条精确脱敏转录，闭环个人
+2000 积分账号的本地保存、回测/回放、Agent、自动更新、技术审计元数据留存及持续
+本地保存。原件未入库、截图未由 Codex 查看、来源未独立认证；这些 provenance 限制
+不改变用户证明其为官方回复的记录。
 
 **主题：确认个人 Tushare Pro 账号用于本地 PIT 研究、回测与内部 Agent 的授权范围**
 
@@ -69,18 +72,25 @@ BaoStock 未书面回答前保持 `PENDING_WRITTEN_PERMISSION`，不进入 F1。
 
 ```text
 WRITTEN_QUANT_DATA_SOURCE_USE_PERMISSION=VERIFIED
-WRITTEN_PERSONAL_LOCAL_STORAGE_PERMISSION=UNVERIFIED
-WRITTEN_PERSONAL_BACKTEST_PERMISSION=UNVERIFIED
-WRITTEN_PERSONAL_AGENT_ANALYSIS_PERMISSION=UNVERIFIED
+WRITTEN_PERSONAL_LOCAL_STORAGE_PERMISSION=VERIFIED
+WRITTEN_PERSONAL_BACKTEST_PERMISSION=VERIFIED
+WRITTEN_PERSONAL_AGENT_ANALYSIS_PERMISSION=VERIFIED
+WRITTEN_AUTOMATED_API_UPDATE_PERMISSION=VERIFIED
+WRITTEN_TECHNICAL_AUDIT_METADATA_RETENTION_PERMISSION=VERIFIED
+POST_EXPIRY_DATA_RETENTION_PERMISSION=VERIFIED
+PERSONAL_2000_POINT_ACCOUNT_SCOPE_PERMISSION=VERIFIED
 USER_PERSONAL_USE_IMPLEMENTATION_AUTHORIZATION=CONFIRMED
 F1_LIMITED_PERSONAL_USE_IMPLEMENTATION=APPROVED_BY_USER
-POST_EXPIRY_DATA_RETENTION_PERMISSION=UNVERIFIED
 RAW_DATA_REDISTRIBUTION_PERMISSION=NOT_GRANTED
+COMMERCIAL_DATA_SERVICE_PERMISSION=NOT_GRANTED
+TOKEN_SHARING_PERMISSION=NOT_GRANTED
+WRITTEN_PERMISSION_GATE=PASS
 ```
 
-上述未验证项不阻止已由用户批准的 F1A 个人自用有限实现，本阶段不得等待新的邮件或企业
-微信确认。问题模板保留给未来正式许可或扩大用途的独立治理，不由 Codex 自动发送；不得
-把量化数据来源回复或用户授权解释为转售、第三方分发、共享 Token/账号或商业数据服务许可。
+当前个人研究书面许可问题已闭环，不再作为 F1 blocker，也不得重复要求用户验证已经明确
+允许的事项。模板保留用于未来扩大用途、商业化、再分发、Token/账号共享或补充技术合同；
+不由 Codex 自动发送。当前回复不得解释为转售、第三方分发、共享 Token/账号或商业数据
+服务许可。
 
 ## 4. 同花顺 iFinD 模板（备用路线）
 
@@ -107,12 +117,13 @@ RAW_DATA_REDISTRIBUTION_PERMISSION=NOT_GRANTED
 
 ## 5. 答复验收
 
-以下形式才可以把本地长期存储、回放/回测和内部 Agent 等具体 Provider 书面许可从
-`UNVERIFIED` 升级为 `VERIFIED`：
+本地长期存储、回放/回测和内部 Agent 已由 `TS-WP-002` 升级为 `VERIFIED`。以下规则
+继续约束未来新增或扩大许可：
 
 1. Provider 官方域名邮件、正式工单、盖章合同、可确认主体的技术/商务附件，或可确认
    Provider 官方主体的企业微信书面文字回复；
 2. 明确指向具体产品、账号等级、数据类别、用途和有效期；
 3. 对本地保存、回放/回测、内部 Agent、长期留存、终止后处理分别回答；
 4. 无“原则上”“一般可以”等无法执行的模糊词；存在限制时能落实为 V13 `usageQualification`；
-5. 用户保存原始答复，Codex 只在后续授权阶段录入脱敏结论，不写入联系人隐私或凭据。
+5. 用户可在 Git 外保留原始答复；Codex 只录入脱敏文字和 provenance，不写入联系人隐私
+   或凭据。若只收到用户提供的精确转录，必须明确原件未保存、截图未审阅和来源未独立认证。
