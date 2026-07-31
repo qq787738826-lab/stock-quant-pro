@@ -129,9 +129,12 @@ public final class TushareDedicatedResearchBatchService {
         Instant observedAt =
                 BacktestCanonicalHashService.microsecondInstant(
                         clock.instant());
+        TushareDedicatedResearchCaptureContract captureContract =
+                TushareDedicatedResearchCaptureContract.validated(
+                        command, session, responses);
         F1eDedicatedCaptureResult capture =
                 captureService.captureAuthorizedDedicatedResearchBatch(
-                        responses,
+                        captureContract,
                         observedAt,
                         authorization,
                         preProvider);
@@ -160,15 +163,7 @@ public final class TushareDedicatedResearchBatchService {
         TushareDedicatedResearchPersistenceGuard.Verification after =
                 capture.afterVerification();
         DatabaseExecutionIdentity databaseIdentity =
-                new DatabaseExecutionIdentity(
-                        before.currentDatabase(),
-                        before.currentUser(),
-                        before.jdbcUrl(),
-                        before.databasePurpose(),
-                        before.currentSchema(),
-                        before.searchPath(),
-                        before.backendPid(),
-                        after.backendPid());
+                DatabaseExecutionIdentity.from(before, after);
         return TushareDedicatedResearchBatchResult.formulaOnly(
                 command.tradeDate(),
                 command.securities().stream()

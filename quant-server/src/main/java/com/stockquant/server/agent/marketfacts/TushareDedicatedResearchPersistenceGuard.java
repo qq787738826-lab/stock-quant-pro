@@ -144,6 +144,35 @@ public final class TushareDedicatedResearchPersistenceGuard {
         }
     }
 
+    static void validateVerificationTarget(
+            Verification verification,
+            boolean transactionRequired
+    ) {
+        Objects.requireNonNull(verification, "verification");
+        if (!REQUIRED_DATABASE.equals(
+                verification.currentDatabase())
+                || !REQUIRED_USER.equals(
+                verification.currentUser())
+                || !safeJdbcUrl(verification.jdbcUrl())
+                || !DATABASE_PURPOSE.equals(
+                verification.databasePurpose())
+                || !REQUIRED_SCHEMA.equals(
+                verification.currentSchema())
+                || !strictSearchPath(verification.searchPath())
+                || !REQUIRED_MIGRATIONS.equals(
+                verification.appliedMigrations())
+                || verification.databaseIdentityQualification()
+                != DatabaseIdentityQualification.VERIFIED
+                || verification.schemaQualification()
+                != SchemaQualification.VERIFIED
+                || verification.backendPid() <= 0
+                || transactionRequired
+                && !verification.transactionBound()) {
+            throw new IllegalArgumentException(
+                    "TUSHARE_DEDICATED_RESEARCH_VERIFICATION_INVALID");
+        }
+    }
+
     private void validateDatabaseIdentity(SchemaState state) {
         if (!identityPolicy.purposeValid()
                 || !REQUIRED_DATABASE.equals(state.currentDatabase())
@@ -304,6 +333,13 @@ public final class TushareDedicatedResearchPersistenceGuard {
             schemaQualification = Objects.requireNonNull(
                     schemaQualification, "schemaQualification");
             if (backendPid <= 0
+                    || !REQUIRED_DATABASE.equals(currentDatabase)
+                    || !REQUIRED_USER.equals(currentUser)
+                    || !safeJdbcUrl(jdbcUrl)
+                    || !DATABASE_PURPOSE.equals(databasePurpose)
+                    || !REQUIRED_SCHEMA.equals(currentSchema)
+                    || !strictSearchPath(searchPath)
+                    || !REQUIRED_MIGRATIONS.equals(appliedMigrations)
                     || databaseIdentityQualification
                     != DatabaseIdentityQualification.VERIFIED
                     || schemaQualification

@@ -54,7 +54,7 @@ public record TushareDedicatedResearchBatchCommand(
     ) {
         public SecuritySelection {
             if (symbol == null || !symbol.matches("[0-9]{6}")
-                    || !Set.of("SSE", "SZSE").contains(exchange)) {
+                    || !isMainBoard(symbol, exchange)) {
                 throw invalid();
             }
         }
@@ -62,6 +62,14 @@ public record TushareDedicatedResearchBatchCommand(
         public String providerInstrumentId() {
             return symbol + ("SSE".equals(exchange) ? ".SH" : ".SZ");
         }
+    }
+
+    private static boolean isMainBoard(String symbol, String exchange) {
+        return switch (exchange) {
+            case "SSE" -> symbol.matches("60[0135][0-9]{3}");
+            case "SZSE" -> symbol.matches("00[0123][0-9]{3}");
+            default -> false;
+        };
     }
 
     private static IllegalArgumentException invalid() {

@@ -1,14 +1,22 @@
 package com.stockquant.server.agent;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.stockquant.server.QuantServerApplication;
 import com.stockquant.server.agent.marketfacts.F1eSyntheticTushareGateway;
 import com.stockquant.server.agent.marketfacts.PitMarketFactCaptureService;
+import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.FactType;
+import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.MarketFactRequest;
+import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.MarketFactResponse;
+import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.RawDailyBar;
+import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.RunNamespace;
 import com.stockquant.server.agent.marketfacts.TushareDedicatedResearchBatchAuthorization;
 import com.stockquant.server.agent.marketfacts.TushareDedicatedResearchBatchCommand;
 import com.stockquant.server.agent.marketfacts.TushareDedicatedResearchBatchCommand.SecuritySelection;
+import com.stockquant.server.agent.marketfacts.TushareDedicatedResearchCaptureContract;
 import com.stockquant.server.agent.marketfacts.TushareDedicatedResearchBatchService;
 import com.stockquant.server.agent.marketfacts.TushareDedicatedResearchPersistenceGuard;
+import com.stockquant.server.agent.marketfacts.TushareManualBoundedSession;
 import com.stockquant.server.agent.marketfacts.TushareMarketFactProperties;
 import com.stockquant.server.agent.marketfacts.TushareMarketFactProvider;
 import org.junit.jupiter.api.AfterAll;
@@ -29,7 +37,9 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -343,9 +353,141 @@ class AgentStage3AR3BF1ETushareDedicatedResearchPostgresIntegrationTest {
                 environment.currentPublicFingerprint());
     }
 
+    @Test
+    @Order(7)
+    void directCaptureContractRejectsDateDuplicateOrderAndCountersAtZeroWrites() {
+        int batchesBefore = count(
+                "SELECT count(*) FROM pit_market_fact_batches");
+        int observationsBefore = count(
+                "SELECT count(*) FROM pit_market_fact_observations");
+        LocalDate date = LocalDate.of(2026, 7, 29);
+        CaptureFixture fixture = captureFixture(
+                date, selections(2));
+
+        List<MarketFactResponse> wrongDate =
+                new ArrayList<>(fixture.responses());
+        wrongDate.set(1, copy(
+                wrongDate.get(1),
+                date.minusDays(1),
+                date.minusDays(1),
+                wrongDate.get(1).rawDailyBars(),
+                metadata(wrongDate.get(1))));
+        assertContractRejected(fixture, wrongDate);
+
+        assertContractRejected(
+                fixture,
+                List.of(
+                        fixture.responses().get(0),
+                        fixture.responses().get(0)));
+
+        List<MarketFactResponse> reversed =
+                new ArrayList<>(fixture.responses());
+        java.util.Collections.reverse(reversed);
+        assertContractRejected(fixture, reversed);
+
+        ObjectNode wrongCalls = metadata(
+                fixture.responses().get(1));
+        wrongCalls.put("providerCallCount", 2);
+        List<MarketFactResponse> callMismatch =
+                new ArrayList<>(fixture.responses());
+        callMismatch.set(1, copy(
+                fixture.responses().get(1),
+                date,
+                date,
+                fixture.responses().get(1).rawDailyBars(),
+                wrongCalls));
+        assertContractRejected(fixture, callMismatch);
+
+        ObjectNode retry = metadata(
+                fixture.responses().get(1));
+        retry.put("rateLimitRetryCount", 1);
+        List<MarketFactResponse> retryMismatch =
+                new ArrayList<>(fixture.responses());
+        retryMismatch.set(1, copy(
+                fixture.responses().get(1),
+                date,
+                date,
+                fixture.responses().get(1).rawDailyBars(),
+                retry));
+        assertContractRejected(fixture, retryMismatch);
+
+        assertEquals(batchesBefore, count(
+                "SELECT count(*) FROM pit_market_fact_batches"));
+        assertEquals(observationsBefore, count(
+                "SELECT count(*) FROM pit_market_fact_observations"));
+    }
+
+    @Test
+    @Order(8)
+    void directCaptureDeepSecondResponseFailureProducesZeroWrites() {
+        int batchesBefore = count(
+                "SELECT count(*) FROM pit_market_fact_batches");
+        int observationsBefore = count(
+                "SELECT count(*) FROM pit_market_fact_observations");
+        LocalDate date = LocalDate.of(2026, 7, 30);
+        CaptureFixture fixture = captureFixture(
+                date, selections(2));
+        MarketFactResponse second =
+                fixture.responses().get(1);
+        RawDailyBar raw = second.rawDailyBars().get(0);
+        RawDailyBar mismatchedRaw = new RawDailyBar(
+                raw.sourceIdentity(),
+                fixture.command().securities().get(0).symbol(),
+                raw.exchange(),
+                raw.tradeDate(),
+                raw.open(),
+                raw.high(),
+                raw.low(),
+                raw.close(),
+                raw.volume(),
+                raw.amount(),
+                raw.turnoverRate(),
+                raw.version(),
+                raw.rawFields());
+        List<MarketFactResponse> invalid =
+                new ArrayList<>(fixture.responses());
+        invalid.set(1, copy(
+                second,
+                date,
+                date,
+                List.of(mismatchedRaw),
+                metadata(second)));
+        TushareDedicatedResearchCaptureContract contract =
+                TushareDedicatedResearchCaptureContract.validated(
+                        fixture.command(),
+                        fixture.session(),
+                        invalid);
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> captureService
+                        .captureAuthorizedDedicatedResearchBatch(
+                                contract,
+                                Instant.parse(
+                                        "2026-07-31T04:16:00Z"),
+                                authorization(),
+                                guard.verifyBeforeProvider()));
+
+        assertEquals(batchesBefore, count(
+                "SELECT count(*) FROM pit_market_fact_batches"));
+        assertEquals(observationsBefore, count(
+                "SELECT count(*) FROM pit_market_fact_observations"));
+    }
+
     private TushareDedicatedResearchBatchService runtime(
             F1eSyntheticTushareGateway gateway,
             Instant observedAt
+    ) {
+        TushareMarketFactProvider provider = provider(gateway);
+        return new TushareDedicatedResearchBatchService(
+                provider,
+                guard,
+                captureService,
+                Clock.fixed(observedAt, ZoneOffset.UTC));
+    }
+
+    private TushareMarketFactProvider provider(
+            F1eSyntheticTushareGateway gateway
     ) {
         TushareMarketFactProperties properties =
                 new TushareMarketFactProperties();
@@ -355,11 +497,7 @@ class AgentStage3AR3BF1ETushareDedicatedResearchPostgresIntegrationTest {
         TushareMarketFactProvider provider =
                 new TushareMarketFactProvider(
                         mapper, properties, gateway);
-        return new TushareDedicatedResearchBatchService(
-                provider,
-                guard,
-                captureService,
-                Clock.fixed(observedAt, ZoneOffset.UTC));
+        return provider;
     }
 
     private static TushareDedicatedResearchBatchAuthorization
@@ -386,5 +524,95 @@ class AgentStage3AR3BF1ETushareDedicatedResearchPostgresIntegrationTest {
 
     private int count(String sql) {
         return jdbc.queryForObject(sql, Integer.class);
+    }
+
+    private CaptureFixture captureFixture(
+            LocalDate date,
+            List<SecuritySelection> selections
+    ) {
+        TushareDedicatedResearchBatchCommand command =
+                command(date, selections);
+        TushareManualBoundedSession session =
+                TushareManualBoundedSession.f1eDedicatedLocalManual(
+                        selections, date);
+        TushareMarketFactProvider provider =
+                provider(new F1eSyntheticTushareGateway());
+        List<MarketFactResponse> responses = new ArrayList<>();
+        for (SecuritySelection security : selections) {
+            responses.add(provider.fetchForDedicatedReducedResearch(
+                    request(date, security), session));
+        }
+        return new CaptureFixture(
+                command, session, List.copyOf(responses));
+    }
+
+    private static MarketFactRequest request(
+            LocalDate date,
+            SecuritySelection security
+    ) {
+        return new MarketFactRequest(
+                RunNamespace.FORMAL,
+                TushareMarketFactProvider.PROVIDER_CODE,
+                TushareMarketFactProvider.sourceInstrumentId(
+                        security.symbol(), security.exchange()),
+                security.symbol(),
+                security.exchange(),
+                date,
+                date,
+                Set.of(
+                        FactType.RAW_DAILY_BAR,
+                        FactType.ADJUSTMENT_FACTOR,
+                        FactType.TRADING_CALENDAR),
+                Duration.ofSeconds(5));
+    }
+
+    private static MarketFactResponse copy(
+            MarketFactResponse value,
+            LocalDate requestedStart,
+            LocalDate requestedEnd,
+            List<RawDailyBar> raw,
+            ObjectNode metadata
+    ) {
+        return new MarketFactResponse(
+                value.providerContractVersion(),
+                value.providerCode(),
+                value.adapterVersion(),
+                value.runNamespace(),
+                value.sourceCode(),
+                value.sourceInstrumentId(),
+                requestedStart,
+                requestedEnd,
+                value.complete(),
+                value.capability(),
+                raw,
+                value.adjustmentFactors(),
+                value.tradingCalendar(),
+                value.corporateActions(),
+                value.errors(),
+                metadata);
+    }
+
+    private static ObjectNode metadata(MarketFactResponse response) {
+        return (ObjectNode) response.providerMetadata().deepCopy();
+    }
+
+    private static void assertContractRejected(
+            CaptureFixture fixture,
+            List<MarketFactResponse> responses
+    ) {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> TushareDedicatedResearchCaptureContract
+                        .validated(
+                                fixture.command(),
+                                fixture.session(),
+                                responses));
+    }
+
+    private record CaptureFixture(
+            TushareDedicatedResearchBatchCommand command,
+            TushareManualBoundedSession session,
+            List<MarketFactResponse> responses
+    ) {
     }
 }

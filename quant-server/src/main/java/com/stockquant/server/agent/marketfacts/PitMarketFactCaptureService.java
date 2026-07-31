@@ -175,7 +175,7 @@ public class PitMarketFactCaptureService {
     @Transactional
     public F1eDedicatedCaptureResult
     captureAuthorizedDedicatedResearchBatch(
-            List<MarketFactResponse> responses,
+            TushareDedicatedResearchCaptureContract captureContract,
             Instant observedAt,
             TushareDedicatedResearchBatchAuthorization authorization,
             TushareDedicatedResearchPersistenceGuard.Verification
@@ -186,30 +186,15 @@ public class PitMarketFactCaptureService {
                 .validateFrozen();
         Objects.requireNonNull(
                 preProviderVerification, "preProviderVerification");
-        List<MarketFactResponse> stableResponses =
-                List.copyOf(Objects.requireNonNull(
-                        responses, "responses"));
-        if (stableResponses.isEmpty()
-                || stableResponses.size()
-                > authorization.maximumSymbols()) {
-            throw new IllegalArgumentException(
-                    "TUSHARE_DEDICATED_RESEARCH_CAPTURE_BATCH_INVALID");
-        }
+        Objects.requireNonNull(
+                captureContract, "captureContract").validateFrozen();
         LimitedPersonalFormalCaptureAuthorization formalAuthorization =
                 LimitedPersonalFormalCaptureAuthorization.tushareF1A();
-        for (MarketFactResponse response : stableResponses) {
-            formalAuthorization.validateResponse(response);
-            if (!response.complete()
-                    || !response.errors().isEmpty()
-                    || response.rawDailyBars().size() != 1
-                    || response.adjustmentFactors().size() != 1
-                    || response.tradingCalendar().size() != 1
-                    || !response.corporateActions().isEmpty()
-                    || response.recordCount() != 3) {
-                throw new IllegalArgumentException(
-                        "TUSHARE_DEDICATED_RESEARCH_CAPTURE_BATCH_INVALID");
-            }
-        }
+        List<PreparedCaptureInput> preparedInputs =
+                prepareDedicatedCaptureInputs(
+                        captureContract,
+                        observedAt,
+                        formalAuthorization);
 
         TushareDedicatedResearchPersistenceGuard.Verification before =
                 tushareDedicatedResearchPersistenceGuard
@@ -217,9 +202,9 @@ public class PitMarketFactCaptureService {
         tushareDedicatedResearchPersistenceGuard.verifySameTarget(
                 preProviderVerification, before);
         List<CaptureResult> results = new ArrayList<>();
-        for (MarketFactResponse response : stableResponses) {
-            CaptureResult result = captureWithinTransaction(
-                    response, observedAt, formalAuthorization);
+        for (PreparedCaptureInput prepared : preparedInputs) {
+            CaptureResult result =
+                    capturePreparedWithinTransaction(prepared);
             validateF1cCaptureResult(result, 3);
             results.add(result);
         }
@@ -237,14 +222,112 @@ public class PitMarketFactCaptureService {
             Instant observedAt,
             LimitedPersonalFormalCaptureAuthorization authorization
     ) {
+        return capturePreparedWithinTransaction(
+                prepareCaptureInput(
+                        response, observedAt, authorization));
+    }
+
+    private PreparedCaptureInput prepareCaptureInput(
+            MarketFactResponse response,
+            Instant observedAt,
+            LimitedPersonalFormalCaptureAuthorization authorization
+    ) {
         Instant stableObservedAt =
                 BacktestCanonicalHashService.microsecondInstant(observedAt);
+        if (authorization != null) {
+            authorization.validateResponse(response);
+        }
         validateResponse(null, null, response);
         Qualification qualification = qualification(
                 response, authorization);
         List<TypedFact> facts = sortedFacts(response);
         validateObservationTime(facts, stableObservedAt);
+        return new PreparedCaptureInput(
+                response,
+                stableObservedAt,
+                qualification,
+                facts);
+    }
 
+    private List<PreparedCaptureInput> prepareDedicatedCaptureInputs(
+            TushareDedicatedResearchCaptureContract captureContract,
+            Instant observedAt,
+            LimitedPersonalFormalCaptureAuthorization authorization
+    ) {
+        List<PreparedCaptureInput> result = new ArrayList<>();
+        List<MarketFactResponse> responses =
+                captureContract.responses();
+        List<TushareDedicatedResearchBatchCommand.SecuritySelection>
+                securities = captureContract.orderedSecurities();
+        for (int index = 0; index < responses.size(); index++) {
+            MarketFactResponse response = responses.get(index);
+            PreparedCaptureInput prepared = prepareCaptureInput(
+                    response, observedAt, authorization);
+            validateDedicatedFactScope(
+                    prepared,
+                    securities.get(index),
+                    captureContract.tradeDate());
+            result.add(prepared);
+        }
+        return List.copyOf(result);
+    }
+
+    private static void validateDedicatedFactScope(
+            PreparedCaptureInput prepared,
+            TushareDedicatedResearchBatchCommand.SecuritySelection
+                    security,
+            java.time.LocalDate tradeDate
+    ) {
+        MarketFactResponse response = prepared.response();
+        String sourceInstrumentId =
+                TushareMarketFactProvider.sourceInstrumentId(
+                        security.symbol(), security.exchange());
+        if (!sourceInstrumentId.equals(
+                response.sourceInstrumentId())
+                || !tradeDate.equals(response.requestedStart())
+                || !tradeDate.equals(response.requestedEnd())
+                || response.rawDailyBars().size() != 1
+                || response.adjustmentFactors().size() != 1
+                || response.tradingCalendar().size() != 1
+                || !response.corporateActions().isEmpty()) {
+            throw new IllegalArgumentException(
+                    "TUSHARE_DEDICATED_RESEARCH_CAPTURE_SCOPE_INVALID");
+        }
+        MarketFactProviderModels.RawDailyBar raw =
+                response.rawDailyBars().get(0);
+        MarketFactProviderModels.AdjustmentFactor factor =
+                response.adjustmentFactors().get(0);
+        MarketFactProviderModels.TradingCalendar calendar =
+                response.tradingCalendar().get(0);
+        if (!security.symbol().equals(raw.symbol())
+                || !security.exchange().equals(raw.exchange())
+                || !TushareMarketFactProvider.rawSourceIdentity(
+                security.symbol(), security.exchange()).equals(
+                raw.sourceIdentity())
+                || !tradeDate.equals(raw.tradeDate())
+                || !security.symbol().equals(factor.symbol())
+                || !TushareMarketFactProvider.factorSourceIdentity(
+                security.symbol(), security.exchange()).equals(
+                factor.sourceIdentity())
+                || !tradeDate.equals(
+                factor.factorEffectiveTradeDate())
+                || !security.exchange().equals(calendar.exchange())
+                || !TushareMarketFactProvider.calendarSourceIdentity(
+                security.exchange()).equals(
+                calendar.sourceIdentity())
+                || !tradeDate.equals(calendar.calendarDate())) {
+            throw new IllegalArgumentException(
+                    "TUSHARE_DEDICATED_RESEARCH_CAPTURE_SCOPE_INVALID");
+        }
+    }
+
+    private CaptureResult capturePreparedWithinTransaction(
+            PreparedCaptureInput prepared
+    ) {
+        MarketFactResponse response = prepared.response();
+        Instant stableObservedAt = prepared.observedAt();
+        Qualification qualification = prepared.qualification();
+        List<TypedFact> facts = prepared.facts();
         ContentQualification contentQualification =
                 qualification.contentQualification(response);
         ObjectNode responsePayload = responsePayload(
@@ -415,6 +498,10 @@ public class PitMarketFactCaptureService {
                     beforeVerification, "beforeVerification");
             Objects.requireNonNull(
                     afterVerification, "afterVerification");
+            TushareDedicatedResearchBatchModels
+                    .DatabaseExecutionIdentity.from(
+                            beforeVerification,
+                            afterVerification);
             if (captureResults.isEmpty()
                     || captureResults.size() > 3
                     || captureResults.stream().anyMatch(result ->
@@ -725,6 +812,24 @@ public class PitMarketFactCaptureService {
     }
 
     private record TypedFact(FactType type, Object value) {
+    }
+
+    private record PreparedCaptureInput(
+            MarketFactResponse response,
+            Instant observedAt,
+            Qualification qualification,
+            List<TypedFact> facts
+    ) {
+        private PreparedCaptureInput {
+            response = Objects.requireNonNull(
+                    response, "response");
+            observedAt = Objects.requireNonNull(
+                    observedAt, "observedAt");
+            qualification = Objects.requireNonNull(
+                    qualification, "qualification");
+            facts = List.copyOf(Objects.requireNonNull(
+                    facts, "facts"));
+        }
     }
 
     private record Qualification(

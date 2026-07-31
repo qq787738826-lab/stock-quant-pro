@@ -85,15 +85,54 @@ public record TushareReducedResearchAdmissionQualification(
 
     public static TushareReducedResearchAdmissionQualification
     currentF1eAssessment() {
-        TushareWrittenPermissionQualification written =
+        return assess(
                 TushareWrittenPermissionQualification
-                        .currentPersonal2000PointAssessment();
-        TushareTechnicalQualification technical =
+                        .currentPersonal2000PointAssessment(),
                 TushareTechnicalQualification
-                        .current2000PointAssessment();
+                        .current2000PointAssessment(),
+                ImplementationEvidence.currentF1e());
+    }
+
+    public static TushareReducedResearchAdmissionQualification assess(
+            TushareWrittenPermissionQualification written,
+            TushareTechnicalQualification technical,
+            ImplementationEvidence implementationEvidence
+    ) {
+        Objects.requireNonNull(written, "written");
+        Objects.requireNonNull(technical, "technical");
+        ImplementationEvidence evidence = Objects.requireNonNull(
+                implementationEvidence, "implementationEvidence");
+        Map<AdmissionClaimType, AdmissionClaim> claims =
+                evidence.claims();
+        boolean sourceReady =
+                written.personalResearchPermissionComplete()
+                        && technical.routeDecision()
+                        == RouteDecision.REDUCED_RESEARCH_ONLY
+                        && technical.reducedResearchContractReady()
+                        && technical
+                        .reducedResearchIsolatedManualRuntimeReady()
+                        && technical
+                        .qfqReducedResearchRuntimeQualification()
+                        == QualificationStatus.VERIFIED
+                        && technical.endpointSpecificRateLimitEnforced()
+                        && technical
+                        .conservativeEndpointMinimumPolicyEnforced();
+        if (!sourceReady) {
+            return blocked(claims);
+        }
         TushareF1EntryQualification f1 =
                 TushareF1EntryQualification.assess(written, technical);
+        if (f1.entryReadiness()
+                != EntryReadiness.BLOCKED_TECHNICAL_EVIDENCE
+                || !f1.activeBlockers().equals(
+                Set.of(EntryBlocker.BLOCKED_TECHNICAL_EVIDENCE))) {
+            return blocked(claims);
+        }
+        return ready(claims);
+    }
 
+    private static Map<AdmissionClaimType, AdmissionClaim>
+    currentImplementationClaims() {
         Map<AdmissionClaimType, AdmissionClaim> claims =
                 new EnumMap<>(AdmissionClaimType.class);
         claims.put(
@@ -128,28 +167,7 @@ public record TushareReducedResearchAdmissionQualification(
                 AdmissionClaimType.FULL_F1_ISOLATION,
                 AdmissionClaim.verified(
                         "TS-F1E-FULL-F1-ISOLATION-001"));
-
-        boolean sourceReady =
-                written.personalResearchPermissionComplete()
-                        && technical.routeDecision()
-                        == RouteDecision.REDUCED_RESEARCH_ONLY
-                        && technical.reducedResearchContractReady()
-                        && technical
-                        .reducedResearchIsolatedManualRuntimeReady()
-                        && technical
-                        .qfqReducedResearchRuntimeQualification()
-                        == QualificationStatus.VERIFIED
-                        && technical.endpointSpecificRateLimitEnforced()
-                        && technical
-                        .conservativeEndpointMinimumPolicyEnforced()
-                        && f1.entryReadiness()
-                        == EntryReadiness.BLOCKED_TECHNICAL_EVIDENCE
-                        && f1.activeBlockers().equals(
-                        Set.of(EntryBlocker.BLOCKED_TECHNICAL_EVIDENCE));
-        if (!sourceReady) {
-            return blocked(claims);
-        }
-        return ready(claims);
+        return Map.copyOf(claims);
     }
 
     private static TushareReducedResearchAdmissionQualification ready(
@@ -255,7 +273,7 @@ public record TushareReducedResearchAdmissionQualification(
                 claims.values().stream().allMatch(AdmissionClaim::verified);
         boolean readyDecision =
                 decision == AdmissionDecision.DEDICATED_LOCAL_RESEARCH_PATH;
-        if (readyDecision != claimsVerified
+        if (!claimsVerified
                 || (implementation == ImplementationReadiness.READY)
                 != readyDecision
                 || implementationReady != readyDecision
@@ -278,6 +296,35 @@ public record TushareReducedResearchAdmissionQualification(
                 || f3Ready) {
             throw new IllegalArgumentException(
                     "TUSHARE_REDUCED_RESEARCH_ADMISSION_INVALID");
+        }
+        if (readyDecision
+                && !blockers.equals(
+                Set.of(AdmissionBlocker
+                        .CONTROLLED_ACCEPTANCE_NOT_RUN))
+                || !readyDecision
+                && !blockers.equals(
+                Set.of(AdmissionBlocker
+                        .ADMISSION_SOURCE_QUALIFICATION_INVALID))) {
+            throw new IllegalArgumentException(
+                    "TUSHARE_REDUCED_RESEARCH_ADMISSION_INVALID");
+        }
+    }
+
+    public record ImplementationEvidence(
+            Map<AdmissionClaimType, AdmissionClaim> claims
+    ) {
+        public ImplementationEvidence {
+            claims = copyClaims(claims);
+            if (claims.values().stream()
+                    .anyMatch(claim -> !claim.verified())) {
+                throw new IllegalArgumentException(
+                        "TUSHARE_REDUCED_RESEARCH_IMPLEMENTATION_EVIDENCE_INVALID");
+            }
+        }
+
+        public static ImplementationEvidence currentF1e() {
+            return new ImplementationEvidence(
+                    currentImplementationClaims());
         }
     }
 

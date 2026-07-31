@@ -176,39 +176,114 @@ public final class TushareDedicatedResearchBatchModels {
         }
     }
 
-    public record DatabaseExecutionIdentity(
-            String currentDatabase,
-            String currentUser,
-            String jdbcUrl,
-            String databasePurpose,
-            String currentSchema,
-            String searchPath,
-            int backendPidBefore,
-            int backendPidAfter
-    ) {
-        public DatabaseExecutionIdentity {
-            currentDatabase = requiredText(
-                    currentDatabase, "currentDatabase");
-            currentUser = requiredText(currentUser, "currentUser");
-            jdbcUrl = requiredText(jdbcUrl, "jdbcUrl");
-            databasePurpose = requiredText(
-                    databasePurpose, "databasePurpose");
-            currentSchema = requiredText(
-                    currentSchema, "currentSchema");
-            searchPath = requiredText(searchPath, "searchPath");
-            if (!TushareDedicatedResearchPersistenceGuard
-                    .REQUIRED_DATABASE.equals(currentDatabase)
-                    || !TushareDedicatedResearchPersistenceGuard
-                    .REQUIRED_USER.equals(currentUser)
-                    || !TushareDedicatedResearchPersistenceGuard
-                    .DATABASE_PURPOSE.equals(databasePurpose)
-                    || !TushareDedicatedResearchPersistenceGuard
-                    .REQUIRED_SCHEMA.equals(currentSchema)
-                    || backendPidBefore <= 0
-                    || backendPidBefore != backendPidAfter) {
-                throw new IllegalArgumentException(
-                        "TUSHARE_DEDICATED_RESEARCH_DATABASE_RESULT_INVALID");
+    public static final class DatabaseExecutionIdentity {
+        private final String currentDatabase;
+        private final String currentUser;
+        private final String jdbcUrl;
+        private final String databasePurpose;
+        private final String currentSchema;
+        private final String searchPath;
+        private final List<String> appliedMigrations;
+        private final int backendPidBefore;
+        private final int backendPidAfter;
+
+        private DatabaseExecutionIdentity(
+                TushareDedicatedResearchPersistenceGuard.Verification before,
+                TushareDedicatedResearchPersistenceGuard.Verification after
+        ) {
+            TushareDedicatedResearchPersistenceGuard
+                    .validateVerificationTarget(before, true);
+            TushareDedicatedResearchPersistenceGuard
+                    .validateVerificationTarget(after, true);
+            if (!sameTarget(before, after)
+                    || before.backendPid() != after.backendPid()) {
+                throw invalid();
             }
+            this.currentDatabase = before.currentDatabase();
+            this.currentUser = before.currentUser();
+            this.jdbcUrl = before.jdbcUrl();
+            this.databasePurpose = before.databasePurpose();
+            this.currentSchema = before.currentSchema();
+            this.searchPath = before.searchPath();
+            this.appliedMigrations = List.copyOf(
+                    before.appliedMigrations());
+            this.backendPidBefore = before.backendPid();
+            this.backendPidAfter = after.backendPid();
+        }
+
+        public static DatabaseExecutionIdentity from(
+                TushareDedicatedResearchPersistenceGuard.Verification before,
+                TushareDedicatedResearchPersistenceGuard.Verification after
+        ) {
+            return new DatabaseExecutionIdentity(
+                    Objects.requireNonNull(before, "before"),
+                    Objects.requireNonNull(after, "after"));
+        }
+
+        private static boolean sameTarget(
+                TushareDedicatedResearchPersistenceGuard.Verification before,
+                TushareDedicatedResearchPersistenceGuard.Verification after
+        ) {
+            return Objects.equals(
+                    before.currentDatabase(), after.currentDatabase())
+                    && Objects.equals(
+                    before.currentUser(), after.currentUser())
+                    && Objects.equals(
+                    before.jdbcUrl(), after.jdbcUrl())
+                    && Objects.equals(
+                    before.databasePurpose(), after.databasePurpose())
+                    && Objects.equals(
+                    before.currentSchema(), after.currentSchema())
+                    && Objects.equals(
+                    before.searchPath(), after.searchPath())
+                    && Objects.equals(
+                    before.appliedMigrations(),
+                    after.appliedMigrations())
+                    && before.databaseIdentityQualification()
+                    == after.databaseIdentityQualification()
+                    && before.schemaQualification()
+                    == after.schemaQualification();
+        }
+
+        public String currentDatabase() {
+            return currentDatabase;
+        }
+
+        public String currentUser() {
+            return currentUser;
+        }
+
+        public String jdbcUrl() {
+            return jdbcUrl;
+        }
+
+        public String databasePurpose() {
+            return databasePurpose;
+        }
+
+        public String currentSchema() {
+            return currentSchema;
+        }
+
+        public String searchPath() {
+            return searchPath;
+        }
+
+        public List<String> appliedMigrations() {
+            return appliedMigrations;
+        }
+
+        public int backendPidBefore() {
+            return backendPidBefore;
+        }
+
+        public int backendPidAfter() {
+            return backendPidAfter;
+        }
+
+        private static IllegalArgumentException invalid() {
+            return new IllegalArgumentException(
+                    "TUSHARE_DEDICATED_RESEARCH_DATABASE_RESULT_INVALID");
         }
     }
 

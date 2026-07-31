@@ -1,5 +1,6 @@
 package com.stockquant.server.agent.marketfacts;
 
+import com.stockquant.server.agent.marketfacts.TushareDedicatedResearchBatchModels.DatabaseExecutionIdentity;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -146,7 +147,94 @@ class TushareDedicatedResearchPersistenceGuardTest {
                                 .GuardException.class,
                         () -> guard(validState(true))
                                 .verifySameTransactionalConnection(
-                                        before, after)).safeCode());
+                        before, after)).safeCode());
+    }
+
+    @Test
+    void verificationRejectsRemoteNormalPublicAndIncompleteTargets() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> verification(
+                        "stock_quant_research",
+                        "jdbc:postgresql://192.0.2.10:55433/"
+                                + "stock_quant_research",
+                        "tushare_research",
+                        V1_TO_V13,
+                        10_001));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> verification(
+                        "stock_quant",
+                        localUrl("stock_quant"),
+                        "tushare_research",
+                        V1_TO_V13,
+                        10_001));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> verification(
+                        "stock_quant_research",
+                        localUrl("stock_quant_research"),
+                        "public",
+                        V1_TO_V13,
+                        10_001));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> verification(
+                        "stock_quant_research",
+                        localUrl("stock_quant_research"),
+                        "tushare_research, public",
+                        V1_TO_V13,
+                        10_001));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> verification(
+                        "stock_quant_research",
+                        localUrl("stock_quant_research"),
+                        "tushare_research, pg_catalog",
+                        V1_TO_V13,
+                        10_001));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> verification(
+                        "stock_quant_research",
+                        localUrl("stock_quant_research"),
+                        "tushare_research",
+                        V1_TO_V13.subList(0, 12),
+                        10_001));
+    }
+
+    @Test
+    void databaseExecutionIdentityRequiresCompleteStableTarget() {
+        var before = verification(
+                "stock_quant_research",
+                localUrl("stock_quant_research"),
+                "tushare_research",
+                V1_TO_V13,
+                10_001);
+        var same = verification(
+                "stock_quant_research",
+                localUrl("stock_quant_research"),
+                "tushare_research",
+                V1_TO_V13,
+                10_001);
+        DatabaseExecutionIdentity identity =
+                DatabaseExecutionIdentity.from(before, same);
+        assertEquals("stock_quant_research",
+                identity.currentDatabase());
+        assertEquals(V1_TO_V13,
+                identity.appliedMigrations());
+
+        var changedUrl = verification(
+                "stock_quant_research",
+                localUrl("stock_quant_research")
+                        + "&ApplicationName=f1e",
+                "tushare_research",
+                V1_TO_V13,
+                10_001);
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> DatabaseExecutionIdentity.from(
+                        before, changedUrl));
     }
 
     private static void assertCode(
@@ -200,5 +288,30 @@ class TushareDedicatedResearchPersistenceGuardTest {
     private static String localUrl(String database) {
         return "jdbc:postgresql://127.0.0.1:55433/" + database
                 + "?currentSchema=tushare_research";
+    }
+
+    private static TushareDedicatedResearchPersistenceGuard.Verification
+    verification(
+            String database,
+            String url,
+            String searchPath,
+            List<String> migrations,
+            int backendPid
+    ) {
+        return new TushareDedicatedResearchPersistenceGuard.Verification(
+                database,
+                "stock_quant_research",
+                url,
+                TushareDedicatedResearchPersistenceGuard
+                        .DATABASE_PURPOSE,
+                "tushare_research",
+                searchPath,
+                migrations,
+                backendPid,
+                true,
+                TushareDedicatedResearchPersistenceGuard
+                        .DatabaseIdentityQualification.VERIFIED,
+                TushareDedicatedResearchPersistenceGuard
+                        .SchemaQualification.VERIFIED);
     }
 }
