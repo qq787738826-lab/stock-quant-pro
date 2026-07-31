@@ -392,6 +392,15 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
         return TECHNICAL_QUALIFICATION;
     }
 
+    public F1cRateLimitedGateway.F1cRateLimitedGatewayContract
+    f1cRateLimitContract() {
+        if (!(gateway instanceof F1cRateLimitedGateway rateLimitedGateway)) {
+            throw new IllegalStateException(
+                    "TUSHARE_REDUCED_RUNTIME_RATE_LIMIT_GATEWAY_REQUIRED");
+        }
+        return rateLimitedGateway.f1cRateLimitContract();
+    }
+
     @Override
     public MarketFactResponse fetch(MarketFactRequest request) {
         throw new IllegalStateException(

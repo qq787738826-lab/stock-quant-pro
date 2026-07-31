@@ -19,11 +19,44 @@ import java.util.concurrent.atomic.AtomicLong;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class TushareHttpApiGatewayTest {
 
     private static final String TEST_TOKEN = "unit-test-secret";
     private final ObjectMapper mapper = new ObjectMapper();
+
+    @Test
+    void realGatewayPublishesFrozenInjectedRateLimitContract() {
+        TushareEndpointRateLimitPolicy policy =
+                TushareEndpointRateLimitPolicy.frozenF1cPolicy();
+        TushareTokenRateLimiter limiter =
+                new TushareTokenRateLimiter(policy);
+        TushareHttpApiGateway gateway =
+                new TushareHttpApiGateway(
+                        mapper,
+                        properties(),
+                        limiter,
+                        URI.create("https://api.tushare.pro"),
+                        new FakeHttpExchange(),
+                        duration -> {
+                            // No request is made by this contract test.
+                        });
+
+        var contract = gateway.f1cRateLimitContract();
+        contract.validateFrozenF1c();
+
+        assertTrue(contract.endpointSpecificRateLimitEnforced());
+        assertTrue(contract.conservativeMinimumPolicyEnforced());
+        assertEquals(180, contract.globalSafeLimitPerMinute());
+        assertEquals(45,
+                contract.endpointSafeLimitsPerMinute()
+                        .get("stock_basic"));
+        assertEquals(90_000,
+                contract.dailySafeLimitPerEndpoint());
+        assertTrue(contract.unknownEndpointRejected());
+        assertFalse(contract.distributedCoordination());
+    }
 
     @Test
     void disabledIsTheDefaultAndStopsBeforeHttp() {

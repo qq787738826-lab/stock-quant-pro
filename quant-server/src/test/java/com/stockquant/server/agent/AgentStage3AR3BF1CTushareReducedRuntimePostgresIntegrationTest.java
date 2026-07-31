@@ -12,6 +12,11 @@ import com.stockquant.server.agent.marketfacts.TushareReducedResearchModels.Runt
 import com.stockquant.server.agent.marketfacts.TushareReducedResearchPersistenceGuard;
 import com.stockquant.server.agent.marketfacts.TushareReducedResearchRuntimeAuthorization;
 import com.stockquant.server.agent.marketfacts.TushareReducedResearchRuntimeService;
+import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.FactType;
+import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.MarketFactRequest;
+import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.RunNamespace;
+import com.stockquant.server.agent.marketfacts.LimitedPersonalFormalCaptureAuthorization;
+import com.stockquant.server.agent.marketfacts.TushareManualBoundedSession;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
@@ -22,6 +27,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -29,9 +35,11 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @SpringBootTest(classes = QuantServerApplication.class)
@@ -73,6 +81,11 @@ class AgentStage3AR3BF1CTushareReducedRuntimePostgresIntegrationTest {
         registry.add(
                 "stockquant.market-facts.tushare.mode",
                 () -> "DISABLED");
+        registry.add(
+                "stockquant.market-facts.tushare."
+                        + "f1c-isolated-database-purpose",
+                () -> TushareReducedResearchPersistenceGuard
+                        .DATABASE_PURPOSE);
     }
 
     private static void bootstrapEphemeralPublicV12() {
@@ -214,6 +227,133 @@ class AgentStage3AR3BF1CTushareReducedRuntimePostgresIntegrationTest {
                         "daily", "adj_factor", "trade_cal"),
                 gateway.endpoints());
         assertEquals(6, gateway.calls());
+        assertEquals(6,
+                gateway.f1cRateLimitContract()
+                        .totalRateLimitedCallCount());
+    }
+
+    @Test
+    @Transactional
+    void captureGuardUsesSameTransactionBoundBackendConnection() {
+        F1cSyntheticTushareGateway gateway =
+                new F1cSyntheticTushareGateway();
+        TushareMarketFactProvider provider = provider(gateway);
+        TushareManualBoundedSession session =
+                TushareManualBoundedSession.f1cIsolatedManual(
+                        "600000", "SSE", START, END);
+        MarketFactRequest request = new MarketFactRequest(
+                RunNamespace.FORMAL,
+                TushareMarketFactProvider.PROVIDER_CODE,
+                TushareMarketFactProvider.sourceInstrumentId(
+                        "600000", "SSE"),
+                "600000",
+                "SSE",
+                START,
+                END,
+                Set.of(
+                        FactType.RAW_DAILY_BAR,
+                        FactType.ADJUSTMENT_FACTOR,
+                        FactType.TRADING_CALENDAR),
+                Duration.ofSeconds(5));
+        var response = provider.fetchForIsolatedReducedResearch(
+                request, session);
+        var preProvider = persistenceGuard.verify();
+
+        var capture =
+                captureService
+                        .captureAuthorizedF1cIsolatedReducedResearch(
+                                response,
+                                OBSERVED_AT.plusSeconds(240),
+                                LimitedPersonalFormalCaptureAuthorization
+                                        .tushareF1A(),
+                                preProvider,
+                                6);
+
+        assertTrue(capture.beforeVerification().transactionBound());
+        assertTrue(capture.afterVerification().transactionBound());
+        assertEquals(
+                capture.beforeVerification().backendPid(),
+                capture.afterVerification().backendPid());
+        assertEquals(6, capture.captureResult().receivedCount());
+        assertEquals(
+                capture.captureResult().receivedCount(),
+                capture.captureResult().appendedCount()
+                        + capture.captureResult().idempotentCount());
+    }
+
+    @Test
+    void transactionGuardRollsBackWhenSearchPathChangesBeforeCommit() {
+        int batchesBefore = count("""
+                SELECT count(*) FROM pit_market_fact_batches
+                """);
+        int observationsBefore = count("""
+                SELECT count(*) FROM pit_market_fact_observations
+                """);
+        jdbc.execute("""
+                CREATE FUNCTION f1c_test_change_search_path()
+                RETURNS trigger
+                LANGUAGE plpgsql
+                AS $$
+                BEGIN
+                    IF NEW.calendar_date = DATE '2026-07-28' THEN
+                        PERFORM set_config(
+                            'search_path', 'public', true);
+                    END IF;
+                    RETURN NEW;
+                END
+                $$
+                """);
+        jdbc.execute("""
+                CREATE TRIGGER trg_f1c_test_change_search_path
+                AFTER INSERT ON trading_calendar_facts_v1
+                FOR EACH ROW
+                EXECUTE FUNCTION f1c_test_change_search_path()
+                """);
+        try {
+            F1cSyntheticTushareGateway gateway =
+                    new F1cSyntheticTushareGateway(
+                            "000001.SZ", "SZSE");
+            TushareReducedResearchRuntimeService runtime =
+                    new TushareReducedResearchRuntimeService(
+                            provider(gateway),
+                            persistenceGuard,
+                            captureService,
+                            Clock.fixed(
+                                    OBSERVED_AT.plusSeconds(120),
+                                    ZoneOffset.UTC));
+
+            TushareReducedResearchPersistenceGuard.GuardException error =
+                    assertThrows(
+                            TushareReducedResearchPersistenceGuard
+                                    .GuardException.class,
+                            () -> runtime.run(
+                                    TushareReducedResearchRuntimeAuthorization
+                                            .f1cIsolatedManual(),
+                                    command(
+                                            "000001",
+                                            "SZSE")));
+
+            assertEquals(
+                    "TUSHARE_REDUCED_RUNTIME_PUBLIC_SCHEMA_FORBIDDEN",
+                    error.safeCode());
+            assertEquals(3, gateway.calls());
+        } finally {
+            jdbc.execute("""
+                    DROP TRIGGER IF EXISTS
+                    trg_f1c_test_change_search_path
+                    ON trading_calendar_facts_v1
+                    """);
+            jdbc.execute("""
+                    DROP FUNCTION IF EXISTS
+                    f1c_test_change_search_path()
+                    """);
+        }
+        assertEquals(batchesBefore, count("""
+                SELECT count(*) FROM pit_market_fact_batches
+                """));
+        assertEquals(observationsBefore, count("""
+                SELECT count(*) FROM pit_market_fact_observations
+                """));
     }
 
     private TushareMarketFactProvider provider(
@@ -229,9 +369,16 @@ class AgentStage3AR3BF1CTushareReducedRuntimePostgresIntegrationTest {
     }
 
     private static RunCommand command() {
+        return command("600000", "SSE");
+    }
+
+    private static RunCommand command(
+            String symbol,
+            String exchange
+    ) {
         return new RunCommand(
-                "600000",
-                "SSE",
+                symbol,
+                exchange,
                 START,
                 END,
                 END,

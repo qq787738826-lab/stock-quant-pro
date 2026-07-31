@@ -353,10 +353,10 @@
 
 - 交付：[F1C 任务书](tasks/3ar3b-f1c-tushare-reduced-runtime.md)和[F1C 阶段记录](stage-3ar3b-f1c-tushare-reduced-runtime.md)。
 - Endpoint 策略：只允许 `stock_basic/daily/adj_factor/trade_cal/dividend`；所有适用官方限制取较小值，安全上限分别为 `45/180/180/180/180` 次/分钟，另有全局 180 次/分钟和每 Endpoint 每 Asia/Shanghai 自然日 90000 次。全局、Endpoint 分钟与 Endpoint 每日额度在单一进程内原子判断并登记；未知 Endpoint 安全拒绝，仍不声称跨进程协调。
-- 隔离入口：唯一类型化授权固定 `ISOLATED_MANUAL`、单证券、最多两自然日、`daily/adj_factor/trade_cal` 精确三次、零重试。Provider 调用前和持久化前都要求 `f1c_tushare_research_<32位随机后缀>`、严格 search_path 与完整 V1—V13；只通过既有有限个人 FORMAL 专用入口保存 raw/factor/calendar。
+- 隔离入口：唯一类型化授权固定 `ISOLATED_MANUAL`、单证券、最多两自然日、`daily/adj_factor/trade_cal` 精确三次、零重试。Provider 调用前要求 Gateway 从实际策略与 limiter 提供冻结的 F1C 类型化限流合同，并预检显式专用数据库用途、数据库/用户/JDBC URL、`f1c_tushare_research_<32位随机后缀>`、严格 search_path 与完整 V1—V13。保存只经 F1C 专用 Spring 事务入口，写入前后使用同一事务绑定 JDBC 连接和 backend PID 重验，并原子校验捕获计数；后置失败整体回滚。
 - QFQ 边界：OHLC 只复用 `QfqPriceMath` 在内存生成 `REDUCED_RESEARCH_FORMULA_ONLY` 结果，不写 QFQ 表；`QfqAsOfEngine` 的公司行动 lineage、factor predecessor、cutoff、用途和 Provider 一致性门禁及 18 个黄金向量不变。
 - 明确状态：`ENDPOINT_SPECIFIC_RATE_LIMIT_ENFORCED=true`、`CONSERVATIVE_ENDPOINT_MINIMUM_POLICY_ENFORCED=true`、`REDUCED_RESEARCH_ISOLATED_MANUAL_RUNTIME_READY=true`；同时 `REDUCED_RESEARCH_RUNTIME_READY=false`、`REDUCED_RESEARCH_PRODUCTION_RUNTIME_READY=false`、`NORMAL_BUSINESS_DATABASE_RUNTIME_READY=false`、`SCHEDULER_RUNTIME_READY=false`、`FULL_TECHNICAL_CONTRACT_READY=false`。
-- 验证：Java 编译通过；F1C 定向 `70/0/0/0`；扩展离线联合回归 `89/0/0/0`；`quant-core` `4/0/0/0`；命令级排除外部集成类的 `quant-server` 安全全量 `380/0/0/0`；PostgreSQL 16.13 临时实例中的 F1A FORMAL 绕过回归 `4/0/0/0` 与 F1C 随机 Schema V1—V13 `1/0/0/0` 均 `Skipped=0`，public 指纹不变且 Schema、端口、目录残留为 0。
+- 验证：171 个生产源码干净编译通过；F1A/F1B/F1C 定向 `87/0/0/0`，加入 Provider V2 后联合回归 `97/0/0/0`；`quant-core` `4/0/0/0`；命令级排除外部集成类的 `quant-server` 安全全量 `388/0/0/0`；PostgreSQL 16.13 临时实例中的 F1A FORMAL 绕过回归 `4/0/0/0` 与 F1C 随机 Schema V1—V13 `3/0/0/0` 均 `Skipped=0`。F1C 覆盖同一事务连接及数据库触发的真实 `search_path` TOCTOU 回滚；public 结构、数据、Flyway 指纹不变且 Schema、端口、目录残留为 0。
 - 当前状态：实现、测试和治理文档已在 `codex/1.4.0-stage-3ar3b-f1c-tushare-reduced-runtime` 完成，待 ChatGPT 基于实际 Git 提交验收，尚未合入。本阶段没有读取 Token、调用 Provider 或访问正常业务数据库；Tushare 累计真实业务请求仍为 20。不得自动升级为生产运行或开始 F2B/F3。
 
 #### 3A-R3B-F1：完整 Provider Adapter 与 V13 闭环（书面许可与技术证据仍阻断）

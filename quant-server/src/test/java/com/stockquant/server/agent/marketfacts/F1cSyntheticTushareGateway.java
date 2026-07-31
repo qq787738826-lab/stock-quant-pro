@@ -14,10 +14,28 @@ import java.util.List;
  * Deterministic, non-network F1C gateway used by the random-schema test.
  */
 public final class F1cSyntheticTushareGateway
-        implements TushareApiGateway {
+        implements TushareApiGateway, F1cRateLimitedGateway {
 
     private final ArrayList<String> endpoints = new ArrayList<>();
+    private final TushareTokenRateLimiter rateLimiter;
+    private final String tsCode;
+    private final String exchange;
     private int calls;
+
+    public F1cSyntheticTushareGateway() {
+        this("600000.SH", "SSE");
+    }
+
+    public F1cSyntheticTushareGateway(
+            String tsCode,
+            String exchange
+    ) {
+        TushareEndpointRateLimitPolicy policy =
+                TushareEndpointRateLimitPolicy.frozenF1cPolicy();
+        this.rateLimiter = new TushareTokenRateLimiter(policy);
+        this.tsCode = tsCode;
+        this.exchange = exchange;
+    }
 
     @Override
     public QueryResult query(
@@ -29,12 +47,13 @@ public final class F1cSyntheticTushareGateway
             TushareManualBoundedSession session
     ) {
         session.authorizeAndReserve(endpoint, parameters);
+        rateLimiter.acquire(endpoint);
         calls++;
         endpoints.add(endpoint);
         List<List<JsonNode>> rows = switch (endpoint) {
             case "daily" -> List.of(
                     List.of(
-                            text("600000.SH"),
+                            text(tsCode),
                             text("20260727"),
                             decimal("10"),
                             decimal("12"),
@@ -43,7 +62,7 @@ public final class F1cSyntheticTushareGateway
                             decimal("100"),
                             decimal("10")),
                     List.of(
-                            text("600000.SH"),
+                            text(tsCode),
                             text("20260728"),
                             decimal("20"),
                             decimal("22"),
@@ -53,21 +72,21 @@ public final class F1cSyntheticTushareGateway
                             decimal("20")));
             case "adj_factor" -> List.of(
                     List.of(
-                            text("600000.SH"),
+                            text(tsCode),
                             text("20260727"),
                             decimal("1")),
                     List.of(
-                            text("600000.SH"),
+                            text(tsCode),
                             text("20260728"),
                             decimal("2")));
             case "trade_cal" -> List.of(
                     List.of(
-                            text("SSE"),
+                            text(exchange),
                             text("20260727"),
                             DecimalNode.valueOf(BigDecimal.ONE),
                             text("20260724")),
                     List.of(
-                            text("SSE"),
+                            text(exchange),
                             text("20260728"),
                             DecimalNode.valueOf(BigDecimal.ONE),
                             text("20260727")));
@@ -82,6 +101,12 @@ public final class F1cSyntheticTushareGateway
 
     public List<String> endpoints() {
         return List.copyOf(endpoints);
+    }
+
+    @Override
+    public F1cRateLimitedGatewayContract f1cRateLimitContract() {
+        return F1cRateLimitedGatewayContract.from(
+                rateLimiter.policy(), rateLimiter);
     }
 
     private static JsonNode text(String value) {

@@ -27,7 +27,8 @@ import java.util.Set;
 
 /** HTTPS JSON client with bounded rate-limit retries and no response logging. */
 @Component
-public final class TushareHttpApiGateway implements TushareApiGateway {
+public final class TushareHttpApiGateway
+        implements TushareApiGateway, F1cRateLimitedGateway {
 
     private static final Set<String> ALLOWED_ENDPOINTS = Set.of(
             "stock_basic", "trade_cal", "daily", "adj_factor", "dividend");
@@ -61,6 +62,12 @@ public final class TushareHttpApiGateway implements TushareApiGateway {
                         duration.toMillis(),
                         duration.minusMillis(
                                 duration.toMillis()).getNano()));
+    }
+
+    @Override
+    public F1cRateLimitedGatewayContract f1cRateLimitContract() {
+        return F1cRateLimitedGatewayContract.from(
+                rateLimiter.policy(), rateLimiter);
     }
 
     TushareHttpApiGateway(

@@ -48,6 +48,8 @@ public class PitMarketFactCaptureService {
     private final PitMarketFactsCanonicalService canonical;
     private final PitMarketFactRepository repository;
     private final TemporalMarketFoundationService temporalFoundation;
+    private final TushareReducedResearchPersistenceGuard
+            tushareReducedResearchPersistenceGuard;
     private final Clock clock;
     private final TransactionTemplate transactionTemplate;
 
@@ -56,6 +58,8 @@ public class PitMarketFactCaptureService {
             PitMarketFactsCanonicalService canonical,
             PitMarketFactRepository repository,
             TemporalMarketFoundationService temporalFoundation,
+            TushareReducedResearchPersistenceGuard
+                    tushareReducedResearchPersistenceGuard,
             Clock clock,
             PlatformTransactionManager transactionManager
     ) {
@@ -63,6 +67,10 @@ public class PitMarketFactCaptureService {
         this.canonical = canonical;
         this.repository = repository;
         this.temporalFoundation = temporalFoundation;
+        this.tushareReducedResearchPersistenceGuard =
+                Objects.requireNonNull(
+                        tushareReducedResearchPersistenceGuard,
+                        "tushareReducedResearchPersistenceGuard");
         this.clock = clock;
         this.transactionTemplate = new TransactionTemplate(
                 transactionManager);
@@ -106,6 +114,49 @@ public class PitMarketFactCaptureService {
         authorization.validateResponse(response);
         return captureWithinTransaction(
                 response, observedAt, authorization);
+    }
+
+    /**
+     * F1C-only capture path. The schema and database identity are checked on
+     * the same transaction-bound connection before and after persistence.
+     */
+    @Transactional
+    public F1cIsolatedCaptureResult
+    captureAuthorizedF1cIsolatedReducedResearch(
+            MarketFactResponse response,
+            Instant observedAt,
+            LimitedPersonalFormalCaptureAuthorization authorization,
+            TushareReducedResearchPersistenceGuard.Verification
+                    preProviderVerification,
+            int expectedReceivedCount
+    ) {
+        Objects.requireNonNull(
+                authorization, "limited personal FORMAL authorization");
+        Objects.requireNonNull(
+                preProviderVerification, "preProviderVerification");
+        if (expectedReceivedCount <= 0) {
+            throw new IllegalArgumentException(
+                    "TUSHARE_REDUCED_RUNTIME_CAPTURE_RESULT_INVALID");
+        }
+        authorization.validateResponse(response);
+        TushareReducedResearchPersistenceGuard.Verification before =
+                tushareReducedResearchPersistenceGuard
+                        .verifyTransactional();
+        tushareReducedResearchPersistenceGuard.verifySameTarget(
+                preProviderVerification, before);
+
+        CaptureResult captureResult = captureWithinTransaction(
+                response, observedAt, authorization);
+        validateF1cCaptureResult(
+                captureResult, expectedReceivedCount);
+
+        TushareReducedResearchPersistenceGuard.Verification after =
+                tushareReducedResearchPersistenceGuard
+                        .verifyTransactional();
+        tushareReducedResearchPersistenceGuard
+                .verifySameTransactionalConnection(before, after);
+        return new F1cIsolatedCaptureResult(
+                captureResult, before, after);
     }
 
     private CaptureResult captureWithinTransaction(
@@ -238,6 +289,43 @@ public class PitMarketFactCaptureService {
         return new CaptureResult(
                 batchId, batchVersion, dataset.id(), datasetVersion,
                 facts.size(), appended, idempotent, response.complete());
+    }
+
+    static void validateF1cCaptureResult(
+            CaptureResult result,
+            int expectedReceivedCount
+    ) {
+        if (result == null
+                || !result.complete()
+                || result.receivedCount() != expectedReceivedCount
+                || result.appendedCount() + result.idempotentCount()
+                != result.receivedCount()) {
+            throw new IllegalStateException(
+                    "TUSHARE_REDUCED_RUNTIME_CAPTURE_RESULT_INVALID");
+        }
+    }
+
+    public record F1cIsolatedCaptureResult(
+            CaptureResult captureResult,
+            TushareReducedResearchPersistenceGuard.Verification
+                    beforeVerification,
+            TushareReducedResearchPersistenceGuard.Verification
+                    afterVerification
+    ) {
+        public F1cIsolatedCaptureResult {
+            Objects.requireNonNull(captureResult, "captureResult");
+            Objects.requireNonNull(
+                    beforeVerification, "beforeVerification");
+            Objects.requireNonNull(
+                    afterVerification, "afterVerification");
+            if (!beforeVerification.transactionBound()
+                    || !afterVerification.transactionBound()
+                    || beforeVerification.backendPid()
+                    != afterVerification.backendPid()) {
+                throw new IllegalArgumentException(
+                        "TUSHARE_REDUCED_RUNTIME_TRANSACTION_CONNECTION_REQUIRED");
+            }
+        }
     }
 
     private void validateResponse(

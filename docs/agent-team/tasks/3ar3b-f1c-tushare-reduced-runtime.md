@@ -51,6 +51,13 @@ F1 已经就绪。
 `TushareEndpointRateLimitPolicy` 是五个允许 Endpoint 的类型化权威策略。未知
 Endpoint 不得继承通用默认值。
 
+F1C 运行入口还要求 Gateway 实现类型化 `F1cRateLimitedGateway`。该合同必须从
+Gateway 实际注入的 `TushareEndpointRateLimitPolicy` 与
+`TushareTokenRateLimiter` 快照生成，并精确证明全局、Endpoint、每日、未知
+Endpoint 拒绝及不支持分布式协调的冻结值。普通无界 Gateway 即使能返回正确 DTO，
+也必须在首个 Provider 调用前拒绝；合成 Gateway 同样必须经过真实或等价的冻结
+策略与限流器，不能靠测试自述绕过。
+
 | Endpoint | 套餐总表 | 接口页 | 有效官方上限 | 应用安全上限 |
 |---|---:|---:|---:|---:|
 | `stock_basic` | 200/分钟 | 50/分钟 | 50/分钟 | 45/分钟 |
@@ -102,30 +109,38 @@ Agent 的授权对象必须在 Provider 调用前拒绝。
 `TushareReducedResearchPersistenceGuard` 在 Provider 调用前和持久化前各检查
 一次：
 
+- 显式数据库用途为 `F1C_ISOLATED_RESEARCH`；
+- `current_database()`、`current_user` 和 JDBC URL 均匹配专用本地隔离测试库，
+  不能只凭安全 Schema 名授权正常业务数据库；
 - `current_schema()` 不是 `public`；
 - Schema 精确匹配 `f1c_tushare_research_<32位十六进制随机后缀>`；
 - `search_path` 只有该 Schema，不包含 `public` 或其他回退；
 - `flyway_schema_history` 精确包含成功的 V1—V13；
-- 前后两次检查的连接目标与迁移状态完全一致。
+- 前后两次检查的数据库身份、Schema 和迁移状态完全一致；
+- 持久化前后检查必须运行在实际 Spring 事务绑定的同一 JDBC 连接上，并以相同
+  PostgreSQL backend PID 证明连接未切换。
 
 任一条件不满足时，不发 Provider 请求、不创建 batch、不写观察。正常业务数据库
-入口永远不由该守卫授权。
+入口永远不由该守卫授权。写入后的守卫或捕获计数校验失败时抛出异常并回滚整个事务，
+不得保留部分 batch 或观察。
 
 ## 6. 缩减运行流程
 
 `TushareReducedResearchRuntimeService` 没有 Controller、scheduler、Agent、回测或
 交易入口。固定流程为：
 
-1. 校验冻结授权和类型化技术资格；
-2. 校验随机隔离 Schema；
+1. 校验冻结授权、类型化技术资格及 Gateway 的实际限流合同；
+2. 校验专用数据库身份与随机隔离 Schema；
 3. 创建精确三次、单证券、两自然日、零重试会话；
 4. 依次读取 `daily`、`adj_factor`、`trade_cal`；
 5. 校验响应完整、日期闭合、开市日、anchor 与逐日 factor；
 6. 仅通过共享 `QfqPriceMath` 在内存计算 OHLC 公式结果；
-7. 再次校验隔离 Schema；
-8. 通过既有 `captureAuthorizedLimitedPersonalFormal(...)` 只保存
-   raw/factor/calendar；
-9. 返回独立的公式级缩减研究结果。
+7. 通过 F1C 专用
+   `captureAuthorizedF1cIsolatedReducedResearch(...)` 进入 Spring 事务；
+8. 在实际事务绑定 JDBC 连接上校验数据库身份、Schema、search_path 与 V1—V13，
+   保存 raw/factor/calendar 后再次在同一 backend PID 校验；
+9. 校验 `CaptureResult` 完整且 `appended + idempotent = received = expected`；
+10. 由 `TushareReducedResearchRunResult.formulaOnly(...)` 返回独立公式级结果。
 
 `stock_basic`、`dividend`、公司行动、其他 Provider、批量证券和第四次请求均被
 排除。响应不完整或 QFQ 校验失败时不允许部分持久化。
@@ -212,8 +227,13 @@ formalEligible=false
   Endpoint、等待中断、重试计数和无 Token 快照；
 - 冻结授权及伪造授权拒绝；
 - public、错误前缀、V13 不完整和调用中目标变化拒绝；
+- 正常业务数据库身份、错误数据库用途、用户或 JDBC URL 在 Provider 调用前拒绝；
+- 实际写事务绑定连接、相同 backend PID、写入中 `search_path` 改写后的全事务回滚；
+- 真实 Gateway 的限流合同来自实际策略/限流器，普通无界 Gateway 在 Provider 前拒绝；
 - 三 Endpoint 精确三次、第四次拒绝、零重试；
 - incomplete、缺 calendar/factor/anchor、raw 晚于 anchor 均不持久化；
+- `CaptureResult` 空值、非完整或计数不闭合均回滚；
+- 公式级结果由安全工厂固定全部降级资格，不接受调用方长布尔参数；
 - OHLC 公式确定性、重复捕获幂等、缩减 QFQ 不写库；
 - `QfqAsOfEngine`、18 个 QFQ 黄金向量、F1A/F1B 与 FORMAL 捕获门禁不回退；
 - PostgreSQL 16 临时实例中随机 Schema V1—V13，public 结构/数据指纹前后不变，

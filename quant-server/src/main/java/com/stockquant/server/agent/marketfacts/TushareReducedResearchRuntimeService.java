@@ -10,8 +10,8 @@ import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.RawDaily
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.RunNamespace;
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.TradingCalendar;
 import com.stockquant.server.agent.marketfacts.PitMarketFactModels.CaptureResult;
+import com.stockquant.server.agent.marketfacts.PitMarketFactCaptureService.F1cIsolatedCaptureResult;
 import com.stockquant.server.agent.marketfacts.TushareReducedResearchModels.RunCommand;
-import com.stockquant.server.agent.marketfacts.TushareReducedResearchModels.RuntimeQualification;
 import com.stockquant.server.agent.marketfacts.TushareReducedResearchModels.TushareReducedResearchQfqBar;
 import com.stockquant.server.agent.marketfacts.TushareReducedResearchModels.TushareReducedResearchRunResult;
 import com.stockquant.server.agent.marketfacts.TushareTechnicalQualification.QualificationStatus;
@@ -82,6 +82,7 @@ public final class TushareReducedResearchRuntimeService {
                 .validateFrozen();
         Objects.requireNonNull(command, "command");
         validateQualification(provider.technicalQualification());
+        validateGatewayRateLimitContract(provider);
 
         TushareReducedResearchPersistenceGuard.Verification
                 preProviderGuard = persistenceGuard.verify();
@@ -110,33 +111,25 @@ public final class TushareReducedResearchRuntimeService {
         List<TushareReducedResearchQfqBar> qfqBars =
                 calculateQfq(series, command.anchorTradeDate());
 
-        TushareReducedResearchPersistenceGuard.Verification
-                preCaptureGuard = persistenceGuard.verify();
-        persistenceGuard.verifyUnchanged(
-                preProviderGuard, preCaptureGuard);
         Instant observedAt =
                 BacktestCanonicalHashService.microsecondInstant(
                         clock.instant());
-        CaptureResult captureResult =
-                captureService.captureAuthorizedLimitedPersonalFormal(
+        int expectedReceivedCount = series.rawBars().size()
+                + series.factors().size()
+                + series.calendar().size();
+        F1cIsolatedCaptureResult isolatedCapture =
+                captureService
+                        .captureAuthorizedF1cIsolatedReducedResearch(
                         response,
                         observedAt,
                         LimitedPersonalFormalCaptureAuthorization
-                                .tushareF1A());
+                                .tushareF1A(),
+                        preProviderGuard,
+                        expectedReceivedCount);
+        CaptureResult captureResult =
+                isolatedCapture.captureResult();
 
-        return new TushareReducedResearchRunResult(
-                RuntimeQualification.REDUCED_RESEARCH_FORMULA_ONLY,
-                true,
-                false,
-                false,
-                false,
-                false,
-                false,
-                false,
-                false,
-                false,
-                false,
-                false,
+        return TushareReducedResearchRunResult.formulaOnly(
                 series.providerCallCount(),
                 series.retryCount(),
                 session.consumedBusinessRequests(),
@@ -152,6 +145,17 @@ public final class TushareReducedResearchRuntimeService {
                 captureResult,
                 SUCCESS_REASON_CODES,
                 provider.technicalQualification().routeDecision());
+    }
+
+    private static void validateGatewayRateLimitContract(
+            TushareMarketFactProvider provider
+    ) {
+        try {
+            provider.f1cRateLimitContract().validateFrozenF1c();
+        } catch (RuntimeException error) {
+            throw blocked(
+                    "TUSHARE_REDUCED_RUNTIME_RATE_LIMIT_GATEWAY_REQUIRED");
+        }
     }
 
     private static void validateQualification(

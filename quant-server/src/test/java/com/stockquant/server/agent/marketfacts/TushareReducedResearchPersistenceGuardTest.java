@@ -9,6 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class TushareReducedResearchPersistenceGuardTest {
 
@@ -31,6 +32,91 @@ class TushareReducedResearchPersistenceGuardTest {
         assertEquals("VERIFIED",
                 verification.isolatedSchemaGuardQualification());
         assertFalse(verification.normalBusinessDatabaseAllowed());
+    }
+
+    @Test
+    void transactionalVerificationRequiresBoundDedicatedConnection() {
+        TushareReducedResearchPersistenceGuard guard =
+                new TushareReducedResearchPersistenceGuard(
+                        () -> identityState(
+                                "stock_quant_test",
+                                "stock_quant_test",
+                                safeUrl(),
+                                SCHEMA,
+                                SCHEMA,
+                                V1_TO_V13,
+                                12_345,
+                                true));
+
+        var verification = assertDoesNotThrow(
+                guard::verifyTransactional);
+
+        assertEquals("stock_quant_test",
+                verification.currentDatabase());
+        assertEquals("stock_quant_test",
+                verification.currentUser());
+        assertEquals(12_345, verification.backendPid());
+        assertTrue(verification.transactionBound());
+        assertFalse(verification.normalBusinessDatabaseAllowed());
+    }
+
+    @Test
+    void rejectsNormalDatabaseEvenWithSafeSchema() {
+        assertGuardCode(
+                "TUSHARE_REDUCED_RUNTIME_NORMAL_DATABASE_FORBIDDEN",
+                identityGuard(
+                        "stock_quant",
+                        "stock_quant_test",
+                        "jdbc:postgresql://127.0.0.1:55432/stock_quant",
+                        TushareReducedResearchPersistenceGuard
+                                .DATABASE_PURPOSE));
+    }
+
+    @Test
+    void rejectsWrongDatabaseUserMissingPurposeAndUnsafeUrl() {
+        assertGuardCode(
+                "TUSHARE_REDUCED_RUNTIME_DATABASE_IDENTITY_INVALID",
+                identityGuard(
+                        "stock_quant_test",
+                        "application_user",
+                        safeUrl(),
+                        TushareReducedResearchPersistenceGuard
+                                .DATABASE_PURPOSE));
+        assertGuardCode(
+                "TUSHARE_REDUCED_RUNTIME_DATABASE_IDENTITY_INVALID",
+                identityGuard(
+                        "stock_quant_test",
+                        "stock_quant_test",
+                        safeUrl(),
+                        "UNSPECIFIED"));
+        assertGuardCode(
+                "TUSHARE_REDUCED_RUNTIME_DATABASE_IDENTITY_INVALID",
+                identityGuard(
+                        "stock_quant_test",
+                        "stock_quant_test",
+                        "jdbc:postgresql://db.internal:5432/"
+                                + "stock_quant_test",
+                        TushareReducedResearchPersistenceGuard
+                                .DATABASE_PURPOSE));
+    }
+
+    @Test
+    void transactionEndMustUseSameBackendPid() {
+        var before = transactionalVerification(12_345);
+        var after = transactionalVerification(54_321);
+        TushareReducedResearchPersistenceGuard guard = guard(
+                SCHEMA, SCHEMA, V1_TO_V13);
+
+        TushareReducedResearchPersistenceGuard.GuardException error =
+                assertThrows(
+                        TushareReducedResearchPersistenceGuard
+                                .GuardException.class,
+                        () -> guard.verifySameTransactionalConnection(
+                                before, after));
+
+        assertEquals(
+                "TUSHARE_REDUCED_RUNTIME_TRANSACTION_CONNECTION_REQUIRED",
+                error.safeCode());
     }
 
     @Test
@@ -100,6 +186,26 @@ class TushareReducedResearchPersistenceGuardTest {
                 () -> state(schema, searchPath, migrations));
     }
 
+    private static TushareReducedResearchPersistenceGuard identityGuard(
+            String database,
+            String user,
+            String url,
+            String purpose
+    ) {
+        return new TushareReducedResearchPersistenceGuard(
+                () -> identityState(
+                        database,
+                        user,
+                        url,
+                        SCHEMA,
+                        SCHEMA,
+                        V1_TO_V13,
+                        12_345,
+                        false),
+                new TushareReducedResearchPersistenceGuard
+                        .DatabaseIdentityPolicy(purpose));
+    }
+
     private static TushareReducedResearchPersistenceGuard.SchemaState state(
             String schema,
             String searchPath,
@@ -107,6 +213,48 @@ class TushareReducedResearchPersistenceGuardTest {
     ) {
         return new TushareReducedResearchPersistenceGuard.SchemaState(
                 schema, searchPath, migrations);
+    }
+
+    private static TushareReducedResearchPersistenceGuard.SchemaState
+    identityState(
+            String database,
+            String user,
+            String url,
+            String schema,
+            String searchPath,
+            List<String> migrations,
+            int backendPid,
+            boolean transactionBound
+    ) {
+        return new TushareReducedResearchPersistenceGuard.SchemaState(
+                database,
+                user,
+                url,
+                schema,
+                searchPath,
+                migrations,
+                backendPid,
+                transactionBound);
+    }
+
+    private static TushareReducedResearchPersistenceGuard.Verification
+    transactionalVerification(int backendPid) {
+        return new TushareReducedResearchPersistenceGuard.Verification(
+                "stock_quant_test",
+                "stock_quant_test",
+                safeUrl(),
+                TushareReducedResearchPersistenceGuard.DATABASE_PURPOSE,
+                SCHEMA,
+                SCHEMA,
+                V1_TO_V13,
+                backendPid,
+                true,
+                "VERIFIED",
+                "VERIFIED");
+    }
+
+    private static String safeUrl() {
+        return "jdbc:postgresql://127.0.0.1:55432/stock_quant_test";
     }
 
     private static void assertGuardCode(

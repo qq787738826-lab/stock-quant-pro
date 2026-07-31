@@ -192,6 +192,10 @@ public final class TushareTokenRateLimiter {
         }
     }
 
+    TushareEndpointRateLimitPolicy policy() {
+        return policy;
+    }
+
     private void rotateDailyCounts() {
         LocalDate current = Objects.requireNonNull(
                 dateSource.currentDate(), "currentDate");

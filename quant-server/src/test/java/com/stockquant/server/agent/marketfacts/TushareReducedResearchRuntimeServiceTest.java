@@ -31,6 +31,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -82,8 +83,30 @@ class TushareReducedResearchRuntimeServiceTest {
 
         assertEquals(0, gateway.calls());
         verify(capture, never())
-                .captureAuthorizedLimitedPersonalFormal(
-                        any(), any(), any());
+                .captureAuthorizedF1cIsolatedReducedResearch(
+                        any(), any(), any(), any(), anyInt());
+    }
+
+    @Test
+    void rejectsGatewayWithoutTypedRateLimitProofBeforeProviderCall() {
+        UnboundedGateway gateway = new UnboundedGateway();
+        PitMarketFactCaptureService capture =
+                mock(PitMarketFactCaptureService.class);
+
+        TushareReducedResearchRuntimeService.RuntimeBlockedException error =
+                assertThrows(
+                        TushareReducedResearchRuntimeService
+                                .RuntimeBlockedException.class,
+                        () -> runtime(gateway, validGuard(), capture)
+                                .run(authorization(), command(END)));
+
+        assertEquals(
+                "TUSHARE_REDUCED_RUNTIME_RATE_LIMIT_GATEWAY_REQUIRED",
+                error.safeCode());
+        assertEquals(0, gateway.calls());
+        verify(capture, never())
+                .captureAuthorizedF1cIsolatedReducedResearch(
+                        any(), any(), any(), any(), anyInt());
     }
 
     @Test
@@ -110,41 +133,46 @@ class TushareReducedResearchRuntimeServiceTest {
                 error.safeCode());
         assertEquals(0, gateway.calls());
         verify(capture, never())
-                .captureAuthorizedLimitedPersonalFormal(
-                        any(), any(), any());
+                .captureAuthorizedF1cIsolatedReducedResearch(
+                        any(), any(), any(), any(), anyInt());
     }
 
     @Test
-    void rejectsSchemaTargetChangeBeforeCapture() {
-        AtomicInteger inspections = new AtomicInteger();
-        String changedSchema =
-                "f1c_tushare_research_"
-                        + "00000000000000000000000000000002";
-        TushareReducedResearchPersistenceGuard guard =
-                new TushareReducedResearchPersistenceGuard(() -> {
-                    String schema = inspections.getAndIncrement() == 0
-                            ? SCHEMA : changedSchema;
-                    return new TushareReducedResearchPersistenceGuard
-                            .SchemaState(schema, schema, V1_TO_V13);
-                });
+    void propagatesTransactionalSchemaGuardFailure() {
         SyntheticGateway gateway = new SyntheticGateway();
         PitMarketFactCaptureService capture =
                 mock(PitMarketFactCaptureService.class);
+        when(capture.captureAuthorizedF1cIsolatedReducedResearch(
+                any(), any(), any(), any(), anyInt()))
+                .thenThrow(new TushareReducedResearchPersistenceGuard
+                        .GuardException(
+                        "TUSHARE_REDUCED_RUNTIME_ISOLATED_SCHEMA_REQUIRED"));
 
         TushareReducedResearchPersistenceGuard.GuardException error =
                 assertThrows(
                         TushareReducedResearchPersistenceGuard
                                 .GuardException.class,
-                        () -> runtime(gateway, guard, capture)
+                        () -> runtime(gateway, validGuard(), capture)
                                 .run(authorization(), command(END)));
 
         assertEquals(
                 "TUSHARE_REDUCED_RUNTIME_ISOLATED_SCHEMA_REQUIRED",
                 error.safeCode());
         assertEquals(3, gateway.calls());
-        verify(capture, never())
-                .captureAuthorizedLimitedPersonalFormal(
-                        any(), any(), any());
+        var rateLimitContract = gateway.f1cRateLimitContract();
+        assertEquals(3, rateLimitContract.totalRateLimitedCallCount());
+        assertEquals(1L,
+                rateLimitContract.endpointRateLimitedCallCounts()
+                        .get("daily"));
+        assertEquals(1L,
+                rateLimitContract.endpointRateLimitedCallCounts()
+                        .get("adj_factor"));
+        assertEquals(1L,
+                rateLimitContract.endpointRateLimitedCallCounts()
+                        .get("trade_cal"));
+        verify(capture, times(1))
+                .captureAuthorizedF1cIsolatedReducedResearch(
+                        any(), any(), any(), any(), anyInt());
     }
 
     @Test
@@ -190,8 +218,82 @@ class TushareReducedResearchRuntimeServiceTest {
         assertTrue(result.reasonCodes().contains(
                 "CORPORATE_ACTION_LINEAGE_INCOMPLETE"));
         verify(capture, times(1))
-                .captureAuthorizedLimitedPersonalFormal(
-                        any(), any(), any());
+                .captureAuthorizedF1cIsolatedReducedResearch(
+                        any(), any(), any(), any(), anyInt());
+    }
+
+    @Test
+    void formulaOnlyFactoryFreezesEveryEligibilityField() {
+        var result =
+                TushareReducedResearchModels
+                        .TushareReducedResearchRunResult.formulaOnly(
+                        3,
+                        0,
+                        3,
+                        TushareMarketFactProvider.PROVIDER_CODE,
+                        "600000.SH",
+                        START,
+                        START,
+                        START,
+                        1,
+                        1,
+                        1,
+                        List.of(new TushareReducedResearchModels
+                                .TushareReducedResearchQfqBar(
+                                START,
+                                BigDecimal.ONE,
+                                BigDecimal.ONE,
+                                BigDecimal.ONE,
+                                BigDecimal.ONE)),
+                        new CaptureResult(
+                                1,
+                                "batch",
+                                1,
+                                "dataset",
+                                3,
+                                3,
+                                0,
+                                true),
+                        Set.of("FORMULA_ONLY"),
+                        TushareTechnicalQualification.RouteDecision
+                                .REDUCED_RESEARCH_ONLY);
+
+        assertTrue(result.systemKnowledgeOnly());
+        assertFalse(result.providerPitVerified());
+        assertFalse(result.corporateActionLineageComplete());
+        assertFalse(result.permanentSecurityIdentityVerified());
+        assertFalse(result.formalEligible());
+        assertFalse(result.fullQfqEligible());
+        assertFalse(result.productionEligible());
+        assertFalse(result.agentDecisionEligible());
+        assertFalse(result.backtestExecutionEligible());
+        assertFalse(result.investmentAdviceEligible());
+        assertFalse(result.tradingEligible());
+    }
+
+    @Test
+    void f1cCaptureResultValidationRequiresAtomicCompleteAccounting() {
+        PitMarketFactCaptureService.validateF1cCaptureResult(
+                result(6, 0), 6);
+        assertThrows(
+                IllegalStateException.class,
+                () -> PitMarketFactCaptureService
+                        .validateF1cCaptureResult(
+                                result(5, 0), 6));
+        assertThrows(
+                IllegalStateException.class,
+                () -> PitMarketFactCaptureService
+                        .validateF1cCaptureResult(
+                                new CaptureResult(
+                                        1,
+                                        "batch",
+                                        1,
+                                        "dataset",
+                                        6,
+                                        6,
+                                        0,
+                                        false),
+                                6));
     }
 
     @Test
@@ -199,10 +301,10 @@ class TushareReducedResearchRuntimeServiceTest {
         SyntheticGateway gateway = new SyntheticGateway();
         PitMarketFactCaptureService capture =
                 mock(PitMarketFactCaptureService.class);
-        when(capture.captureAuthorizedLimitedPersonalFormal(
-                any(), any(), any()))
-                .thenReturn(result(6, 0))
-                .thenReturn(result(0, 6));
+        when(capture.captureAuthorizedF1cIsolatedReducedResearch(
+                any(), any(), any(), any(), anyInt()))
+                .thenReturn(isolatedResult(6, 0))
+                .thenReturn(isolatedResult(0, 6));
         TushareReducedResearchRuntimeService runtime =
                 runtime(gateway, validGuard(), capture);
 
@@ -327,12 +429,12 @@ class TushareReducedResearchRuntimeServiceTest {
 
         assertEquals(expectedCode, error.safeCode());
         verify(capture, never())
-                .captureAuthorizedLimitedPersonalFormal(
-                        any(), any(), any());
+                .captureAuthorizedF1cIsolatedReducedResearch(
+                        any(), any(), any(), any(), anyInt());
     }
 
     private static TushareReducedResearchRuntimeService runtime(
-            SyntheticGateway gateway,
+            TushareApiGateway gateway,
             TushareReducedResearchPersistenceGuard guard,
             PitMarketFactCaptureService capture
     ) {
@@ -360,10 +462,39 @@ class TushareReducedResearchRuntimeServiceTest {
     ) {
         PitMarketFactCaptureService capture =
                 mock(PitMarketFactCaptureService.class);
-        when(capture.captureAuthorizedLimitedPersonalFormal(
-                any(), any(), any()))
-                .thenReturn(result(appended, idempotent));
+        when(capture.captureAuthorizedF1cIsolatedReducedResearch(
+                any(), any(), any(), any(), anyInt()))
+                .thenReturn(isolatedResult(appended, idempotent));
         return capture;
+    }
+
+    private static PitMarketFactCaptureService.F1cIsolatedCaptureResult
+    isolatedResult(
+            int appended,
+            int idempotent
+    ) {
+        var verification =
+                new TushareReducedResearchPersistenceGuard.Verification(
+                        TushareReducedResearchPersistenceGuard
+                                .REQUIRED_DATABASE,
+                        TushareReducedResearchPersistenceGuard
+                                .REQUIRED_DATABASE_USER,
+                        "jdbc:postgresql://127.0.0.1:55432/"
+                                + TushareReducedResearchPersistenceGuard
+                                .REQUIRED_DATABASE,
+                        TushareReducedResearchPersistenceGuard
+                                .DATABASE_PURPOSE,
+                        SCHEMA,
+                        SCHEMA,
+                        V1_TO_V13,
+                        10_001,
+                        true,
+                        "VERIFIED",
+                        "VERIFIED");
+        return new PitMarketFactCaptureService.F1cIsolatedCaptureResult(
+                result(appended, idempotent),
+                verification,
+                verification);
     }
 
     private static CaptureResult result(
@@ -453,11 +584,38 @@ class TushareReducedResearchRuntimeServiceTest {
         MISSING_ANCHOR_FACTOR
     }
 
-    private static final class SyntheticGateway
+    private static final class UnboundedGateway
             implements TushareApiGateway {
+        private final AtomicInteger calls = new AtomicInteger();
+
+        @Override
+        public QueryResult query(
+                String endpoint,
+                ObjectNode parameters,
+                List<String> fields,
+                Duration timeout,
+                QueryMode mode,
+                TushareManualBoundedSession session
+        ) {
+            calls.incrementAndGet();
+            throw new AssertionError(
+                    "unbounded gateway must be rejected before use");
+        }
+
+        int calls() {
+            return calls.get();
+        }
+    }
+
+    private static final class SyntheticGateway
+            implements TushareApiGateway, F1cRateLimitedGateway {
         private final AtomicInteger calls = new AtomicInteger();
         private final java.util.ArrayList<String> endpoints =
                 new java.util.ArrayList<>();
+        private final TushareTokenRateLimiter rateLimiter =
+                new TushareTokenRateLimiter(
+                        TushareEndpointRateLimitPolicy
+                                .frozenF1cPolicy());
         private Behavior behavior = Behavior.NORMAL;
 
         @Override
@@ -470,6 +628,7 @@ class TushareReducedResearchRuntimeServiceTest {
                 TushareManualBoundedSession session
         ) {
             session.authorizeAndReserve(endpoint, parameters);
+            rateLimiter.acquire(endpoint);
             calls.incrementAndGet();
             endpoints.add(endpoint);
             if (behavior == Behavior.FAIL_FACTOR
@@ -498,6 +657,13 @@ class TushareReducedResearchRuntimeServiceTest {
 
         List<String> endpoints() {
             return List.copyOf(endpoints);
+        }
+
+        @Override
+        public F1cRateLimitedGatewayContract
+        f1cRateLimitContract() {
+            return F1cRateLimitedGatewayContract.from(
+                    rateLimiter.policy(), rateLimiter);
         }
 
         private List<List<JsonNode>> dailyRows() {

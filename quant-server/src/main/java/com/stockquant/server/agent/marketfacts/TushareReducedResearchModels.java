@@ -89,6 +89,53 @@ public final class TushareReducedResearchModels {
             Set<String> reasonCodes,
             RouteDecision technicalRouteDecision
     ) {
+        public static TushareReducedResearchRunResult formulaOnly(
+                int providerCallCount,
+                int retryCount,
+                int sessionConsumedRequests,
+                String sourceCode,
+                String sourceInstrumentId,
+                LocalDate requestedStart,
+                LocalDate requestedEnd,
+                LocalDate anchorTradeDate,
+                int rawCount,
+                int factorCount,
+                int calendarCount,
+                List<TushareReducedResearchQfqBar> qfqBars,
+                CaptureResult captureResult,
+                Set<String> reasonCodes,
+                RouteDecision technicalRouteDecision
+        ) {
+            return new TushareReducedResearchRunResult(
+                    RuntimeQualification.REDUCED_RESEARCH_FORMULA_ONLY,
+                    true,
+                    false,
+                    false,
+                    false,
+                    false,
+                    false,
+                    false,
+                    false,
+                    false,
+                    false,
+                    false,
+                    providerCallCount,
+                    retryCount,
+                    sessionConsumedRequests,
+                    sourceCode,
+                    sourceInstrumentId,
+                    requestedStart,
+                    requestedEnd,
+                    anchorTradeDate,
+                    rawCount,
+                    factorCount,
+                    calendarCount,
+                    qfqBars,
+                    captureResult,
+                    reasonCodes,
+                    technicalRouteDecision);
+        }
+
         public TushareReducedResearchRunResult {
             runtimeQualification = Objects.requireNonNull(
                     runtimeQualification, "runtimeQualification");
