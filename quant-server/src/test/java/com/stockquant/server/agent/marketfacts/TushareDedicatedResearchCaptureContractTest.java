@@ -6,6 +6,7 @@ import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.FactType
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.MarketFactRequest;
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.MarketFactResponse;
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.RunNamespace;
+import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.TradingCalendar;
 import com.stockquant.server.agent.marketfacts.TushareDedicatedResearchBatchCommand.SecuritySelection;
 import org.junit.jupiter.api.Test;
 
@@ -112,6 +113,33 @@ class TushareDedicatedResearchCaptureContractTest {
                                 List.of()));
     }
 
+    @Test
+    void rejectsClosedCalendarBeforeContractCreation() {
+        Fixture fixture = fixture(List.of(
+                new SecuritySelection("600000", "SSE")));
+        MarketFactResponse original = fixture.responses().get(0);
+        TradingCalendar calendar =
+                original.tradingCalendar().get(0);
+        TradingCalendar closed = new TradingCalendar(
+                calendar.sourceIdentity(),
+                calendar.exchange(),
+                calendar.calendarDate(),
+                false,
+                "CLOSED",
+                calendar.version(),
+                calendar.rawFields());
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> TushareDedicatedResearchCaptureContract
+                        .validated(
+                                fixture.command(),
+                                fixture.session(),
+                                List.of(copyWithCalendar(
+                                        original,
+                                        List.of(closed)))));
+    }
+
     private static void assertMetadataRejected(
             java.util.function.Consumer<ObjectNode> mutation
     ) {
@@ -210,6 +238,29 @@ class TushareDedicatedResearchCaptureContractTest {
                 value.corporateActions(),
                 value.errors(),
                 metadata);
+    }
+
+    private static MarketFactResponse copyWithCalendar(
+            MarketFactResponse value,
+            List<TradingCalendar> calendars
+    ) {
+        return new MarketFactResponse(
+                value.providerContractVersion(),
+                value.providerCode(),
+                value.adapterVersion(),
+                value.runNamespace(),
+                value.sourceCode(),
+                value.sourceInstrumentId(),
+                value.requestedStart(),
+                value.requestedEnd(),
+                value.complete(),
+                value.capability(),
+                value.rawDailyBars(),
+                value.adjustmentFactors(),
+                calendars,
+                value.corporateActions(),
+                value.errors(),
+                value.providerMetadata());
     }
 
     private static ObjectNode metadata(MarketFactResponse value) {

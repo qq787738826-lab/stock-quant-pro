@@ -1,16 +1,13 @@
 package com.stockquant.server.agent.marketfacts;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.stockquant.server.agent.backtest.BacktestCanonicalHashService;
-import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.AdjustmentFactor;
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.FactType;
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.MarketFactRequest;
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.MarketFactResponse;
-import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.RawDailyBar;
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.RunNamespace;
-import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.TradingCalendar;
 import com.stockquant.server.agent.marketfacts.PitMarketFactCaptureService.F1eDedicatedCaptureResult;
 import com.stockquant.server.agent.marketfacts.TushareDedicatedResearchBatchCommand.SecuritySelection;
+import com.stockquant.server.agent.marketfacts.TushareDedicatedResearchFactValidator.ValidatedSymbolFacts;
 import com.stockquant.server.agent.marketfacts.TushareDedicatedResearchBatchModels.DatabaseExecutionIdentity;
 import com.stockquant.server.agent.marketfacts.TushareDedicatedResearchBatchModels.SymbolResearchResult;
 import com.stockquant.server.agent.marketfacts.TushareDedicatedResearchBatchModels.TushareDedicatedResearchBatchResult;
@@ -23,7 +20,6 @@ import com.stockquant.server.agent.marketfacts.TushareTechnicalQualification.Rou
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
-import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -240,92 +236,38 @@ public final class TushareDedicatedResearchBatchService {
             SecuritySelection security,
             TushareDedicatedResearchBatchCommand command
     ) {
-        if (response == null
-                || !response.complete()
-                || !response.errors().isEmpty()
-                || !TushareMarketFactProvider.PROVIDER_CODE.equals(
-                response.sourceCode())
-                || !TushareMarketFactProvider.sourceInstrumentId(
-                        security.symbol(), security.exchange()).equals(
-                response.sourceInstrumentId())
-                || !command.tradeDate().equals(response.requestedStart())
-                || !command.tradeDate().equals(response.requestedEnd())) {
-            throw blocked(
-                    "TUSHARE_DEDICATED_RESEARCH_PROVIDER_RESPONSE_INCOMPLETE");
-        }
-        int providerCalls = metadataInt(
-                response.providerMetadata(), "providerCallCount");
-        int retryCount = metadataInt(
-                response.providerMetadata(), "rateLimitRetryCount");
-        if (providerCalls != 3 || retryCount != 0
-                || response.rawDailyBars().size() != 1
-                || response.adjustmentFactors().size() != 1
-                || response.tradingCalendar().size() != 1) {
-            throw blocked(
-                    "TUSHARE_DEDICATED_RESEARCH_PROVIDER_RESPONSE_INVALID");
-        }
-        RawDailyBar raw = response.rawDailyBars().get(0);
-        AdjustmentFactor factor =
-                response.adjustmentFactors().get(0);
-        TradingCalendar calendar =
-                response.tradingCalendar().get(0);
-        if (!command.tradeDate().equals(raw.tradeDate())
-                || !command.tradeDate().equals(
-                factor.factorEffectiveTradeDate())
-                || !command.tradeDate().equals(calendar.calendarDate())
-                || !calendar.open()) {
+        ValidatedSymbolFacts facts;
+        try {
+            facts = TushareDedicatedResearchFactValidator.validate(
+                    response, security, command.tradeDate());
+        } catch (IllegalArgumentException error) {
             throw blocked(
                     "TUSHARE_DEDICATED_RESEARCH_FACT_WINDOW_INCOMPLETE");
         }
-        requirePositive(factor.factor(),
-                "TUSHARE_QFQ_FACTOR_INVALID");
-        requirePositive(raw.open(),
-                "TUSHARE_QFQ_RAW_PRICE_INVALID");
-        requirePositive(raw.high(),
-                "TUSHARE_QFQ_RAW_PRICE_INVALID");
-        requirePositive(raw.low(),
-                "TUSHARE_QFQ_RAW_PRICE_INVALID");
-        requirePositive(raw.close(),
-                "TUSHARE_QFQ_RAW_PRICE_INVALID");
         List<TushareDedicatedResearchQfqBar> qfqBars = List.of(
                 new TushareDedicatedResearchQfqBar(
                         command.tradeDate(),
                         QfqPriceMath.calculate(
-                                raw.open(),
-                                factor.factor(),
-                                factor.factor()),
+                                facts.raw().open(),
+                                facts.factor().factor(),
+                                facts.factor().factor()),
                         QfqPriceMath.calculate(
-                                raw.high(),
-                                factor.factor(),
-                                factor.factor()),
+                                facts.raw().high(),
+                                facts.factor().factor(),
+                                facts.factor().factor()),
                         QfqPriceMath.calculate(
-                                raw.low(),
-                                factor.factor(),
-                                factor.factor()),
+                                facts.raw().low(),
+                                facts.factor().factor(),
+                                facts.factor().factor()),
                         QfqPriceMath.calculate(
-                                raw.close(),
-                                factor.factor(),
-                                factor.factor())));
+                                facts.raw().close(),
+                                facts.factor().factor(),
+                                facts.factor().factor())));
         return new ValidatedSymbol(
-                response, providerCalls, retryCount, qfqBars);
-    }
-
-    private static int metadataInt(JsonNode metadata, String field) {
-        JsonNode value = metadata == null ? null : metadata.get(field);
-        if (value == null || !value.canConvertToInt()) {
-            throw blocked(
-                    "TUSHARE_DEDICATED_RESEARCH_PROVIDER_METADATA_INVALID");
-        }
-        return value.intValue();
-    }
-
-    private static void requirePositive(
-            BigDecimal value,
-            String safeCode
-    ) {
-        if (value == null || value.signum() <= 0) {
-            throw blocked(safeCode);
-        }
+                response,
+                facts.providerCallCount(),
+                facts.retryCount(),
+                qfqBars);
     }
 
     private static RuntimeBlockedException blocked(String safeCode) {

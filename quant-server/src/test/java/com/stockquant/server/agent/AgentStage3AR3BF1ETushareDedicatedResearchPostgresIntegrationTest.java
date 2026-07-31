@@ -10,6 +10,7 @@ import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.MarketFa
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.MarketFactResponse;
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.RawDailyBar;
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.RunNamespace;
+import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.TradingCalendar;
 import com.stockquant.server.agent.marketfacts.TushareDedicatedResearchBatchAuthorization;
 import com.stockquant.server.agent.marketfacts.TushareDedicatedResearchBatchCommand;
 import com.stockquant.server.agent.marketfacts.TushareDedicatedResearchBatchCommand.SecuritySelection;
@@ -45,6 +46,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 @SpringBootTest(classes = QuantServerApplication.class)
 @ActiveProfiles("agent-integration-test")
@@ -453,10 +456,7 @@ class AgentStage3AR3BF1ETushareDedicatedResearchPostgresIntegrationTest {
                 List.of(mismatchedRaw),
                 metadata(second)));
         TushareDedicatedResearchCaptureContract contract =
-                TushareDedicatedResearchCaptureContract.validated(
-                        fixture.command(),
-                        fixture.session(),
-                        invalid);
+                bypassContract(fixture, invalid);
 
         assertThrows(
                 IllegalArgumentException.class,
@@ -465,6 +465,66 @@ class AgentStage3AR3BF1ETushareDedicatedResearchPostgresIntegrationTest {
                                 contract,
                                 Instant.parse(
                                         "2026-07-31T04:16:00Z"),
+                                authorization(),
+                                guard.verifyBeforeProvider()));
+
+        assertEquals(batchesBefore, count(
+                "SELECT count(*) FROM pit_market_fact_batches"));
+        assertEquals(observationsBefore, count(
+                "SELECT count(*) FROM pit_market_fact_observations"));
+    }
+
+    @Test
+    @Order(9)
+    void directClosedCalendarCaptureProducesZeroWrites() {
+        int batchesBefore = count(
+                "SELECT count(*) FROM pit_market_fact_batches");
+        int observationsBefore = count(
+                "SELECT count(*) FROM pit_market_fact_observations");
+        LocalDate date = LocalDate.of(2026, 7, 31);
+        CaptureFixture fixture = captureFixture(
+                date, selections(1));
+        MarketFactResponse closed =
+                withClosedCalendar(fixture.responses().get(0));
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> captureService
+                        .captureAuthorizedDedicatedResearchBatch(
+                                bypassContract(
+                                        fixture, List.of(closed)),
+                                Instant.parse(
+                                        "2026-07-31T04:17:00Z"),
+                                authorization(),
+                                guard.verifyBeforeProvider()));
+
+        assertEquals(batchesBefore, count(
+                "SELECT count(*) FROM pit_market_fact_batches"));
+        assertEquals(observationsBefore, count(
+                "SELECT count(*) FROM pit_market_fact_observations"));
+    }
+
+    @Test
+    @Order(10)
+    void secondClosedCalendarRejectsWholeBatchBeforeWrites() {
+        int batchesBefore = count(
+                "SELECT count(*) FROM pit_market_fact_batches");
+        int observationsBefore = count(
+                "SELECT count(*) FROM pit_market_fact_observations");
+        LocalDate date = LocalDate.of(2026, 8, 1);
+        CaptureFixture fixture = captureFixture(
+                date, selections(2));
+        List<MarketFactResponse> responses =
+                new ArrayList<>(fixture.responses());
+        responses.set(1, withClosedCalendar(responses.get(1)));
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> captureService
+                        .captureAuthorizedDedicatedResearchBatch(
+                                bypassContract(fixture, responses),
+                                Instant.parse(
+                                        "2026-07-31T04:18:00Z"),
                                 authorization(),
                                 guard.verifyBeforeProvider()));
 
@@ -594,6 +654,53 @@ class AgentStage3AR3BF1ETushareDedicatedResearchPostgresIntegrationTest {
 
     private static ObjectNode metadata(MarketFactResponse response) {
         return (ObjectNode) response.providerMetadata().deepCopy();
+    }
+
+    private static MarketFactResponse withClosedCalendar(
+            MarketFactResponse response
+    ) {
+        TradingCalendar value =
+                response.tradingCalendar().get(0);
+        TradingCalendar closed = new TradingCalendar(
+                value.sourceIdentity(),
+                value.exchange(),
+                value.calendarDate(),
+                false,
+                "CLOSED",
+                value.version(),
+                value.rawFields());
+        return new MarketFactResponse(
+                response.providerContractVersion(),
+                response.providerCode(),
+                response.adapterVersion(),
+                response.runNamespace(),
+                response.sourceCode(),
+                response.sourceInstrumentId(),
+                response.requestedStart(),
+                response.requestedEnd(),
+                response.complete(),
+                response.capability(),
+                response.rawDailyBars(),
+                response.adjustmentFactors(),
+                List.of(closed),
+                response.corporateActions(),
+                response.errors(),
+                response.providerMetadata());
+    }
+
+    private static TushareDedicatedResearchCaptureContract
+    bypassContract(
+            CaptureFixture fixture,
+            List<MarketFactResponse> responses
+    ) {
+        TushareDedicatedResearchCaptureContract contract =
+                mock(TushareDedicatedResearchCaptureContract.class);
+        when(contract.tradeDate()).thenReturn(
+                fixture.command().tradeDate());
+        when(contract.orderedSecurities()).thenReturn(
+                fixture.command().securities());
+        when(contract.responses()).thenReturn(List.copyOf(responses));
+        return contract;
     }
 
     private static void assertContractRejected(

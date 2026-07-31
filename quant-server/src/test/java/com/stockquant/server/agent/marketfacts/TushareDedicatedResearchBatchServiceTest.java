@@ -199,6 +199,28 @@ class TushareDedicatedResearchBatchServiceTest {
     }
 
     @Test
+    void closedCalendarUsesSharedFactGateAndCreatesNoCapture() {
+        SyntheticGateway gateway = new SyntheticGateway();
+        gateway.closedCalendar = true;
+        PitMarketFactCaptureService capture =
+                mock(PitMarketFactCaptureService.class);
+
+        var error = assertThrows(
+                TushareDedicatedResearchBatchService
+                        .RuntimeBlockedException.class,
+                () -> service(gateway, validGuard(), capture).run(
+                        authorization(), command(securities(1))));
+
+        assertEquals(
+                "TUSHARE_DEDICATED_RESEARCH_FACT_WINDOW_INCOMPLETE",
+                error.safeCode());
+        assertEquals(3, gateway.calls());
+        verify(capture, never())
+                .captureAuthorizedDedicatedResearchBatch(
+                        any(), any(), any(), any());
+    }
+
+    @Test
     void captureFailurePropagatesAfterExactProviderBudget() {
         SyntheticGateway gateway = new SyntheticGateway();
         PitMarketFactCaptureService capture =
@@ -414,6 +436,7 @@ class TushareDedicatedResearchBatchServiceTest {
         private int calls;
         private int failAtCall = -1;
         private boolean emptyFactor;
+        private boolean closedCalendar;
 
         @Override
         public QueryResult query(
@@ -461,7 +484,7 @@ class TushareDedicatedResearchBatchServiceTest {
                 case "trade_cal" -> List.of(List.of(
                         text(exchange),
                         text(date),
-                        decimal("1"),
+                        decimal(closedCalendar ? "0" : "1"),
                         text(previousDate(date))));
                 default -> throw new IllegalArgumentException(endpoint);
             };

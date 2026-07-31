@@ -261,64 +261,15 @@ public class PitMarketFactCaptureService {
                 securities = captureContract.orderedSecurities();
         for (int index = 0; index < responses.size(); index++) {
             MarketFactResponse response = responses.get(index);
-            PreparedCaptureInput prepared = prepareCaptureInput(
-                    response, observedAt, authorization);
-            validateDedicatedFactScope(
-                    prepared,
+            TushareDedicatedResearchFactValidator.validate(
+                    response,
                     securities.get(index),
                     captureContract.tradeDate());
+            PreparedCaptureInput prepared = prepareCaptureInput(
+                    response, observedAt, authorization);
             result.add(prepared);
         }
         return List.copyOf(result);
-    }
-
-    private static void validateDedicatedFactScope(
-            PreparedCaptureInput prepared,
-            TushareDedicatedResearchBatchCommand.SecuritySelection
-                    security,
-            java.time.LocalDate tradeDate
-    ) {
-        MarketFactResponse response = prepared.response();
-        String sourceInstrumentId =
-                TushareMarketFactProvider.sourceInstrumentId(
-                        security.symbol(), security.exchange());
-        if (!sourceInstrumentId.equals(
-                response.sourceInstrumentId())
-                || !tradeDate.equals(response.requestedStart())
-                || !tradeDate.equals(response.requestedEnd())
-                || response.rawDailyBars().size() != 1
-                || response.adjustmentFactors().size() != 1
-                || response.tradingCalendar().size() != 1
-                || !response.corporateActions().isEmpty()) {
-            throw new IllegalArgumentException(
-                    "TUSHARE_DEDICATED_RESEARCH_CAPTURE_SCOPE_INVALID");
-        }
-        MarketFactProviderModels.RawDailyBar raw =
-                response.rawDailyBars().get(0);
-        MarketFactProviderModels.AdjustmentFactor factor =
-                response.adjustmentFactors().get(0);
-        MarketFactProviderModels.TradingCalendar calendar =
-                response.tradingCalendar().get(0);
-        if (!security.symbol().equals(raw.symbol())
-                || !security.exchange().equals(raw.exchange())
-                || !TushareMarketFactProvider.rawSourceIdentity(
-                security.symbol(), security.exchange()).equals(
-                raw.sourceIdentity())
-                || !tradeDate.equals(raw.tradeDate())
-                || !security.symbol().equals(factor.symbol())
-                || !TushareMarketFactProvider.factorSourceIdentity(
-                security.symbol(), security.exchange()).equals(
-                factor.sourceIdentity())
-                || !tradeDate.equals(
-                factor.factorEffectiveTradeDate())
-                || !security.exchange().equals(calendar.exchange())
-                || !TushareMarketFactProvider.calendarSourceIdentity(
-                security.exchange()).equals(
-                calendar.sourceIdentity())
-                || !tradeDate.equals(calendar.calendarDate())) {
-            throw new IllegalArgumentException(
-                    "TUSHARE_DEDICATED_RESEARCH_CAPTURE_SCOPE_INVALID");
-        }
     }
 
     private CaptureResult capturePreparedWithinTransaction(

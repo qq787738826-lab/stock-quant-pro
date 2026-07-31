@@ -9,6 +9,7 @@ import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.MarketFa
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.ProviderCapability;
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.RawDailyBar;
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.RunNamespace;
+import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.TradingCalendar;
 import com.stockquant.server.agent.marketfacts.TushareDedicatedResearchBatchCommand.SecuritySelection;
 import com.stockquant.server.agent.temporal.TemporalMarketFoundationService;
 import org.junit.jupiter.api.Test;
@@ -26,6 +27,7 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 class PitMarketFactCaptureServiceF1eBoundaryTest {
 
@@ -38,7 +40,7 @@ class PitMarketFactCaptureServiceF1eBoundaryTest {
             FactType.TRADING_CALENDAR);
 
     @Test
-    void secondResponseDuplicateNaturalIdentityFailsBeforeFirstWrite() {
+    void secondResponseFactIdentityMismatchFailsBeforeFirstWrite() {
         Fixture fixture = fixture();
         MarketFactResponse first = fixture.responses().get(0);
         MarketFactResponse second = fixture.responses().get(1);
@@ -76,10 +78,7 @@ class PitMarketFactCaptureServiceF1eBoundaryTest {
                 List.of(duplicateRaw),
                 List.of(duplicateFactor)));
         TushareDedicatedResearchCaptureContract contract =
-                TushareDedicatedResearchCaptureContract.validated(
-                        fixture.command(),
-                        fixture.session(),
-                        responses);
+                bypassContract(fixture, responses);
         PitMarketFactRepository repository =
                 mock(PitMarketFactRepository.class);
 
@@ -143,6 +142,50 @@ class PitMarketFactCaptureServiceF1eBoundaryTest {
                 () -> captureService(repository)
                         .captureAuthorizedDedicatedResearchBatch(
                                 contract,
+                                OBSERVED_AT,
+                                TushareDedicatedResearchBatchAuthorization
+                                        .manualPersonalResearch(),
+                                verification(false)));
+
+        verifyNoInteractions(repository);
+    }
+
+    @Test
+    void closedCalendarCannotBypassCaptureAfterValidContract() {
+        Fixture fixture = fixture();
+        TushareDedicatedResearchCaptureContract valid =
+                TushareDedicatedResearchCaptureContract.validated(
+                        fixture.command(),
+                        fixture.session(),
+                        fixture.responses());
+        MarketFactResponse original = valid.responses().get(0);
+        TradingCalendar calendar =
+                original.tradingCalendar().get(0);
+        TradingCalendar closed = new TradingCalendar(
+                calendar.sourceIdentity(),
+                calendar.exchange(),
+                calendar.calendarDate(),
+                false,
+                "CLOSED",
+                calendar.version(),
+                calendar.rawFields());
+        MarketFactResponse tampered =
+                copyWithCalendar(original, List.of(closed));
+        TushareDedicatedResearchCaptureContract bypass =
+                mock(TushareDedicatedResearchCaptureContract.class);
+        when(bypass.tradeDate()).thenReturn(valid.tradeDate());
+        when(bypass.orderedSecurities()).thenReturn(
+                valid.orderedSecurities());
+        when(bypass.responses()).thenReturn(List.of(
+                tampered, valid.responses().get(1)));
+        PitMarketFactRepository repository =
+                mock(PitMarketFactRepository.class);
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> captureService(repository)
+                        .captureAuthorizedDedicatedResearchBatch(
+                                bypass,
                                 OBSERVED_AT,
                                 TushareDedicatedResearchBatchAuthorization
                                         .manualPersonalResearch(),
@@ -237,6 +280,44 @@ class PitMarketFactCaptureServiceF1eBoundaryTest {
                 value.corporateActions(),
                 value.errors(),
                 value.providerMetadata());
+    }
+
+    private static MarketFactResponse copyWithCalendar(
+            MarketFactResponse value,
+            List<TradingCalendar> calendars
+    ) {
+        return new MarketFactResponse(
+                value.providerContractVersion(),
+                value.providerCode(),
+                value.adapterVersion(),
+                value.runNamespace(),
+                value.sourceCode(),
+                value.sourceInstrumentId(),
+                value.requestedStart(),
+                value.requestedEnd(),
+                value.complete(),
+                value.capability(),
+                value.rawDailyBars(),
+                value.adjustmentFactors(),
+                calendars,
+                value.corporateActions(),
+                value.errors(),
+                value.providerMetadata());
+    }
+
+    private static TushareDedicatedResearchCaptureContract
+    bypassContract(
+            Fixture fixture,
+            List<MarketFactResponse> responses
+    ) {
+        TushareDedicatedResearchCaptureContract contract =
+                mock(TushareDedicatedResearchCaptureContract.class);
+        when(contract.tradeDate()).thenReturn(
+                fixture.command().tradeDate());
+        when(contract.orderedSecurities()).thenReturn(
+                fixture.command().securities());
+        when(contract.responses()).thenReturn(List.copyOf(responses));
+        return contract;
     }
 
     private static TushareDedicatedResearchPersistenceGuard.Verification

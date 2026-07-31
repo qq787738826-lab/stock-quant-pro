@@ -97,7 +97,22 @@ dividend、公司行动、Provider revision、缩减 QFQ、Agent 结论或投资
 `BLOCKED`，不会以构造器异常替代业务判定。修复不改变当前 ready/operational 状态、
 真实调用累计数或四项正式门禁。
 
-## 7. 缩减 QFQ
+## 7. 最终实际 Git 复验修复
+
+增量提交 `e95781687cd0af63507c42017ec8ca6d6f404f86` 已解决捕获合同、全部响应
+写前验证、数据库身份和 Admission `BLOCKED` 语义。其最终实际 Git 复验继续发现：
+`calendar.open=true` 只由上层 `TushareDedicatedResearchBatchService` 检查，直接调用
+专用捕获入口时仍可能绕过该开市日不变量。
+
+本次增量修复新增共享纯验证器 `TushareDedicatedResearchFactValidator`，由正常 Service、
+`TushareDedicatedResearchCaptureContract` 和 `PitMarketFactCaptureService` 写前预验证
+共同调用。每只证券统一要求 raw/factor/calendar 各一条、日期和来源身份闭合、
+calendar 为 `open=true/REGULAR`、factor 与 OHLC 合法、无公司行动、Provider 调用数为
+3 且重试数为 0。即使调用方绕过 Service 或篡改已构造合同，任一证券为休市日也会在
+任何 Repository 或 Temporal Foundation 写入前拒绝；两证券批次中第二只证券休市时
+同样整批零写入。该修复不改变业务状态、Provider 调用数、QFQ 规则或四项正式门禁。
+
+## 8. 缩减 QFQ
 
 每只证券只有一个开市日 raw 与同日 factor。OHLC 只调用共享 `QfqPriceMath`，以同日
 factor 作为显式 anchor，在内存返回 `REDUCED_RESEARCH_FORMULA_ONLY`。结果明确：
@@ -108,20 +123,20 @@ factor 作为显式 anchor，在内存返回 `REDUCED_RESEARCH_FORMULA_ONLY`。�
 - 不使用 `QfqAsOfResult`，不写 QFQ 表；
 - `QfqAsOfEngine` 的完整 lineage/cutoff 门禁和黄金向量不变。
 
-## 8. 验证结果
+## 9. 验证结果
 
 全部结果是 Codex 本地实际执行证据，不是 GitHub Actions CI：
 
 | 验证组 | 结果 |
 |---|---|
-| Java 干净编译 | `mvn -pl quant-server -am clean compile -DskipTests`；8 个 core、180 个 server 生产源码，`BUILD SUCCESS` |
-| F1E 定向与边界单元测试 | `27/0/0/0`；捕获合同、全响应预验证零写、准入、授权、命令、守卫、1—3 证券编排和 failure-before-capture |
-| F1A—F1E、Provider V2 与 QFQ 联合回归 | `143/0/0/0`；Provider V2 10 项、QFQ 权威引擎 19 项及 18 个黄金向量不变 |
+| Java 干净编译 | `mvn -pl quant-server -am clean compile -DskipTests`；8 个 core、181 个 server 生产源码，`BUILD SUCCESS` |
+| F1E 定向与边界单元测试 | `40/0/0/0`；共享事实验证、捕获合同、休市日写前零写、准入、授权、命令、守卫、1—3 证券编排和 failure-before-capture |
+| F1A—F1E、Provider V2 与 QFQ 联合回归 | `146/0/0/0`；Provider V2 10 项、QFQ 权威引擎 19 项及 18 个黄金向量不变 |
 | `quant-core` 全量 | `4/0/0/0` |
-| `quant-server` 安全全量 | `434/0/0/0`；命令级排除全部 `*IntegrationTest/*Postgres*/*CrossLanguage*/*Live*` |
+| `quant-server` 安全全量 | `437/0/0/0`；命令级排除全部 `*IntegrationTest/*Postgres*/*CrossLanguage*/*Live*` |
 | F1A PostgreSQL | `4/0/0/0`，`Skipped=0` |
 | F1C PostgreSQL | `3/0/0/0`，`Skipped=0` |
-| F1E PostgreSQL | `8/0/0/0`，`Skipped=0`；专用数据库/用户/Schema、V1—V13、1/2/3 证券、合同绕过零写、后续响应深层事实异常零写、全批次回滚、search path TOCTOU、幂等及 append-only |
+| F1E PostgreSQL | `10/0/0/0`，`Skipped=0`；专用数据库/用户/Schema、V1—V13、1/2/3 证券、合同绕过零写、后续响应深层事实异常零写、直接休市日零写、第二证券休市整批零写、全批次回滚、search path TOCTOU、幂等及 append-only |
 
 三组数据库测试只连接同一个本轮新建的 PostgreSQL 16.13 临时实例中的
 `stock_quant_test` 与 `stock_quant_research`，没有连接既有或正常业务数据库。F1A/F1C
@@ -129,7 +144,7 @@ factor 作为显式 anchor，在内存返回 `REDUCED_RESEARCH_FORMULA_ONLY`。�
 public 结构、数据和 Flyway 指纹前后相同。临时 55432 监听和集群目录残留均为 0。
 全部 Provider 响应来自合成 Gateway，不计真实 Provider 调用。
 
-## 9. 当前状态
+## 10. 当前状态
 
 ```text
 TUSHARE_TECHNICAL_ROUTE_DECISION=REDUCED_RESEARCH_ONLY

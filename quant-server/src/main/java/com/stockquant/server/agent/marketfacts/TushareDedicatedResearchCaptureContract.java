@@ -3,8 +3,8 @@ package com.stockquant.server.agent.marketfacts;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.FactType;
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.MarketFactResponse;
-import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.RunNamespace;
 import com.stockquant.server.agent.marketfacts.TushareDedicatedResearchBatchCommand.SecuritySelection;
+import com.stockquant.server.agent.marketfacts.TushareDedicatedResearchFactValidator.ValidatedSymbolFacts;
 import com.stockquant.server.agent.marketfacts.TushareManualBoundedSession.SessionProfile;
 
 import java.time.LocalDate;
@@ -135,11 +135,10 @@ public final class TushareDedicatedResearchCaptureContract {
             }
             MarketFactResponse response = Objects.requireNonNull(
                     responses.get(index), "response");
-            validateResponse(response, security, index);
-            providerCalls += metadataInt(
-                    response.providerMetadata(), "providerCallCount");
-            retryCount += metadataInt(
-                    response.providerMetadata(), "rateLimitRetryCount");
+            ValidatedSymbolFacts facts =
+                    validateResponse(response, security, index);
+            providerCalls += facts.providerCallCount();
+            retryCount += facts.retryCount();
         }
         if (providerCalls != expectedProviderCallCount
                 || retryCount != expectedRetryCount) {
@@ -147,35 +146,17 @@ public final class TushareDedicatedResearchCaptureContract {
         }
     }
 
-    private void validateResponse(
+    private ValidatedSymbolFacts validateResponse(
             MarketFactResponse response,
             SecuritySelection security,
             int index
     ) {
+        ValidatedSymbolFacts facts =
+                TushareDedicatedResearchFactValidator.validate(
+                        response, security, tradeDate);
         JsonNode metadata = response.providerMetadata();
-        if (!response.complete()
-                || !response.errors().isEmpty()
-                || response.runNamespace() != RunNamespace.FORMAL
-                || !TushareMarketFactProvider.PROVIDER_CODE.equals(
-                response.providerCode())
-                || !TushareMarketFactProvider.PROVIDER_CODE.equals(
-                response.sourceCode())
-                || !TushareMarketFactProvider.ADAPTER_VERSION.equals(
-                response.adapterVersion())
-                || !TushareMarketFactProvider.sourceInstrumentId(
-                security.symbol(), security.exchange()).equals(
-                response.sourceInstrumentId())
-                || !tradeDate.equals(response.requestedStart())
-                || !tradeDate.equals(response.requestedEnd())
-                || response.rawDailyBars().size() != 1
-                || response.adjustmentFactors().size() != 1
-                || response.tradingCalendar().size() != 1
-                || !response.corporateActions().isEmpty()
-                || response.recordCount() != 3
-                || !response.capability().supportedFactTypes()
+        if (!response.capability().supportedFactTypes()
                 .equals(expectedFactTypes)
-                || metadataInt(metadata, "providerCallCount") != 3
-                || metadataInt(metadata, "rateLimitRetryCount") != 0
                 || metadataInt(
                 metadata, "sessionMaximumBusinessRequests")
                 != expectedProviderCallCount
@@ -190,6 +171,7 @@ public final class TushareDedicatedResearchCaptureContract {
                 expectedFactTypes)) {
             throw invalid();
         }
+        return facts;
     }
 
     private static Set<FactType> metadataFactTypes(JsonNode metadata) {
