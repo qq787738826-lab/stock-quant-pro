@@ -111,10 +111,7 @@ public final class TushareWrittenPermissionQualification {
         Objects.requireNonNull(input, "input");
         validateRestrictions(input);
         Set<String> evidenceIds = collectEvidenceIds(input);
-        if (!input.evidenceProvenance().keySet().equals(evidenceIds)) {
-            throw new IllegalArgumentException(
-                    "permission evidence provenance must match claim IDs");
-        }
+        validateEvidenceSupport(input, evidenceIds);
         Set<PermissionBlocker> blockers =
                 EnumSet.noneOf(PermissionBlocker.class);
         addBlocker(
@@ -152,6 +149,31 @@ public final class TushareWrittenPermissionQualification {
                 PermissionBlocker.PERSONAL_2000_POINT_SCOPE_UNVERIFIED);
         return new TushareWrittenPermissionQualification(
                 input, evidenceIds, Set.copyOf(blockers));
+    }
+
+    private static void validateEvidenceSupport(
+            AssessmentInput input,
+            Set<String> evidenceIds
+    ) {
+        Map<String, EvidenceMetadata> metadataById =
+                input.evidenceProvenance();
+        if (!metadataById.keySet().equals(evidenceIds)) {
+            throw new IllegalArgumentException(
+                    "permission evidence provenance must match claim IDs");
+        }
+        for (String evidenceId : evidenceIds) {
+            EvidenceMetadata metadata = metadataById.get(evidenceId);
+            if (metadata == null
+                    || !evidenceId.equals(metadata.evidenceId())) {
+                throw new IllegalArgumentException(
+                        "permission evidence metadata ID mismatch");
+            }
+            if (!metadata.supportsVerifiedPermission()) {
+                throw new IllegalArgumentException(
+                        "permission evidence is not qualified for VERIFIED: "
+                                + evidenceId);
+            }
+        }
     }
 
     private static EvidenceMetadata quantSourceEvidence() {
@@ -372,14 +394,53 @@ public final class TushareWrittenPermissionQualification {
             }
             if (evidenceProvenance
                     == EvidenceProvenance
-                    .USER_PROVIDED_EXACT_OFFICIAL_TRANSCRIPTION
-                    && (originalArtifactStored
-                    || screenshotReviewed
-                    || independentSourceAuthenticityReviewed)) {
-                throw new IllegalArgumentException(
-                        "transcription provenance cannot impersonate "
-                                + "artifact review");
+                    .USER_PROVIDED_EXACT_OFFICIAL_TRANSCRIPTION) {
+                if (evidenceSource
+                        != EvidenceSource.TUSHARE_OFFICIAL_REPLY
+                        || !userAttestedOfficialSource) {
+                    throw new IllegalArgumentException(
+                            "official transcription requires user-attested "
+                                    + "Tushare official reply source");
+                }
+                if (originalArtifactStored
+                        || screenshotReviewed
+                        || independentSourceAuthenticityReviewed) {
+                    throw new IllegalArgumentException(
+                            "transcription provenance cannot impersonate "
+                                    + "artifact review");
+                }
             }
+            if (evidenceProvenance
+                    == EvidenceProvenance.OFFICIAL_ARTIFACT_REVIEWED
+                    && (evidenceSource
+                    != EvidenceSource.TUSHARE_OFFICIAL_REPLY
+                    || !userAttestedOfficialSource
+                    || (!originalArtifactStored && !screenshotReviewed))) {
+                throw new IllegalArgumentException(
+                        "reviewed artifact provenance requires an official "
+                                + "source and an actual review fact");
+            }
+        }
+
+        public boolean supportsVerifiedPermission() {
+            return switch (evidenceProvenance) {
+                case USER_PROVIDED_EXACT_OFFICIAL_TRANSCRIPTION ->
+                        evidenceSource
+                                == EvidenceSource.TUSHARE_OFFICIAL_REPLY
+                                && userAttestedOfficialSource
+                                && !originalArtifactStored
+                                && !screenshotReviewed
+                                && !independentSourceAuthenticityReviewed
+                                && !exactTranscription.isEmpty();
+                case OFFICIAL_ARTIFACT_REVIEWED ->
+                        evidenceSource
+                                == EvidenceSource.TUSHARE_OFFICIAL_REPLY
+                                && userAttestedOfficialSource
+                                && (originalArtifactStored
+                                || screenshotReviewed)
+                                && !exactTranscription.isEmpty();
+                case OFFICIAL_DOCUMENT, UNVERIFIED -> false;
+            };
         }
     }
 
@@ -481,7 +542,8 @@ public final class TushareWrittenPermissionQualification {
     }
 
     public enum EvidenceSource {
-        TUSHARE_OFFICIAL_REPLY
+        TUSHARE_OFFICIAL_REPLY,
+        UNVERIFIED_SOURCE
     }
 
     public enum EvidenceProvenance {

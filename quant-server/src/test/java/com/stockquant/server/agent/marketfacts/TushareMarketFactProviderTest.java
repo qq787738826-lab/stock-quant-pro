@@ -383,6 +383,10 @@ class TushareMarketFactProviderTest {
                                         FactType.TRADING_CALENDAR)),
                         session());
 
+        assertEquals(
+                LimitedPersonalFormalCaptureAuthorization.tushareF1A(),
+                LimitedPersonalFormalCaptureAuthorization.fromResponse(
+                        response));
         assertTrue(response.complete());
         assertEquals(List.of(
                         "daily", "adj_factor", "trade_cal"),

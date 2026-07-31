@@ -151,23 +151,50 @@ WRITTEN_RESPONSE_RETENTION_PERMISSION=UNVERIFIED
 这些是 B1 当时没有事前书面答复的历史事实。F1D 不追认 B1 为完整证据探针，不重新
 执行请求，也不把收到转录后的当前许可状态倒写到探针执行前。
 
-## 7. 验证
+## 7. 实际 Git 复验增量修复
+
+初始提交 `349856ea6e9e3dc423fc1ad9115886cfc8858159` 的实际 Git 复验未通过：
+当时 `PermissionClaim` 只验证 VERIFIED claim 携带了已登记 Evidence ID，没有验证
+对应 `EvidenceMetadata` 的 provenance 是否足以支撑 VERIFIED，因此不可信 Metadata
+仍可能使 `permissionComplete=true`。
+
+增量修复新增并冻结以下不变量：
+
+1. `EvidenceMetadata.supportsVerifiedPermission()` 成为类型化证据资格边界；每份被
+   VERIFIED claim 引用的证据都必须通过该资格。
+2. `USER_PROVIDED_EXACT_OFFICIAL_TRANSCRIPTION` 必须来自 Tushare 官方回复、由用户
+   证明为官方来源、精确转录非空，并同时保持
+   `originalArtifactStored/screenshotReviewed/independentSourceAuthenticityReviewed=false`。
+3. `UNVERIFIED` 永远不能支撑 VERIFIED；`OFFICIAL_ARTIFACT_REVIEWED` 必须有实际
+   原件或截图审阅事实；`OFFICIAL_DOCUMENT` 当前没有合格的个人书面许可证据模型，
+   因此不能升级 claim。
+4. `assess()` 交叉核验 VERIFIED claim 的 Evidence ID 集合、Map key、
+   `metadata.evidenceId`、证据可信资格、非 VERIFIED claim 的空 evidence，以及 Map
+   中不存在未引用条目；任一矛盾立即拒绝。
+
+本修复不改变 TS-WP-002 七项精确转录、用户声明或业务结论。当前冻结工厂继续只使用
+`USER_PROVIDED_EXACT_OFFICIAL_TRANSCRIPTION`；书面许可门保持 PASS，当前 F1 仍只剩
+`BLOCKED_TECHNICAL_EVIDENCE`。
+
+## 8. 验证
 
 本阶段只运行离线验证：
 
 | 验证组 | 结果 |
 |---|---|
 | Java 干净编译 | `mvn -pl quant-server -am clean compile -DskipTests`；8 个 core、173 个 server 生产源码，`BUILD SUCCESS` |
-| F1D 模型与 Capability 首轮定向 | `18/0/0/0` |
-| F1A/F1B/F1C、Provider V2、QFQ 与 F1D 联合回归 | `105/0/0/0`；Provider V2 10 项、QFQ 权威黄金/lineage 19 项 |
+| F1D provenance、F1 聚合与 Capability 定向 | `24/0/0/0`；含 12 项书面许可证据不变量、2 项 F1 聚合、10 项 Capability/有限捕获授权投影 |
+| F1A/F1B/F1C、Provider V2、QFQ 与 F1D 联合回归 | `111/0/0/0`；Provider V2 10 项、QFQ 权威黄金/lineage 19 项 |
 | `quant-core` 全量 | `4/0/0/0` |
-| `quant-server` 安全全量 | `396/0/0/0`；命令级排除全部 `*IntegrationTest/*Postgres*/*CrossLanguage*/*Live*` |
+| `quant-server` 安全全量 | `402/0/0/0`；命令级排除全部 `*IntegrationTest/*Postgres*/*CrossLanguage*/*Live*` |
 
-验证覆盖七项精确转录、provenance、每项 evidence claim、禁止用途、不完整许可反例、
-当前 F1 单技术阻断、Capability 投影、运行门保持关闭和 Token 不泄露。安全全量没有
-运行 Live、数据库或跨语言测试；没有检查环境 Token 或访问 PostgreSQL。
+验证覆盖七项精确转录、可信 provenance、Claim/Metadata 交叉门、未引用证据、
+UNVERIFIED/伪造 artifact/未支持 official document 反例、禁止用途、当前 F1 单技术
+阻断、Capability 投影、`LimitedPersonalFormalCaptureAuthorization` 回归、运行门保持
+关闭和 Token 不泄露。安全全量没有运行 Live、数据库或跨语言测试；没有检查环境
+Token 或访问 PostgreSQL。
 
-## 8. 当前阶段状态
+## 9. 当前阶段状态
 
 ```text
 FREE_PRODUCT_PREVIEW_GATE=PASS

@@ -2,7 +2,9 @@ package com.stockquant.server.agent.marketfacts;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import static com.stockquant.server.agent.marketfacts.TushareWrittenPermissionQualification.EvidenceProvenance.USER_PROVIDED_EXACT_OFFICIAL_TRANSCRIPTION;
 import static com.stockquant.server.agent.marketfacts.TushareWrittenPermissionQualification.PermissionStatus.NOT_GRANTED;
@@ -33,6 +35,7 @@ class TushareWrittenPermissionQualificationTest {
         assertFalse(evidence.originalArtifactStored());
         assertFalse(evidence.screenshotReviewed());
         assertFalse(evidence.independentSourceAuthenticityReviewed());
+        assertTrue(evidence.supportsVerifiedPermission());
         assertEquals(List.of(
                 "本地数据库保存：允许",
                 "策略回测/历史回放：允许",
@@ -66,6 +69,12 @@ class TushareWrittenPermissionQualificationTest {
                     claim.evidenceIds()));
         });
         assertEquals(
+                2,
+                value.evidenceProvenance().size());
+        assertTrue(value.evidenceProvenance().values().stream()
+                .allMatch(TushareWrittenPermissionQualification
+                        .EvidenceMetadata::supportsVerifiedPermission));
+        assertEquals(
                 NOT_GRANTED,
                 value.redistributionPermission().status());
         assertEquals(
@@ -96,6 +105,140 @@ class TushareWrittenPermissionQualificationTest {
                         true,
                         false,
                         List.of("test")));
+    }
+
+    @Test
+    void exactTranscriptionRequiresEveryFrozenProvenanceInvariant() {
+        assertInvalidExactTranscription(
+                TushareWrittenPermissionQualification.EvidenceSource
+                        .TUSHARE_OFFICIAL_REPLY,
+                false,
+                false,
+                false,
+                false,
+                List.of("test"));
+        assertInvalidExactTranscription(
+                TushareWrittenPermissionQualification.EvidenceSource
+                        .UNVERIFIED_SOURCE,
+                true,
+                false,
+                false,
+                false,
+                List.of("test"));
+        assertInvalidExactTranscription(
+                TushareWrittenPermissionQualification.EvidenceSource
+                        .TUSHARE_OFFICIAL_REPLY,
+                true,
+                true,
+                false,
+                false,
+                List.of("test"));
+        assertInvalidExactTranscription(
+                TushareWrittenPermissionQualification.EvidenceSource
+                        .TUSHARE_OFFICIAL_REPLY,
+                true,
+                false,
+                true,
+                false,
+                List.of("test"));
+        assertInvalidExactTranscription(
+                TushareWrittenPermissionQualification.EvidenceSource
+                        .TUSHARE_OFFICIAL_REPLY,
+                true,
+                false,
+                false,
+                true,
+                List.of("test"));
+        assertInvalidExactTranscription(
+                TushareWrittenPermissionQualification.EvidenceSource
+                        .TUSHARE_OFFICIAL_REPLY,
+                true,
+                false,
+                false,
+                false,
+                List.of());
+    }
+
+    @Test
+    void unverifiedProvenanceCannotSupportVerifiedPermission() {
+        TushareWrittenPermissionQualification current = current();
+        var metadata = metadata(
+                TushareWrittenPermissionQualification
+                        .EvidenceProvenance.UNVERIFIED,
+                true,
+                false,
+                false,
+                false);
+
+        assertFalse(metadata.supportsVerifiedPermission());
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> TushareWrittenPermissionQualification.assess(
+                        inputWithPersonalEvidence(current, metadata)));
+    }
+
+    @Test
+    void reviewedArtifactRequiresAnActualReviewFact() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> metadata(
+                        TushareWrittenPermissionQualification
+                                .EvidenceProvenance
+                                .OFFICIAL_ARTIFACT_REVIEWED,
+                        true,
+                        false,
+                        false,
+                        false));
+    }
+
+    @Test
+    void unsupportedOfficialDocumentCannotUpgradePermission() {
+        TushareWrittenPermissionQualification current = current();
+        var metadata = metadata(
+                TushareWrittenPermissionQualification
+                        .EvidenceProvenance.OFFICIAL_DOCUMENT,
+                true,
+                false,
+                false,
+                false);
+
+        assertFalse(metadata.supportsVerifiedPermission());
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> TushareWrittenPermissionQualification.assess(
+                        inputWithPersonalEvidence(current, metadata)));
+    }
+
+    @Test
+    void unreferencedEvidenceMetadataIsRejected() {
+        TushareWrittenPermissionQualification current = current();
+        Map<String, TushareWrittenPermissionQualification.EvidenceMetadata>
+                evidence = new LinkedHashMap<>(
+                current.evidenceProvenance());
+        evidence.put(
+                "TS-WP-EXTRA",
+                trustedExactMetadata("TS-WP-EXTRA"));
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> TushareWrittenPermissionQualification.assess(
+                        inputWithEvidence(current, evidence)));
+    }
+
+    @Test
+    void evidenceMapKeyMustMatchMetadataId() {
+        TushareWrittenPermissionQualification current = current();
+        Map<String, TushareWrittenPermissionQualification.EvidenceMetadata>
+                evidence = new LinkedHashMap<>(
+                current.evidenceProvenance());
+        evidence.put(
+                TushareWrittenPermissionQualification
+                        .PERSONAL_USE_EVIDENCE_ID,
+                trustedExactMetadata("TS-WP-MISMATCH"));
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> inputWithEvidence(current, evidence));
     }
 
     @Test
@@ -189,5 +332,110 @@ class TushareWrittenPermissionQualificationTest {
                 current.commercialDataServicePermission(),
                 current.tokenSharingPermission(),
                 current.evidenceProvenance());
+    }
+
+    private static TushareWrittenPermissionQualification.AssessmentInput
+    inputWithPersonalEvidence(
+            TushareWrittenPermissionQualification current,
+            TushareWrittenPermissionQualification.EvidenceMetadata
+                    personalEvidence
+    ) {
+        Map<String, TushareWrittenPermissionQualification.EvidenceMetadata>
+                evidence = new LinkedHashMap<>(
+                current.evidenceProvenance());
+        evidence.put(
+                TushareWrittenPermissionQualification
+                        .PERSONAL_USE_EVIDENCE_ID,
+                personalEvidence);
+        return inputWithEvidence(current, evidence);
+    }
+
+    private static TushareWrittenPermissionQualification.AssessmentInput
+    inputWithEvidence(
+            TushareWrittenPermissionQualification current,
+            Map<String,
+                    TushareWrittenPermissionQualification.EvidenceMetadata>
+                    evidence
+    ) {
+        return new TushareWrittenPermissionQualification.AssessmentInput(
+                current.quantDataSourceUsePermission(),
+                current.personalLocalStoragePermission(),
+                current.personalBacktestPermission(),
+                current.personalAgentAnalysisPermission(),
+                current.automatedApiUpdatePermission(),
+                current.technicalAuditMetadataRetentionPermission(),
+                current.postExpiryDataRetentionPermission(),
+                current.personal2000PointAccountScopePermission(),
+                current.redistributionPermission(),
+                current.commercialDataServicePermission(),
+                current.tokenSharingPermission(),
+                evidence);
+    }
+
+    private static void assertInvalidExactTranscription(
+            TushareWrittenPermissionQualification.EvidenceSource source,
+            boolean userAttested,
+            boolean originalStored,
+            boolean screenshotReviewed,
+            boolean independentlyReviewed,
+            List<String> transcription
+    ) {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new TushareWrittenPermissionQualification
+                        .EvidenceMetadata(
+                        "TS-WP-TEST",
+                        "test",
+                        source,
+                        USER_PROVIDED_EXACT_OFFICIAL_TRANSCRIPTION,
+                        "2026-07-31T11:07:00+08:00",
+                        "UNKNOWN",
+                        userAttested,
+                        originalStored,
+                        screenshotReviewed,
+                        independentlyReviewed,
+                        transcription));
+    }
+
+    private static TushareWrittenPermissionQualification.EvidenceMetadata
+    metadata(
+            TushareWrittenPermissionQualification.EvidenceProvenance
+                    provenance,
+            boolean userAttested,
+            boolean originalStored,
+            boolean screenshotReviewed,
+            boolean independentlyReviewed
+    ) {
+        return new TushareWrittenPermissionQualification.EvidenceMetadata(
+                TushareWrittenPermissionQualification
+                        .PERSONAL_USE_EVIDENCE_ID,
+                "test",
+                TushareWrittenPermissionQualification.EvidenceSource
+                        .TUSHARE_OFFICIAL_REPLY,
+                provenance,
+                "2026-07-31T11:07:00+08:00",
+                "UNKNOWN",
+                userAttested,
+                originalStored,
+                screenshotReviewed,
+                independentlyReviewed,
+                List.of("test"));
+    }
+
+    private static TushareWrittenPermissionQualification.EvidenceMetadata
+    trustedExactMetadata(String evidenceId) {
+        return new TushareWrittenPermissionQualification.EvidenceMetadata(
+                evidenceId,
+                "test",
+                TushareWrittenPermissionQualification.EvidenceSource
+                        .TUSHARE_OFFICIAL_REPLY,
+                USER_PROVIDED_EXACT_OFFICIAL_TRANSCRIPTION,
+                "2026-07-31T11:07:00+08:00",
+                "UNKNOWN",
+                true,
+                false,
+                false,
+                false,
+                List.of("test"));
     }
 }
