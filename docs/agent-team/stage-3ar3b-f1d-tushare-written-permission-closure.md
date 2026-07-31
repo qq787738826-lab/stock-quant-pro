@@ -176,6 +176,25 @@ WRITTEN_RESPONSE_RETENTION_PERMISSION=UNVERIFIED
 `USER_PROVIDED_EXACT_OFFICIAL_TRANSCRIPTION`；书面许可门保持 PASS，当前 F1 仍只剩
 `BLOCKED_TECHNICAL_EVIDENCE`。
 
+`049c750026fa00dad70c12667fad732af07d60ce` 已修复 Evidence provenance 可信度，
+但后续实际 Git 复验继续发现 Claim 与 Evidence 支持范围尚未绑定：如果多个 VERIFIED
+claim 复用一份可信但不相关的 Evidence ID，旧模型仍可能错误升级许可。
+
+本次增量继续固定类型化 `PermissionSubject`：
+
+- `TS-WP-001` 只支持 `QUANT_DATA_SOURCE_USE`；
+- `TS-WP-002` 精确支持本地保存、回测、Agent、自动更新、技术审计元数据留存、
+  到期后继续保存和个人 2000 积分账号范围七项主题；
+- 再分发、商业数据服务和 Token 共享拥有独立主题，但没有被 TS-WP-001/002 支持，
+  并继续为 `NOT_GRANTED`。
+
+`PermissionClaim` 现在携带明确主题，`AssessmentInput` 要求每个字段的主题精确匹配。
+`assess()` 逐 Claim 验证 Evidence 的可信 provenance 和
+`supportedPermissionSubjects`，并要求每份 Evidence 的主题集合与实际引用它的
+VERIFIED Claim 主题集合完全一致。Capability 同步投影这组主题白名单，下游不能再把
+“来源可信”解释成“支持任意许可”。该修复不分析自由文本、不改变七项转录，也不改变
+当前书面门 PASS 和 F1 单一技术证据阻断。
+
 ## 8. 验证
 
 本阶段只运行离线验证：
@@ -183,16 +202,17 @@ WRITTEN_RESPONSE_RETENTION_PERMISSION=UNVERIFIED
 | 验证组 | 结果 |
 |---|---|
 | Java 干净编译 | `mvn -pl quant-server -am clean compile -DskipTests`；8 个 core、173 个 server 生产源码，`BUILD SUCCESS` |
-| F1D provenance、F1 聚合与 Capability 定向 | `24/0/0/0`；含 12 项书面许可证据不变量、2 项 F1 聚合、10 项 Capability/有限捕获授权投影 |
-| F1A/F1B/F1C、Provider V2、QFQ 与 F1D 联合回归 | `111/0/0/0`；Provider V2 10 项、QFQ 权威黄金/lineage 19 项 |
+| F1D provenance/subject、F1 聚合与 Capability 定向 | `29/0/0/0`；含 17 项书面许可证据可信度与主题绑定、2 项 F1 聚合、10 项 Capability/有限捕获授权投影 |
+| F1A/F1B/F1C、Provider V2、QFQ 与 F1D 联合回归 | `116/0/0/0`；Provider V2 10 项、QFQ 权威黄金/lineage 19 项 |
 | `quant-core` 全量 | `4/0/0/0` |
-| `quant-server` 安全全量 | `402/0/0/0`；命令级排除全部 `*IntegrationTest/*Postgres*/*CrossLanguage*/*Live*` |
+| `quant-server` 安全全量 | `407/0/0/0`；命令级排除全部 `*IntegrationTest/*Postgres*/*CrossLanguage*/*Live*` |
 
 验证覆盖七项精确转录、可信 provenance、Claim/Metadata 交叉门、未引用证据、
-UNVERIFIED/伪造 artifact/未支持 official document 反例、禁止用途、当前 F1 单技术
-阻断、Capability 投影、`LimitedPersonalFormalCaptureAuthorization` 回归、运行门保持
-关闭和 Token 不泄露。安全全量没有运行 Live、数据库或跨语言测试；没有检查环境
-Token 或访问 PostgreSQL。
+UNVERIFIED/伪造 artifact/未支持 official document 反例、Claim 字段主题错位、
+TS-WP-001/002 跨主题借用、空/无关/未引用支持主题、禁止用途、当前 F1 单技术阻断、
+Capability 投影、`LimitedPersonalFormalCaptureAuthorization` 回归、运行门保持关闭和
+Token 不泄露。安全全量没有运行 Live、数据库或跨语言测试；没有检查环境 Token 或
+访问 PostgreSQL。
 
 ## 9. 当前阶段状态
 

@@ -2,6 +2,9 @@ package com.stockquant.server.agent.marketfacts;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.Map;
 import java.util.Set;
 
 import static com.stockquant.server.agent.marketfacts.TushareF1EntryQualification.EntryReadiness.BLOCKED_MULTIPLE;
@@ -64,13 +67,45 @@ class TushareF1EntryQualificationTest {
         TushareWrittenPermissionQualification complete =
                 TushareWrittenPermissionQualification
                         .currentPersonal2000PointAssessment();
+        Map<String, TushareWrittenPermissionQualification.EvidenceMetadata>
+                evidence = new LinkedHashMap<>(
+                complete.evidenceProvenance());
+        var personalEvidence = evidence.get(
+                TushareWrittenPermissionQualification
+                        .PERSONAL_USE_EVIDENCE_ID);
+        Set<TushareWrittenPermissionQualification.PermissionSubject>
+                subjects = new LinkedHashSet<>(
+                personalEvidence.supportedPermissionSubjects());
+        subjects.remove(
+                TushareWrittenPermissionQualification.PermissionSubject
+                        .PERSONAL_LOCAL_STORAGE);
+        evidence.put(
+                TushareWrittenPermissionQualification
+                        .PERSONAL_USE_EVIDENCE_ID,
+                new TushareWrittenPermissionQualification.EvidenceMetadata(
+                        personalEvidence.evidenceId(),
+                        personalEvidence.evidenceName(),
+                        personalEvidence.evidenceSource(),
+                        personalEvidence.evidenceProvenance(),
+                        personalEvidence.transcriptionReceivedAt(),
+                        personalEvidence.officialReplyAt(),
+                        personalEvidence.userAttestedOfficialSource(),
+                        personalEvidence.originalArtifactStored(),
+                        personalEvidence.screenshotReviewed(),
+                        personalEvidence
+                                .independentSourceAuthenticityReviewed(),
+                        subjects,
+                        personalEvidence.exactTranscription()));
         var incomplete =
                 TushareWrittenPermissionQualification.assess(
                         new TushareWrittenPermissionQualification
                                 .AssessmentInput(
                                 complete.quantDataSourceUsePermission(),
                                 TushareWrittenPermissionQualification
-                                        .PermissionClaim.unverified(),
+                                        .PermissionClaim.unverified(
+                                        TushareWrittenPermissionQualification
+                                                .PermissionSubject
+                                                .PERSONAL_LOCAL_STORAGE),
                                 complete.personalBacktestPermission(),
                                 complete.personalAgentAnalysisPermission(),
                                 complete.automatedApiUpdatePermission(),
@@ -82,7 +117,7 @@ class TushareF1EntryQualificationTest {
                                 complete.redistributionPermission(),
                                 complete.commercialDataServicePermission(),
                                 complete.tokenSharingPermission(),
-                                complete.evidenceProvenance()));
+                                evidence));
         TushareF1EntryQualification value =
                 TushareF1EntryQualification.assess(
                         incomplete,

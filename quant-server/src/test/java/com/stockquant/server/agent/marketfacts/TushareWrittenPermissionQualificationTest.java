@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static com.stockquant.server.agent.marketfacts.TushareWrittenPermissionQualification.EvidenceProvenance.USER_PROVIDED_EXACT_OFFICIAL_TRANSCRIPTION;
 import static com.stockquant.server.agent.marketfacts.TushareWrittenPermissionQualification.PermissionStatus.NOT_GRANTED;
@@ -20,10 +21,20 @@ class TushareWrittenPermissionQualificationTest {
     void currentAssessmentRecordsExactSevenItemTranscription() {
         TushareWrittenPermissionQualification value =
                 current();
+        var quantEvidence = value.evidenceProvenance().get(
+                TushareWrittenPermissionQualification
+                        .QUANT_SOURCE_EVIDENCE_ID);
         var evidence = value.evidenceProvenance().get(
                 TushareWrittenPermissionQualification
                         .PERSONAL_USE_EVIDENCE_ID);
 
+        assertEquals(
+                Set.of(TushareWrittenPermissionQualification
+                        .PermissionSubject.QUANT_DATA_SOURCE_USE),
+                quantEvidence.supportedPermissionSubjects());
+        assertEquals(
+                personalUseSubjects(),
+                evidence.supportedPermissionSubjects());
         assertEquals(
                 "2026-07-31T11:07:00+08:00",
                 evidence.transcriptionReceivedAt());
@@ -104,6 +115,9 @@ class TushareWrittenPermissionQualificationTest {
                         false,
                         true,
                         false,
+                        Set.of(TushareWrittenPermissionQualification
+                                .PermissionSubject
+                                .PERSONAL_LOCAL_STORAGE),
                         List.of("test")));
     }
 
@@ -242,15 +256,120 @@ class TushareWrittenPermissionQualificationTest {
     }
 
     @Test
+    void personalUseClaimsCannotBorrowQuantSourceEvidence() {
+        TushareWrittenPermissionQualification current = current();
+        for (var subject : personalUseSubjects()) {
+            var wrongEvidence =
+                    TushareWrittenPermissionQualification.PermissionClaim
+                            .verified(
+                                    subject,
+                                    TushareWrittenPermissionQualification
+                                            .QUANT_SOURCE_EVIDENCE_ID);
+            assertThrows(
+                    IllegalArgumentException.class,
+                    () -> TushareWrittenPermissionQualification.assess(
+                            inputReplacingClaim(
+                                    current,
+                                    subject,
+                                    wrongEvidence,
+                                    current.evidenceProvenance())));
+        }
+    }
+
+    @Test
+    void quantSourceClaimCannotBorrowPersonalUseEvidence() {
+        TushareWrittenPermissionQualification current = current();
+        Map<String, TushareWrittenPermissionQualification.EvidenceMetadata>
+                evidence = new LinkedHashMap<>(
+                current.evidenceProvenance());
+        evidence.remove(
+                TushareWrittenPermissionQualification
+                        .QUANT_SOURCE_EVIDENCE_ID);
+        var wrongEvidence =
+                TushareWrittenPermissionQualification.PermissionClaim
+                        .verified(
+                                TushareWrittenPermissionQualification
+                                        .PermissionSubject
+                                        .QUANT_DATA_SOURCE_USE,
+                                TushareWrittenPermissionQualification
+                                        .PERSONAL_USE_EVIDENCE_ID);
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> TushareWrittenPermissionQualification.assess(
+                        inputReplacingClaim(
+                                current,
+                                TushareWrittenPermissionQualification
+                                        .PermissionSubject
+                                        .QUANT_DATA_SOURCE_USE,
+                                wrongEvidence,
+                                evidence)));
+    }
+
+    @Test
+    void assessmentFieldRejectsClaimWithWrongSubject() {
+        TushareWrittenPermissionQualification current = current();
+        var wrongSubject =
+                TushareWrittenPermissionQualification.PermissionClaim
+                        .verified(
+                                TushareWrittenPermissionQualification
+                                        .PermissionSubject.PERSONAL_BACKTEST,
+                                TushareWrittenPermissionQualification
+                                        .PERSONAL_USE_EVIDENCE_ID);
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> inputWithLocalStorage(current, wrongSubject));
+    }
+
+    @Test
+    void emptyOrUnrelatedEvidenceSubjectScopeCannotVerifyClaims() {
+        TushareWrittenPermissionQualification current = current();
+        for (Set<TushareWrittenPermissionQualification.PermissionSubject>
+                subjects : List.of(
+                Set.<TushareWrittenPermissionQualification
+                        .PermissionSubject>of(),
+                Set.of(TushareWrittenPermissionQualification
+                        .PermissionSubject.QUANT_DATA_SOURCE_USE))) {
+            var metadata = trustedExactMetadata(
+                    TushareWrittenPermissionQualification
+                            .PERSONAL_USE_EVIDENCE_ID,
+                    subjects);
+            assertThrows(
+                    IllegalArgumentException.class,
+                    () -> TushareWrittenPermissionQualification.assess(
+                            inputWithPersonalEvidence(
+                                    current,
+                                    metadata)));
+        }
+    }
+
+    @Test
+    void evidenceCannotAdvertiseUnreferencedPermissionSubject() {
+        TushareWrittenPermissionQualification current = current();
+        Set<TushareWrittenPermissionQualification.PermissionSubject>
+                subjects = new java.util.LinkedHashSet<>(
+                personalUseSubjects());
+        subjects.add(TushareWrittenPermissionQualification
+                .PermissionSubject.RAW_DATA_REDISTRIBUTION);
+        var metadata = trustedExactMetadata(
+                TushareWrittenPermissionQualification
+                        .PERSONAL_USE_EVIDENCE_ID,
+                subjects);
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> TushareWrittenPermissionQualification.assess(
+                        inputWithPersonalEvidence(current, metadata)));
+    }
+
+    @Test
     void unverifiedCorePermissionKeepsCompletionFalse() {
         TushareWrittenPermissionQualification current =
                 current();
         TushareWrittenPermissionQualification value =
                 TushareWrittenPermissionQualification.assess(
-                        inputWithLocalStorage(
-                                current,
-                                TushareWrittenPermissionQualification
-                                        .PermissionClaim.unverified()));
+                        inputWithUnverifiedLocalStorage(current));
 
         assertFalse(value.personalResearchPermissionComplete());
         assertEquals(
@@ -273,11 +392,17 @@ class TushareWrittenPermissionQualificationTest {
                                 current,
                                 TushareWrittenPermissionQualification
                                         .PermissionClaim.verified(
+                                        TushareWrittenPermissionQualification
+                                                .PermissionSubject
+                                                .PERSONAL_LOCAL_STORAGE,
                                         "UNKNOWN-EVIDENCE"))));
 
         var verifiedRestriction =
                 TushareWrittenPermissionQualification.PermissionClaim
                         .verified(
+                                TushareWrittenPermissionQualification
+                                        .PermissionSubject
+                                        .RAW_DATA_REDISTRIBUTION,
                                 TushareWrittenPermissionQualification
                                         .PERSONAL_USE_EVIDENCE_ID);
         assertThrows(
@@ -335,6 +460,45 @@ class TushareWrittenPermissionQualificationTest {
     }
 
     private static TushareWrittenPermissionQualification.AssessmentInput
+    inputWithUnverifiedLocalStorage(
+            TushareWrittenPermissionQualification current
+    ) {
+        Map<String, TushareWrittenPermissionQualification.EvidenceMetadata>
+                evidence = new LinkedHashMap<>(
+                current.evidenceProvenance());
+        var personalEvidence = evidence.get(
+                TushareWrittenPermissionQualification
+                        .PERSONAL_USE_EVIDENCE_ID);
+        Set<TushareWrittenPermissionQualification.PermissionSubject>
+                supportedSubjects = new java.util.LinkedHashSet<>(
+                personalEvidence.supportedPermissionSubjects());
+        supportedSubjects.remove(
+                TushareWrittenPermissionQualification.PermissionSubject
+                        .PERSONAL_LOCAL_STORAGE);
+        evidence.put(
+                TushareWrittenPermissionQualification
+                        .PERSONAL_USE_EVIDENCE_ID,
+                copyWithSubjects(personalEvidence, supportedSubjects));
+        return new TushareWrittenPermissionQualification.AssessmentInput(
+                current.quantDataSourceUsePermission(),
+                TushareWrittenPermissionQualification.PermissionClaim
+                        .unverified(
+                                TushareWrittenPermissionQualification
+                                        .PermissionSubject
+                                        .PERSONAL_LOCAL_STORAGE),
+                current.personalBacktestPermission(),
+                current.personalAgentAnalysisPermission(),
+                current.automatedApiUpdatePermission(),
+                current.technicalAuditMetadataRetentionPermission(),
+                current.postExpiryDataRetentionPermission(),
+                current.personal2000PointAccountScopePermission(),
+                current.redistributionPermission(),
+                current.commercialDataServicePermission(),
+                current.tokenSharingPermission(),
+                evidence);
+    }
+
+    private static TushareWrittenPermissionQualification.AssessmentInput
     inputWithPersonalEvidence(
             TushareWrittenPermissionQualification current,
             TushareWrittenPermissionQualification.EvidenceMetadata
@@ -372,6 +536,58 @@ class TushareWrittenPermissionQualificationTest {
                 evidence);
     }
 
+    private static TushareWrittenPermissionQualification.AssessmentInput
+    inputReplacingClaim(
+            TushareWrittenPermissionQualification current,
+            TushareWrittenPermissionQualification.PermissionSubject field,
+            TushareWrittenPermissionQualification.PermissionClaim replacement,
+            Map<String,
+                    TushareWrittenPermissionQualification.EvidenceMetadata>
+                    evidence
+    ) {
+        return new TushareWrittenPermissionQualification.AssessmentInput(
+                field == TushareWrittenPermissionQualification
+                        .PermissionSubject.QUANT_DATA_SOURCE_USE
+                        ? replacement
+                        : current.quantDataSourceUsePermission(),
+                field == TushareWrittenPermissionQualification
+                        .PermissionSubject.PERSONAL_LOCAL_STORAGE
+                        ? replacement
+                        : current.personalLocalStoragePermission(),
+                field == TushareWrittenPermissionQualification
+                        .PermissionSubject.PERSONAL_BACKTEST
+                        ? replacement
+                        : current.personalBacktestPermission(),
+                field == TushareWrittenPermissionQualification
+                        .PermissionSubject.PERSONAL_AGENT_ANALYSIS
+                        ? replacement
+                        : current.personalAgentAnalysisPermission(),
+                field == TushareWrittenPermissionQualification
+                        .PermissionSubject.AUTOMATED_API_UPDATE
+                        ? replacement
+                        : current.automatedApiUpdatePermission(),
+                field == TushareWrittenPermissionQualification
+                        .PermissionSubject
+                        .TECHNICAL_AUDIT_METADATA_RETENTION
+                        ? replacement
+                        : current
+                                .technicalAuditMetadataRetentionPermission(),
+                field == TushareWrittenPermissionQualification
+                        .PermissionSubject.POST_EXPIRY_DATA_RETENTION
+                        ? replacement
+                        : current.postExpiryDataRetentionPermission(),
+                field == TushareWrittenPermissionQualification
+                        .PermissionSubject
+                        .PERSONAL_2000_POINT_ACCOUNT_SCOPE
+                        ? replacement
+                        : current
+                                .personal2000PointAccountScopePermission(),
+                current.redistributionPermission(),
+                current.commercialDataServicePermission(),
+                current.tokenSharingPermission(),
+                evidence);
+    }
+
     private static void assertInvalidExactTranscription(
             TushareWrittenPermissionQualification.EvidenceSource source,
             boolean userAttested,
@@ -394,6 +610,9 @@ class TushareWrittenPermissionQualificationTest {
                         originalStored,
                         screenshotReviewed,
                         independentlyReviewed,
+                        Set.of(TushareWrittenPermissionQualification
+                                .PermissionSubject
+                                .PERSONAL_LOCAL_STORAGE),
                         transcription));
     }
 
@@ -419,11 +638,24 @@ class TushareWrittenPermissionQualificationTest {
                 originalStored,
                 screenshotReviewed,
                 independentlyReviewed,
+                personalUseSubjects(),
                 List.of("test"));
     }
 
     private static TushareWrittenPermissionQualification.EvidenceMetadata
     trustedExactMetadata(String evidenceId) {
+        return trustedExactMetadata(
+                evidenceId,
+                Set.of(TushareWrittenPermissionQualification
+                        .PermissionSubject.QUANT_DATA_SOURCE_USE));
+    }
+
+    private static TushareWrittenPermissionQualification.EvidenceMetadata
+    trustedExactMetadata(
+            String evidenceId,
+            Set<TushareWrittenPermissionQualification.PermissionSubject>
+                    supportedSubjects
+    ) {
         return new TushareWrittenPermissionQualification.EvidenceMetadata(
                 evidenceId,
                 "test",
@@ -436,6 +668,48 @@ class TushareWrittenPermissionQualificationTest {
                 false,
                 false,
                 false,
+                supportedSubjects,
                 List.of("test"));
+    }
+
+    private static TushareWrittenPermissionQualification.EvidenceMetadata
+    copyWithSubjects(
+            TushareWrittenPermissionQualification.EvidenceMetadata original,
+            Set<TushareWrittenPermissionQualification.PermissionSubject>
+                    supportedSubjects
+    ) {
+        return new TushareWrittenPermissionQualification.EvidenceMetadata(
+                original.evidenceId(),
+                original.evidenceName(),
+                original.evidenceSource(),
+                original.evidenceProvenance(),
+                original.transcriptionReceivedAt(),
+                original.officialReplyAt(),
+                original.userAttestedOfficialSource(),
+                original.originalArtifactStored(),
+                original.screenshotReviewed(),
+                original.independentSourceAuthenticityReviewed(),
+                supportedSubjects,
+                original.exactTranscription());
+    }
+
+    private static Set<
+            TushareWrittenPermissionQualification.PermissionSubject>
+    personalUseSubjects() {
+        return Set.of(
+                TushareWrittenPermissionQualification.PermissionSubject
+                        .PERSONAL_LOCAL_STORAGE,
+                TushareWrittenPermissionQualification.PermissionSubject
+                        .PERSONAL_BACKTEST,
+                TushareWrittenPermissionQualification.PermissionSubject
+                        .PERSONAL_AGENT_ANALYSIS,
+                TushareWrittenPermissionQualification.PermissionSubject
+                        .AUTOMATED_API_UPDATE,
+                TushareWrittenPermissionQualification.PermissionSubject
+                        .TECHNICAL_AUDIT_METADATA_RETENTION,
+                TushareWrittenPermissionQualification.PermissionSubject
+                        .POST_EXPIRY_DATA_RETENTION,
+                TushareWrittenPermissionQualification.PermissionSubject
+                        .PERSONAL_2000_POINT_ACCOUNT_SCOPE);
     }
 }

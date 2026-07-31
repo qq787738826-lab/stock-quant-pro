@@ -270,6 +270,17 @@ class TushareMarketFactProviderTest {
         assertEquals("NOT_GRANTED",
                 capability.licensing()
                         .path("tokenSharingPermission").asText());
+        JsonNode wp001 = capability.licensing()
+                .path("writtenPermissionEvidenceProvenance")
+                .path("TS-WP-001");
+        assertEquals(
+                List.of("QUANT_DATA_SOURCE_USE"),
+                java.util.stream.StreamSupport.stream(
+                                wp001.path("supportedPermissionSubjects")
+                                        .spliterator(),
+                                false)
+                        .map(JsonNode::asText)
+                        .toList());
         JsonNode wp002 = capability.licensing()
                 .path("writtenPermissionEvidenceProvenance")
                 .path("TS-WP-002");
@@ -283,6 +294,21 @@ class TushareMarketFactProviderTest {
         assertFalse(wp002.path("screenshotReviewed").asBoolean(true));
         assertFalse(wp002.path("independentSourceAuthenticityReviewed")
                 .asBoolean(true));
+        assertEquals(
+                List.of(
+                        "PERSONAL_LOCAL_STORAGE",
+                        "PERSONAL_BACKTEST",
+                        "PERSONAL_AGENT_ANALYSIS",
+                        "AUTOMATED_API_UPDATE",
+                        "TECHNICAL_AUDIT_METADATA_RETENTION",
+                        "POST_EXPIRY_DATA_RETENTION",
+                        "PERSONAL_2000_POINT_ACCOUNT_SCOPE"),
+                java.util.stream.StreamSupport.stream(
+                                wp002.path("supportedPermissionSubjects")
+                                        .spliterator(),
+                                false)
+                        .map(JsonNode::asText)
+                        .toList());
         assertFalse(capability.toString().contains(TEST_TOKEN));
         assertEquals(200,
                 capability.rateLimit()

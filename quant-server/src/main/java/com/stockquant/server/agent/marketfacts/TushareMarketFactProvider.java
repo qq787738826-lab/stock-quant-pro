@@ -395,6 +395,12 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
                     evidence.put(
                             "independentSourceAuthenticityReviewed",
                             metadata.independentSourceAuthenticityReviewed());
+                    ArrayNode supportedSubjects = evidence.putArray(
+                            "supportedPermissionSubjects");
+                    metadata.supportedPermissionSubjects().stream()
+                            .sorted()
+                            .forEach(value ->
+                                    supportedSubjects.add(value.name()));
                 });
 
         ObjectNode rateLimit = objectMapper.createObjectNode();

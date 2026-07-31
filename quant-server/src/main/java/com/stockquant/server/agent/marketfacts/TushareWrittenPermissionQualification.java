@@ -82,22 +82,39 @@ public final class TushareWrittenPermissionQualification {
     public static TushareWrittenPermissionQualification
     currentPersonal2000PointAssessment() {
         PermissionClaim quant = PermissionClaim.verified(
+                PermissionSubject.QUANT_DATA_SOURCE_USE,
                 QUANT_SOURCE_EVIDENCE_ID);
-        PermissionClaim personal = PermissionClaim.verified(
-                PERSONAL_USE_EVIDENCE_ID);
-        PermissionClaim notGranted = PermissionClaim.notGranted();
         return assess(new AssessmentInput(
                 quant,
-                personal,
-                personal,
-                personal,
-                personal,
-                personal,
-                personal,
-                personal,
-                notGranted,
-                notGranted,
-                notGranted,
+                PermissionClaim.verified(
+                        PermissionSubject.PERSONAL_LOCAL_STORAGE,
+                        PERSONAL_USE_EVIDENCE_ID),
+                PermissionClaim.verified(
+                        PermissionSubject.PERSONAL_BACKTEST,
+                        PERSONAL_USE_EVIDENCE_ID),
+                PermissionClaim.verified(
+                        PermissionSubject.PERSONAL_AGENT_ANALYSIS,
+                        PERSONAL_USE_EVIDENCE_ID),
+                PermissionClaim.verified(
+                        PermissionSubject.AUTOMATED_API_UPDATE,
+                        PERSONAL_USE_EVIDENCE_ID),
+                PermissionClaim.verified(
+                        PermissionSubject
+                                .TECHNICAL_AUDIT_METADATA_RETENTION,
+                        PERSONAL_USE_EVIDENCE_ID),
+                PermissionClaim.verified(
+                        PermissionSubject.POST_EXPIRY_DATA_RETENTION,
+                        PERSONAL_USE_EVIDENCE_ID),
+                PermissionClaim.verified(
+                        PermissionSubject
+                                .PERSONAL_2000_POINT_ACCOUNT_SCOPE,
+                        PERSONAL_USE_EVIDENCE_ID),
+                PermissionClaim.notGranted(
+                        PermissionSubject.RAW_DATA_REDISTRIBUTION),
+                PermissionClaim.notGranted(
+                        PermissionSubject.COMMERCIAL_DATA_SERVICE),
+                PermissionClaim.notGranted(
+                        PermissionSubject.TOKEN_SHARING),
                 Map.of(
                         QUANT_SOURCE_EVIDENCE_ID,
                         quantSourceEvidence(),
@@ -161,17 +178,46 @@ public final class TushareWrittenPermissionQualification {
             throw new IllegalArgumentException(
                     "permission evidence provenance must match claim IDs");
         }
-        for (String evidenceId : evidenceIds) {
-            EvidenceMetadata metadata = metadataById.get(evidenceId);
-            if (metadata == null
-                    || !evidenceId.equals(metadata.evidenceId())) {
-                throw new IllegalArgumentException(
-                        "permission evidence metadata ID mismatch");
+        Map<String, Set<PermissionSubject>> referencedSubjects =
+                new java.util.LinkedHashMap<>();
+        for (PermissionClaim claim : input.claims()) {
+            if (!claim.verified()) {
+                continue;
             }
-            if (!metadata.supportsVerifiedPermission()) {
+            for (String evidenceId : claim.evidenceIds()) {
+                EvidenceMetadata metadata = metadataById.get(evidenceId);
+                if (metadata == null
+                        || !evidenceId.equals(metadata.evidenceId())) {
+                    throw new IllegalArgumentException(
+                            "permission evidence metadata ID mismatch");
+                }
+                if (!metadata.supportsVerifiedPermission()) {
+                    throw new IllegalArgumentException(
+                            "permission evidence is not qualified for "
+                                    + "VERIFIED: " + evidenceId);
+                }
+                if (!metadata.supportedPermissionSubjects()
+                        .contains(claim.subject())) {
+                    throw new IllegalArgumentException(
+                            "permission evidence does not support claim "
+                                    + "subject: " + claim.subject());
+                }
+                referencedSubjects.computeIfAbsent(
+                        evidenceId,
+                        ignored -> EnumSet.noneOf(PermissionSubject.class))
+                        .add(claim.subject());
+            }
+        }
+        for (Map.Entry<String, EvidenceMetadata> entry
+                : metadataById.entrySet()) {
+            Set<PermissionSubject> subjects =
+                    referencedSubjects.get(entry.getKey());
+            if (subjects == null
+                    || !Set.copyOf(subjects).equals(
+                    entry.getValue().supportedPermissionSubjects())) {
                 throw new IllegalArgumentException(
-                        "permission evidence is not qualified for VERIFIED: "
-                                + evidenceId);
+                        "permission evidence subjects must exactly match "
+                                + "referencing claims: " + entry.getKey());
             }
         }
     }
@@ -189,6 +235,7 @@ public final class TushareWrittenPermissionQualification {
                 false,
                 false,
                 false,
+                Set.of(PermissionSubject.QUANT_DATA_SOURCE_USE),
                 List.of(
                         "问：这个可以用来当量化数据来源吧",
                         "答：可以"));
@@ -207,6 +254,16 @@ public final class TushareWrittenPermissionQualification {
                 false,
                 false,
                 false,
+                EnumSet.of(
+                        PermissionSubject.PERSONAL_LOCAL_STORAGE,
+                        PermissionSubject.PERSONAL_BACKTEST,
+                        PermissionSubject.PERSONAL_AGENT_ANALYSIS,
+                        PermissionSubject.AUTOMATED_API_UPDATE,
+                        PermissionSubject
+                                .TECHNICAL_AUDIT_METADATA_RETENTION,
+                        PermissionSubject.POST_EXPIRY_DATA_RETENTION,
+                        PermissionSubject
+                                .PERSONAL_2000_POINT_ACCOUNT_SCOPE),
                 TS_WP_002_TRANSCRIPTION);
     }
 
@@ -314,10 +371,12 @@ public final class TushareWrittenPermissionQualification {
     }
 
     public record PermissionClaim(
+            PermissionSubject subject,
             PermissionStatus status,
             Set<String> evidenceIds
     ) {
         public PermissionClaim {
+            subject = Objects.requireNonNull(subject, "subject");
             status = Objects.requireNonNull(status, "status");
             evidenceIds = Set.copyOf(Objects.requireNonNull(
                     evidenceIds, "evidenceIds"));
@@ -338,19 +397,29 @@ public final class TushareWrittenPermissionQualification {
             }
         }
 
-        public static PermissionClaim verified(String evidenceId) {
+        public static PermissionClaim verified(
+                PermissionSubject subject,
+                String evidenceId
+        ) {
             return new PermissionClaim(
+                    Objects.requireNonNull(subject, "subject"),
                     PermissionStatus.VERIFIED,
                     Set.of(requiredText(evidenceId, "evidenceId")));
         }
 
-        public static PermissionClaim unverified() {
+        public static PermissionClaim unverified(
+                PermissionSubject subject
+        ) {
             return new PermissionClaim(
+                    Objects.requireNonNull(subject, "subject"),
                     PermissionStatus.UNVERIFIED, Set.of());
         }
 
-        public static PermissionClaim notGranted() {
+        public static PermissionClaim notGranted(
+                PermissionSubject subject
+        ) {
             return new PermissionClaim(
+                    Objects.requireNonNull(subject, "subject"),
                     PermissionStatus.NOT_GRANTED, Set.of());
         }
 
@@ -371,6 +440,7 @@ public final class TushareWrittenPermissionQualification {
             boolean originalArtifactStored,
             boolean screenshotReviewed,
             boolean independentSourceAuthenticityReviewed,
+            Set<PermissionSubject> supportedPermissionSubjects,
             List<String> exactTranscription
     ) {
         public EvidenceMetadata {
@@ -384,6 +454,10 @@ public final class TushareWrittenPermissionQualification {
                     transcriptionReceivedAt, "transcriptionReceivedAt");
             officialReplyAt = requiredText(
                     officialReplyAt, "officialReplyAt");
+            supportedPermissionSubjects = Set.copyOf(
+                    Objects.requireNonNull(
+                            supportedPermissionSubjects,
+                            "supportedPermissionSubjects"));
             exactTranscription = List.copyOf(Objects.requireNonNull(
                     exactTranscription, "exactTranscription"));
             if (exactTranscription.isEmpty()
@@ -431,6 +505,7 @@ public final class TushareWrittenPermissionQualification {
                                 && !originalArtifactStored
                                 && !screenshotReviewed
                                 && !independentSourceAuthenticityReviewed
+                                && !supportedPermissionSubjects.isEmpty()
                                 && !exactTranscription.isEmpty();
                 case OFFICIAL_ARTIFACT_REVIEWED ->
                         evidenceSource
@@ -438,6 +513,7 @@ public final class TushareWrittenPermissionQualification {
                                 && userAttestedOfficialSource
                                 && (originalArtifactStored
                                 || screenshotReviewed)
+                                && !supportedPermissionSubjects.isEmpty()
                                 && !exactTranscription.isEmpty();
                 case OFFICIAL_DOCUMENT, UNVERIFIED -> false;
             };
@@ -492,6 +568,51 @@ public final class TushareWrittenPermissionQualification {
             tokenSharingPermission = required(
                     tokenSharingPermission,
                     "tokenSharingPermission");
+            requireSubject(
+                    quantDataSourceUsePermission,
+                    PermissionSubject.QUANT_DATA_SOURCE_USE,
+                    "quantDataSourceUsePermission");
+            requireSubject(
+                    personalLocalStoragePermission,
+                    PermissionSubject.PERSONAL_LOCAL_STORAGE,
+                    "personalLocalStoragePermission");
+            requireSubject(
+                    personalBacktestPermission,
+                    PermissionSubject.PERSONAL_BACKTEST,
+                    "personalBacktestPermission");
+            requireSubject(
+                    personalAgentAnalysisPermission,
+                    PermissionSubject.PERSONAL_AGENT_ANALYSIS,
+                    "personalAgentAnalysisPermission");
+            requireSubject(
+                    automatedApiUpdatePermission,
+                    PermissionSubject.AUTOMATED_API_UPDATE,
+                    "automatedApiUpdatePermission");
+            requireSubject(
+                    technicalAuditMetadataRetentionPermission,
+                    PermissionSubject
+                            .TECHNICAL_AUDIT_METADATA_RETENTION,
+                    "technicalAuditMetadataRetentionPermission");
+            requireSubject(
+                    postExpiryDataRetentionPermission,
+                    PermissionSubject.POST_EXPIRY_DATA_RETENTION,
+                    "postExpiryDataRetentionPermission");
+            requireSubject(
+                    personal2000PointAccountScopePermission,
+                    PermissionSubject.PERSONAL_2000_POINT_ACCOUNT_SCOPE,
+                    "personal2000PointAccountScopePermission");
+            requireSubject(
+                    redistributionPermission,
+                    PermissionSubject.RAW_DATA_REDISTRIBUTION,
+                    "redistributionPermission");
+            requireSubject(
+                    commercialDataServicePermission,
+                    PermissionSubject.COMMERCIAL_DATA_SERVICE,
+                    "commercialDataServicePermission");
+            requireSubject(
+                    tokenSharingPermission,
+                    PermissionSubject.TOKEN_SHARING,
+                    "tokenSharingPermission");
             evidenceProvenance = Map.copyOf(Objects.requireNonNull(
                     evidenceProvenance, "evidenceProvenance"));
             evidenceProvenance.forEach((id, metadata) -> {
@@ -528,6 +649,17 @@ public final class TushareWrittenPermissionQualification {
         return Objects.requireNonNull(value, name);
     }
 
+    private static void requireSubject(
+            PermissionClaim claim,
+            PermissionSubject expected,
+            String field
+    ) {
+        if (claim.subject() != expected) {
+            throw new IllegalArgumentException(
+                    field + " subject must be " + expected);
+        }
+    }
+
     private static String requiredText(String value, String name) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException(name + " must not be blank");
@@ -539,6 +671,20 @@ public final class TushareWrittenPermissionQualification {
         VERIFIED,
         UNVERIFIED,
         NOT_GRANTED
+    }
+
+    public enum PermissionSubject {
+        QUANT_DATA_SOURCE_USE,
+        PERSONAL_LOCAL_STORAGE,
+        PERSONAL_BACKTEST,
+        PERSONAL_AGENT_ANALYSIS,
+        AUTOMATED_API_UPDATE,
+        TECHNICAL_AUDIT_METADATA_RETENTION,
+        POST_EXPIRY_DATA_RETENTION,
+        PERSONAL_2000_POINT_ACCOUNT_SCOPE,
+        RAW_DATA_REDISTRIBUTION,
+        COMMERCIAL_DATA_SERVICE,
+        TOKEN_SHARING
     }
 
     public enum EvidenceSource {
