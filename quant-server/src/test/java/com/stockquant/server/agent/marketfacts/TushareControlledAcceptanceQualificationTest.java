@@ -1,13 +1,19 @@
 package com.stockquant.server.agent.marketfacts;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.FactType;
 import com.stockquant.server.agent.marketfacts.TushareControlledAcceptanceAuthorization.ControlledEndpoint;
 import com.stockquant.server.agent.marketfacts.TushareControlledAcceptanceQualification.AcceptanceStatus;
+import com.stockquant.server.agent.marketfacts.TushareControlledAcceptanceQualification.AuthorizationConsumptionQualification;
 import com.stockquant.server.agent.marketfacts.TushareControlledAcceptanceQualification.AtomicCommitResult;
+import com.stockquant.server.agent.marketfacts.TushareControlledAcceptanceQualification.CodeBaselineQualification;
 import com.stockquant.server.agent.marketfacts.TushareControlledAcceptanceQualification.ExecutionEvidence;
 import com.stockquant.server.agent.marketfacts.TushareControlledAcceptanceQualification.FormulaOnlyQfqSummary;
 import com.stockquant.server.agent.marketfacts.TushareControlledAcceptanceQualification.ProhibitedStage;
+import com.stockquant.server.agent.marketfacts.TushareControlledAcceptanceQualification.SensitiveOutputQualification;
 import com.stockquant.server.agent.marketfacts.TushareControlledAcceptanceQualification.SystemKnowledgeEvidence;
+import com.stockquant.server.agent.marketfacts.TushareTechnicalQualification.TechnicalBlocker;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Modifier;
@@ -21,6 +27,7 @@ import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class TushareControlledAcceptanceQualificationTest {
@@ -61,6 +68,11 @@ class TushareControlledAcceptanceQualificationTest {
                                 .getMethods())
                 .noneMatch(method -> method.getName().toLowerCase()
                         .contains("pass")));
+        assertThrows(
+                Exception.class,
+                () -> new ObjectMapper().readValue(
+                        "{\"status\":\"PASSED\"}",
+                        TushareControlledAcceptanceQualification.class));
     }
 
     @Test
@@ -125,7 +137,7 @@ class TushareControlledAcceptanceQualificationTest {
         assertFailed(evidence(builder ->
                 builder.systemKnowledgeEvidence =
                         new SystemKnowledgeEvidence(
-                                STARTED, false, true, true)));
+                                STARTED, false, true, true, false)));
         assertFailed(evidence(builder -> builder.qfqSummary =
                 new FormulaOnlyQfqSummary(
                         1, true, true, false, false)));
@@ -140,7 +152,10 @@ class TushareControlledAcceptanceQualificationTest {
 
     @Test
     void sensitiveOutputAndProhibitedStagesFailClosed() {
-        assertFailed(evidence(builder -> builder.tokenOutputDetected = true));
+        assertFailed(evidence(builder ->
+                builder.sensitiveOutputQualification =
+                        SensitiveOutputQualification
+                                .SENSITIVE_OUTPUT_DETECTED));
         assertFailed(evidence(builder -> builder.startedProhibitedStages =
                 Set.of(ProhibitedStage.SCHEDULER)));
         assertFailed(evidence(builder -> builder.startedProhibitedStages =
@@ -167,6 +182,21 @@ class TushareControlledAcceptanceQualificationTest {
         assertFalse(admission.fullF1EntryReady());
         assertFalse(admission.fullTechnicalContractReady());
         assertFalse(admission.formalEligible());
+        assertEquals(
+                CodeBaselineQualification.CONFIG_DECLARED_EXACT_MATCH,
+                candidate.executionEvidence()
+                        .codeBaselineQualification());
+        assertEquals(
+                AuthorizationConsumptionQualification
+                        .OBJECT_INSTANCE_CAS_ONLY,
+                candidate.executionEvidence()
+                        .authorizationConsumptionQualification());
+        assertEquals(
+                SensitiveOutputQualification.NOT_ATTESTED,
+                candidate.executionEvidence()
+                        .sensitiveOutputQualification());
+        assertFalse(candidate.executionEvidence()
+                .systemKnowledgeEvidence().databaseReadbackVerified());
     }
 
     @Test
@@ -178,12 +208,47 @@ class TushareControlledAcceptanceQualificationTest {
                         .currentPersonal2000PointAssessment(),
                 technical);
 
-        assertEquals(10, technical.blockers().size());
+        assertEquals(Set.of(
+                        TechnicalBlocker
+                                .CORPORATE_ACTION_LINEAGE_INCOMPLETE,
+                        TechnicalBlocker.STABLE_ACTION_ID_UNAVAILABLE,
+                        TechnicalBlocker
+                                .FACTOR_ACTION_RELATION_UNVERIFIED,
+                        TechnicalBlocker.PROVIDER_REVISION_UNAVAILABLE,
+                        TechnicalBlocker
+                                .HISTORICAL_VERSIONS_NOT_QUERYABLE,
+                        TechnicalBlocker
+                                .PERMANENT_SECURITY_IDENTITY_UNVERIFIED,
+                        TechnicalBlocker
+                                .FULL_HISTORY_DAILY_EXACT_UNVERIFIED,
+                        TechnicalBlocker.PROVIDER_PIT_UNAVAILABLE,
+                        TechnicalBlocker
+                                .QFQ_OPERATIONAL_RUNTIME_INCOMPLETE,
+                        TechnicalBlocker
+                                .ENDPOINT_RATE_LIMIT_EVIDENCE_CONFLICT),
+                technical.blockers());
         assertEquals(
                 TushareF1EntryQualification.EntryReadiness
                         .BLOCKED_TECHNICAL_EVIDENCE,
                 entry.entryReadiness());
         assertFalse(entry.fullF1EntryReady());
+    }
+
+    @Test
+    void evidenceCollectionsAreDefensivelyCopied() {
+        Builder builder = new Builder();
+        ExecutionEvidence evidence = builder.build();
+
+        builder.endpointCalls.put(ControlledEndpoint.DAILY, 9);
+        builder.factCounts.put(FactType.RAW_DAILY_BAR, 9);
+
+        assertEquals(1,
+                evidence.endpointCallCounts().get(ControlledEndpoint.DAILY));
+        assertEquals(1,
+                evidence.factCounts().get(FactType.RAW_DAILY_BAR));
+        assertThrows(
+                UnsupportedOperationException.class,
+                () -> evidence.captureBatchIds().add(999L));
     }
 
     private static TushareControlledAcceptanceQualification qualify(
@@ -235,11 +300,13 @@ class TushareControlledAcceptanceQualificationTest {
         private boolean tradingDayOpen = true;
         private String sessionCode = "REGULAR";
         private SystemKnowledgeEvidence systemKnowledgeEvidence =
-                new SystemKnowledgeEvidence(STARTED, true, true, true);
+                new SystemKnowledgeEvidence(
+                        STARTED, true, true, true, false);
         private FormulaOnlyQfqSummary qfqSummary =
                 new FormulaOnlyQfqSummary(
                         1, true, false, false, false);
-        private boolean tokenOutputDetected;
+        private SensitiveOutputQualification sensitiveOutputQualification =
+                SensitiveOutputQualification.NOT_ATTESTED;
         private boolean normalBusinessDatabaseUsed;
         private boolean publicSchemaUsed;
         private Set<ProhibitedStage> startedProhibitedStages = Set.of();
@@ -252,6 +319,8 @@ class TushareControlledAcceptanceQualificationTest {
                     "F1F_ACCEPTANCE_EVIDENCE",
                     "F1F_ACCEPTANCE_001",
                     BASELINE,
+                    CodeBaselineQualification
+                            .CONFIG_DECLARED_EXACT_MATCH,
                     TushareMarketFactProvider.PROVIDER_CODE,
                     databaseIdentity,
                     "stock_quant_research",
@@ -265,6 +334,8 @@ class TushareControlledAcceptanceQualificationTest {
                     endpointCalls,
                     totalCalls,
                     retryCount,
+                    AuthorizationConsumptionQualification
+                            .OBJECT_INSTANCE_CAS_ONLY,
                     STARTED,
                     ENDED,
                     List.of(101L),
@@ -275,7 +346,7 @@ class TushareControlledAcceptanceQualificationTest {
                     sessionCode,
                     systemKnowledgeEvidence,
                     qfqSummary,
-                    tokenOutputDetected,
+                    sensitiveOutputQualification,
                     normalBusinessDatabaseUsed,
                     publicSchemaUsed,
                     startedProhibitedStages,

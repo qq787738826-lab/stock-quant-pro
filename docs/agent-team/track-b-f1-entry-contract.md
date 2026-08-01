@@ -240,6 +240,13 @@ F1F-A 把固定的 `CONTROLLED_ACCEPTANCE_NOT_RUN` 改为类型化、默认拒�
 前验证，F1E捕获事务内前后守卫和全部响应写前验证继续生效。证据不得保存Token、密码、
 JDBC URL或完整市场响应。
 
+F1F-A 当前只证明同一授权对象的单 JVM CAS 防重，不证明同 ID 重建、JVM 重启或跨进程唯一
+消费；当前基线只来自配置声明，不是构建产物证明；敏感输出为 `NOT_ATTESTED`；`observedAt`
+虽与捕获调用共用，但未做数据库回读。F1F-B 必须在任何真实请求前补持久化 acceptance ID
+唯一预占，在最终审查且不再修改的提交上验证构建产物完整哈希，并补日志/输出审计和数据库
+first-observed/known-at 回读。验收后若提交哈希变化，现有精确相等规则必须判
+`INCOMPATIBLE_BASELINE`；不得通过配置声明兼容。
+
 即使未来受控验收通过，也只能独立讨论 `REDUCED_RESEARCH_OPERATIONAL_READY=true`；
 不得改变完整F1十项技术阻断、生产/正常业务库、scheduler、Agent、回测、Shadow、F2B/F3、
 交易或四项正式门禁。本阶段真实Provider调用为0，F1F-B尚未授权。

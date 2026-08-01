@@ -4,7 +4,10 @@ import com.stockquant.server.agent.marketfacts.PitMarketFactModels.CaptureResult
 import com.stockquant.server.agent.marketfacts.TushareApiGateway.ErrorKind;
 import com.stockquant.server.agent.marketfacts.TushareApiGateway.GatewayException;
 import com.stockquant.server.agent.marketfacts.TushareControlledAcceptanceQualification.AcceptanceStatus;
+import com.stockquant.server.agent.marketfacts.TushareControlledAcceptanceQualification.AuthorizationConsumptionQualification;
+import com.stockquant.server.agent.marketfacts.TushareControlledAcceptanceQualification.CodeBaselineQualification;
 import com.stockquant.server.agent.marketfacts.TushareControlledAcceptanceQualification.FailureStage;
+import com.stockquant.server.agent.marketfacts.TushareControlledAcceptanceQualification.SensitiveOutputQualification;
 import com.stockquant.server.agent.marketfacts.TushareDedicatedResearchBatchCommand.SecuritySelection;
 import com.stockquant.server.agent.marketfacts.TushareDedicatedResearchBatchModels.DatabaseExecutionIdentity;
 import com.stockquant.server.agent.marketfacts.TushareDedicatedResearchBatchModels.SymbolResearchResult;
@@ -24,6 +27,9 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -63,7 +69,19 @@ class TushareControlledAcceptanceServiceTest {
         assertEquals(3,
                 result.executionEvidence().totalProviderCallCount());
         assertEquals(0, result.executionEvidence().retryCount());
-        assertFalse(result.executionEvidence().tokenOutputDetected());
+        assertEquals(
+                SensitiveOutputQualification.NOT_ATTESTED,
+                result.executionEvidence().sensitiveOutputQualification());
+        assertEquals(
+                CodeBaselineQualification.CONFIG_DECLARED_EXACT_MATCH,
+                result.executionEvidence().codeBaselineQualification());
+        assertEquals(
+                AuthorizationConsumptionQualification
+                        .OBJECT_INSTANCE_CAS_ONLY,
+                result.executionEvidence()
+                        .authorizationConsumptionQualification());
+        assertFalse(result.executionEvidence().systemKnowledgeEvidence()
+                .databaseReadbackVerified());
         assertFalse(result.executionEvidence()
                 .normalBusinessDatabaseUsed());
         assertFalse(result.executionEvidence().publicSchemaUsed());
@@ -90,6 +108,63 @@ class TushareControlledAcceptanceServiceTest {
                 FailureStage.AUTHORIZATION_VALIDATION,
                 repeated.failureEvidence().stage());
         verify(batch, times(1)).run(any(), any());
+    }
+
+    @Test
+    void sameAuthorizationObjectCannotBeConsumedByTwoThreads()
+            throws Exception {
+        CountDownLatch bothInspecting = new CountDownLatch(2);
+        CountDownLatch releaseInspection = new CountDownLatch(1);
+        AtomicInteger inspections = new AtomicInteger();
+        TushareDedicatedResearchPersistenceGuard guard =
+                new TushareDedicatedResearchPersistenceGuard(() -> {
+                    inspections.incrementAndGet();
+                    bothInspecting.countDown();
+                    try {
+                        if (!releaseInspection.await(5, TimeUnit.SECONDS)) {
+                            throw new IllegalStateException(
+                                    "TEST_CONCURRENCY_TIMEOUT");
+                        }
+                    } catch (InterruptedException error) {
+                        Thread.currentThread().interrupt();
+                        throw new IllegalStateException(
+                                "TEST_CONCURRENCY_INTERRUPTED", error);
+                    }
+                    return validState();
+                });
+        TushareDedicatedResearchBatchService batch =
+                mock(TushareDedicatedResearchBatchService.class);
+        when(batch.run(any(), any())).thenReturn(successResult());
+        var service = service(batch, guard, BASELINE);
+        var authorization = authorization(BASELINE);
+
+        var executor = Executors.newFixedThreadPool(2);
+        try {
+            var first = executor.submit(() ->
+                    service.executePreparedAcceptance(
+                            authorization, command()));
+            var second = executor.submit(() ->
+                    service.executePreparedAcceptance(
+                            authorization, command()));
+            assertTrue(bothInspecting.await(5, TimeUnit.SECONDS));
+            releaseInspection.countDown();
+            var statuses = Set.of(
+                    first.get(5, TimeUnit.SECONDS).status(),
+                    second.get(5, TimeUnit.SECONDS).status());
+
+            assertEquals(Set.of(
+                    AcceptanceStatus.CANDIDATE,
+                    AcceptanceStatus.FAILED), statuses);
+        } finally {
+            executor.shutdownNow();
+        }
+        assertEquals(2, inspections.get());
+        verify(batch, times(1)).run(any(), any());
+        assertEquals(
+                TushareControlledAcceptanceAuthorization
+                        .ReuseProtectionScope.OBJECT_INSTANCE_CAS_ONLY,
+                authorization.reuseProtectionScope());
+        assertFalse(authorization.durableConsumptionRecorded());
     }
 
     @Test
@@ -188,14 +263,15 @@ class TushareControlledAcceptanceServiceTest {
                                 10_001,
                                 false));
 
+        var authorization = authorization(BASELINE);
         var result = service(batch, guard, BASELINE)
-                .executePreparedAcceptance(
-                        authorization(BASELINE), command());
+                .executePreparedAcceptance(authorization, command());
 
         assertEquals(AcceptanceStatus.FAILED, result.status());
         assertEquals(
                 FailureStage.DATABASE_IDENTITY,
                 result.failureEvidence().stage());
+        assertFalse(authorization.consumed());
         verify(batch, times(0)).run(any(), any());
     }
 
@@ -211,9 +287,9 @@ class TushareControlledAcceptanceServiceTest {
                 0,
                 null));
 
+        var authorization = authorization(BASELINE);
         var result = service(batch, validGuard(), BASELINE)
-                .executePreparedAcceptance(
-                        authorization(BASELINE), command());
+                .executePreparedAcceptance(authorization, command());
 
         assertEquals(AcceptanceStatus.FAILED, result.status());
         assertEquals(
@@ -222,6 +298,7 @@ class TushareControlledAcceptanceServiceTest {
         assertEquals(
                 "TUSHARE_NETWORK_ERROR",
                 result.failureEvidence().safeReasonCode());
+        assertTrue(authorization.consumed());
         assertFalse(result.toString().toLowerCase().contains("token"));
         assertFalse(result.toString().toLowerCase().contains("password"));
     }

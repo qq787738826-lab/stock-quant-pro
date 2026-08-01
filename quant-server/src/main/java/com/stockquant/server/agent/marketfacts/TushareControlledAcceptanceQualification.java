@@ -85,7 +85,7 @@ public final class TushareControlledAcceptanceQualification {
                     Set.of(AcceptanceBlocker.ACCEPTANCE_EVIDENCE_STALE),
                     false);
         }
-        if (!meetsOperationalContract(evidence)) {
+        if (!meetsCandidateContract(evidence)) {
             return failed(
                     evidence.acceptanceId(),
                     evidence.codeBaselineCommit(),
@@ -122,7 +122,7 @@ public final class TushareControlledAcceptanceQualification {
                 false);
     }
 
-    private static boolean meetsOperationalContract(
+    private static boolean meetsCandidateContract(
             ExecutionEvidence evidence
     ) {
         Map<ControlledEndpoint, Integer> expectedEndpointCounts =
@@ -158,9 +158,10 @@ public final class TushareControlledAcceptanceQualification {
                 && evidence.databaseIdentityStable()
                 && evidence.tradingDayOpen()
                 && "REGULAR".equals(evidence.sessionCode())
-                && evidence.systemKnowledgeEvidence().valid()
+                && evidence.systemKnowledgeEvidence().candidateValid()
                 && evidence.qfqSummary().validFormulaOnly()
-                && !evidence.tokenOutputDetected()
+                && evidence.sensitiveOutputQualification()
+                != SensitiveOutputQualification.SENSITIVE_OUTPUT_DETECTED
                 && !evidence.normalBusinessDatabaseUsed()
                 && !evidence.publicSchemaUsed()
                 && evidence.startedProhibitedStages().isEmpty()
@@ -174,6 +175,22 @@ public final class TushareControlledAcceptanceQualification {
                 .isAfter(evidence.endedAt());
     }
 
+    private static boolean meetsOperationalContract(
+            ExecutionEvidence evidence
+    ) {
+        return meetsCandidateContract(evidence)
+                && evidence.codeBaselineQualification()
+                == CodeBaselineQualification
+                .BUILD_ARTIFACT_VERIFIED_EXACT_MATCH
+                && evidence.authorizationConsumptionQualification()
+                == AuthorizationConsumptionQualification
+                .DURABLY_RECORDED_UNIQUE
+                && evidence.systemKnowledgeEvidence().operationalValid()
+                && evidence.sensitiveOutputQualification()
+                == SensitiveOutputQualification
+                .VERIFIED_NO_SENSITIVE_OUTPUT;
+    }
+
     private void validateInvariants() {
         boolean passed = status == AcceptanceStatus.PASSED;
         if (reducedResearchOperationalReady != passed
@@ -182,6 +199,7 @@ public final class TushareControlledAcceptanceQualification {
                 || !blockers.isEmpty())
                 || status == AcceptanceStatus.CANDIDATE
                 && (executionEvidence == null
+                || !meetsCandidateContract(executionEvidence)
                 || failureEvidence != null
                 || blockers.isEmpty())
                 || status == AcceptanceStatus.FAILED
@@ -226,6 +244,7 @@ public final class TushareControlledAcceptanceQualification {
             String evidenceId,
             String acceptanceId,
             String codeBaselineCommit,
+            CodeBaselineQualification codeBaselineQualification,
             String providerCode,
             String databaseIdentity,
             String databaseUser,
@@ -239,6 +258,8 @@ public final class TushareControlledAcceptanceQualification {
             Map<ControlledEndpoint, Integer> endpointCallCounts,
             int totalProviderCallCount,
             int retryCount,
+            AuthorizationConsumptionQualification
+                    authorizationConsumptionQualification,
             Instant startedAt,
             Instant endedAt,
             List<Long> captureBatchIds,
@@ -249,7 +270,7 @@ public final class TushareControlledAcceptanceQualification {
             String sessionCode,
             SystemKnowledgeEvidence systemKnowledgeEvidence,
             FormulaOnlyQfqSummary qfqSummary,
-            boolean tokenOutputDetected,
+            SensitiveOutputQualification sensitiveOutputQualification,
             boolean normalBusinessDatabaseUsed,
             boolean publicSchemaUsed,
             Set<ProhibitedStage> startedProhibitedStages,
@@ -263,6 +284,9 @@ public final class TushareControlledAcceptanceQualification {
             acceptanceId = requireSafeId(
                     acceptanceId, "acceptanceId");
             codeBaselineCommit = requireCommit(codeBaselineCommit);
+            codeBaselineQualification = Objects.requireNonNull(
+                    codeBaselineQualification,
+                    "codeBaselineQualification");
             providerCode = requireSafeText(providerCode, "providerCode");
             databaseIdentity = requireSafeText(
                     databaseIdentity, "databaseIdentity");
@@ -275,6 +299,9 @@ public final class TushareControlledAcceptanceQualification {
             endpoints = Set.copyOf(Objects.requireNonNull(
                     endpoints, "endpoints"));
             endpointCallCounts = copyEndpointCounts(endpointCallCounts);
+            authorizationConsumptionQualification = Objects.requireNonNull(
+                    authorizationConsumptionQualification,
+                    "authorizationConsumptionQualification");
             startedAt = Objects.requireNonNull(startedAt, "startedAt");
             endedAt = Objects.requireNonNull(endedAt, "endedAt");
             captureBatchIds = List.copyOf(Objects.requireNonNull(
@@ -285,6 +312,9 @@ public final class TushareControlledAcceptanceQualification {
             systemKnowledgeEvidence = Objects.requireNonNull(
                     systemKnowledgeEvidence, "systemKnowledgeEvidence");
             qfqSummary = Objects.requireNonNull(qfqSummary, "qfqSummary");
+            sensitiveOutputQualification = Objects.requireNonNull(
+                    sensitiveOutputQualification,
+                    "sensitiveOutputQualification");
             startedProhibitedStages = Set.copyOf(Objects.requireNonNull(
                     startedProhibitedStages, "startedProhibitedStages"));
             redactedEvidenceSummary = requireSafeSummary(
@@ -305,16 +335,21 @@ public final class TushareControlledAcceptanceQualification {
             Instant observedAt,
             boolean firstObservedAtAssigned,
             boolean knownAtAssigned,
-            boolean systemKnowledgeOnly
+            boolean systemKnowledgeOnly,
+            boolean databaseReadbackVerified
     ) {
         public SystemKnowledgeEvidence {
             observedAt = Objects.requireNonNull(observedAt, "observedAt");
         }
 
-        boolean valid() {
+        boolean candidateValid() {
             return firstObservedAtAssigned
                     && knownAtAssigned
                     && systemKnowledgeOnly;
+        }
+
+        boolean operationalValid() {
+            return candidateValid() && databaseReadbackVerified;
         }
     }
 
@@ -387,6 +422,22 @@ public final class TushareControlledAcceptanceQualification {
         ROLLED_BACK_CLEANLY,
         ROLLBACK_FAILED,
         NOT_OBSERVED
+    }
+
+    public enum CodeBaselineQualification {
+        CONFIG_DECLARED_EXACT_MATCH,
+        BUILD_ARTIFACT_VERIFIED_EXACT_MATCH
+    }
+
+    public enum AuthorizationConsumptionQualification {
+        OBJECT_INSTANCE_CAS_ONLY,
+        DURABLY_RECORDED_UNIQUE
+    }
+
+    public enum SensitiveOutputQualification {
+        NOT_ATTESTED,
+        VERIFIED_NO_SENSITIVE_OUTPUT,
+        SENSITIVE_OUTPUT_DETECTED
     }
 
     public enum ProhibitedStage {

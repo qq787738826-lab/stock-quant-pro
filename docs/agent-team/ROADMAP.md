@@ -382,9 +382,9 @@
 #### 3A-R3B-F1F-A：缩减研究受控验收机制准备（任务分支实施中）
 
 - 交付：[F1F-A 任务书](tasks/3ar3b-f1f-controlled-acceptance-preparation.md)和[F1F-A 阶段记录](stage-3ar3b-f1f-controlled-acceptance-preparation.md)。
-- 机制：一次性用户授权绑定代码基线、Tushare、一个证券、一个开市日、三个固定 Endpoint、三次请求、零重试、专用数据库/用户/Schema/V13和有效期；基线/范围先于数据库，数据库先于F1E委托。
+- 机制：同一授权对象以 CAS 防止并发重复委托，并绑定代码基线、Tushare、一个证券、一个开市日、三个固定 Endpoint、三次请求、零重试、专用数据库/用户/Schema/V13和有效期；基线/范围先于数据库，数据库先于F1E委托。当前不声称同 ID 重建、JVM 重启或跨进程防重。
 - 证据：只保存脱敏执行身份、计数、时间、批次ID、事实数量、SYSTEM_KNOWLEDGE和formula-only QFQ摘要；不保存Token、密码、JDBC URL或完整响应。
-- 投影：默认 `NOT_RUN`；离线成功只能生成 `CANDIDATE`，没有公开 `PASSED` 构造入口，因此 `REDUCED_RESEARCH_OPERATIONAL_READY=false`。未来F1F-B需要用户单独批准，Provider预算上限为3次、零重试。
+- 投影：默认 `NOT_RUN`；离线成功只能生成 `CANDIDATE`，没有公开 `PASSED` 构造入口，因此 `REDUCED_RESEARCH_OPERATIONAL_READY=false`。候选证据明确保留配置声明基线、对象实例消费、敏感输出未证明及数据库时间未回读状态；未来F1F-B需要用户单独批准，并补持久化唯一消费、构建产物基线、输出审计和数据库时间回读，Provider预算上限为3次、零重试。
 - 状态：F1F-A不改变完整F1十项技术阻断、生产/正常业务库、scheduler、Agent、回测、Shadow、F2B/F3、交易或四项正式门禁。
 
 #### 3A-R3B-F1：完整 Provider Adapter 与 V13 闭环（当前仅技术证据阻断）

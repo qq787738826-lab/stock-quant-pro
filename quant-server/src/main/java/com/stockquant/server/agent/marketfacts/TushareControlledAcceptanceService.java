@@ -4,10 +4,13 @@ import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.FactType
 import com.stockquant.server.agent.marketfacts.TushareApiGateway.GatewayException;
 import com.stockquant.server.agent.marketfacts.TushareControlledAcceptanceAuthorization.ControlledEndpoint;
 import com.stockquant.server.agent.marketfacts.TushareControlledAcceptanceQualification.AtomicCommitResult;
+import com.stockquant.server.agent.marketfacts.TushareControlledAcceptanceQualification.AuthorizationConsumptionQualification;
+import com.stockquant.server.agent.marketfacts.TushareControlledAcceptanceQualification.CodeBaselineQualification;
 import com.stockquant.server.agent.marketfacts.TushareControlledAcceptanceQualification.ExecutionEvidence;
 import com.stockquant.server.agent.marketfacts.TushareControlledAcceptanceQualification.FailureStage;
 import com.stockquant.server.agent.marketfacts.TushareControlledAcceptanceQualification.FormulaOnlyQfqSummary;
 import com.stockquant.server.agent.marketfacts.TushareControlledAcceptanceQualification.SystemKnowledgeEvidence;
+import com.stockquant.server.agent.marketfacts.TushareControlledAcceptanceQualification.SensitiveOutputQualification;
 import com.stockquant.server.agent.marketfacts.TushareDedicatedResearchBatchModels.Eligibility;
 import com.stockquant.server.agent.marketfacts.TushareDedicatedResearchBatchModels.RuntimeQualification;
 import com.stockquant.server.agent.marketfacts.TushareDedicatedResearchBatchModels.TushareDedicatedResearchBatchResult;
@@ -125,6 +128,7 @@ public final class TushareControlledAcceptanceService {
                 authorization.acceptanceId() + "_EVIDENCE",
                 authorization.acceptanceId(),
                 authorization.codeBaselineCommit(),
+                CodeBaselineQualification.CONFIG_DECLARED_EXACT_MATCH,
                 authorization.providerCode(),
                 result.databaseIdentity().currentDatabase(),
                 result.databaseIdentity().currentUser(),
@@ -138,6 +142,8 @@ public final class TushareControlledAcceptanceService {
                 endpointCalls,
                 result.providerCallCount(),
                 result.retryCount(),
+                AuthorizationConsumptionQualification
+                        .OBJECT_INSTANCE_CAS_ONLY,
                 startedAt,
                 endedAt,
                 batchIds,
@@ -147,10 +153,10 @@ public final class TushareControlledAcceptanceService {
                 true,
                 "REGULAR",
                 new SystemKnowledgeEvidence(
-                        result.observedAt(), true, true, true),
+                        result.observedAt(), true, true, true, false),
                 new FormulaOnlyQfqSummary(
                         qfqBars, true, false, false, false),
-                false,
+                SensitiveOutputQualification.NOT_ATTESTED,
                 false,
                 false,
                 Set.of(),

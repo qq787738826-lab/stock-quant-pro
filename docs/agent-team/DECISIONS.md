@@ -245,3 +245,5 @@
 138. **F1F-A 将受控验收从固定状态改为不可伪造的类型化证据投影**：默认状态为 `NOT_RUN`，并可明确表达 `CANDIDATE/PASSED/FAILED/STALE/INCOMPATIBLE_BASELINE`。授权必须一次性绑定代码基线、Tushare、一个证券、一个交易日、`daily/adj_factor/trade_cal`、三次调用、零重试、专用数据库/用户/Schema/V13和有效期。F1F-A 的离线成功只能生成 `CANDIDATE`，没有公开 `PASSED` 构造入口；真实 `PASSED` 必须留给用户另行批准的 F1F-B。
 
 139. **缩减研究 operational 验收独立于完整 F1 技术资格和正式门禁**：未来只有真实受控证据满足全部数据库、原子写入、SYSTEM_KNOWLEDGE、formula-only QFQ、无敏感输出和零禁止阶段条件时，才能讨论 `REDUCED_RESEARCH_OPERATIONAL_READY=true`。该投影不得改变 `F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE`、完整技术合同、生产/正常业务库、scheduler、Agent、回测、Shadow、F2B/F3、交易或四项正式门禁。
+
+140. **F1F-A 候选证据不得冒充 F1F-B 强证明**：当前 CAS 只保护同一内存授权对象，配置值只证明声明的完整哈希相等，`observedAt` 只证明捕获调用使用同一微秒 `Instant`，敏感输出尚未由独立执行审计证明。因此候选分别记录 `OBJECT_INSTANCE_CAS_ONLY`、`CONFIG_DECLARED_EXACT_MATCH`、`databaseReadbackVerified=false` 和 `NOT_ATTESTED`。未来 `PASSED` 必须额外取得持久化 acceptance ID 唯一消费、最终构建产物完整哈希、数据库时间回读以及敏感输出审计，不能直接复用候选字段升级。

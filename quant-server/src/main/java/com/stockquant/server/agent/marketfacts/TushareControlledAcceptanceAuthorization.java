@@ -40,6 +40,7 @@ public final class TushareControlledAcceptanceAuthorization {
     private final int schemaVersion;
     private final UserApproval userApproval;
     private final RuntimeBoundary runtimeBoundary;
+    private final ReuseProtectionScope reuseProtectionScope;
     private final Instant issuedAt;
     private final Instant expiresAt;
     private final AtomicBoolean consumed = new AtomicBoolean(false);
@@ -69,12 +70,14 @@ public final class TushareControlledAcceptanceAuthorization {
         this.schemaVersion = 13;
         this.userApproval = UserApproval.CONFIRMED;
         this.runtimeBoundary = RuntimeBoundary.forbidAll();
+        this.reuseProtectionScope =
+                ReuseProtectionScope.OBJECT_INSTANCE_CAS_ONLY;
         this.issuedAt = Objects.requireNonNull(issuedAt, "issuedAt");
         this.expiresAt = Objects.requireNonNull(expiresAt, "expiresAt");
         validateFrozen();
     }
 
-    public static TushareControlledAcceptanceAuthorization
+    static TushareControlledAcceptanceAuthorization
     issueUserApprovedOneShot(
             String acceptanceId,
             String codeBaselineCommit,
@@ -143,6 +146,8 @@ public final class TushareControlledAcceptanceAuthorization {
                 || schemaVersion != 13
                 || userApproval != UserApproval.CONFIRMED
                 || !runtimeBoundary.allForbidden()
+                || reuseProtectionScope
+                != ReuseProtectionScope.OBJECT_INSTANCE_CAS_ONLY
                 || !expiresAt.isAfter(issuedAt)) {
             throw invalid("TUSHARE_CONTROLLED_ACCEPTANCE_AUTHORIZATION_INVALID");
         }
@@ -216,6 +221,14 @@ public final class TushareControlledAcceptanceAuthorization {
         return runtimeBoundary;
     }
 
+    public ReuseProtectionScope reuseProtectionScope() {
+        return reuseProtectionScope;
+    }
+
+    public boolean durableConsumptionRecorded() {
+        return false;
+    }
+
     public Instant issuedAt() {
         return issuedAt;
     }
@@ -245,6 +258,8 @@ public final class TushareControlledAcceptanceAuthorization {
                 + ", schemaVersion=" + schemaVersion
                 + ", userApproval=" + userApproval
                 + ", runtimeBoundary=" + runtimeBoundary
+                + ", reuseProtectionScope=" + reuseProtectionScope
+                + ", durableConsumptionRecorded=false"
                 + ", issuedAt=" + issuedAt
                 + ", expiresAt=" + expiresAt
                 + ", consumed=" + consumed.get() + ']';
@@ -290,6 +305,15 @@ public final class TushareControlledAcceptanceAuthorization {
 
     public enum UserApproval {
         CONFIRMED
+    }
+
+    /**
+     * F1F-A only prevents concurrent reuse of the same in-memory object.
+     * A durable acceptance-id reservation remains an F1F-B prerequisite.
+     */
+    public enum ReuseProtectionScope {
+        OBJECT_INSTANCE_CAS_ONLY,
+        DURABLE_ACCEPTANCE_ID_RESERVATION
     }
 
     public record RuntimeBoundary(
