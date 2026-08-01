@@ -9,7 +9,7 @@
 - 当前稳定版本：`1.3.1`
 - 当前目标版本：`1.4.0`
 - 当前集成分支：`feature/1.4.0-agent-team`
-- 当前集成分支 HEAD：`0e2b607bc068910319134790360d71a18a6a9e02`
+- 当前集成分支 HEAD：`f68d84403ebb82babe92a1cb0f78d845ed39547a`
 - 1D-4 验收来源分支：`codex/1.4.0-1d4-acceptance`
 - 1D-4 验收基线：`5bc492a feat(agent): add safe local team runtime scripts`
 - 阶段 2A 验收来源分支：`codex/1.4.0-2a-readonly-context`
@@ -153,7 +153,8 @@
 - 3A-R3B-F1E 当前状态：三提交链 `d5f28066bee97a5485917e193926594b9961767e` → `e95781687cd0af63507c42017ec8ca6d6f404f86` → `0e2b607bc068910319134790360d71a18a6a9e02` 已通过 ChatGPT 对完整实际 Git 差异的最终审查，经用户批准纯 fast-forward 合入。类型化缩减研究准入、专用数据库身份守卫、单日 1—3 证券共享会话、每证券 `daily/adj_factor/trade_cal` 精确三请求、全响应写前验证、开市日语义、全批次单事务捕获及内存公式级 QFQ 均已合入。当前 `REDUCED_RESEARCH_ROUTE_DECISION=DEDICATED_LOCAL_RESEARCH_PATH`、`REDUCED_RESEARCH_LOCAL_RUNTIME_IMPLEMENTATION_READY=true`、`REDUCED_RESEARCH_CONTROLLED_ACCEPTANCE_READY=true`，但真实受控运行尚未由用户接受，因此 `REDUCED_RESEARCH_OPERATIONAL_READY=false`；不改变完整 F1 技术阻断、生产/正常业务库、scheduler、Agent/回测、F2B/F3 或交易门禁。
 - 3A-R3B-F1F-A 冻结基线：`0e2b607bc068910319134790360d71a18a6a9e02`
 - 3A-R3B-F1F-A 任务分支：`codex/1.4.0-stage-3ar3b-f1f-controlled-acceptance-preparation`
-- 3A-R3B-F1F-A 当前状态：对象实例内 CAS 一次性用户授权、验收状态/失败阶段、脱敏执行证据、默认拒绝资格投影和非 Controller 显式准备入口已在任务分支实现。基线/范围/有效期在数据库前验证，专用数据库预检在 F1E 委托前执行；F1E 捕获事务内守卫和整批零写边界继续复用。最终审查已将候选基线、授权消费、敏感输出与数据库时间证据分别收紧为 `CONFIG_DECLARED_EXACT_MATCH`、`OBJECT_INSTANCE_CAS_ONLY`、`NOT_ATTESTED` 与 `databaseReadbackVerified=false`；同 ID 重建、跨重启/进程唯一消费、构建产物基线、敏感输出证明和数据库时间回读仍是 F1F-B 前置。离线成功只能生成 `CANDIDATE`，不能生成 `PASSED`，当前 `CONTROLLED_ACCEPTANCE_STATUS=NOT_RUN`、`REDUCED_RESEARCH_OPERATIONAL_READY=false`。真实 F1F-B 验收未运行，未来预算最多 3 次且零重试；本阶段待实际 Git 提交验收，尚未合入。
+- 3A-R3B-F1F-A 当前状态：双提交链已通过实际 Git 审查并纯 fast-forward 合入集成提交 `f68d84403ebb82babe92a1cb0f78d845ed39547a`。对象实例 CAS、类型化候选证据与默认拒绝投影已合入；其历史弱证明字段仍保留用于区分 F1F-B1 强证明。
+- 3A-R3B-F1F-B1 当前状态：持久化唯一 acceptance ID、独立 V14 治理状态机、可信构建产物证明、实际输出审计、SYSTEM_KNOWLEDGE 数据库回读、内部 PASSED 重验及崩溃恢复已在任务分支 `codex/1.4.0-stage-3ar3b-f1f-b1-controlled-acceptance-executor` 完成，待 ChatGPT 实际 Git 提交复验，尚未合入。离线 `TEST` 成功只形成候选；F1F-B2 真实验收未运行，当前 `CONTROLLED_ACCEPTANCE_STATUS=NOT_RUN`、`REDUCED_RESEARCH_OPERATIONAL_READY=false`。
 - 3A-R3B-F2A 任务书 / 阶段记录：[tasks/3ar3b-f2a-research-preview-product.md](tasks/3ar3b-f2a-research-preview-product.md) / [stage-3ar3b-f2a-research-preview-product.md](stage-3ar3b-f2a-research-preview-product.md)。
 - 3A-R3B-F2A-R1 任务书 / 阶段记录：[tasks/3ar3b-f2a-r1-preview-ux-convergence.md](tasks/3ar3b-f2a-r1-preview-ux-convergence.md) / [stage-3ar3b-f2a-r1-preview-ux-convergence.md](stage-3ar3b-f2a-r1-preview-ux-convergence.md)。
 - 3A-R3B-F2A-R1A 任务书 / 阶段记录：[tasks/3ar3b-f2a-r1a-visual-semantics-fix.md](tasks/3ar3b-f2a-r1a-visual-semantics-fix.md) / [stage-3ar3b-f2a-r1a-visual-semantics-fix.md](stage-3ar3b-f2a-r1a-visual-semantics-fix.md)。
@@ -166,6 +167,7 @@
 - 3A-R3B-F1D 任务书 / 阶段记录：[tasks/3ar3b-f1d-tushare-written-permission-closure.md](tasks/3ar3b-f1d-tushare-written-permission-closure.md) / [stage-3ar3b-f1d-tushare-written-permission-closure.md](stage-3ar3b-f1d-tushare-written-permission-closure.md)。
 - 3A-R3B-F1E 任务书 / 阶段记录：[tasks/3ar3b-f1e-dedicated-research-runtime.md](tasks/3ar3b-f1e-dedicated-research-runtime.md) / [stage-3ar3b-f1e-dedicated-research-runtime.md](stage-3ar3b-f1e-dedicated-research-runtime.md)。
 - 3A-R3B-F1F-A 任务书 / 阶段记录：[tasks/3ar3b-f1f-controlled-acceptance-preparation.md](tasks/3ar3b-f1f-controlled-acceptance-preparation.md) / [stage-3ar3b-f1f-controlled-acceptance-preparation.md](stage-3ar3b-f1f-controlled-acceptance-preparation.md)。
+- 3A-R3B-F1F-B1 任务书 / 阶段记录：[tasks/3ar3b-f1f-b1-controlled-acceptance-executor.md](tasks/3ar3b-f1f-b1-controlled-acceptance-executor.md) / [stage-3ar3b-f1f-b1-controlled-acceptance-executor.md](stage-3ar3b-f1f-b1-controlled-acceptance-executor.md)。
 - 当前正式状态：`F0_AUDIT_RESULT=PARTIAL`、`FREE_IMPLEMENTATION_PATH=RESEARCH_PREVIEW_FIRST`、`FREE_PRODUCT_PREVIEW_GATE=PASS`、`FREE_PROVIDER_VALIDATION_GATE=BLOCKED`、`PAID_PROVIDER_UPGRADE_DECISION=PENDING`、`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`。Track A 的免费研究预览产品形态验证已经完成；该 PASS 不改变 Provider、PIT、效果、Shadow、付费数据或交易资格。F1A/F1B/F1C/F1D/F1E 均已验收合入；F1E 的专用本地实现与受控验收准备 READY 不等于 operational、生产或正常业务库运行 READY。F1D 已把当前个人研究书面许可闭环为 PASS，但完整技术合同仍有十项阻断，因此 `F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE`、`fullF1EntryReady=false`。F1F-A 只准备不可伪造的受控验收机制，当前 `CONTROLLED_ACCEPTANCE_STATUS=NOT_RUN`、`REDUCED_RESEARCH_OPERATIONAL_READY=false`。Tushare 累计真实业务请求为 20（B1 为 10、F1A 为 10、F1B/F1C/F1D/F1E/F1F-A 均为 0），iFinD 真实调用数为 0；正常业务库 V13 未执行，F2B/F3、3A-R3B-1 均未开始，Day 002 未创建，scheduler 关闭，3B 未开始。
 - `master`：`27d9099 chore: checkpoint Stock Quant Pro 1.3.1 and remove tracked cache`
 - 版本号仍保持 `1.3.1`；尚未发布 `1.4.0`。

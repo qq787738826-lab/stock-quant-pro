@@ -379,13 +379,20 @@
 - 继续关闭：生产、正常业务库、scheduler、Agent、回测、Shadow、F2B、F3、投资建议与交易全部为 false。完整 F1 继续 `BLOCKED_TECHNICAL_EVIDENCE`，F1E 不调用 Provider 或读取 Token。
 - 当前状态：三提交链 `d5f28066bee97a5485917e193926594b9961767e` → `e95781687cd0af63507c42017ec8ca6d6f404f86` → `0e2b607bc068910319134790360d71a18a6a9e02` 已通过完整实际 Git 最终审查，经用户批准纯 fast-forward 合入。本阶段 Provider 新增调用为 0，不检查 Token、不访问既有或正常业务数据库；真实受控验收未运行。
 
-#### 3A-R3B-F1F-A：缩减研究受控验收机制准备（任务分支实施中）
+#### 3A-R3B-F1F-A：缩减研究受控验收机制准备（已合入）
 
 - 交付：[F1F-A 任务书](tasks/3ar3b-f1f-controlled-acceptance-preparation.md)和[F1F-A 阶段记录](stage-3ar3b-f1f-controlled-acceptance-preparation.md)。
 - 机制：同一授权对象以 CAS 防止并发重复委托，并绑定代码基线、Tushare、一个证券、一个开市日、三个固定 Endpoint、三次请求、零重试、专用数据库/用户/Schema/V13和有效期；基线/范围先于数据库，数据库先于F1E委托。当前不声称同 ID 重建、JVM 重启或跨进程防重。
 - 证据：只保存脱敏执行身份、计数、时间、批次ID、事实数量、SYSTEM_KNOWLEDGE和formula-only QFQ摘要；不保存Token、密码、JDBC URL或完整响应。
 - 投影：默认 `NOT_RUN`；离线成功只能生成 `CANDIDATE`，没有公开 `PASSED` 构造入口，因此 `REDUCED_RESEARCH_OPERATIONAL_READY=false`。候选证据明确保留配置声明基线、对象实例消费、敏感输出未证明及数据库时间未回读状态；未来F1F-B需要用户单独批准，并补持久化唯一消费、构建产物基线、输出审计和数据库时间回读，Provider预算上限为3次、零重试。
 - 状态：F1F-A不改变完整F1十项技术阻断、生产/正常业务库、scheduler、Agent、回测、Shadow、F2B/F3、交易或四项正式门禁。
+
+#### 3A-R3B-F1F-B1：受控验收可信执行机制（任务分支完成，待复验）
+
+- 交付：[F1F-B1 任务书](tasks/3ar3b-f1f-b1-controlled-acceptance-executor.md)和[F1F-B1 阶段记录](stage-3ar3b-f1f-b1-controlled-acceptance-executor.md)。
+- 机制：独立 V14 持久化状态机、跨进程唯一 acceptance ID、可信构建产物证明、实际输出审计、V13 数据库回读、内部 PASSED 重验及不可复用恢复。
+- 隔离：离线 TEST 只能得到候选；真实 F1F-B2 未运行，`CONTROLLED_ACCEPTANCE_STATUS=NOT_RUN`、`REDUCED_RESEARCH_OPERATIONAL_READY=false`。
+- 下一入口：仅在 B1 实际 Git 复验并合入后，由用户单独授权基于冻结集成 SHA 的 F1F-B2；预算精确 3 次、零重试。
 
 #### 3A-R3B-F1：完整 Provider Adapter 与 V13 闭环（当前仅技术证据阻断）
 

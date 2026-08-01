@@ -38,6 +38,8 @@ public final class TushareControlledAcceptanceAuthorization {
     private final String databaseUser;
     private final String schemaName;
     private final int schemaVersion;
+    private final String artifactSha256;
+    private final String authorizationFingerprint;
     private final UserApproval userApproval;
     private final RuntimeBoundary runtimeBoundary;
     private final ReuseProtectionScope reuseProtectionScope;
@@ -53,6 +55,22 @@ public final class TushareControlledAcceptanceAuthorization {
             Instant issuedAt,
             Instant expiresAt
     ) {
+        this(acceptanceId, codeBaselineCommit, security, tradeDate,
+                issuedAt, expiresAt, 13, null,
+                ReuseProtectionScope.OBJECT_INSTANCE_CAS_ONLY);
+    }
+
+    private TushareControlledAcceptanceAuthorization(
+            String acceptanceId,
+            String codeBaselineCommit,
+            SecuritySelection security,
+            LocalDate tradeDate,
+            Instant issuedAt,
+            Instant expiresAt,
+            int schemaVersion,
+            String artifactSha256,
+            ReuseProtectionScope reuseProtectionScope
+    ) {
         this.acceptanceId = requireAcceptanceId(acceptanceId);
         this.codeBaselineCommit = requireCommit(codeBaselineCommit);
         this.providerCode = TushareMarketFactProvider.PROVIDER_CODE;
@@ -67,14 +85,33 @@ public final class TushareControlledAcceptanceAuthorization {
                 TushareDedicatedResearchPersistenceGuard.REQUIRED_USER;
         this.schemaName =
                 TushareDedicatedResearchPersistenceGuard.REQUIRED_SCHEMA;
-        this.schemaVersion = 13;
+        this.schemaVersion = schemaVersion;
+        this.artifactSha256 = artifactSha256 == null ? null
+                : requireSha256(artifactSha256);
         this.userApproval = UserApproval.CONFIRMED;
         this.runtimeBoundary = RuntimeBoundary.forbidAll();
-        this.reuseProtectionScope =
-                ReuseProtectionScope.OBJECT_INSTANCE_CAS_ONLY;
+        this.reuseProtectionScope = Objects.requireNonNull(
+                reuseProtectionScope, "reuseProtectionScope");
         this.issuedAt = Objects.requireNonNull(issuedAt, "issuedAt");
         this.expiresAt = Objects.requireNonNull(expiresAt, "expiresAt");
+        this.authorizationFingerprint = fingerprint();
         validateFrozen();
+    }
+
+    static TushareControlledAcceptanceAuthorization
+    issueUserApprovedDurable(
+            String acceptanceId,
+            String codeBaselineCommit,
+            String artifactSha256,
+            SecuritySelection security,
+            LocalDate tradeDate,
+            Instant issuedAt,
+            Instant expiresAt
+    ) {
+        return new TushareControlledAcceptanceAuthorization(
+                acceptanceId, codeBaselineCommit, security, tradeDate,
+                issuedAt, expiresAt, 14, artifactSha256,
+                ReuseProtectionScope.DURABLE_ACCEPTANCE_ID_RESERVATION);
     }
 
     static TushareControlledAcceptanceAuthorization
@@ -143,11 +180,17 @@ public final class TushareControlledAcceptanceAuthorization {
                 .REQUIRED_USER.equals(databaseUser)
                 || !TushareDedicatedResearchPersistenceGuard
                 .REQUIRED_SCHEMA.equals(schemaName)
-                || schemaVersion != 13
+                || schemaVersion != (reuseProtectionScope
+                == ReuseProtectionScope.DURABLE_ACCEPTANCE_ID_RESERVATION
+                ? 14 : 13)
+                || reuseProtectionScope
+                == ReuseProtectionScope.DURABLE_ACCEPTANCE_ID_RESERVATION
+                && artifactSha256 == null
+                || reuseProtectionScope
+                == ReuseProtectionScope.OBJECT_INSTANCE_CAS_ONLY
+                && artifactSha256 != null
                 || userApproval != UserApproval.CONFIRMED
                 || !runtimeBoundary.allForbidden()
-                || reuseProtectionScope
-                != ReuseProtectionScope.OBJECT_INSTANCE_CAS_ONLY
                 || !expiresAt.isAfter(issuedAt)) {
             throw invalid("TUSHARE_CONTROLLED_ACCEPTANCE_AUTHORIZATION_INVALID");
         }
@@ -226,7 +269,16 @@ public final class TushareControlledAcceptanceAuthorization {
     }
 
     public boolean durableConsumptionRecorded() {
-        return false;
+        return reuseProtectionScope
+                == ReuseProtectionScope.DURABLE_ACCEPTANCE_ID_RESERVATION;
+    }
+
+    public String artifactSha256() {
+        return artifactSha256;
+    }
+
+    public String authorizationFingerprint() {
+        return authorizationFingerprint;
     }
 
     public Instant issuedAt() {
@@ -256,10 +308,14 @@ public final class TushareControlledAcceptanceAuthorization {
                 + ", databaseUser=" + databaseUser
                 + ", schemaName=" + schemaName
                 + ", schemaVersion=" + schemaVersion
+                + ", artifactSha256="
+                + (artifactSha256 == null ? "none" : "[SHA256]")
+                + ", authorizationFingerprint=[SHA256]"
                 + ", userApproval=" + userApproval
                 + ", runtimeBoundary=" + runtimeBoundary
                 + ", reuseProtectionScope=" + reuseProtectionScope
-                + ", durableConsumptionRecorded=false"
+                + ", durableConsumptionRecorded="
+                + durableConsumptionRecorded()
                 + ", issuedAt=" + issuedAt
                 + ", expiresAt=" + expiresAt
                 + ", consumed=" + consumed.get() + ']';
@@ -277,6 +333,31 @@ public final class TushareControlledAcceptanceAuthorization {
             throw invalid("TUSHARE_CONTROLLED_ACCEPTANCE_BASELINE_INVALID");
         }
         return value;
+    }
+
+    private static String requireSha256(String value) {
+        if (value == null || !value.matches("[0-9a-f]{64}")) {
+            throw invalid("TUSHARE_CONTROLLED_ACCEPTANCE_ARTIFACT_INVALID");
+        }
+        return value;
+    }
+
+    private String fingerprint() {
+        String material = acceptanceId + '|' + codeBaselineCommit + '|'
+                + providerCode + '|' + security.providerInstrumentId() + '|'
+                + tradeDate + '|' + endpoints + '|' + maximumProviderRequests
+                + '|' + retryPermission + '|' + databaseIdentity + '|'
+                + databaseUser + '|' + schemaName + '|' + schemaVersion + '|'
+                + userApproval + '|' + runtimeBoundary + '|'
+                + reuseProtectionScope + '|' + issuedAt + '|' + expiresAt + '|'
+                + (artifactSha256 == null ? "NONE" : artifactSha256);
+        try {
+            byte[] digest = java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(material.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            return java.util.HexFormat.of().formatHex(digest);
+        } catch (java.security.NoSuchAlgorithmException impossible) {
+            throw new IllegalStateException(impossible);
+        }
     }
 
     private static IllegalArgumentException invalid(String safeCode) {

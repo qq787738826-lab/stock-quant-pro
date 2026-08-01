@@ -251,6 +251,12 @@ first-observed/known-at 回读。验收后若提交哈希变化，现有精确�
 不得改变完整F1十项技术阻断、生产/正常业务库、scheduler、Agent、回测、Shadow、F2B/F3、
 交易或四项正式门禁。本阶段真实Provider调用为0，F1F-B尚未授权。
 
+### 5.4 F1F-B1 可信执行机制
+
+F1F-B1 补齐持久化唯一 acceptance ID、不可逆状态机、可信构建产物证明、实际输出审计、数据库回读及内部资格重验。独立 V14 仅由受控验收数据库显式加载，默认生产迁移仍止于 V13。TEST 来源不能投影真实 PASSED；F1F-B2 未运行前继续保持 `CONTROLLED_ACCEPTANCE_STATUS=NOT_RUN` 与 `REDUCED_RESEARCH_OPERATIONAL_READY=false`。
+
+完整 F1 的公司行动、稳定事件身份、factor/action、Provider revision/历史版本、永久证券身份、全历史 DAILY_EXACT 与完整 QFQ lineage 等技术阻断不因该运行机制完成而解除；`F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE`。
+
 ## 6. 继续禁止
 
 - F1A 验收完成后不追加无授权 Tushare 调用；

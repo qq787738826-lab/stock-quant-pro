@@ -37,6 +37,9 @@ public final class TushareDedicatedResearchPersistenceGuard {
     public static final List<String> REQUIRED_MIGRATIONS = List.of(
             "1", "2", "3", "4", "5", "6", "7",
             "8", "9", "10", "11", "12", "13");
+    public static final List<String> CONTROLLED_ACCEPTANCE_MIGRATIONS = List.of(
+            "1", "2", "3", "4", "5", "6", "7",
+            "8", "9", "10", "11", "12", "13", "14");
 
     private final SchemaInspector inspector;
     private final DatabaseIdentityPolicy identityPolicy;
@@ -96,7 +99,7 @@ public final class TushareDedicatedResearchPersistenceGuard {
             throw blocked(
                     "TUSHARE_DEDICATED_RESEARCH_SEARCH_PATH_INVALID");
         }
-        if (!state.appliedMigrations().equals(REQUIRED_MIGRATIONS)) {
+        if (!supportedMigrations(state.appliedMigrations())) {
             throw blocked(
                     "TUSHARE_DEDICATED_RESEARCH_SCHEMA_VERSION_INVALID");
         }
@@ -159,8 +162,7 @@ public final class TushareDedicatedResearchPersistenceGuard {
                 || !REQUIRED_SCHEMA.equals(
                 verification.currentSchema())
                 || !strictSearchPath(verification.searchPath())
-                || !REQUIRED_MIGRATIONS.equals(
-                verification.appliedMigrations())
+                || !supportedMigrations(verification.appliedMigrations())
                 || verification.databaseIdentityQualification()
                 != DatabaseIdentityQualification.VERIFIED
                 || verification.schemaQualification()
@@ -339,7 +341,7 @@ public final class TushareDedicatedResearchPersistenceGuard {
                     || !DATABASE_PURPOSE.equals(databasePurpose)
                     || !REQUIRED_SCHEMA.equals(currentSchema)
                     || !strictSearchPath(searchPath)
-                    || !REQUIRED_MIGRATIONS.equals(appliedMigrations)
+                    || !supportedMigrations(appliedMigrations)
                     || databaseIdentityQualification
                     != DatabaseIdentityQualification.VERIFIED
                     || schemaQualification
@@ -441,5 +443,10 @@ public final class TushareDedicatedResearchPersistenceGuard {
                     "invalid dedicated research " + field);
         }
         return value;
+    }
+
+    private static boolean supportedMigrations(List<String> migrations) {
+        return REQUIRED_MIGRATIONS.equals(migrations)
+                || CONTROLLED_ACCEPTANCE_MIGRATIONS.equals(migrations);
     }
 }
