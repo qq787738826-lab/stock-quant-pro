@@ -37,9 +37,6 @@ public final class TushareDedicatedResearchPersistenceGuard {
     public static final List<String> REQUIRED_MIGRATIONS = List.of(
             "1", "2", "3", "4", "5", "6", "7",
             "8", "9", "10", "11", "12", "13");
-    public static final List<String> CONTROLLED_ACCEPTANCE_MIGRATIONS = List.of(
-            "1", "2", "3", "4", "5", "6", "7",
-            "8", "9", "10", "11", "12", "13", "14");
 
     private final SchemaInspector inspector;
     private final DatabaseIdentityPolicy identityPolicy;
@@ -446,7 +443,6 @@ public final class TushareDedicatedResearchPersistenceGuard {
     }
 
     private static boolean supportedMigrations(List<String> migrations) {
-        return REQUIRED_MIGRATIONS.equals(migrations)
-                || CONTROLLED_ACCEPTANCE_MIGRATIONS.equals(migrations);
+        return REQUIRED_MIGRATIONS.equals(migrations);
     }
 }

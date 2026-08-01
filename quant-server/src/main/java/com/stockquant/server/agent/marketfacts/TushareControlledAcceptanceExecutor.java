@@ -8,12 +8,10 @@ import com.stockquant.server.agent.marketfacts.TushareControlledAcceptanceExecut
 import com.stockquant.server.agent.marketfacts.TushareControlledAcceptanceExecution.RedactedEvidence;
 import com.stockquant.server.agent.marketfacts.TushareControlledAcceptanceExecution.Reservation;
 import com.stockquant.server.agent.marketfacts.TushareControlledAcceptanceEvaluator.EncodedEvidence;
+import com.stockquant.server.agent.marketfacts.TushareControlledAcceptanceEvaluator.CandidateAssessment;
 import com.stockquant.server.agent.marketfacts.TushareControlledAcceptanceOutputAudit.Captured;
 import com.stockquant.server.agent.marketfacts.TushareControlledAcceptanceOutputAudit.SensitiveMaterial;
 import com.stockquant.server.agent.marketfacts.TushareDedicatedResearchBatchModels.TushareDedicatedResearchBatchResult;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.support.TransactionTemplate;
-
 import java.time.Clock;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -21,6 +19,7 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Explicit F1F-B execution boundary. It is intentionally not a Spring bean,
@@ -28,20 +27,18 @@ import java.util.Objects;
  */
 public final class TushareControlledAcceptanceExecutor {
     private final TushareControlledAcceptanceExecutionRepository repository;
-    private final TushareDedicatedResearchPersistenceGuard guard;
+    private final TushareControlledAcceptanceDatabaseGuard guard;
     private final TushareDedicatedResearchBatchService batchService;
     private final TushareControlledAcceptanceReadbackService readbackService;
     private final TushareControlledAcceptanceEvaluator evaluator;
-    private final TransactionTemplate transaction;
     private final Clock clock;
 
     public TushareControlledAcceptanceExecutor(
             TushareControlledAcceptanceExecutionRepository repository,
-            TushareDedicatedResearchPersistenceGuard guard,
+            TushareControlledAcceptanceDatabaseGuard guard,
             TushareDedicatedResearchBatchService batchService,
             TushareControlledAcceptanceReadbackService readbackService,
             TushareControlledAcceptanceEvaluator evaluator,
-            PlatformTransactionManager transactionManager,
             Clock clock
     ) {
         this.repository = Objects.requireNonNull(repository, "repository");
@@ -49,8 +46,6 @@ public final class TushareControlledAcceptanceExecutor {
         this.batchService = Objects.requireNonNull(batchService, "batchService");
         this.readbackService = Objects.requireNonNull(readbackService, "readbackService");
         this.evaluator = Objects.requireNonNull(evaluator, "evaluator");
-        this.transaction = new TransactionTemplate(Objects.requireNonNull(
-                transactionManager, "transactionManager"));
         this.clock = Objects.requireNonNull(clock, "clock");
         if (TushareControlledAcceptanceBoundaryAttestor.attest(getClass())
                 != TushareControlledAcceptanceExecution.ProhibitedStageAttestation
@@ -71,16 +66,9 @@ public final class TushareControlledAcceptanceExecutor {
         Objects.requireNonNull(buildProof, "buildProof").validate();
         Objects.requireNonNull(executionSource, "executionSource");
         Objects.requireNonNull(sensitiveMaterialSource, "sensitiveMaterialSource");
-        List<SensitiveMaterial> sensitiveMaterials = List.copyOf(
-                Objects.requireNonNull(sensitiveMaterialSource.materials(),
-                        "sensitiveMaterials"));
-        if (executionSource == ExecutionSource.REAL_CONTROLLED_ACCEPTANCE
-                && sensitiveMaterials.isEmpty()) {
-            throw blocked("TUSHARE_CONTROLLED_ACCEPTANCE_SENSITIVE_REGISTRY_REQUIRED");
-        }
         Instant startedAt = clock.instant().truncatedTo(ChronoUnit.MICROS);
         validateExactScope(authorization, command, buildProof, executionSource, startedAt);
-        TushareDedicatedResearchPersistenceGuard.Verification preProvider =
+        TushareControlledAcceptanceDatabaseGuard.ControlledVerification preProvider =
                 guard.verifyBeforeProvider();
         authorization.validatePreflight(command, buildProof.gitCommit(), startedAt);
         Reservation reservation = new Reservation(
@@ -93,7 +81,7 @@ public final class TushareControlledAcceptanceExecutor {
                 authorization.schemaVersion(), startedAt, authorization.expiresAt());
         repository.reserve(reservation);
         try {
-            authorization.validateAndConsume(command, buildProof.gitCommit(),
+            authorization.validateAndConsumeDurable(command, buildProof.gitCommit(),
                     startedAt, preProvider);
             repository.markRunning(authorization.acceptanceId());
         } catch (RuntimeException error) {
@@ -103,37 +91,44 @@ public final class TushareControlledAcceptanceExecutor {
             throw error;
         }
 
+        AtomicLong providerAttemptsBefore = new AtomicLong(-1L);
         ExecutionPayload payload;
         TushareControlledAcceptanceOutputAudit.AuditResult audit;
         try {
             Captured<ExecutionPayload> captured =
-                    TushareControlledAcceptanceOutputAudit.capture(
-                            sensitiveMaterials,
-                            () -> Objects.requireNonNull(transaction.execute(status ->
-                                    runAndReadback(command, startedAt))));
+                    TushareControlledAcceptanceOutputAudit.captureAfterRegistration(
+                            () -> List.copyOf(Objects.requireNonNull(
+                                    sensitiveMaterialSource.materials(),
+                                    "sensitiveMaterials")),
+                            () -> {
+                                long before = batchService.totalProviderAttemptCount();
+                                providerAttemptsBefore.set(before);
+                                return runAndReadback(command, startedAt, before);
+                            });
             payload = captured.value();
             audit = captured.auditResult();
             if (!audit.clean()) {
                 repository.markFailed(authorization.acceptanceId(), ExecutionStatus.RUNNING,
                         ExecutionStatus.FAILED_OUTPUT_AUDIT, "OUTPUT_AUDIT",
-                        "TUSHARE_CONTROLLED_ACCEPTANCE_SENSITIVE_OUTPUT_DETECTED", 3);
+                        "TUSHARE_CONTROLLED_ACCEPTANCE_SENSITIVE_OUTPUT_DETECTED",
+                        providerAttemptsSince(providerAttemptsBefore.get()));
                 throw blocked("TUSHARE_CONTROLLED_ACCEPTANCE_SENSITIVE_OUTPUT_DETECTED");
             }
         } catch (TushareControlledAcceptanceOutputAudit.CapturedExecutionException error) {
-            ExecutionStatus failure = error.auditResult().clean()
-                    ? ExecutionStatus.FAILED_PROVIDER
-                    : ExecutionStatus.FAILED_OUTPUT_AUDIT;
+            FailureClassification failure = error.auditResult().clean()
+                    ? classifyCleanFailure(error.getCause(),
+                    providerAttemptsBefore.get())
+                    : new FailureClassification(
+                    ExecutionStatus.FAILED_OUTPUT_AUDIT, "OUTPUT_AUDIT",
+                    "TUSHARE_CONTROLLED_ACCEPTANCE_SENSITIVE_OUTPUT_DETECTED");
             repository.markFailed(authorization.acceptanceId(), ExecutionStatus.RUNNING,
-                    failure, failure == ExecutionStatus.FAILED_OUTPUT_AUDIT
-                            ? "OUTPUT_AUDIT" : "EXECUTION",
-                    failure == ExecutionStatus.FAILED_OUTPUT_AUDIT
-                            ? "TUSHARE_CONTROLLED_ACCEPTANCE_SENSITIVE_OUTPUT_DETECTED"
-                            : "TUSHARE_CONTROLLED_ACCEPTANCE_EXECUTION_FAILED", 0);
+                    failure.status(), failure.stage(), failure.reasonCode(),
+                    providerAttemptsSince(providerAttemptsBefore.get()));
             throw blocked("TUSHARE_CONTROLLED_ACCEPTANCE_EXECUTION_FAILED");
         } catch (Exception error) {
             repository.markFailed(authorization.acceptanceId(), ExecutionStatus.RUNNING,
                     ExecutionStatus.FAILED_VALIDATION, "EXECUTION",
-                    safeReason(error), 0);
+                    safeReason(error), providerAttemptsSince(providerAttemptsBefore.get()));
             throw error instanceof RuntimeException runtime ? runtime
                     : blocked("TUSHARE_CONTROLLED_ACCEPTANCE_EXECUTION_FAILED");
         }
@@ -156,20 +151,21 @@ public final class TushareControlledAcceptanceExecutor {
         TushareControlledAcceptanceExecution.StoredExecution candidate =
                 repository.markCandidate(authorization.acceptanceId(),
                         payload.batchId(), 3, encoded.json(), encoded.digest());
-        Decision decision = evaluator.evaluateCandidate(candidate,
+        CandidateAssessment candidateAssessment = evaluator.evaluateCandidate(candidate,
                 repository.history(authorization.acceptanceId()), evidence, buildProof);
-        if (decision.status() == ExecutionStatus.PASSED) {
+        if (candidateAssessment.persistedPassAuthorized()) {
             TushareControlledAcceptanceExecution.StoredExecution passed =
                     repository.markPassed(authorization.acceptanceId());
             return evaluator.reloadAndRevalidate(passed,
                     repository.history(authorization.acceptanceId()), buildProof);
         }
-        return decision;
+        return candidateAssessment.testDecision();
     }
 
     private ExecutionPayload runAndReadback(
             TushareDedicatedResearchBatchCommand command,
-            Instant startedAt
+            Instant startedAt,
+            long providerAttemptsBefore
     ) {
         TushareDedicatedResearchBatchResult result = batchService.run(
                 TushareDedicatedResearchBatchAuthorization.manualPersonalResearch(), command);
@@ -179,11 +175,30 @@ public final class TushareControlledAcceptanceExecutor {
                 || result.symbolResults().get(0).qfqBars().size() != 1) {
             throw blocked("TUSHARE_CONTROLLED_ACCEPTANCE_RESULT_INVALID");
         }
+        if (providerAttemptsSince(providerAttemptsBefore) != 3) {
+            throw blocked("TUSHARE_CONTROLLED_ACCEPTANCE_PROVIDER_ATTEMPT_COUNT_INVALID");
+        }
         long batchId = result.symbolResults().get(0).captureResult().batchId();
+        var symbolResult = result.symbolResults().get(0);
+        var security = command.securities().get(0);
         DatabaseReadbackEvidence readback = readbackService.readAndVerify(
                 batchId, result.observedAt(), startedAt,
-                clock.instant().truncatedTo(ChronoUnit.MICROS), result.databaseIdentity());
+                clock.instant().truncatedTo(ChronoUnit.MICROS), result.databaseIdentity(),
+                symbolResult.sourceInstrumentId(), security.symbol(),
+                security.exchange(), command.tradeDate());
+        guard.verifyBeforeProvider();
         return new ExecutionPayload(result, batchId, readback, true);
+    }
+
+    private int providerAttemptsSince(long before) {
+        if (before < 0) {
+            return 0;
+        }
+        long difference = batchService.totalProviderAttemptCount() - before;
+        if (difference < 0 || difference > 3) {
+            throw blocked("TUSHARE_CONTROLLED_ACCEPTANCE_PROVIDER_ATTEMPT_COUNT_INVALID");
+        }
+        return Math.toIntExact(difference);
     }
 
     private static void validateExactScope(
@@ -224,6 +239,63 @@ public final class TushareControlledAcceptanceExecutor {
                 ? message : "TUSHARE_CONTROLLED_ACCEPTANCE_EXECUTION_FAILED";
     }
 
+    static FailureClassification classifyCleanFailure(
+            Throwable error,
+            long providerAttemptsBefore
+    ) {
+        String reason = safeReason(error);
+        if (providerAttemptsBefore < 0
+                || reason.startsWith(
+                "TUSHARE_CONTROLLED_ACCEPTANCE_SENSITIVE_REGISTRY_")) {
+            return new FailureClassification(
+                    ExecutionStatus.FAILED_OUTPUT_AUDIT, "OUTPUT_AUDIT", reason);
+        }
+        if (hasCause(error, TushareApiGateway.GatewayException.class)
+                || reason.startsWith("TUSHARE_TIMEOUT")
+                || reason.startsWith("TUSHARE_NETWORK_")
+                || reason.startsWith("TUSHARE_API_")
+                || reason.startsWith("TUSHARE_PERMISSION_")
+                || reason.startsWith("TUSHARE_RATE_LIMIT")) {
+            return new FailureClassification(
+                    ExecutionStatus.FAILED_PROVIDER, "PROVIDER", reason);
+        }
+        if (reason.startsWith("TUSHARE_QFQ_")) {
+            return new FailureClassification(
+                    ExecutionStatus.FAILED_QFQ, "QFQ", reason);
+        }
+        if (reason.startsWith("TUSHARE_DEDICATED_RESEARCH_CAPTURE_")
+                || reason.startsWith("TUSHARE_REDUCED_RUNTIME_CAPTURE_")) {
+            return new FailureClassification(
+                    ExecutionStatus.FAILED_PERSISTENCE, "PERSISTENCE", reason);
+        }
+        if (reason.startsWith("TUSHARE_DEDICATED_RESEARCH_SCHEMA_")
+                || reason.startsWith("TUSHARE_DEDICATED_RESEARCH_SEARCH_PATH_")
+                || reason.startsWith("TUSHARE_DEDICATED_RESEARCH_DATABASE_")
+                || reason.startsWith("TUSHARE_DEDICATED_RESEARCH_TRANSACTION_")
+                || reason.startsWith("TUSHARE_CONTROLLED_ACCEPTANCE_GOVERNANCE_")
+                || reason.startsWith("TUSHARE_CONTROLLED_ACCEPTANCE_DATABASE_")
+                || reason.startsWith("TUSHARE_CONTROLLED_ACCEPTANCE_UNTRACKED_SCHEMA_")
+                || reason.startsWith("TUSHARE_CONTROLLED_ACCEPTANCE_READBACK_IDENTITY_")
+                || reason.startsWith("TUSHARE_CONTROLLED_ACCEPTANCE_POST_COMMIT_")) {
+            return new FailureClassification(
+                    ExecutionStatus.FAILED_DATABASE_GUARD,
+                    "DATABASE_GUARD", reason);
+        }
+        return new FailureClassification(
+                ExecutionStatus.FAILED_VALIDATION, "VALIDATION", reason);
+    }
+
+    private static boolean hasCause(Throwable error, Class<?> type) {
+        Throwable current = error;
+        while (current != null) {
+            if (type.isInstance(current)) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
+    }
+
     @FunctionalInterface
     interface SensitiveMaterialSource {
         List<SensitiveMaterial> materials();
@@ -235,6 +307,22 @@ public final class TushareControlledAcceptanceExecutor {
             DatabaseReadbackEvidence readback,
             boolean formulaOnlyQfqValid
     ) {
+    }
+
+    record FailureClassification(
+            ExecutionStatus status,
+            String stage,
+            String reasonCode
+    ) {
+        FailureClassification {
+            Objects.requireNonNull(status, "status");
+            stage = TushareControlledAcceptanceExecution.safeText(stage);
+            reasonCode = TushareControlledAcceptanceExecution.safeText(reasonCode);
+            if (!status.name().startsWith("FAILED_")) {
+                throw new IllegalArgumentException(
+                        "TUSHARE_CONTROLLED_ACCEPTANCE_FAILURE_STATUS_INVALID");
+            }
+        }
     }
 
     private static IllegalStateException blocked(String code) {

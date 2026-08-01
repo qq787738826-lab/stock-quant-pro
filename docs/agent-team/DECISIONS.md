@@ -248,8 +248,10 @@
 
 140. **F1F-A 候选证据不得冒充 F1F-B 强证明**：当前 CAS 只保护同一内存授权对象，配置值只证明声明的完整哈希相等，`observedAt` 只证明捕获调用使用同一微秒 `Instant`，敏感输出尚未由独立执行审计证明。因此候选分别记录 `OBJECT_INSTANCE_CAS_ONLY`、`CONFIG_DECLARED_EXACT_MATCH`、`databaseReadbackVerified=false` 和 `NOT_ATTESTED`。未来 `PASSED` 必须额外取得持久化 acceptance ID 唯一消费、最终构建产物完整哈希、数据库时间回读以及敏感输出审计，不能直接复用候选字段升级。
 
-141. **F1F-B1 将强证明实现为独立、默认不加载的治理执行机制**：acceptance ID 由独立 V14 治理表和 SQL 单向转换约束跨线程/JVM/进程唯一消费；正常应用 Flyway 仍只加载 V1—V13。`RUNNING` 必须在 Provider 前持久化，崩溃恢复只能终结为 `INTERRUPTED`，不得重试或复用原 ID。
+141. **F1F-B1 将强证明实现为独立、默认不加载的治理执行机制**：acceptance ID 由独立 V14 治理表和 SQL 单向转换约束跨线程/JVM/进程唯一消费；正常应用 Flyway 主历史仍只加载 V1—V13。V14 必须使用独立 location 和 `flyway_controlled_acceptance_history`，baseline 13 后显式迁移，并由 Java 前后守卫与脚本内数据库/Schema/主历史/治理历史检查共同拒绝误加载。`RUNNING` 必须在 Provider 前独立提交，崩溃恢复只封存已预占执行为 `INTERRUPTED`，不得消费未预占授权、重试或复用原 ID。
 
-142. **构建、输出、回读和 PASSED 均以实际证据为准**：受控构建 sidecar 必须匹配完整 Git SHA、干净已跟踪工作区和实际 JAR SHA-256；输出审计捕获 stdout/stderr/日志/异常但只持久化类别和位置；SYSTEM_KNOWLEDGE 由同事务连接实际回读；数据库中的 `PASSED` 字符串不能绕过证据摘要、状态历史和规则版本重验。
+142. **构建、输出、回读和 PASSED 均以实际证据为准**：受控构建只允许在冻结集成分支且本地/远程集成 SHA 一致时生成，MANIFEST 与相邻 sidecar 必须交叉匹配并由运行时重算当前 executor JAR SHA-256；TEST proof 不具治理资格。输出隔离必须先于敏感材料 supplier，独占捕获并恢复 stdout/stderr、当前 Logback 拓扑和异常链，只持久化类别与位置。SYSTEM_KNOWLEDGE 必须在 F1E 捕获事务提交后、无活动事务时回读 V13 envelope 与 raw/factor/calendar typed 表并重新验证数据库身份；捕获与回读 PID 分别留证。数据库中的 `PASSED` 字符串不能绕过严格 JSON、证据摘要、精确状态历史、构建来源和规则版本重验，且持久化 PASSED 后必须重新加载再次验证。
+
+- **F1F-B1 信任边界**：JAR/sidecar SHA-256 和数据库 evidence digest 用于检测意外变化与普通应用路径篡改，不是外部根密钥签名；能够同时改写 Git/JAR/sidecar 或完整数据库行、转换历史和证据的特权管理员超出本阶段防护范围。输出审计覆盖边界内 stdout/stderr、当前 Logback 和同步完成的异常/线程输出，不证明任意外部文件、未桥接日志框架或边界结束后的脱离线程无泄漏。F1F-B2 必须使用最小专用进程、专用最小权限账号、输出白名单、无未等待后台任务和用户一次性授权。
 
 143. **F1F-B1 离线成功不改变治理状态**：`TEST` 来源永远只得到 `SUCCEEDED_CANDIDATE`。本阶段没有调用 Provider、没有执行 F1F-B2，继续保持 `CONTROLLED_ACCEPTANCE_STATUS=NOT_RUN`、`REDUCED_RESEARCH_OPERATIONAL_READY=false`、`F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE` 及四项正式门禁。

@@ -1,5 +1,46 @@
--- Governance-only migration. Loaded explicitly by the controlled-acceptance
--- test/execution database and never by the normal application Flyway location.
+-- Governance-only migration. A second in-script identity guard protects
+-- against a future accidental classpath-location expansion. The production
+-- entry also validates this target before Flyway can issue any DDL.
+DO $$
+DECLARE base_versions TEXT[];
+DECLARE governance_versions TEXT[];
+BEGIN
+    IF current_database() <> 'stock_quant_research'
+       OR current_user <> 'stock_quant_research'
+       OR current_schema() <> 'tushare_research'
+       OR current_schemas(FALSE) <> ARRAY['tushare_research']::name[]
+       OR to_regclass(
+         'tushare_research.flyway_controlled_acceptance_history') IS NULL THEN
+        RAISE EXCEPTION 'controlled acceptance migration target rejected'
+            USING ERRCODE = '42501';
+    END IF;
+    SELECT array_agg(version ORDER BY installed_rank)
+      INTO base_versions
+      FROM tushare_research.flyway_schema_history
+     WHERE success;
+    IF base_versions <> ARRAY[
+        '1','2','3','4','5','6','7','8','9','10','11','12','13'
+    ]::TEXT[] OR EXISTS (
+        SELECT 1 FROM tushare_research.flyway_schema_history WHERE NOT success
+    ) THEN
+        RAISE EXCEPTION 'controlled acceptance base migrations rejected'
+            USING ERRCODE = '23514';
+    END IF;
+    SELECT array_agg(version ORDER BY installed_rank)
+      INTO governance_versions
+      FROM tushare_research.flyway_controlled_acceptance_history
+     WHERE success;
+    IF governance_versions <> ARRAY['13']::TEXT[] OR EXISTS (
+        SELECT 1
+          FROM tushare_research.flyway_controlled_acceptance_history
+         WHERE NOT success
+    ) THEN
+        RAISE EXCEPTION 'controlled acceptance governance history rejected'
+            USING ERRCODE = '23514';
+    END IF;
+END;
+$$;
+
 CREATE TABLE tushare_controlled_acceptance_execution (
     acceptance_id VARCHAR(64) PRIMARY KEY,
     authorization_fingerprint VARCHAR(64) NOT NULL,
@@ -49,11 +90,55 @@ CREATE TABLE tushare_controlled_acceptance_execution (
     ),
     CONSTRAINT ck_tca_scope CHECK (
         provider_code = 'TUSHARE_PRO'
-        AND jsonb_array_length(endpoints_json) = 3
+        AND endpoints_json = '["ADJ_FACTOR","DAILY","TRADE_CAL"]'::jsonb
         AND schema_version = 14
         AND provider_call_count BETWEEN 0 AND 3
         AND retry_count = 0
         AND authorization_expires_at > created_at
+    ),
+    CONSTRAINT ck_tca_safe_failure_text CHECK (
+        (failure_stage IS NULL OR failure_stage ~ '^[A-Z0-9_:-]{1,48}$')
+        AND (safe_failure_reason IS NULL
+             OR safe_failure_reason ~ '^[A-Z0-9_:-]{1,128}$')
+    ),
+    CONSTRAINT ck_tca_time_order CHECK (
+        (reserved_at IS NULL OR reserved_at >= created_at)
+        AND (started_at IS NULL OR
+             reserved_at IS NOT NULL AND started_at >= reserved_at)
+        AND (finalized_at IS NULL OR
+             finalized_at >= COALESCE(started_at, reserved_at, created_at))
+    ),
+    CONSTRAINT ck_tca_state_shape CHECK (
+        (status = 'AUTHORIZED'
+         AND reserved_at IS NULL AND started_at IS NULL AND finalized_at IS NULL
+         AND capture_batch_id IS NULL AND provider_call_count = 0
+         AND evidence_summary_json IS NULL AND evidence_digest IS NULL)
+        OR
+        (status = 'RESERVED'
+         AND reserved_at IS NOT NULL AND started_at IS NULL AND finalized_at IS NULL
+         AND capture_batch_id IS NULL AND provider_call_count = 0
+         AND evidence_summary_json IS NULL AND evidence_digest IS NULL)
+        OR
+        (status = 'RUNNING'
+         AND reserved_at IS NOT NULL AND started_at IS NOT NULL
+         AND finalized_at IS NULL AND capture_batch_id IS NULL
+         AND provider_call_count = 0
+         AND evidence_summary_json IS NULL AND evidence_digest IS NULL)
+        OR
+        (status IN ('SUCCEEDED_CANDIDATE','PASSED')
+         AND reserved_at IS NOT NULL AND started_at IS NOT NULL
+         AND finalized_at IS NOT NULL AND capture_batch_id IS NOT NULL
+         AND provider_call_count = 3 AND retry_count = 0
+         AND evidence_summary_json IS NOT NULL AND evidence_digest IS NOT NULL
+         AND failure_stage IS NULL AND safe_failure_reason IS NULL)
+        OR
+        (status IN (
+            'FAILED_PRE_PROVIDER','FAILED_PROVIDER','FAILED_VALIDATION',
+            'FAILED_DATABASE_GUARD','FAILED_PERSISTENCE','FAILED_ROLLBACK',
+            'FAILED_QFQ','FAILED_OUTPUT_AUDIT','INTERRUPTED','STALE',
+            'INCOMPATIBLE_BASELINE')
+         AND reserved_at IS NOT NULL AND finalized_at IS NOT NULL
+         AND failure_stage IS NOT NULL AND safe_failure_reason IS NOT NULL)
     )
 );
 
@@ -93,6 +178,18 @@ BEGIN
             USING ERRCODE = '23514';
     END IF;
 
+    IF NEW.provider_call_count < OLD.provider_call_count
+       OR NEW.retry_count <> OLD.retry_count
+       OR NEW.capture_batch_id IS DISTINCT FROM OLD.capture_batch_id
+          AND OLD.capture_batch_id IS NOT NULL
+       OR NEW.evidence_summary_json IS DISTINCT FROM OLD.evidence_summary_json
+          AND OLD.evidence_summary_json IS NOT NULL
+       OR NEW.evidence_digest IS DISTINCT FROM OLD.evidence_digest
+          AND OLD.evidence_digest IS NOT NULL THEN
+        RAISE EXCEPTION 'controlled acceptance evidence regressed or changed'
+            USING ERRCODE = '23514';
+    END IF;
+
     allowed := (OLD.status = 'AUTHORIZED' AND NEW.status = 'RESERVED')
         OR (OLD.status = 'RESERVED' AND NEW.status IN (
             'RUNNING', 'FAILED_PRE_PROVIDER', 'FAILED_DATABASE_GUARD',
@@ -107,6 +204,21 @@ BEGIN
             'INTERRUPTED'));
     IF NOT allowed OR NEW.row_version <> OLD.row_version + 1 THEN
         RAISE EXCEPTION 'controlled acceptance transition rejected'
+            USING ERRCODE = '23514';
+    END IF;
+    IF OLD.status = 'SUCCEEDED_CANDIDATE'
+       AND (NEW.capture_batch_id IS DISTINCT FROM OLD.capture_batch_id
+            OR NEW.provider_call_count <> OLD.provider_call_count
+            OR NEW.retry_count <> OLD.retry_count
+            OR NEW.evidence_summary_json IS DISTINCT FROM OLD.evidence_summary_json
+            OR NEW.evidence_digest IS DISTINCT FROM OLD.evidence_digest) THEN
+        RAISE EXCEPTION 'controlled acceptance candidate evidence changed'
+            USING ERRCODE = '23514';
+    END IF;
+    IF OLD.status = 'SUCCEEDED_CANDIDATE' AND NEW.status = 'PASSED'
+       AND (NEW.failure_stage IS DISTINCT FROM OLD.failure_stage
+            OR NEW.safe_failure_reason IS DISTINCT FROM OLD.safe_failure_reason) THEN
+        RAISE EXCEPTION 'controlled acceptance passed with failure metadata'
             USING ERRCODE = '23514';
     END IF;
     RETURN NEW;
@@ -127,7 +239,12 @@ BEGIN
         NEW.acceptance_id,
         CASE WHEN TG_OP = 'INSERT' THEN NULL ELSE OLD.status END,
         NEW.status,
-        clock_timestamp(),
+        CASE
+            WHEN TG_OP = 'INSERT' THEN NEW.created_at
+            WHEN NEW.status = 'RESERVED' THEN NEW.reserved_at
+            WHEN NEW.status = 'RUNNING' THEN NEW.started_at
+            ELSE NEW.finalized_at
+        END,
         NEW.row_version,
         NEW.safe_failure_reason
     );

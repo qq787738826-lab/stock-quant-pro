@@ -387,10 +387,11 @@
 - 投影：默认 `NOT_RUN`；离线成功只能生成 `CANDIDATE`，没有公开 `PASSED` 构造入口，因此 `REDUCED_RESEARCH_OPERATIONAL_READY=false`。候选证据明确保留配置声明基线、对象实例消费、敏感输出未证明及数据库时间未回读状态；未来F1F-B需要用户单独批准，并补持久化唯一消费、构建产物基线、输出审计和数据库时间回读，Provider预算上限为3次、零重试。
 - 状态：F1F-A不改变完整F1十项技术阻断、生产/正常业务库、scheduler、Agent、回测、Shadow、F2B/F3、交易或四项正式门禁。
 
-#### 3A-R3B-F1F-B1：受控验收可信执行机制（任务分支完成，待复验）
+#### 3A-R3B-F1F-B1：受控验收可信执行机制（安全加固完成，待最终复验）
 
 - 交付：[F1F-B1 任务书](tasks/3ar3b-f1f-b1-controlled-acceptance-executor.md)和[F1F-B1 阶段记录](stage-3ar3b-f1f-b1-controlled-acceptance-executor.md)。
-- 机制：独立 V14 持久化状态机、跨进程唯一 acceptance ID、可信构建产物证明、实际输出审计、V13 数据库回读、内部 PASSED 重验及不可复用恢复。
+- 机制：V14 使用独立 location、独立治理历史与脚本内身份/历史守卫，默认主历史保持 V1—V13；跨进程唯一 acceptance ID、先提交 RUNNING、可信当前 JAR/集成 SHA 证明、先安装隔离再登记敏感材料的输出审计、提交后 envelope 与三类 typed fact 回读、内部 PASSED 持久化后再加载重验及不可复用恢复均已实现。
+- 边界：构建与证据 SHA-256 是完整性核对，不是抵抗特权系统/数据库管理员的外部签名；输出审计不覆盖任意外部文件、未桥接日志框架或边界结束后的脱离线程。未来 B2 必须采用最小专用进程、专用最小权限账号、输出白名单和无未等待后台任务。
 - 隔离：离线 TEST 只能得到候选；真实 F1F-B2 未运行，`CONTROLLED_ACCEPTANCE_STATUS=NOT_RUN`、`REDUCED_RESEARCH_OPERATIONAL_READY=false`。
 - 下一入口：仅在 B1 实际 Git 复验并合入后，由用户单独授权基于冻结集成 SHA 的 F1F-B2；预算精确 3 次、零重试。
 

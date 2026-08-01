@@ -253,7 +253,11 @@ first-observed/known-at 回读。验收后若提交哈希变化，现有精确�
 
 ### 5.4 F1F-B1 可信执行机制
 
-F1F-B1 补齐持久化唯一 acceptance ID、不可逆状态机、可信构建产物证明、实际输出审计、数据库回读及内部资格重验。独立 V14 仅由受控验收数据库显式加载，默认生产迁移仍止于 V13。TEST 来源不能投影真实 PASSED；F1F-B2 未运行前继续保持 `CONTROLLED_ACCEPTANCE_STATUS=NOT_RUN` 与 `REDUCED_RESEARCH_OPERATIONAL_READY=false`。
+F1F-B1 补齐持久化唯一 acceptance ID、不可逆状态机、可信构建产物证明、实际输出审计、提交后数据库 typed fact 回读及内部资格重验。独立 V14 使用独立 location 和独立治理历史，baseline 13 后由受控验收数据库守卫显式加载；默认主历史仍止于 V13，合并 location 的误扫描由 V14 脚本内不变量在 DDL 留存前拒绝。`RUNNING` 必须在 Provider 前独立提交，失败尝试数按共享 limiter 总计数差保存；恢复只封存已预占执行，不自动重试。
+
+构建证明必须绑定当前 executor JAR、MANIFEST、相邻 sidecar、冻结集成分支和本地/远程集成完整 SHA；TEST proof 永远无治理资格。输出隔离先于敏感材料读取，并捕获边界内 stdout/stderr、当前 Logback 拓扑和异常链。F1E 捕获事务提交后，回读必须在无活动事务中重新验证专用数据库身份，并同时核对 V13 envelope 与 raw/factor/calendar typed facts；捕获 PID 与回读 PID 分别记录。
+
+上述 SHA-256 与数据库 digest 是完整性核对而不是特权管理员不可伪造的外部签名；输出审计也不覆盖任意外部文件、未桥接日志框架或边界结束后的脱离线程。F1F-B2 必须使用最小专用进程、最小权限账号、输出白名单和无未等待后台任务。TEST 来源不能投影真实 PASSED；F1F-B2 未运行前继续保持 `CONTROLLED_ACCEPTANCE_STATUS=NOT_RUN` 与 `REDUCED_RESEARCH_OPERATIONAL_READY=false`。
 
 完整 F1 的公司行动、稳定事件身份、factor/action、Provider revision/历史版本、永久证券身份、全历史 DAILY_EXACT 与完整 QFQ lineage 等技术阻断不因该运行机制完成而解除；`F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE`。
 

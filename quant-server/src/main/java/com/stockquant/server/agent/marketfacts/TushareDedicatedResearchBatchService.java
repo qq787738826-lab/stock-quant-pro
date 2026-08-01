@@ -178,6 +178,10 @@ public final class TushareDedicatedResearchBatchService {
                 provider.technicalQualification().routeDecision());
     }
 
+    long totalProviderAttemptCount() {
+        return provider.f1cRateLimitContract().totalRateLimitedCallCount();
+    }
+
     private void validateAdmission() {
         TushareReducedResearchAdmissionQualification admission =
                 TushareReducedResearchAdmissionQualification

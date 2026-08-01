@@ -127,6 +127,34 @@ public final class TushareControlledAcceptanceExecution {
                     || rowVersion < 0 || captureBatchId != null && captureBatchId <= 0) {
                 throw invalid("TUSHARE_CONTROLLED_ACCEPTANCE_STORED_EXECUTION_INVALID");
             }
+            if (reservedAt != null && reservedAt.isBefore(reservation.createdAt())
+                    || startedAt != null && (reservedAt == null || startedAt.isBefore(reservedAt))
+                    || finalizedAt != null && finalizedAt.isBefore(
+                    startedAt != null ? startedAt
+                            : reservedAt != null ? reservedAt : reservation.createdAt())) {
+                throw invalid("TUSHARE_CONTROLLED_ACCEPTANCE_TIME_ORDER_INVALID");
+            }
+            boolean candidateOrPassed = status == ExecutionStatus.SUCCEEDED_CANDIDATE
+                    || status == ExecutionStatus.PASSED;
+            boolean failure = status.name().startsWith("FAILED_")
+                    || status == ExecutionStatus.INTERRUPTED
+                    || status == ExecutionStatus.STALE
+                    || status == ExecutionStatus.INCOMPATIBLE_BASELINE;
+            if (status == ExecutionStatus.AUTHORIZED
+                    && (reservedAt != null || startedAt != null || finalizedAt != null)
+                    || status == ExecutionStatus.RESERVED
+                    && (reservedAt == null || startedAt != null || finalizedAt != null)
+                    || status == ExecutionStatus.RUNNING
+                    && (reservedAt == null || startedAt == null || finalizedAt != null)
+                    || candidateOrPassed
+                    && (reservedAt == null || startedAt == null || finalizedAt == null
+                    || captureBatchId == null || providerCallCount != 3
+                    || evidenceSummaryJson == null || evidenceDigest == null
+                    || failureStage != null || safeFailureReason != null)
+                    || failure && (reservedAt == null || finalizedAt == null
+                    || failureStage == null || safeFailureReason == null)) {
+                throw invalid("TUSHARE_CONTROLLED_ACCEPTANCE_STATE_SHAPE_INVALID");
+            }
         }
     }
 
@@ -143,6 +171,9 @@ public final class TushareControlledAcceptanceExecution {
             Objects.requireNonNull(to, "to");
             Objects.requireNonNull(transitionAt, "transitionAt");
             safeReasonCode = nullableSafe(safeReasonCode);
+            if (rowVersion < 0) {
+                throw invalid("TUSHARE_CONTROLLED_ACCEPTANCE_TRANSITION_INVALID");
+            }
         }
     }
 
@@ -155,10 +186,12 @@ public final class TushareControlledAcceptanceExecution {
             Instant maximumFirstObservedAt,
             Instant minimumKnownAt,
             Instant maximumKnownAt,
-            int backendPid,
+            int writeBackendPid,
+            int committedReadbackBackendPid,
             String databaseIdentity,
             String databaseUser,
             String schemaName,
+            boolean committedReadbackVerified,
             boolean exactMicrosecondMatch
     ) {
         public DatabaseReadbackEvidence {
@@ -176,7 +209,20 @@ public final class TushareControlledAcceptanceExecution {
             schemaName = safeText(schemaName);
             if (batchId <= 0 || observationIds.size() != 3
                     || observationIds.stream().anyMatch(id -> id == null || id <= 0)
-                    || backendPid <= 0) {
+                    || observationIds.stream().distinct().count() != 3
+                    || !factCounts.equals(Map.of(
+                    FactType.RAW_DAILY_BAR, 1,
+                    FactType.ADJUSTMENT_FACTOR, 1,
+                    FactType.TRADING_CALENDAR, 1))
+                    || writeBackendPid <= 0
+                    || committedReadbackBackendPid <= 0
+                    || !committedReadbackVerified
+                    || minimumFirstObservedAt.isAfter(maximumFirstObservedAt)
+                    || minimumKnownAt.isAfter(maximumKnownAt)
+                    || exactMicrosecondMatch && (!observedAt.equals(minimumFirstObservedAt)
+                    || !observedAt.equals(maximumFirstObservedAt)
+                    || !observedAt.equals(minimumKnownAt)
+                    || !observedAt.equals(maximumKnownAt))) {
                 throw invalid("TUSHARE_CONTROLLED_ACCEPTANCE_READBACK_INVALID");
             }
         }

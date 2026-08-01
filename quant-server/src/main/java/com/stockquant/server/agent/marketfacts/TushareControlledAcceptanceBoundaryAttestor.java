@@ -3,8 +3,13 @@ package com.stockquant.server.agent.marketfacts;
 import com.stockquant.server.agent.marketfacts.TushareControlledAcceptanceExecution.ProhibitedStageAttestation;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
 import org.springframework.stereotype.Controller;
+import org.springframework.stereotype.Repository;
+import org.springframework.stereotype.Service;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.lang.reflect.Method;
@@ -23,12 +28,17 @@ final class TushareControlledAcceptanceBoundaryAttestor {
     static ProhibitedStageAttestation attest(Class<?> executorType) {
         if (executorType.isAnnotationPresent(Controller.class)
                 || executorType.isAnnotationPresent(RestController.class)
+                || executorType.isAnnotationPresent(Component.class)
+                || executorType.isAnnotationPresent(Service.class)
+                || executorType.isAnnotationPresent(Repository.class)
+                || executorType.isAnnotationPresent(Configuration.class)
                 || CommandLineRunner.class.isAssignableFrom(executorType)
                 || ApplicationRunner.class.isAssignableFrom(executorType)
                 || Arrays.stream(executorType.getDeclaredMethods())
                 .map(Method::getAnnotations)
                 .flatMap(Arrays::stream)
-                .anyMatch(annotation -> annotation.annotationType() == Scheduled.class)
+                .anyMatch(annotation -> annotation.annotationType() == Scheduled.class
+                        || annotation.annotationType() == Bean.class)
                 || Arrays.stream(executorType.getDeclaredConstructors())
                 .flatMap(constructor -> Arrays.stream(constructor.getParameterTypes()))
                 .map(Class::getSimpleName)

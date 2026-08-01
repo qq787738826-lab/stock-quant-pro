@@ -24,13 +24,13 @@ import java.util.Objects;
 import java.util.Optional;
 
 /** Durable, process-safe reservation and monotonic state transitions. */
-public final class TushareControlledAcceptanceExecutionRepository {
+final class TushareControlledAcceptanceExecutionRepository {
     private final JdbcTemplate jdbc;
     private final ObjectMapper objectMapper;
     private final TransactionTemplate requiresNew;
     private final Clock clock;
 
-    public TushareControlledAcceptanceExecutionRepository(
+    TushareControlledAcceptanceExecutionRepository(
             JdbcTemplate jdbc,
             ObjectMapper objectMapper,
             PlatformTransactionManager transactionManager,
@@ -44,7 +44,7 @@ public final class TushareControlledAcceptanceExecutionRepository {
         this.requiresNew.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
 
-    public StoredExecution reserve(Reservation reservation) {
+    StoredExecution reserve(Reservation reservation) {
         Objects.requireNonNull(reservation, "reservation");
         return Objects.requireNonNull(requiresNew.execute(status -> {
             int inserted = jdbc.update("""
@@ -79,13 +79,13 @@ public final class TushareControlledAcceptanceExecutionRepository {
         }));
     }
 
-    public StoredExecution markRunning(String acceptanceId) {
+    StoredExecution markRunning(String acceptanceId) {
         return transition(acceptanceId, ExecutionStatus.RESERVED,
                 ExecutionStatus.RUNNING, clock.instant(), null,
                 null, 0, 0, null, null);
     }
 
-    public StoredExecution markCandidate(
+    StoredExecution markCandidate(
             String acceptanceId,
             long batchId,
             int providerCalls,
@@ -97,13 +97,13 @@ public final class TushareControlledAcceptanceExecutionRepository {
                 null, providerCalls, 0, batchId, new Evidence(evidenceJson, evidenceDigest));
     }
 
-    public StoredExecution markPassed(String acceptanceId) {
+    StoredExecution markPassed(String acceptanceId) {
         return transition(acceptanceId, ExecutionStatus.SUCCEEDED_CANDIDATE,
                 ExecutionStatus.PASSED, clock.instant(), null,
                 null, 3, 0, null, null);
     }
 
-    public StoredExecution markFailed(
+    StoredExecution markFailed(
             String acceptanceId,
             ExecutionStatus expected,
             ExecutionStatus failure,
@@ -120,24 +120,39 @@ public final class TushareControlledAcceptanceExecutionRepository {
                 failureStage, safeReason, providerCalls, 0, null, null);
     }
 
-    public int recoverIncompleteExecutions() {
+    int recoverIncompleteExecutions() {
         List<StoredExecution> incomplete = jdbc.query("""
                 SELECT * FROM tushare_controlled_acceptance_execution
-                 WHERE status IN ('AUTHORIZED','RESERVED','RUNNING','SUCCEEDED_CANDIDATE')
+                 WHERE status IN ('RESERVED','RUNNING','SUCCEEDED_CANDIDATE')
                  ORDER BY acceptance_id
                 """, this::mapExecution);
         int recovered = 0;
         for (StoredExecution execution : incomplete) {
-            markFailed(execution.reservation().acceptanceId(), execution.status(),
-                    ExecutionStatus.INTERRUPTED, "RECOVERY",
-                    "TUSHARE_CONTROLLED_ACCEPTANCE_INTERRUPTED_RECOVERY",
-                    execution.providerCallCount());
-            recovered++;
+            String acceptanceId = execution.reservation().acceptanceId();
+            StoredExecution current = execution;
+            for (int attempt = 0; attempt < 4 && current.status().incomplete(); attempt++) {
+                if (current.status() == ExecutionStatus.AUTHORIZED) {
+                    break;
+                }
+                try {
+                    markFailed(acceptanceId, current.status(),
+                            ExecutionStatus.INTERRUPTED, "RECOVERY",
+                            "TUSHARE_CONTROLLED_ACCEPTANCE_INTERRUPTED_RECOVERY",
+                            current.providerCallCount());
+                    recovered++;
+                    break;
+                } catch (IllegalStateException race) {
+                    current = find(acceptanceId).orElseThrow(() -> race);
+                    if (!current.status().incomplete()) {
+                        break;
+                    }
+                }
+            }
         }
         return recovered;
     }
 
-    public Optional<StoredExecution> find(String acceptanceId) {
+    Optional<StoredExecution> find(String acceptanceId) {
         List<StoredExecution> values = jdbc.query("""
                 SELECT * FROM tushare_controlled_acceptance_execution
                  WHERE acceptance_id = ?
@@ -146,7 +161,7 @@ public final class TushareControlledAcceptanceExecutionRepository {
         return values.stream().findFirst();
     }
 
-    public List<Transition> history(String acceptanceId) {
+    List<Transition> history(String acceptanceId) {
         return jdbc.query("""
                 SELECT acceptance_id, from_status, to_status, transition_at,
                        row_version, safe_reason_code

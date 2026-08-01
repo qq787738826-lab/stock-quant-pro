@@ -1,5 +1,6 @@
 package com.stockquant.server.agent.marketfacts;
 
+import com.stockquant.server.agent.marketfacts.TushareControlledAcceptanceDatabaseGuard.ControlledVerification;
 import com.stockquant.server.agent.marketfacts.TushareDedicatedResearchBatchCommand.SecuritySelection;
 import com.stockquant.server.agent.marketfacts.TushareDedicatedResearchPersistenceGuard.Verification;
 
@@ -146,6 +147,20 @@ public final class TushareControlledAcceptanceAuthorization {
         }
     }
 
+    public void validateAndConsumeDurable(
+            TushareDedicatedResearchBatchCommand command,
+            String activeCodeBaseline,
+            Instant now,
+            ControlledVerification databaseVerification
+    ) {
+        validatePreflight(command, activeCodeBaseline, now);
+        Objects.requireNonNull(databaseVerification, "databaseVerification");
+        validateDurableDatabase(databaseVerification);
+        if (!consumed.compareAndSet(false, true)) {
+            throw invalid("TUSHARE_CONTROLLED_ACCEPTANCE_ALREADY_USED");
+        }
+    }
+
     public void validatePreflight(
             TushareDedicatedResearchBatchCommand command,
             String activeCodeBaseline,
@@ -204,6 +219,22 @@ public final class TushareControlledAcceptanceAuthorization {
                 || !schemaName.equals(verification.currentSchema())
                 || verification.appliedMigrations().size() != schemaVersion
                 || verification.normalBusinessDatabaseAllowed()) {
+            throw invalid("TUSHARE_CONTROLLED_ACCEPTANCE_DATABASE_MISMATCH");
+        }
+    }
+
+    private void validateDurableDatabase(ControlledVerification verification) {
+        Verification base = verification.baseVerification();
+        TushareDedicatedResearchPersistenceGuard.validateVerificationTarget(base, false);
+        if (!databaseIdentity.equals(base.currentDatabase())
+                || !databaseUser.equals(base.currentUser())
+                || !schemaName.equals(base.currentSchema())
+                || !TushareDedicatedResearchPersistenceGuard.REQUIRED_MIGRATIONS.equals(
+                base.appliedMigrations())
+                || verification.controlledSchemaVersion() != schemaVersion
+                || !TushareControlledAcceptanceDatabaseGuard.GOVERNANCE_MIGRATIONS.equals(
+                verification.governanceMigrations())
+                || base.normalBusinessDatabaseAllowed()) {
             throw invalid("TUSHARE_CONTROLLED_ACCEPTANCE_DATABASE_MISMATCH");
         }
     }
@@ -343,9 +374,13 @@ public final class TushareControlledAcceptanceAuthorization {
     }
 
     private String fingerprint() {
+        String canonicalEndpoints = endpoints.stream()
+                .map(Enum::name)
+                .sorted()
+                .collect(java.util.stream.Collectors.joining(","));
         String material = acceptanceId + '|' + codeBaselineCommit + '|'
                 + providerCode + '|' + security.providerInstrumentId() + '|'
-                + tradeDate + '|' + endpoints + '|' + maximumProviderRequests
+                + tradeDate + '|' + canonicalEndpoints + '|' + maximumProviderRequests
                 + '|' + retryPermission + '|' + databaseIdentity + '|'
                 + databaseUser + '|' + schemaName + '|' + schemaVersion + '|'
                 + userApproval + '|' + runtimeBoundary + '|'
