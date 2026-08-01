@@ -161,6 +161,7 @@ public final class TushareDedicatedResearchBatchService {
         DatabaseExecutionIdentity databaseIdentity =
                 DatabaseExecutionIdentity.from(before, after);
         return TushareDedicatedResearchBatchResult.formulaOnly(
+                observedAt,
                 command.tradeDate(),
                 command.securities().stream()
                         .map(security ->

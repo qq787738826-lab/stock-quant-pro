@@ -5,6 +5,7 @@ import com.stockquant.server.agent.marketfacts.TushareReducedResearchAdmissionQu
 import com.stockquant.server.agent.marketfacts.TushareTechnicalQualification.RouteDecision;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Objects;
@@ -290,6 +291,7 @@ public final class TushareDedicatedResearchBatchModels {
     public record TushareDedicatedResearchBatchResult(
             RuntimeEligibility runtimeEligibility,
             OperationalReadiness operationalReadiness,
+            Instant observedAt,
             LocalDate tradeDate,
             List<String> symbols,
             int providerCallCount,
@@ -303,6 +305,7 @@ public final class TushareDedicatedResearchBatchModels {
             RouteDecision technicalRouteDecision
     ) {
         public static TushareDedicatedResearchBatchResult formulaOnly(
+                Instant observedAt,
                 LocalDate tradeDate,
                 List<String> symbols,
                 int providerCallCount,
@@ -323,6 +326,7 @@ public final class TushareDedicatedResearchBatchModels {
             return new TushareDedicatedResearchBatchResult(
                     RuntimeEligibility.formulaOnly(),
                     OperationalReadiness.NOT_ACCEPTED,
+                    observedAt,
                     tradeDate,
                     symbols,
                     providerCallCount,
@@ -341,6 +345,7 @@ public final class TushareDedicatedResearchBatchModels {
                     runtimeEligibility, "runtimeEligibility");
             operationalReadiness = Objects.requireNonNull(
                     operationalReadiness, "operationalReadiness");
+            observedAt = Objects.requireNonNull(observedAt, "observedAt");
             tradeDate = Objects.requireNonNull(tradeDate, "tradeDate");
             symbols = List.copyOf(Objects.requireNonNull(
                     symbols, "symbols"));

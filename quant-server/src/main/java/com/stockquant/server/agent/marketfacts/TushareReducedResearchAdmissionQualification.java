@@ -20,6 +20,8 @@ public record TushareReducedResearchAdmissionQualification(
         AdmissionDecision admissionDecision,
         ImplementationReadiness implementationReadiness,
         OperationalReadiness operationalReadiness,
+        TushareControlledAcceptanceQualification
+                controlledAcceptanceQualification,
         Map<AdmissionClaimType, AdmissionClaim> claims,
         Set<AdmissionBlocker> blockers,
         Set<String> evidenceIds,
@@ -56,6 +58,9 @@ public record TushareReducedResearchAdmissionQualification(
                 implementationReadiness, "implementationReadiness");
         operationalReadiness = Objects.requireNonNull(
                 operationalReadiness, "operationalReadiness");
+        controlledAcceptanceQualification = Objects.requireNonNull(
+                controlledAcceptanceQualification,
+                "controlledAcceptanceQualification");
         claims = copyClaims(claims);
         blockers = Set.copyOf(Objects.requireNonNull(
                 blockers, "blockers"));
@@ -65,6 +70,7 @@ public record TushareReducedResearchAdmissionQualification(
                 admissionDecision,
                 implementationReadiness,
                 operationalReadiness,
+                controlledAcceptanceQualification,
                 claims,
                 blockers,
                 evidenceIds,
@@ -90,7 +96,8 @@ public record TushareReducedResearchAdmissionQualification(
                         .currentPersonal2000PointAssessment(),
                 TushareTechnicalQualification
                         .current2000PointAssessment(),
-                ImplementationEvidence.currentF1e());
+                ImplementationEvidence.currentF1e(),
+                TushareControlledAcceptanceQualification.notRun());
     }
 
     public static TushareReducedResearchAdmissionQualification assess(
@@ -98,10 +105,25 @@ public record TushareReducedResearchAdmissionQualification(
             TushareTechnicalQualification technical,
             ImplementationEvidence implementationEvidence
     ) {
+        return assess(
+                written,
+                technical,
+                implementationEvidence,
+                TushareControlledAcceptanceQualification.notRun());
+    }
+
+    public static TushareReducedResearchAdmissionQualification assess(
+            TushareWrittenPermissionQualification written,
+            TushareTechnicalQualification technical,
+            ImplementationEvidence implementationEvidence,
+            TushareControlledAcceptanceQualification acceptance
+    ) {
         Objects.requireNonNull(written, "written");
         Objects.requireNonNull(technical, "technical");
         ImplementationEvidence evidence = Objects.requireNonNull(
                 implementationEvidence, "implementationEvidence");
+        TushareControlledAcceptanceQualification acceptanceEvidence =
+                Objects.requireNonNull(acceptance, "acceptance");
         Map<AdmissionClaimType, AdmissionClaim> claims =
                 evidence.claims();
         boolean sourceReady =
@@ -118,7 +140,7 @@ public record TushareReducedResearchAdmissionQualification(
                         && technical
                         .conservativeEndpointMinimumPolicyEnforced();
         if (!sourceReady) {
-            return blocked(claims);
+            return blocked(claims, acceptanceEvidence);
         }
         TushareF1EntryQualification f1 =
                 TushareF1EntryQualification.assess(written, technical);
@@ -126,9 +148,9 @@ public record TushareReducedResearchAdmissionQualification(
                 != EntryReadiness.BLOCKED_TECHNICAL_EVIDENCE
                 || !f1.activeBlockers().equals(
                 Set.of(EntryBlocker.BLOCKED_TECHNICAL_EVIDENCE))) {
-            return blocked(claims);
+            return blocked(claims, acceptanceEvidence);
         }
-        return ready(claims);
+        return ready(claims, acceptanceEvidence);
     }
 
     private static Map<AdmissionClaimType, AdmissionClaim>
@@ -171,21 +193,29 @@ public record TushareReducedResearchAdmissionQualification(
     }
 
     private static TushareReducedResearchAdmissionQualification ready(
-            Map<AdmissionClaimType, AdmissionClaim> claims
+            Map<AdmissionClaimType, AdmissionClaim> claims,
+            TushareControlledAcceptanceQualification acceptance
     ) {
+        boolean operationalReady =
+                acceptance.reducedResearchOperationalReady();
         return new TushareReducedResearchAdmissionQualification(
                 AdmissionDecision.DEDICATED_LOCAL_RESEARCH_PATH,
                 ImplementationReadiness.READY,
-                OperationalReadiness.NOT_ACCEPTED,
+                operationalReady
+                        ? OperationalReadiness.READY
+                        : OperationalReadiness.NOT_ACCEPTED,
+                acceptance,
                 claims,
-                Set.of(AdmissionBlocker.CONTROLLED_ACCEPTANCE_NOT_RUN),
-                collectEvidenceIds(claims),
+                operationalReady
+                        ? Set.of()
+                        : Set.of(acceptanceBlocker(acceptance)),
+                collectEvidenceIds(claims, acceptance),
                 false,
                 false,
                 false,
                 true,
                 true,
-                false,
+                operationalReady,
                 false,
                 false,
                 false,
@@ -196,15 +226,17 @@ public record TushareReducedResearchAdmissionQualification(
     }
 
     private static TushareReducedResearchAdmissionQualification blocked(
-            Map<AdmissionClaimType, AdmissionClaim> claims
+            Map<AdmissionClaimType, AdmissionClaim> claims,
+            TushareControlledAcceptanceQualification acceptance
     ) {
         return new TushareReducedResearchAdmissionQualification(
                 AdmissionDecision.BLOCKED,
                 ImplementationReadiness.BLOCKED,
                 OperationalReadiness.BLOCKED,
+                acceptance,
                 claims,
                 Set.of(AdmissionBlocker.ADMISSION_SOURCE_QUALIFICATION_INVALID),
-                collectEvidenceIds(claims),
+                collectEvidenceIds(claims, acceptance),
                 false,
                 false,
                 false,
@@ -241,17 +273,36 @@ public record TushareReducedResearchAdmissionQualification(
     }
 
     private static Set<String> collectEvidenceIds(
-            Map<AdmissionClaimType, AdmissionClaim> claims
+            Map<AdmissionClaimType, AdmissionClaim> claims,
+            TushareControlledAcceptanceQualification acceptance
     ) {
         Set<String> ids = new LinkedHashSet<>();
         claims.values().forEach(claim -> ids.addAll(claim.evidenceIds()));
+        ids.addAll(acceptance.evidenceIds());
         return Set.copyOf(ids);
+    }
+
+    private static AdmissionBlocker acceptanceBlocker(
+            TushareControlledAcceptanceQualification acceptance
+    ) {
+        return switch (acceptance.status()) {
+            case NOT_RUN, CANDIDATE ->
+                    AdmissionBlocker.CONTROLLED_ACCEPTANCE_NOT_RUN;
+            case FAILED -> AdmissionBlocker.CONTROLLED_ACCEPTANCE_FAILED;
+            case STALE -> AdmissionBlocker.CONTROLLED_ACCEPTANCE_STALE;
+            case INCOMPATIBLE_BASELINE ->
+                    AdmissionBlocker
+                            .CONTROLLED_ACCEPTANCE_BASELINE_INCOMPATIBLE;
+            case PASSED -> throw new IllegalArgumentException(
+                    "TUSHARE_REDUCED_RESEARCH_ACCEPTANCE_INVALID");
+        };
     }
 
     private static void validateInvariants(
             AdmissionDecision decision,
             ImplementationReadiness implementation,
             OperationalReadiness operational,
+            TushareControlledAcceptanceQualification acceptance,
             Map<AdmissionClaimType, AdmissionClaim> claims,
             Set<AdmissionBlocker> blockers,
             Set<String> evidenceIds,
@@ -273,20 +324,23 @@ public record TushareReducedResearchAdmissionQualification(
                 claims.values().stream().allMatch(AdmissionClaim::verified);
         boolean readyDecision =
                 decision == AdmissionDecision.DEDICATED_LOCAL_RESEARCH_PATH;
+        boolean accepted = acceptance.reducedResearchOperationalReady();
         if (!claimsVerified
                 || (implementation == ImplementationReadiness.READY)
                 != readyDecision
                 || implementationReady != readyDecision
                 || acceptanceReady != readyDecision
                 || operational != (readyDecision
-                ? OperationalReadiness.NOT_ACCEPTED
+                ? accepted
+                ? OperationalReadiness.READY
+                : OperationalReadiness.NOT_ACCEPTED
                 : OperationalReadiness.BLOCKED)
-                || !evidenceIds.equals(collectEvidenceIds(claims))
-                || blockers.isEmpty()
+                || operationalReady != (readyDecision && accepted)
+                || !evidenceIds.equals(
+                collectEvidenceIds(claims, acceptance))
                 || fullF1
                 || fullTechnical
                 || formal
-                || operationalReady
                 || productionReady
                 || normalDatabaseReady
                 || schedulerReady
@@ -297,10 +351,9 @@ public record TushareReducedResearchAdmissionQualification(
             throw new IllegalArgumentException(
                     "TUSHARE_REDUCED_RESEARCH_ADMISSION_INVALID");
         }
-        if (readyDecision
-                && !blockers.equals(
-                Set.of(AdmissionBlocker
-                        .CONTROLLED_ACCEPTANCE_NOT_RUN))
+        if (readyDecision && accepted && !blockers.isEmpty()
+                || readyDecision && !accepted && !blockers.equals(
+                Set.of(acceptanceBlocker(acceptance)))
                 || !readyDecision
                 && !blockers.equals(
                 Set.of(AdmissionBlocker
@@ -386,6 +439,9 @@ public record TushareReducedResearchAdmissionQualification(
 
     public enum AdmissionBlocker {
         CONTROLLED_ACCEPTANCE_NOT_RUN,
+        CONTROLLED_ACCEPTANCE_FAILED,
+        CONTROLLED_ACCEPTANCE_STALE,
+        CONTROLLED_ACCEPTANCE_BASELINE_INCOMPATIBLE,
         ADMISSION_SOURCE_QUALIFICATION_INVALID
     }
 }

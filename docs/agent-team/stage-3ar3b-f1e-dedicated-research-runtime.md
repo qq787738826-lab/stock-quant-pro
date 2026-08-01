@@ -177,5 +177,12 @@ IFIND_TRIAL_ACTIVATION_GATE=BLOCKED
 
 `F1E_PROVIDER_REAL_CALL_COUNT=0`，Tushare 累计真实业务请求为 20，iFinD 为 0。未读取
 Token，未访问既有或正常业务数据库，未对 public 执行 V13。scheduler、Shadow、
-Day 002、F2B、F3、3A-R3B-1、3B 和交易均未开始。F1E 在任务分支完成后仍需
-ChatGPT 基于实际 Git 提交验收和用户批准合入；本阶段不自动开始下一阶段。
+Day 002、F2B、F3、3A-R3B-1、3B 和交易均未开始。
+
+## 11. 合入后状态
+
+F1E 三提交链 `d5f28066bee97a5485917e193926594b9961767e` →
+`e95781687cd0af63507c42017ec8ca6d6f404f86` →
+`0e2b607bc068910319134790360d71a18a6a9e02` 已通过 ChatGPT 对完整实际 Git 差异的
+最终审查，并经用户批准纯 fast-forward 合入 `feature/1.4.0-agent-team`。合入只确认
+实现与隔离验证成立；真实受控验收仍未运行，`REDUCED_RESEARCH_OPERATIONAL_READY=false`。

@@ -228,6 +228,22 @@ F1E 的公式级 QFQ 只在内存返回，不进入完整 QFQ 或公司行动表
 `BLOCKED_TECHNICAL_EVIDENCE`。运行验收尚未接受，不得把 implementation/acceptance
 ready 改写为 operational ready。
 
+### 5.3 F1F-A 受控验收机制准备
+
+F1F-A 把固定的 `CONTROLLED_ACCEPTANCE_NOT_RUN` 改为类型化、默认拒绝的证据模型，
+可以表达 `NOT_RUN/CANDIDATE/PASSED/FAILED/STALE/INCOMPATIBLE_BASELINE`。当前默认仍为
+`NOT_RUN`；离线 Fake/Stub 成功只能生成 `CANDIDATE`，没有公开 `PASSED` 构造入口。
+
+未来 F1F-B 的一次性授权必须精确绑定验收ID、代码基线、Tushare、一个证券、一个已知
+开市日、`daily/adj_factor/trade_cal`、每项一次、总计三次、零重试、专用数据库/用户、
+`tushare_research`和V13。基线/范围/有效期必须在数据库前验证；数据库身份必须在Provider
+前验证，F1E捕获事务内前后守卫和全部响应写前验证继续生效。证据不得保存Token、密码、
+JDBC URL或完整市场响应。
+
+即使未来受控验收通过，也只能独立讨论 `REDUCED_RESEARCH_OPERATIONAL_READY=true`；
+不得改变完整F1十项技术阻断、生产/正常业务库、scheduler、Agent、回测、Shadow、F2B/F3、
+交易或四项正式门禁。本阶段真实Provider调用为0，F1F-B尚未授权。
+
 ## 6. 继续禁止
 
 - F1A 验收完成后不追加无授权 Tushare 调用；

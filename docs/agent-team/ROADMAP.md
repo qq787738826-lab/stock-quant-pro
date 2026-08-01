@@ -269,7 +269,7 @@
 - 既有规划状态：iFinD 里程碑规划提交 `23baf11ed3a236800b5f3feba8681d261a71d9f9` 已通过 ChatGPT 对实际 Git 提交的验收，并经用户批准纯 fast-forward 合入。精确验收和批准时间无仓库证据，记为 `UNKNOWN`。
 - 免费优先更新：最终提交 `c47b88e586f6751563fe210f40137a3b7ce5e576` 已通过 ChatGPT 对实际 Git 提交的验收，并经用户批准纯 fast-forward 合入。系统先用免费数据验证产品形态和效果；只有系统显示可重复使用价值、数据成为可量化主要瓶颈，且同范围免费/付费 A/B 方案和成本意愿均明确后，才考虑 iFinD 或其他付费 Provider。
 - 日期边界：iFinD 试用不得绑定 `2026-08-31`、2026 年 8 月 31 日或任何其他固定日期。日历日期只能作为非权威临时估算，不属于路线图依赖，不得因预计日期临近而降低验收标准。
-- 当前集成 HEAD：`01024df465afcfa34dfd4efdbef7d56d32419aa1`。当前状态：`F0_AUDIT_RESULT=PARTIAL`、`FREE_IMPLEMENTATION_PATH=RESEARCH_PREVIEW_FIRST`、`FREE_PRODUCT_PREVIEW_GATE=PASS`、`FREE_PROVIDER_VALIDATION_GATE=BLOCKED`、`PAID_PROVIDER_UPGRADE_DECISION=PENDING`、`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`。正常业务库 V13 未执行，iFinD 调用数为 0；Track A、Track B0、Track B1、F1A、F1B、F1C 与 F1D 均已验收并纯 fast-forward 合入。用户已开通 Tushare 2000 积分，十项 B1 受控权限探针均 PASS；TS-WP-001/002 已闭环当前个人研究书面许可。当前准入为 `F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE`，完整 F1 仍受技术证据阻断。F1E 在任务分支实现专用本地研究运行代码，但 operational 未接受；F2B/F3 均未开始，Day 002 未创建，scheduler 关闭，3B 未开始。
+- 当前集成 HEAD：`0e2b607bc068910319134790360d71a18a6a9e02`。当前状态：`F0_AUDIT_RESULT=PARTIAL`、`FREE_IMPLEMENTATION_PATH=RESEARCH_PREVIEW_FIRST`、`FREE_PRODUCT_PREVIEW_GATE=PASS`、`FREE_PROVIDER_VALIDATION_GATE=BLOCKED`、`PAID_PROVIDER_UPGRADE_DECISION=PENDING`、`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`。正常业务库 V13 未执行，iFinD 调用数为 0；Track A、Track B0、Track B1、F1A—F1E 均已验收并纯 fast-forward 合入。TS-WP-001/002 已闭环当前个人研究书面许可；完整 F1 仍为 `F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE`。F1E 专用本地实现已合入但 operational 未接受；F1F-A 只准备受控验收机制，真实验收仍未运行。F2B/F3 均未开始，Day 002 未创建，scheduler 关闭，3B 未开始。
 
 #### 3A-R3B-0：Provider 中立离线闭环与试用准备（已完成并合入）
 
@@ -369,7 +369,7 @@
 - 运行边界：书面门 PASS 不启用生产、正常业务库、scheduler、Agent、回测、Shadow、F2B/F3 或交易。F1C 隔离手工入口保持 READY；`formalEligible=false`、`REDUCED_RESEARCH_PRODUCTION_RUNTIME_READY=false`、`NORMAL_BUSINESS_DATABASE_RUNTIME_READY=false`。
 - 历史边界：B1 的 `PARTIAL_NOT_COMPLETE/NOT_MET` 与两项事前书面许可 `UNVERIFIED` 仍是探针执行时点的历史事实；F1D 不追认完整证据探针，也不重跑。
 
-#### 3A-R3B-F1E：缩减研究准入与专用本地前向数据闭环（任务分支已完成，待验收）
+#### 3A-R3B-F1E：缩减研究准入与专用本地前向数据闭环（已完成并合入）
 
 - 交付：[F1E 任务书](tasks/3ar3b-f1e-dedicated-research-runtime.md)和[F1E 阶段记录](stage-3ar3b-f1e-dedicated-research-runtime.md)。
 - 准入：类型化模型固定 `REDUCED_RESEARCH_ROUTE_DECISION=DEDICATED_LOCAL_RESEARCH_PATH`、`REDUCED_RESEARCH_LOCAL_RUNTIME_IMPLEMENTATION_READY=true`、`REDUCED_RESEARCH_CONTROLLED_ACCEPTANCE_READY=true`，但 `REDUCED_RESEARCH_OPERATIONAL_READY=false`；实现完成不替代后续人工受控验收。
@@ -377,7 +377,15 @@
 - 批次：手工单日 1—3 只 SSE/SZSE 证券，每只只调用 `daily/adj_factor/trade_cal`，共享会话精确消耗 3/6/9 次，零重试。全部响应先验证，再在一个事务捕获 raw/factor/calendar；任一失败全批次回滚。
 - QFQ：只复用 `QfqPriceMath` 在内存返回 `REDUCED_RESEARCH_FORMULA_ONLY`，不写 QFQ 或公司行动；`QfqAsOfEngine` 完整 lineage/cutoff 门禁不变。
 - 继续关闭：生产、正常业务库、scheduler、Agent、回测、Shadow、F2B、F3、投资建议与交易全部为 false。完整 F1 继续 `BLOCKED_TECHNICAL_EVIDENCE`，F1E 不调用 Provider 或读取 Token。
-- 当前状态：实现与治理文档已在任务分支完成，待 ChatGPT 基于实际 Git 提交验收，尚未合入。本阶段 Provider 新增调用为 0，不检查 Token、不访问数据库、不执行 V13。
+- 当前状态：三提交链 `d5f28066bee97a5485917e193926594b9961767e` → `e95781687cd0af63507c42017ec8ca6d6f404f86` → `0e2b607bc068910319134790360d71a18a6a9e02` 已通过完整实际 Git 最终审查，经用户批准纯 fast-forward 合入。本阶段 Provider 新增调用为 0，不检查 Token、不访问既有或正常业务数据库；真实受控验收未运行。
+
+#### 3A-R3B-F1F-A：缩减研究受控验收机制准备（任务分支实施中）
+
+- 交付：[F1F-A 任务书](tasks/3ar3b-f1f-controlled-acceptance-preparation.md)和[F1F-A 阶段记录](stage-3ar3b-f1f-controlled-acceptance-preparation.md)。
+- 机制：一次性用户授权绑定代码基线、Tushare、一个证券、一个开市日、三个固定 Endpoint、三次请求、零重试、专用数据库/用户/Schema/V13和有效期；基线/范围先于数据库，数据库先于F1E委托。
+- 证据：只保存脱敏执行身份、计数、时间、批次ID、事实数量、SYSTEM_KNOWLEDGE和formula-only QFQ摘要；不保存Token、密码、JDBC URL或完整响应。
+- 投影：默认 `NOT_RUN`；离线成功只能生成 `CANDIDATE`，没有公开 `PASSED` 构造入口，因此 `REDUCED_RESEARCH_OPERATIONAL_READY=false`。未来F1F-B需要用户单独批准，Provider预算上限为3次、零重试。
+- 状态：F1F-A不改变完整F1十项技术阻断、生产/正常业务库、scheduler、Agent、回测、Shadow、F2B/F3、交易或四项正式门禁。
 
 #### 3A-R3B-F1：完整 Provider Adapter 与 V13 闭环（当前仅技术证据阻断）
 

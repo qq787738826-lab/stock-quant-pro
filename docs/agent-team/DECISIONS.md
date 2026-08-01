@@ -241,3 +241,7 @@
 136. **F1E QFQ 仍是内存公式级降级结果，不替代权威完整 lineage 引擎**：专用运行只调用共享 `QfqPriceMath`，返回 `REDUCED_RESEARCH_FORMULA_ONLY` 和 `systemKnowledgeOnly=true`；Provider PIT、公司行动 lineage、永久证券身份、完整 QFQ、生产、Agent、回测、投资建议及交易资格都为 false。QFQ 结果、stock_basic、dividend、公司行动和 Provider revision 不写入；`QfqAsOfEngine` 的公司行动 lineage、factor predecessor、cutoff、用途与 Provider 一致性门禁以及黄金向量不得放宽。
 
 137. **F1E 不改变完整 F1、正式门禁或后续阶段**：当前继续保持 `F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE`、`V13_LINEAGE_PARTIAL`、`PIT_PARTIAL` 和稳定证券 ID `PARTIAL`。`FREE_PRODUCT_PREVIEW_GATE=PASS`、`FREE_PROVIDER_VALIDATION_GATE=BLOCKED`、`PAID_PROVIDER_UPGRADE_DECISION=PENDING`、`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED` 不变。生产、正常业务库、scheduler、Agent、回测、Shadow、Day 002、F2B、F3、3A-R3B-1、3B 和交易都不启动；F1E 使用合成 Gateway，新增 Provider 调用为 0，Tushare 累计真实业务请求仍为 20，iFinD 为 0。
+
+138. **F1F-A 将受控验收从固定状态改为不可伪造的类型化证据投影**：默认状态为 `NOT_RUN`，并可明确表达 `CANDIDATE/PASSED/FAILED/STALE/INCOMPATIBLE_BASELINE`。授权必须一次性绑定代码基线、Tushare、一个证券、一个交易日、`daily/adj_factor/trade_cal`、三次调用、零重试、专用数据库/用户/Schema/V13和有效期。F1F-A 的离线成功只能生成 `CANDIDATE`，没有公开 `PASSED` 构造入口；真实 `PASSED` 必须留给用户另行批准的 F1F-B。
+
+139. **缩减研究 operational 验收独立于完整 F1 技术资格和正式门禁**：未来只有真实受控证据满足全部数据库、原子写入、SYSTEM_KNOWLEDGE、formula-only QFQ、无敏感输出和零禁止阶段条件时，才能讨论 `REDUCED_RESEARCH_OPERATIONAL_READY=true`。该投影不得改变 `F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE`、完整技术合同、生产/正常业务库、scheduler、Agent、回测、Shadow、F2B/F3、交易或四项正式门禁。
