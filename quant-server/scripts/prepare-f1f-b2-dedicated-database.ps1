@@ -25,6 +25,91 @@ function Remove-VerifiedPreparationRoot([string] $Path) {
     Remove-Item -LiteralPath $resolved -Recurse -Force
 }
 
+function Set-FrozenPreparationManifest(
+    [string] $Artifact,
+    [string] $EntryClass,
+    [string] $Commit
+) {
+    Add-Type -AssemblyName System.IO.Compression
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $archive = [IO.Compression.ZipFile]::Open(
+        $Artifact, [IO.Compression.ZipArchiveMode]::Update)
+    try {
+        $entry = $archive.GetEntry('META-INF/MANIFEST.MF')
+        if ($null -eq $entry) {
+            throw 'TUSHARE_DATABASE_PREPARATION_MANIFEST_MISSING'
+        }
+        $reader = [IO.StreamReader]::new(
+            $entry.Open(), [Text.Encoding]::UTF8, $true)
+        try {
+            $original = $reader.ReadToEnd()
+        } finally {
+            $reader.Dispose()
+        }
+
+        $logicalLines = [Collections.Generic.List[string]]::new()
+        foreach ($line in [regex]::Split($original, '\r?\n')) {
+            if ([string]::IsNullOrEmpty($line)) { break }
+            if ($line.StartsWith(' ') -and $logicalLines.Count -gt 0) {
+                $last = $logicalLines.Count - 1
+                $logicalLines[$last] = $logicalLines[$last] + $line.Substring(1)
+            } else {
+                $logicalLines.Add($line)
+            }
+        }
+        $attributes = [ordered]@{}
+        foreach ($line in $logicalLines) {
+            if ($line -notmatch '^([^:]+): (.*)$') { continue }
+            $name = $Matches[1]
+            if ($name -in @(
+                    'Main-Class',
+                    'Start-Class',
+                    'Stock-Quant-Database-Preparation-Commit',
+                    'Stock-Quant-Database-Preparation-Entry-Version')) {
+                continue
+            }
+            if (-not $attributes.Contains($name)) {
+                $attributes[$name] = $Matches[2]
+            }
+        }
+        if (-not $attributes.Contains('Manifest-Version')) {
+            $attributes.Insert(0, 'Manifest-Version', '1.0')
+        }
+        $attributes['Main-Class'] =
+            'org.springframework.boot.loader.launch.JarLauncher'
+        $attributes['Start-Class'] = $EntryClass
+        $attributes['Stock-Quant-Database-Preparation-Commit'] = $Commit
+        $attributes['Stock-Quant-Database-Preparation-Entry-Version'] =
+            'F1F_B2_DATABASE_PREPARER_V1'
+
+        $entry.Delete()
+        $newEntry = $archive.CreateEntry(
+            'META-INF/MANIFEST.MF', [IO.Compression.CompressionLevel]::Optimal)
+        $writer = [IO.StreamWriter]::new(
+            $newEntry.Open(), [Text.UTF8Encoding]::new($false))
+        try {
+            foreach ($attribute in $attributes.GetEnumerator()) {
+                $remaining = "$($attribute.Key): $($attribute.Value)"
+                $firstLine = $true
+                while ($remaining.Length -gt $(if ($firstLine) { 72 } else { 71 })) {
+                    $limit = if ($firstLine) { 72 } else { 71 }
+                    $writer.Write($remaining.Substring(0, $limit))
+                    $writer.Write("`r`n")
+                    $remaining = ' ' + $remaining.Substring($limit)
+                    $firstLine = $false
+                }
+                $writer.Write($remaining)
+                $writer.Write("`r`n")
+            }
+            $writer.Write("`r`n")
+        } finally {
+            $writer.Dispose()
+        }
+    } finally {
+        $archive.Dispose()
+    }
+}
+
 if ($ExpectedCommit -notmatch '^[0-9a-f]{40}$') {
     throw 'TUSHARE_DATABASE_PREPARATION_COMMIT_INVALID'
 }
@@ -94,21 +179,8 @@ try {
     $tempRoot = Join-Path $tempBase ($temporaryPrefix + [Guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $tempRoot | Out-Null
     $artifact = Join-Path $tempRoot 'quant-server-1.3.1-f1f-b2-dbprep.jar'
-    $manifest = Join-Path $tempRoot 'dbprep-manifest.mf'
     Copy-Item -LiteralPath $sourceJar -Destination $artifact
-    $manifestContent = @(
-        'Main-Class: org.springframework.boot.loader.launch.JarLauncher'
-        "Start-Class: $entryClass"
-        "Stock-Quant-Database-Preparation-Commit: $actualCommit"
-        'Stock-Quant-Database-Preparation-Entry-Version: F1F_B2_DATABASE_PREPARER_V1'
-        ''
-    ) -join "`r`n"
-    [IO.File]::WriteAllText(
-        $manifest, $manifestContent, [Text.UTF8Encoding]::new($false))
-    & jar --update --file $artifact --manifest $manifest
-    if ($LASTEXITCODE -ne 0) {
-        throw 'TUSHARE_DATABASE_PREPARATION_MANIFEST_BIND_FAILED'
-    }
+    Set-FrozenPreparationManifest $artifact $entryClass $actualCommit
     $entries = @(& jar --list --file $artifact)
     $entryPath = 'BOOT-INF/classes/' + $entryClass.Replace('.', '/') + '.class'
     if ($LASTEXITCODE -ne 0 -or $entries -notcontains $entryPath) {
