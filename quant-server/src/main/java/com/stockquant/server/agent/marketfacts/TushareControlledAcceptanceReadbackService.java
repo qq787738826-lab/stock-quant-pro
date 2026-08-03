@@ -125,8 +125,8 @@ public final class TushareControlledAcceptanceReadbackService {
         EnumMap<FactType, Integer> counts = new EnumMap<>(FactType.class);
         List<Long> ids = new ArrayList<>();
         for (ObservationRow row : observations) {
-            if (!row.isExpected(expectedSourceInstrumentId, expectedSymbol,
-                    expectedExchange, expectedTradeDate)) {
+            if (!row.isExpected(expectedSymbol, expectedExchange,
+                    expectedTradeDate)) {
                 throw blocked(
                         "TUSHARE_CONTROLLED_ACCEPTANCE_TYPED_FACT_READBACK_INVALID");
             }
@@ -231,14 +231,25 @@ public final class TushareControlledAcceptanceReadbackService {
             String calendarSession
     ) {
         boolean isExpected(
-                String expectedSourceInstrumentId,
                 String expectedSymbol,
                 String expectedExchange,
                 LocalDate expectedTradeDate
         ) {
+            String expectedTypedSourceIdentity = switch (factType) {
+                case RAW_DAILY_BAR -> TushareMarketFactProvider.rawSourceIdentity(
+                        expectedSymbol, expectedExchange);
+                case ADJUSTMENT_FACTOR ->
+                        TushareMarketFactProvider.factorSourceIdentity(
+                                expectedSymbol, expectedExchange);
+                case TRADING_CALENDAR ->
+                        TushareMarketFactProvider.calendarSourceIdentity(
+                                expectedExchange);
+                case CORPORATE_ACTION -> null;
+            };
             if (id <= 0
                     || !TushareMarketFactProvider.PROVIDER_CODE.equals(sourceCode)
-                    || !Objects.equals(sourceInstrumentId, expectedSourceInstrumentId)) {
+                    || !Objects.equals(sourceInstrumentId,
+                            expectedTypedSourceIdentity)) {
                 return false;
             }
             return switch (factType) {

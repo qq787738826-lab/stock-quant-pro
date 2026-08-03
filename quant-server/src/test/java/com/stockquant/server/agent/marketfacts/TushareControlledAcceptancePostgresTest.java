@@ -341,6 +341,15 @@ class TushareControlledAcceptancePostgresTest {
                 evidence.writeBackendPid());
         assertTrue(evidence.committedReadbackBackendPid() > 0);
 
+        var executionRepository = repository();
+        executionRepository.reserve(reservation(
+                "F1FB2_READBACK_CANDIDATE", "8".repeat(64)));
+        executionRepository.markRunning("F1FB2_READBACK_CANDIDATE");
+        var candidate = executionRepository.markCandidate(
+                "F1FB2_READBACK_CANDIDATE", complete.batchId(), 3,
+                "{\"redacted\":true}", "9".repeat(64));
+        assertEquals(complete.batchId(), candidate.captureBatchId());
+
         assertThrows(IllegalStateException.class, () -> transaction.execute(status -> {
             readback.readAndVerify(
                     complete.batchId(), complete.observedAt(), executionStarted,
@@ -357,6 +366,115 @@ class TushareControlledAcceptancePostgresTest {
                 Instant.now().truncatedTo(ChronoUnit.MICROS),
                 envelopesOnly.writeIdentity(), envelopesOnly.sourceInstrumentId(),
                 "600000", "SSE", envelopesOnly.tradeDate()));
+    }
+
+    @Test
+    void postCommitReadbackRejectsWrongBatchAndTypedIdentityMismatch() {
+        TushareDedicatedResearchPersistenceGuard guard =
+                new TushareDedicatedResearchPersistenceGuard(
+                        jdbc, TushareDedicatedResearchPersistenceGuard.DATABASE_PURPOSE);
+        TransactionTemplate transaction = new TransactionTemplate(
+                new DataSourceTransactionManager(dataSource));
+        CommittedFacts complete = transaction.execute(status ->
+                insertFacts(guard, LocalDate.of(2025, 1, 2), "6", true));
+        assertNotNull(complete);
+        TushareControlledAcceptanceReadbackService readback =
+                new TushareControlledAcceptanceReadbackService(jdbc, guard);
+        Instant startedAt = complete.observedAt().minusSeconds(1);
+
+        IllegalStateException wrongBatch = assertThrows(
+                IllegalStateException.class, () -> readback.readAndVerify(
+                        complete.batchId() + 999, complete.observedAt(), startedAt,
+                        Instant.now().truncatedTo(ChronoUnit.MICROS),
+                        complete.writeIdentity(), complete.sourceInstrumentId(),
+                        "600000", "SSE", complete.tradeDate()));
+        assertEquals("TUSHARE_CONTROLLED_ACCEPTANCE_BATCH_READBACK_MISMATCH",
+                wrongBatch.getMessage());
+
+        CommittedFacts invalidIdentity = transaction.execute(status ->
+                insertFacts(guard, LocalDate.of(2025, 1, 3), "7", true,
+                        TushareMarketFactProvider.sourceInstrumentId(
+                                "600000", "SSE"),
+                        TushareMarketFactProvider.calendarSourceIdentity("SSE")));
+        assertNotNull(invalidIdentity);
+        IllegalStateException typedIdentity = assertThrows(
+                IllegalStateException.class, () -> readback.readAndVerify(
+                        invalidIdentity.batchId(), invalidIdentity.observedAt(),
+                        invalidIdentity.observedAt().minusSeconds(1),
+                        Instant.now().truncatedTo(ChronoUnit.MICROS),
+                        invalidIdentity.writeIdentity(),
+                        invalidIdentity.sourceInstrumentId(),
+                        "600000", "SSE", invalidIdentity.tradeDate()));
+        assertEquals("TUSHARE_CONTROLLED_ACCEPTANCE_TYPED_FACT_READBACK_INVALID",
+                typedIdentity.getMessage());
+    }
+
+    @Test
+    void postCommitReadbackDoesNotMixOlderBatchFacts() {
+        TushareDedicatedResearchPersistenceGuard guard =
+                new TushareDedicatedResearchPersistenceGuard(
+                        jdbc, TushareDedicatedResearchPersistenceGuard.DATABASE_PURPOSE);
+        TransactionTemplate transaction = new TransactionTemplate(
+                new DataSourceTransactionManager(dataSource));
+        CommittedFacts old = transaction.execute(status ->
+                insertFacts(guard, LocalDate.of(2025, 1, 2), "6", true));
+        CommittedFacts current = transaction.execute(status ->
+                insertFacts(guard, LocalDate.of(2025, 1, 3), "7", true));
+        assertNotNull(old);
+        assertNotNull(current);
+        TushareControlledAcceptanceReadbackService readback =
+                new TushareControlledAcceptanceReadbackService(jdbc, guard);
+        var currentEvidence = readback.readAndVerify(
+                current.batchId(), current.observedAt(),
+                current.observedAt().minusSeconds(1),
+                Instant.now().truncatedTo(ChronoUnit.MICROS),
+                current.writeIdentity(), current.sourceInstrumentId(),
+                "600000", "SSE", current.tradeDate());
+        assertEquals(3, currentEvidence.observationIds().size());
+        List<Long> oldObservationIds = jdbc.queryForList("""
+                SELECT id FROM pit_market_fact_observations WHERE batch_id=?
+                """, Long.class, old.batchId());
+        currentEvidence.observationIds().forEach(observationId -> {
+            assertFalse(oldObservationIds.contains(observationId));
+            assertEquals(current.batchId(), jdbc.queryForObject("""
+                    SELECT batch_id FROM pit_market_fact_observations WHERE id=?
+                    """, Long.class, observationId));
+        });
+    }
+
+    @Test
+    void postCommitReadbackRejectsExtraTypedFactCount() {
+        TushareDedicatedResearchPersistenceGuard guard =
+                new TushareDedicatedResearchPersistenceGuard(
+                        jdbc, TushareDedicatedResearchPersistenceGuard.DATABASE_PURPOSE);
+        TransactionTemplate transaction = new TransactionTemplate(
+                new DataSourceTransactionManager(dataSource));
+        CommittedFacts complete = transaction.execute(status ->
+                insertFacts(guard, LocalDate.of(2025, 1, 3), "6", true));
+        assertNotNull(complete);
+        long predecessor = jdbc.queryForObject("""
+                SELECT id FROM pit_market_fact_observations
+                 WHERE batch_id=? AND fact_type='RAW_DAILY_BAR'
+                """, Long.class, complete.batchId());
+        long extraRawId = insertObservationSuccessor(
+                complete.batchId(), predecessor,
+                "RAW_DAILY_BAR_OBSERVATION_V2",
+                "RAW_DAILY_BAR|600000|" + complete.tradeDate(),
+                TushareMarketFactProvider.rawSourceIdentity("600000", "SSE"),
+                complete.observedAt(), "7".repeat(64), "8".repeat(64));
+        insertRawTypedFact(extraRawId, complete.tradeDate());
+
+        TushareControlledAcceptanceReadbackService readback =
+                new TushareControlledAcceptanceReadbackService(jdbc, guard);
+        IllegalStateException countMismatch = assertThrows(
+                IllegalStateException.class, () -> readback.readAndVerify(
+                        complete.batchId(), complete.observedAt(),
+                        complete.observedAt().minusSeconds(1),
+                        Instant.now().truncatedTo(ChronoUnit.MICROS),
+                        complete.writeIdentity(), complete.sourceInstrumentId(),
+                        "600000", "SSE", complete.tradeDate()));
+        assertEquals("TUSHARE_CONTROLLED_ACCEPTANCE_SYSTEM_KNOWLEDGE_READBACK_INVALID",
+                countMismatch.getMessage());
     }
 
     @Test
@@ -390,6 +508,59 @@ class TushareControlledAcceptancePostgresTest {
         assertEquals(
                 result.databaseIdentity().backendPidBefore(),
                 result.databaseIdentity().backendPidAfter());
+    }
+
+    @Test
+    void controlledAcceptanceProjectsCommittedBatchIdToCandidate() {
+        Clock runtimeClock = Clock.systemUTC();
+        Instant now = runtimeClock.instant();
+        LocalDate tradeDate = LocalDate.of(2025, 1, 3);
+        F1eSyntheticTushareGateway gateway = new F1eSyntheticTushareGateway();
+        ManualRuntime runtime = manualRuntime(
+                gateway, new DataSourceTransactionManager(dataSource), runtimeClock);
+        ObjectMapper mapper = new ObjectMapper().registerModule(new JavaTimeModule());
+        TushareDedicatedResearchPersistenceGuard baseGuard =
+                new TushareDedicatedResearchPersistenceGuard(
+                        jdbc, TushareDedicatedResearchPersistenceGuard.DATABASE_PURPOSE);
+        TushareControlledAcceptanceExecutionRepository executionRepository =
+                new TushareControlledAcceptanceExecutionRepository(
+                        jdbc, mapper, new DataSourceTransactionManager(dataSource),
+                        runtimeClock);
+        TushareControlledAcceptanceExecutor executor =
+                new TushareControlledAcceptanceExecutor(
+                        executionRepository,
+                        new TushareControlledAcceptanceDatabaseGuard(jdbc, baseGuard),
+                        runtime.batch(),
+                        new TushareControlledAcceptanceReadbackService(jdbc, baseGuard),
+                        new TushareControlledAcceptanceEvaluator(mapper),
+                        runtimeClock);
+        SecuritySelection security = new SecuritySelection("600000", "SSE");
+        TushareControlledAcceptanceAuthorization authorization =
+                TushareControlledAcceptanceAuthorization.issueUserApprovedDurable(
+                        "F1FB2_READBACK_EXECUTOR", COMMIT, SHA, security, tradeDate,
+                        now.minusSeconds(1), now.plusSeconds(60));
+
+        var pending = executor.executeBeforeFinalAudit(
+                authorization,
+                new TushareDedicatedResearchBatchCommand(
+                        tradeDate, List.of(security), Duration.ofSeconds(5)),
+                TushareControlledAcceptanceBuildProof.verifiedTestProof(COMMIT, SHA),
+                ExecutionSource.TEST);
+        executor.completeAfterAudit(pending,
+                new TushareControlledAcceptanceOutputAudit.AuditResult(
+                        true, true, List.of()));
+
+        var stored = executionRepository.find(
+                "F1FB2_READBACK_EXECUTOR").orElseThrow();
+        assertEquals(ExecutionStatus.SUCCEEDED_CANDIDATE, stored.status());
+        assertNotNull(stored.captureBatchId());
+        assertTrue(stored.captureBatchId() > 0);
+        assertEquals(1, typedCount(
+                "raw_daily_bar_facts_v2", stored.captureBatchId()));
+        assertEquals(1, typedCount(
+                "adjustment_factor_facts_v1", stored.captureBatchId()));
+        assertEquals(1, typedCount(
+                "trading_calendar_facts_v1", stored.captureBatchId()));
     }
 
     @Test
@@ -506,7 +677,15 @@ class TushareControlledAcceptancePostgresTest {
             PlatformTransactionManager transactionManager,
             Instant observedAt
     ) {
-        Clock clock = Clock.fixed(observedAt, ZoneOffset.UTC);
+        return manualRuntime(gateway, transactionManager,
+                Clock.fixed(observedAt, ZoneOffset.UTC));
+    }
+
+    private static ManualRuntime manualRuntime(
+            F1eSyntheticTushareGateway gateway,
+            PlatformTransactionManager transactionManager,
+            Clock clock
+    ) {
         ObjectMapper mapper = new ObjectMapper()
                 .registerModule(new JavaTimeModule());
         JdbcTemplate dedicatedJdbc = new JdbcTemplate(dataSource);
@@ -715,6 +894,19 @@ class TushareControlledAcceptancePostgresTest {
             String hashSeed,
             boolean includeTypedRows
     ) {
+        return insertFacts(guard, tradeDate, hashSeed, includeTypedRows,
+                TushareMarketFactProvider.factorSourceIdentity("600000", "SSE"),
+                TushareMarketFactProvider.calendarSourceIdentity("SSE"));
+    }
+
+    private static CommittedFacts insertFacts(
+            TushareDedicatedResearchPersistenceGuard guard,
+            LocalDate tradeDate,
+            String hashSeed,
+            boolean includeTypedRows,
+            String factorSourceIdentity,
+            String calendarSourceIdentity
+    ) {
         var before = guard.verifyTransactional();
         Instant observedAt = Instant.now().minusSeconds(1)
                 .truncatedTo(ChronoUnit.MICROS);
@@ -754,34 +946,22 @@ class TushareControlledAcceptancePostgresTest {
                 sourceInstrumentId, tradeDate, tradeDate, Timestamp.from(observedAt));
         long rawId = insertObservation(batchId, "RAW_DAILY_BAR",
                 "RAW_DAILY_BAR_OBSERVATION_V2",
-                "RAW_DAILY_BAR|600000|" + tradeDate, sourceInstrumentId,
+                "RAW_DAILY_BAR|600000|" + tradeDate,
+                TushareMarketFactProvider.rawSourceIdentity("600000", "SSE"),
                 observedAt, (hashSeed + "a").repeat(32),
                 (hashSeed + "b").repeat(32));
         long factorId = insertObservation(batchId, "ADJUSTMENT_FACTOR",
                 "ADJUSTMENT_FACTOR_OBSERVATION_V1",
                 "ADJUSTMENT_FACTOR|600000|QFQ|" + tradeDate,
-                sourceInstrumentId, observedAt, (hashSeed + "c").repeat(32),
+                factorSourceIdentity, observedAt, (hashSeed + "c").repeat(32),
                 (hashSeed + "d").repeat(32));
         long calendarId = insertObservation(batchId, "TRADING_CALENDAR",
                 "TRADING_CALENDAR_OBSERVATION_V1",
-                "TRADING_CALENDAR|SSE|" + tradeDate, sourceInstrumentId,
-                observedAt, (hashSeed + "e").repeat(32),
+                "TRADING_CALENDAR|SSE|" + tradeDate,
+                calendarSourceIdentity, observedAt, (hashSeed + "e").repeat(32),
                 (hashSeed + "f").repeat(32));
         if (includeTypedRows) {
-            jdbc.update("""
-                    INSERT INTO raw_daily_bar_facts_v2(
-                        observation_id, symbol, exchange, trade_date,
-                        open, high, low, close, volume, volume_qualification,
-                        volume_unit_code, volume_semantic_code, amount,
-                        amount_qualification, amount_unit_code,
-                        amount_semantic_code, turnover_rate,
-                        turnover_rate_qualification, turnover_rate_unit_code,
-                        turnover_rate_semantic_code)
-                    VALUES (?, '600000', 'SSE', ?, 10, 11, 9, 10,
-                        NULL, 'MISSING', 'SHARES', 'TRADED_VOLUME',
-                        NULL, 'MISSING', 'CNY', 'TRADED_AMOUNT',
-                        NULL, 'MISSING', 'RATIO', 'TURNOVER_RATE')
-                    """, rawId, tradeDate);
+            insertRawTypedFact(rawId, tradeDate);
             jdbc.update("""
                     INSERT INTO adjustment_factor_facts_v1(
                         observation_id, symbol, factor_effective_trade_date,
@@ -798,6 +978,26 @@ class TushareControlledAcceptancePostgresTest {
         var after = guard.verifyTransactional();
         return new CommittedFacts(batchId, observedAt, tradeDate,
                 sourceInstrumentId, DatabaseExecutionIdentity.from(before, after));
+    }
+
+    private static void insertRawTypedFact(
+            long observationId,
+            LocalDate tradeDate
+    ) {
+        jdbc.update("""
+                INSERT INTO raw_daily_bar_facts_v2(
+                    observation_id, symbol, exchange, trade_date,
+                    open, high, low, close, volume, volume_qualification,
+                    volume_unit_code, volume_semantic_code, amount,
+                    amount_qualification, amount_unit_code,
+                    amount_semantic_code, turnover_rate,
+                    turnover_rate_qualification, turnover_rate_unit_code,
+                    turnover_rate_semantic_code)
+                VALUES (?, '600000', 'SSE', ?, 10, 11, 9, 10,
+                    NULL, 'MISSING', 'SHARES', 'TRADED_VOLUME',
+                    NULL, 'MISSING', 'CNY', 'TRADED_AMOUNT',
+                    NULL, 'MISSING', 'RATIO', 'TURNOVER_RATE')
+                """, observationId, tradeDate);
     }
 
     private static long insertObservation(
@@ -827,6 +1027,36 @@ class TushareControlledAcceptancePostgresTest {
                 sourceInstrumentId, Timestamp.from(observedAt),
                 Timestamp.from(observedAt), contentHash,
                 observationVersion);
+    }
+
+    private static long insertObservationSuccessor(
+            long batchId,
+            long predecessorId,
+            String contractVersion,
+            String naturalKey,
+            String sourceInstrumentId,
+            Instant observedAt,
+            String contentHash,
+            String observationVersion
+    ) {
+        return jdbc.queryForObject("""
+                INSERT INTO pit_market_fact_observations(
+                    batch_id, fact_type, fact_contract_version, natural_key,
+                    chain_sequence, predecessor_observation_id, source_code,
+                    source_instrument_id, first_observed_at, known_at,
+                    canonical_content_hash, observation_version,
+                    revision_qualification, assurance_level,
+                    usage_qualification, formal_eligible,
+                    local_persistence_allowed, historical_replay_allowed,
+                    backtest_allowed, agent_use_allowed, raw_payload_json)
+                VALUES (?, 'RAW_DAILY_BAR', ?, ?, 2, ?, 'TUSHARE_PRO', ?,
+                    ?, ?, ?, ?, 'SYSTEM_KNOWLEDGE_ONLY',
+                    'SYSTEM_KNOWLEDGE_PIT', 'RESEARCH_ONLY', false,
+                    true, true, true, true, '{}'::jsonb)
+                RETURNING id
+                """, Long.class, batchId, contractVersion, naturalKey,
+                predecessorId, sourceInstrumentId, Timestamp.from(observedAt),
+                Timestamp.from(observedAt), contentHash, observationVersion);
     }
 
     private record CommittedFacts(

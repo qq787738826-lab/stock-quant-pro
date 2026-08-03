@@ -84,3 +84,58 @@ IFIND_TRIAL_ACTIVATION_GATE=BLOCKED
 ```
 
 完整 F1 十项技术阻断不变。先完成 DBPREP、再按新集成 SHA 冻结和授权的顺序属于已执行的历史准入要求；当前必须先完成本事务修复的实际 Git 复验与合入，再由用户另行批准新的冻结和验收，失败 ID 不得重试。
+
+## 2026-08-03 typed fact 回读失败与增量修复
+
+事务修复合入后签发的 ID `F1FB2_20260803_POSTFIX_EB61FFB9663C`
+已执行并永久封存。该次执行精确完成 `daily → adj_factor → trade_cal`
+三次真实调用、重试 0，治理 V14 已完成；最终状态为：
+
+```text
+CONTROLLED_ACCEPTANCE_STATUS=FAILED_VALIDATION
+failure_stage=VALIDATION
+safe_failure_reason=TUSHARE_CONTROLLED_ACCEPTANCE_TYPED_FACT_READBACK_INVALID
+capture_batch_id=NULL
+F1F_B2_PROVIDER_REAL_CALL_COUNT=3
+TUSHARE_TOTAL_REAL_BUSINESS_CALL_COUNT=26
+```
+
+调用链确认 F1E 捕获事务先返回 `CaptureResult.batchId`，随后才执行 committed
+typed fact 回读。V13 的真实关联是 `pit_market_fact_observations.batch_id` 指向批次，
+`raw_daily_bar_facts_v2`、`adjustment_factor_facts_v1` 与
+`trading_calendar_facts_v1` 仅通过 `observation_id` 指向 observation。
+SQL 关联没有假设 typed 表存在 `batch_id`；精确缺陷是回读把所有 observation
+的 `source_instrument_id` 都与批次证券 identity 比较，但生产捕获实际保存 raw、
+factor、calendar 各自的类型化 identity。尤其 factor 与 calendar 必然不同于批次
+证券 identity，因此合法 1/1/1 事实也会被安全拒绝。
+
+`capture_batch_id=NULL` 的原因是 executor 只有在回读和输出审计均成功后才调用
+`markCandidate` 投影批次 ID；本次在候选证据构造前抛出验证异常，失败 transition
+只记录状态、阶段、reason 和调用次数。该空值不等于捕获事务未提交。当前环境没有
+永久数据库凭据，使用 `psql -w` 的只读连接在认证前失败，未绕过秘密通道，也没有
+对永久数据库执行 SELECT、DDL 或 DML；永久库事实存在性只能以用户提供的持久化
+状态和后续正式只读审计为准。
+
+增量修复保持 batch 的证券级 identity 检查；typed observation 改为分别验证
+`rawSourceIdentity`、`factorSourceIdentity` 和 `calendarSourceIdentity`。测试数据也
+改用与生产捕获相同的三类 identity，并以 V1—V14 临时 PostgreSQL 证明：三类事实
+提交后精确回读 1/1/1、旧批次不会混入当前批次、错误批次/identity/数量均拒绝、
+候选证据中的 batch ID 非空，第三类事实写入失败仍整批回滚。事务守卫没有修改或
+放宽；本修复不调用 Provider、不读取 Token、不创建新 acceptance ID，也不执行新
+的 F1F-B2。
+
+验证结果：typed fact readback 与事务定向 PostgreSQL `7/0/0/0`、`Skipped=0`；
+Runner/F1E 边界与 QFQ 联合定向 `52/0/0/0`，其中 QFQ 权威引擎
+`19/0/0/0` 并保持 18 个黄金向量；Java `clean compile` 通过。临时 PostgreSQL
+使用全新随机端口和目录，结束后端口、进程和目录残留均为 0。
+
+当前继续保持：
+
+```text
+F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE
+REDUCED_RESEARCH_OPERATIONAL_READY=false
+FREE_PRODUCT_PREVIEW_GATE=PASS
+FREE_PROVIDER_VALIDATION_GATE=BLOCKED
+PAID_PROVIDER_UPGRADE_DECISION=PENDING
+IFIND_TRIAL_ACTIVATION_GATE=BLOCKED
+```

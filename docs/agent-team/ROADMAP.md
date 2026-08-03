@@ -269,7 +269,7 @@
 - 既有规划状态：iFinD 里程碑规划提交 `23baf11ed3a236800b5f3feba8681d261a71d9f9` 已通过 ChatGPT 对实际 Git 提交的验收，并经用户批准纯 fast-forward 合入。精确验收和批准时间无仓库证据，记为 `UNKNOWN`。
 - 免费优先更新：最终提交 `c47b88e586f6751563fe210f40137a3b7ce5e576` 已通过 ChatGPT 对实际 Git 提交的验收，并经用户批准纯 fast-forward 合入。系统先用免费数据验证产品形态和效果；只有系统显示可重复使用价值、数据成为可量化主要瓶颈，且同范围免费/付费 A/B 方案和成本意愿均明确后，才考虑 iFinD 或其他付费 Provider。
 - 日期边界：iFinD 试用不得绑定 `2026-08-31`、2026 年 8 月 31 日或任何其他固定日期。日历日期只能作为非权威临时估算，不属于路线图依赖，不得因预计日期临近而降低验收标准。
-- 当前集成 HEAD：`d3c0ada828c90c772f6bbbb7a787ba2d1ce8b7eb`。当前状态：`F0_AUDIT_RESULT=PARTIAL`、`FREE_IMPLEMENTATION_PATH=RESEARCH_PREVIEW_FIRST`、`FREE_PRODUCT_PREVIEW_GATE=PASS`、`FREE_PROVIDER_VALIDATION_GATE=BLOCKED`、`PAID_PROVIDER_UPGRADE_DECISION=PENDING`、`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`。正常业务库 V13 未执行，iFinD 调用数为 0；Track A、Track B0、Track B1、F1A—F1E、F1F-A、F1F-B1、F1F-B2-RUNNER 与 DBPREP 均已验收并纯 fast-forward 合入。TS-WP-001/002 已闭环当前个人研究书面许可；完整 F1 仍为 `F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE`。首次真实 F1F-B2 在三次、零重试 Provider 调用后由事务守卫安全拒绝，`CONTROLLED_ACCEPTANCE_STATUS=FAILED_DATABASE_GUARD`、`REDUCED_RESEARCH_OPERATIONAL_READY=false`；对应 ID 已永久封存，当前事务修复任务尚未合入。F2B/F3 均未开始，Day 002 未创建，scheduler 关闭，3B 未开始。
+- 当前集成 HEAD：`aca9aae7dc7c60b203542a0b7c6d24af549c73fa`。当前状态：`F0_AUDIT_RESULT=PARTIAL`、`FREE_IMPLEMENTATION_PATH=RESEARCH_PREVIEW_FIRST`、`FREE_PRODUCT_PREVIEW_GATE=PASS`、`FREE_PROVIDER_VALIDATION_GATE=BLOCKED`、`PAID_PROVIDER_UPGRADE_DECISION=PENDING`、`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`。正常业务库 V13 未执行，iFinD 调用数为 0；Track A、Track B0、Track B1、F1A—F1E、F1F-A、F1F-B1、F1F-B2-RUNNER、DBPREP 与事务修复均已验收并纯 fast-forward 合入。TS-WP-001/002 已闭环当前个人研究书面许可；完整 F1 仍为 `F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE`。事务修复后的真实 F1F-B2 完成三次、零重试 Provider 调用并提交捕获事务，但 typed fact 回读错误地把 factor/calendar 类型化 identity 与批次证券 identity 比较，当前为 `CONTROLLED_ACCEPTANCE_STATUS=FAILED_VALIDATION`、`REDUCED_RESEARCH_OPERATIONAL_READY=false`；对应 ID 已永久封存，Tushare 累计真实请求为 26。F2B/F3 均未开始，Day 002 未创建，scheduler 关闭，3B 未开始。
 
 #### 3A-R3B-0：Provider 中立离线闭环与试用准备（已完成并合入）
 
@@ -411,12 +411,14 @@
 - 启动合同：Runner 只接受 `AuthorizationFile`；构建证明、数据库、证券、日期、Endpoint、预算和 JAR 摘要来自严格非敏感授权文件，不能被命令行覆盖。
 - 合入：四提交链 `d178cde7` → `14b466f5` → `c8342830` → `d3c0ada828c90c772f6bbbb7a787ba2d1ce8b7eb` 已通过实际 Git 复验并纯 fast-forward 合入。之后正式专用数据库已完成主 V1—V13 准备，真实验收启动时独立治理 V14 已完成。
 
-#### F1F-B2 首次真实验收与事务修复（修复任务待复验）
+#### F1F-B2 真实验收、事务修复与 typed fact 回读修复
 
 - 真实结果：`F1FB2_20260803_REISSUE_C5A3D7B92A94` 已永久封存；`FAILED_DATABASE_GUARD` / `DATABASE_GUARD` / `TUSHARE_DEDICATED_RESEARCH_TRANSACTION_REQUIRED`，Provider 调用 3、重试 0、`capture_batch_id=NULL`。Tushare 累计真实业务请求更新为 23。
 - 根因：专用 Runner 按设计不启动 Spring 并手工装配组件，`PitMarketFactCaptureService` 的 F1E 入口因此没有经过 `@Transactional` 代理；守卫在首次 Repository 写入前发现没有绑定专用 DataSource 的活动事务并安全拒绝。
 - 修复边界：仅在既有 F1E 捕获入口内部使用构造时注入的专用 `PlatformTransactionManager` 显式执行一个事务；所有 Temporal、batch、observation 和 typed fact 写入共享该事务，错误事务管理器仍由原守卫拒绝，任一写入失败整体回滚。修复不调用 Provider、不访问永久数据库、不执行新的 V14 或验收，也不改变 operational、完整 F1 或正式门禁。
-- 下一入口：任务通过实际 Git 复验并合入后，基于新的集成 SHA 重新执行简化 B2-FREEZE；只冻结正式端口、正式构建摘要和用户最终参数表，不沿用旧 SHA/JAR/sidecar/授权草案。
+- 事务修复状态：提交 `aca9aae7dc7c60b203542a0b7c6d24af549c73fa` 已通过复验并合入；旧 ID、旧 JAR、旧 sidecar 与旧授权均不得复用。
+- 第二次真实结果：`F1FB2_20260803_POSTFIX_EB61FFB9663C` 已永久封存；`FAILED_VALIDATION` / `VALIDATION` / `TUSHARE_CONTROLLED_ACCEPTANCE_TYPED_FACT_READBACK_INVALID`，Provider 调用 3、重试 0，Tushare 累计真实业务请求更新为 26。捕获事务返回批次后，回读仍错误地要求 raw/factor/calendar 共用批次证券 identity；failure transition 发生在候选证据写入前，所以 acceptance 的 `capture_batch_id=NULL`，不能据此推断捕获事务没有提交。
+- 当前修复边界：batch 继续校验证券级 identity；raw、factor、calendar 分别校验其生产捕获所使用的类型化 source identity。真实 Schema 的 `observation.batch_id` 与 typed 表 `observation_id` 关联、1/1/1 精确数量、时间、证券、交易所、开市日和事务守卫均不放宽；Provider 新增调用为 0。
 
 #### 3A-R3B-F1：完整 Provider Adapter 与 V13 闭环（当前仅技术证据阻断）
 
