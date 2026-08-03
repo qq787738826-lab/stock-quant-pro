@@ -129,10 +129,38 @@ class TushareControlledAcceptanceDatabasePreparationPostgresTest {
 
     @Test
     @Order(4)
-    void dedicatedRoleOwnsResearchSchema() throws Exception {
+    void dedicatedRoleOwnsDatabaseSchemaAndMigratedObjects() throws Exception {
+        assertEquals("stock_quant_research", scalar(administrator, """
+                SELECT pg_get_userbyid(datdba)
+                  FROM pg_database WHERE datname = 'stock_quant_research'
+                """));
         assertEquals("stock_quant_research", scalar(administrator, """
                 SELECT pg_get_userbyid(nspowner)
                   FROM pg_namespace WHERE nspname = 'tushare_research'
+                """));
+        assertEquals("0", scalar(administrator, """
+                SELECT count(*)::text FROM pg_class c
+                JOIN pg_namespace n ON n.oid = c.relnamespace
+                WHERE n.nspname = 'tushare_research'
+                  AND pg_get_userbyid(c.relowner) <> 'stock_quant_research'
+                  AND NOT EXISTS (
+                    SELECT 1 FROM pg_depend d
+                     WHERE d.classid = 'pg_class'::regclass
+                       AND d.objid = c.oid
+                       AND d.refclassid = 'pg_extension'::regclass
+                       AND d.deptype = 'e')
+                """));
+        assertEquals("0", scalar(administrator, """
+                SELECT count(*)::text FROM pg_proc p
+                JOIN pg_namespace n ON n.oid = p.pronamespace
+                WHERE n.nspname = 'tushare_research'
+                  AND pg_get_userbyid(p.proowner) <> 'stock_quant_research'
+                  AND NOT EXISTS (
+                    SELECT 1 FROM pg_depend d
+                     WHERE d.classid = 'pg_proc'::regclass
+                       AND d.objid = p.oid
+                       AND d.refclassid = 'pg_extension'::regclass
+                       AND d.deptype = 'e')
                 """));
         assertEquals("tushare_research", scalar(administrator, """
                 SELECT n.nspname FROM pg_extension e
@@ -146,10 +174,6 @@ class TushareControlledAcceptanceDatabasePreparationPostgresTest {
     void publicCreateAndDatabasePublicPrivilegesAreRevoked() throws Exception {
         assertEquals("false", scalar(dedicated,
                 "SELECT has_schema_privilege(current_user, 'public', 'CREATE')::text"));
-        assertEquals("false", scalar(dedicated, """
-                SELECT has_database_privilege(
-                    current_user, 'stock_quant_research', 'CREATE')::text
-                """));
         assertEquals("0", scalar(administrator, """
                 SELECT count(*)::text
                   FROM pg_database d,

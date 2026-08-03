@@ -118,7 +118,6 @@ final class TushareControlledAcceptanceDatabasePreparationService {
                     createDedicatedSchemaAndExtension(bootstrapConnection);
                 }
                 phase = Phase.PERMISSIONS_HARDENED;
-                finishTargetHardening(adminTarget);
             }
             Arrays.fill(adminSecret, '\0');
 
@@ -370,7 +369,8 @@ final class TushareControlledAcceptanceDatabasePreparationService {
         try (Statement statement = connection.createStatement()) {
             statement.execute("""
                     CREATE DATABASE stock_quant_research
-                    WITH TEMPLATE template0 ENCODING 'UTF8'
+                    WITH OWNER stock_quant_research
+                    TEMPLATE template0 ENCODING 'UTF8'
                     """);
         }
     }
@@ -409,7 +409,7 @@ final class TushareControlledAcceptanceDatabasePreparationService {
         try (Statement statement = connection.createStatement()) {
             statement.execute("REVOKE ALL ON DATABASE stock_quant_research FROM PUBLIC");
             statement.execute("GRANT CONNECT ON DATABASE stock_quant_research TO stock_quant_research");
-            statement.execute("GRANT CREATE ON DATABASE stock_quant_research TO stock_quant_research");
+            statement.execute("ALTER SCHEMA public OWNER TO CURRENT_USER");
             statement.execute("REVOKE ALL ON SCHEMA public FROM PUBLIC");
             statement.execute("REVOKE ALL ON SCHEMA public FROM stock_quant_research");
         }
@@ -423,13 +423,6 @@ final class TushareControlledAcceptanceDatabasePreparationService {
             statement.execute("GRANT USAGE, CREATE ON SCHEMA tushare_research TO stock_quant_research");
             statement.execute("CREATE EXTENSION btree_gist WITH SCHEMA tushare_research");
             statement.execute("ALTER ROLE stock_quant_research IN DATABASE stock_quant_research SET search_path TO tushare_research");
-        }
-    }
-
-    private static void finishTargetHardening(Connection connection)
-            throws SQLException {
-        try (Statement statement = connection.createStatement()) {
-            statement.execute("REVOKE CREATE ON DATABASE stock_quant_research FROM stock_quant_research");
         }
     }
 
@@ -514,19 +507,65 @@ final class TushareControlledAcceptanceDatabasePreparationService {
                     SELECT pg_get_userbyid(nspowner)
                       FROM pg_namespace WHERE nspname = 'tushare_research'
                     """);
+            String databaseOwner = scalar(statement, """
+                    SELECT pg_get_userbyid(datdba)
+                      FROM pg_database WHERE datname = current_database()
+                    """);
+            boolean relationOwnerMismatch = bool(statement, """
+                    SELECT EXISTS (
+                      SELECT 1 FROM pg_class c
+                      JOIN pg_namespace n ON n.oid = c.relnamespace
+                      WHERE n.nspname = 'tushare_research'
+                        AND pg_get_userbyid(c.relowner) <> current_user
+                        AND NOT EXISTS (
+                          SELECT 1 FROM pg_depend d
+                           WHERE d.classid = 'pg_class'::regclass
+                             AND d.objid = c.oid
+                             AND d.refclassid = 'pg_extension'::regclass
+                             AND d.deptype = 'e'))
+                    """);
+            boolean procedureOwnerMismatch = bool(statement, """
+                    SELECT EXISTS (
+                      SELECT 1 FROM pg_proc p
+                      JOIN pg_namespace n ON n.oid = p.pronamespace
+                      WHERE n.nspname = 'tushare_research'
+                        AND pg_get_userbyid(p.proowner) <> current_user
+                        AND NOT EXISTS (
+                          SELECT 1 FROM pg_depend d
+                           WHERE d.classid = 'pg_proc'::regclass
+                             AND d.objid = p.oid
+                             AND d.refclassid = 'pg_extension'::regclass
+                             AND d.deptype = 'e'))
+                    """);
             String extensionSchema = scalar(statement, """
                     SELECT n.nspname
                       FROM pg_extension e
                       JOIN pg_namespace n ON n.oid = e.extnamespace
                      WHERE e.extname = 'btree_gist'
                     """);
+            if (!TushareControlledAcceptanceDatabasePreparationPlan.USER
+                    .equals(databaseOwner)) {
+                throw new IllegalStateException(
+                        "TUSHARE_DATABASE_PREPARATION_DATABASE_OWNER_INVALID");
+            }
+            if (!TushareControlledAcceptanceDatabasePreparationPlan.USER
+                    .equals(schemaOwner)) {
+                throw new IllegalStateException(
+                        "TUSHARE_DATABASE_PREPARATION_SCHEMA_OWNER_INVALID");
+            }
+            if (relationOwnerMismatch) {
+                throw new IllegalStateException(
+                        "TUSHARE_DATABASE_PREPARATION_RELATION_OWNER_INVALID");
+            }
+            if (procedureOwnerMismatch) {
+                throw new IllegalStateException(
+                        "TUSHARE_DATABASE_PREPARATION_PROCEDURE_OWNER_INVALID");
+            }
             if (!EXPECTED_MAIN_MIGRATIONS.equals(migrations)
                     || failed != 0 || ranks != 0 || governanceHistory
                     || governanceObjects || publicObjects || factRows
                     || roleInvalid || publicSchemaCreate || !targetConnect
                     || publicDatabasePrivileges
-                    || !TushareControlledAcceptanceDatabasePreparationPlan.USER
-                    .equals(schemaOwner)
                     || !TushareControlledAcceptanceDatabasePreparationPlan.SCHEMA
                     .equals(extensionSchema)) {
                 throw new IllegalStateException(
