@@ -68,6 +68,24 @@ class TushareControlledAcceptanceTrustedMechanismTest {
     }
 
     @Test
+    void executorArtifactRequiresOneRealJarClasspathEntry(@TempDir Path temp)
+            throws Exception {
+        Path jar = Files.createFile(temp.resolve("f1f-b2-runner.jar"));
+        assertEquals(jar.toAbsolutePath().normalize(),
+                TushareControlledAcceptanceBuildProof
+                        .requireSingleJarClasspath(jar.toString()));
+        assertThrows(IllegalArgumentException.class, () ->
+                TushareControlledAcceptanceBuildProof.requireSingleJarClasspath(
+                        jar + System.getProperty("path.separator") + temp));
+        assertThrows(IllegalArgumentException.class, () ->
+                TushareControlledAcceptanceBuildProof
+                        .requireSingleJarClasspath(temp.toString()));
+        assertThrows(IllegalArgumentException.class, () ->
+                TushareControlledAcceptanceBuildProof
+                        .requireSingleJarClasspath("runner.jar"));
+    }
+
+    @Test
     void controlledBuildProofIsBoundToJarManifestHashAndAdjacentSidecar(
             @TempDir Path temp
     ) throws Exception {
@@ -110,6 +128,22 @@ class TushareControlledAcceptanceTrustedMechanismTest {
         writeJar(jar, COMMIT, taskBranch);
         Path sidecar = Path.of(jar + TushareControlledAcceptanceBuildProof.SIDECAR_SUFFIX);
         writeSidecar(sidecar, COMMIT, sha256(jar), taskBranch);
+        assertThrows(IllegalArgumentException.class, () ->
+                TushareControlledAcceptanceBuildProof.loadBoundTestArtifact(jar, sidecar));
+    }
+
+    @Test
+    void buildProofRejectsArtifactBuiltForAnotherJavaRuntime(@TempDir Path temp)
+            throws Exception {
+        Path jar = temp.resolve("quant-server-1.3.1-f1f-b2-runner.jar");
+        writeJar(jar, COMMIT, COMMIT,
+                TushareControlledAcceptanceBuildProof.REQUIRED_INTEGRATION_BRANCH,
+                "CONTROLLED_BUILD_ARTIFACT", "17-incompatible");
+        Path sidecar = Path.of(jar + TushareControlledAcceptanceBuildProof.SIDECAR_SUFFIX);
+        writeSidecar(sidecar, COMMIT, COMMIT, sha256(jar),
+                TushareControlledAcceptanceBuildProof.REQUIRED_INTEGRATION_BRANCH,
+                "CONTROLLED_BUILD_ARTIFACT", "17-incompatible");
+
         assertThrows(IllegalArgumentException.class, () ->
                 TushareControlledAcceptanceBuildProof.loadBoundTestArtifact(jar, sidecar));
     }
@@ -529,6 +563,18 @@ class TushareControlledAcceptanceTrustedMechanismTest {
             String branch,
             String buildMode
     ) throws IOException {
+        writeJar(jar, commit, remoteCommit, branch, buildMode,
+                TushareControlledAcceptanceBuildProof.currentJavaVersion());
+    }
+
+    private static void writeJar(
+            Path jar,
+            String commit,
+            String remoteCommit,
+            String branch,
+            String buildMode,
+            String javaVersion
+    ) throws IOException {
         Manifest manifest = new Manifest();
         Attributes attributes = manifest.getMainAttributes();
         attributes.put(Attributes.Name.MANIFEST_VERSION, "1.0");
@@ -538,7 +584,7 @@ class TushareControlledAcceptanceTrustedMechanismTest {
         attributes.putValue("Stock-Quant-Tracked-Clean", "true");
         attributes.putValue("Stock-Quant-Untracked-Scope-Clean", "true");
         attributes.putValue("Stock-Quant-Build-Time", "2026-08-01T00:00:00Z");
-        attributes.putValue("Stock-Quant-Java-Version", "17-test");
+        attributes.putValue("Stock-Quant-Java-Version", javaVersion);
         attributes.putValue("Stock-Quant-Module-Version", "1.3.1");
         attributes.putValue("Stock-Quant-Maven-Wrapper-Version", "3.9.16");
         attributes.putValue("Stock-Quant-Build-Mode", buildMode);
@@ -576,6 +622,19 @@ class TushareControlledAcceptanceTrustedMechanismTest {
             String branch,
             String buildMode
     ) throws IOException {
+        writeSidecar(sidecar, commit, remoteCommit, artifactHash, branch,
+                buildMode, TushareControlledAcceptanceBuildProof.currentJavaVersion());
+    }
+
+    private static void writeSidecar(
+            Path sidecar,
+            String commit,
+            String remoteCommit,
+            String artifactHash,
+            String branch,
+            String buildMode,
+            String javaVersion
+    ) throws IOException {
         Files.writeString(sidecar, """
                 git.commit=%s
                 git.remote.commit=%s
@@ -584,13 +643,14 @@ class TushareControlledAcceptanceTrustedMechanismTest {
                 git.untrackedScopeClean=true
                 artifact.sha256=%s
                 build.time=2026-08-01T00:00:00Z
-                java.version=17-test
+                java.version=%s
                 module.version=1.3.1
                 maven.wrapper.version=3.9.16
                 build.mode=%s
                 executor.version=TUSHARE_CONTROLLED_ACCEPTANCE_EXECUTOR_V1
                 qualification.rule.version=TUSHARE_CONTROLLED_ACCEPTANCE_RULE_V1
-                """.formatted(commit, remoteCommit, branch, artifactHash, buildMode),
+                """.formatted(commit, remoteCommit, branch, artifactHash,
+                        javaVersion, buildMode),
                 StandardCharsets.UTF_8);
     }
 

@@ -261,3 +261,5 @@
 145. **正式受控构建与准备演练严格分离**：构建模式只有 `PREPARATION_ONLY` 与 `CONTROLLED_BUILD_ARTIFACT`，默认必须是前者。两者都使用 Maven Wrapper `3.9.16` 并绑定本地/远程 Git、MANIFEST、sidecar 和 JAR SHA-256；只有显式正式模式、冻结集成分支和本地/远程同 SHA 才可能取得治理资格。准备产物即使改名或篡改 sidecar 模式，也不能生成真实授权、`REAL_CONTROLLED_ACCEPTANCE`、`PASSED` 或 operational 投影。
 
 146. **F1F-B2 必须由非 Spring 一次性最小进程执行，并采用显式受守卫治理初始化**：专用 runner 不启动普通 Spring Boot、Web、Controller、scheduler 或任何 Agent/回测/Shadow/交易入口；组件只按白名单手工装配。输出审计必须先于构建/授权解析、秘密读取、DataSource、Flyway 和 Provider 客户端。治理 V14 固定 `baselineOnMigrate(false)`；只有构建、授权、数据库身份、search path 与主历史 V1—V13 全部通过后，才允许显式 baseline 13 和迁移 V14。该机制完成不改变 `CONTROLLED_ACCEPTANCE_STATUS=NOT_RUN`、`REDUCED_RESEARCH_OPERATIONAL_READY=false`、完整 F1 技术阻断或四项正式门禁。
+
+147. **F1F-B2-RUNNER 的正式执行产物必须由单一专用 JAR 决定入口并从隔离 commit 构建**：构建脚本从核验 commit 的 `git archive` 在系统临时目录离线构建，不使用共享工作区产物；MANIFEST 固定不可由 `loader.main` 覆盖的 `JarLauncher` 和 Runner `Start-Class`，运行时只接受单一真实 JAR classpath。Maven 构建 JVM、实际启动 JVM、MANIFEST 与 sidecar 的 `java.version` 必须一致；主 Flyway history 必须精确 V1—V13 且无失败，独立治理 history 必须精确 BASELINE/13 与 SQL/V14 的类型和脚本。上述加固不签发正式证明或授权，也不改变任何门禁。

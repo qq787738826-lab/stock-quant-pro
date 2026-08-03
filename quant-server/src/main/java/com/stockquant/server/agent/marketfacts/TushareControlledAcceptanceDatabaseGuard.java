@@ -25,6 +25,12 @@ public final class TushareControlledAcceptanceDatabaseGuard {
     static final String GOVERNANCE_HISTORY_TABLE =
             "flyway_controlled_acceptance_history";
     static final List<String> GOVERNANCE_MIGRATIONS = List.of("13", "14");
+    static final List<GovernanceHistoryEntry> GOVERNANCE_HISTORY = List.of(
+            new GovernanceHistoryEntry("13", "BASELINE",
+                    "explicit verified dedicated V1-V13 base "
+                            + TushareControlledAcceptanceExecution.RULE_VERSION),
+            new GovernanceHistoryEntry("14", "SQL",
+                    "V14__tushare_controlled_acceptance_execution.sql"));
 
     private final JdbcTemplate jdbc;
     private final TushareDedicatedResearchPersistenceGuard baseGuard;
@@ -60,9 +66,13 @@ public final class TushareControlledAcceptanceDatabaseGuard {
         TushareDedicatedResearchPersistenceGuard base =
                 new TushareDedicatedResearchPersistenceGuard(jdbc, databasePurpose);
         PreMigrationVerification before = performGuardedGovernanceInitialization(
-                () -> new PreMigrationVerification(
-                        base.verifyBeforeProvider(),
-                        requireGovernanceStateBeforeMigration(jdbc)),
+                () -> {
+                    var baseVerification = base.verifyBeforeProvider();
+                    requireExactMainHistory(jdbc);
+                    return new PreMigrationVerification(
+                            baseVerification,
+                            requireGovernanceStateBeforeMigration(jdbc));
+                },
                 ignored -> flywayOperations(dataSource));
 
         ControlledVerification after =
@@ -107,15 +117,11 @@ public final class TushareControlledAcceptanceDatabaseGuard {
     public ControlledVerification verifyBeforeProvider() {
         TushareDedicatedResearchPersistenceGuard.Verification base =
                 baseGuard.verifyBeforeProvider();
-        List<String> versions;
+        requireExactMainHistory(jdbc);
+        List<GovernanceHistoryEntry> history;
         int failed;
         try {
-            versions = jdbc.queryForList("""
-                    SELECT version
-                      FROM tushare_research.flyway_controlled_acceptance_history
-                     WHERE success
-                     ORDER BY installed_rank
-                    """, String.class);
+            history = governanceHistory(jdbc);
             Integer failedValue = jdbc.queryForObject("""
                     SELECT count(*)
                       FROM tushare_research.flyway_controlled_acceptance_history
@@ -125,12 +131,13 @@ public final class TushareControlledAcceptanceDatabaseGuard {
         } catch (RuntimeException error) {
             throw blocked("TUSHARE_CONTROLLED_ACCEPTANCE_GOVERNANCE_MIGRATION_REQUIRED");
         }
-        if (!GOVERNANCE_MIGRATIONS.equals(versions) || failed != 0
+        if (!GOVERNANCE_HISTORY.equals(history) || failed != 0
                 || !requiredObjectsPresent()) {
             throw blocked("TUSHARE_CONTROLLED_ACCEPTANCE_GOVERNANCE_SCHEMA_INVALID");
         }
         return new ControlledVerification(
-                base, versions, GOVERNANCE_HISTORY_TABLE, 14);
+                base, history.stream().map(GovernanceHistoryEntry::version).toList(),
+                GOVERNANCE_HISTORY_TABLE, 14);
     }
 
     private boolean requiredObjectsPresent() {
@@ -172,30 +179,61 @@ public final class TushareControlledAcceptanceDatabaseGuard {
             }
             return GovernanceState.ABSENT;
         }
-        List<String> versions = jdbc.queryForList("""
-                SELECT version
-                  FROM tushare_research.flyway_controlled_acceptance_history
-                 WHERE success
-                 ORDER BY installed_rank
-                """, String.class);
+        List<GovernanceHistoryEntry> history = governanceHistory(jdbc);
         Integer failed = jdbc.queryForObject("""
                 SELECT count(*)
                   FROM tushare_research.flyway_controlled_acceptance_history
                  WHERE NOT success
                 """, Integer.class);
         if (failed == null || failed != 0
-                || !versions.equals(List.of("13"))
-                && !versions.equals(GOVERNANCE_MIGRATIONS)) {
+                || !history.equals(GOVERNANCE_HISTORY.subList(0, 1))
+                && !history.equals(GOVERNANCE_HISTORY)) {
             throw blocked("TUSHARE_CONTROLLED_ACCEPTANCE_GOVERNANCE_HISTORY_INVALID");
         }
-        return versions.equals(GOVERNANCE_MIGRATIONS)
+        return history.equals(GOVERNANCE_HISTORY)
                 ? GovernanceState.COMPLETE : GovernanceState.BASELINED;
+    }
+
+    private static void requireExactMainHistory(JdbcTemplate jdbc) {
+        try {
+            Integer failed = jdbc.queryForObject("""
+                    SELECT count(*)
+                      FROM tushare_research.flyway_schema_history
+                     WHERE NOT success
+                    """, Integer.class);
+            if (failed == null || failed != 0) {
+                throw blocked("TUSHARE_CONTROLLED_ACCEPTANCE_MAIN_HISTORY_INVALID");
+            }
+        } catch (IllegalStateException error) {
+            throw error;
+        } catch (RuntimeException error) {
+            throw blocked("TUSHARE_CONTROLLED_ACCEPTANCE_MAIN_HISTORY_INVALID");
+        }
+    }
+
+    private static List<GovernanceHistoryEntry> governanceHistory(JdbcTemplate jdbc) {
+        return jdbc.query("""
+                SELECT version, type, script
+                  FROM tushare_research.flyway_controlled_acceptance_history
+                 WHERE success
+                 ORDER BY installed_rank
+                """, (row, ignored) -> new GovernanceHistoryEntry(
+                row.getString("version"), row.getString("type"),
+                row.getString("script")));
     }
 
     enum GovernanceState {
         ABSENT,
         BASELINED,
         COMPLETE
+    }
+
+    record GovernanceHistoryEntry(String version, String type, String script) {
+        GovernanceHistoryEntry {
+            version = Objects.requireNonNull(version, "version");
+            type = Objects.requireNonNull(type, "type");
+            script = Objects.requireNonNull(script, "script");
+        }
     }
 
     static PreMigrationVerification performGuardedGovernanceInitialization(

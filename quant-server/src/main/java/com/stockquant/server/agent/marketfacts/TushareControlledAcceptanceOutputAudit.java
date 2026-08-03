@@ -72,65 +72,88 @@ public final class TushareControlledAcceptanceOutputAudit {
         PrintStream originalErr = System.err;
         ByteArrayOutputStream stdout = new ByteArrayOutputStream();
         ByteArrayOutputStream stderr = new ByteArrayOutputStream();
-        LoggerContext context = requireLogbackContext();
-        Logger root = context.getLogger(Logger.ROOT_LOGGER_NAME);
-        ListAppender<ILoggingEvent> captureAppender = new ListAppender<>();
-        List<LoggerState> loggerStates = snapshotLoggerTopology(context);
+        LoggerContext context = null;
+        Logger root = null;
+        ListAppender<ILoggingEvent> captureAppender = null;
+        List<LoggerState> loggerStates = List.of();
         Throwable failure = null;
         T result = null;
         boolean complete = false;
-        try (PrintStream out = new PrintStream(stdout, true, StandardCharsets.UTF_8);
-             PrintStream err = new PrintStream(stderr, true, StandardCharsets.UTF_8)) {
-            captureAppender.setContext(context);
-            captureAppender.start();
-            isolateLogback(loggerStates, root, captureAppender);
-            System.setOut(out);
-            System.setErr(err);
+        AuditResult audit = null;
+        Throwable restoreFailure = null;
+        try {
+            context = requireLogbackContext();
+            root = context.getLogger(Logger.ROOT_LOGGER_NAME);
+            captureAppender = new ListAppender<>();
+            loggerStates = snapshotLoggerTopology(context);
+            try (PrintStream out = new PrintStream(stdout, true, StandardCharsets.UTF_8);
+                 PrintStream err = new PrintStream(stderr, true, StandardCharsets.UTF_8)) {
+                captureAppender.setContext(context);
+                captureAppender.start();
+                isolateLogback(loggerStates, root, captureAppender);
+                System.setOut(out);
+                System.setErr(err);
+                try {
+                    result = action.call(registry);
+                    if (registry.materials().isEmpty()) {
+                        throw new IllegalStateException(
+                                "TUSHARE_CONTROLLED_ACCEPTANCE_SENSITIVE_REGISTRY_REQUIRED");
+                    }
+                    if (requireControlledRegistry) {
+                        registry.requireCompleteControlledRegistration();
+                    }
+                } catch (Throwable error) {
+                    failure = error;
+                } finally {
+                    registry.close();
+                    out.flush();
+                    err.flush();
+                    complete = topologyStillIsolated(context, root, captureAppender);
+                }
+            }
+
+            // The final flush, captured-event expansion and sensitive scan all
+            // happen while stdout/stderr and Logback remain isolated. No
+            // controlled component can emit output after this audit point.
+            List<CapturedText> texts = new ArrayList<>();
+            texts.add(new CapturedText("STDOUT",
+                    stdout.toString(StandardCharsets.UTF_8)));
+            texts.add(new CapturedText("STDERR",
+                    stderr.toString(StandardCharsets.UTF_8)));
+            for (ILoggingEvent event : captureAppender.list) {
+                texts.add(new CapturedText("LOG", event.getFormattedMessage()));
+                appendThrowableProxy(texts, event.getThrowableProxy(),
+                    Collections.newSetFromMap(new IdentityHashMap<>()));
+            }
+            appendThrowable(texts, failure,
+                    Collections.newSetFromMap(new IdentityHashMap<>()));
             try {
-                result = action.call(registry);
-                if (registry.materials().isEmpty()) {
-                    throw new IllegalStateException(
-                            "TUSHARE_CONTROLLED_ACCEPTANCE_SENSITIVE_REGISTRY_REQUIRED");
-                }
-                if (requireControlledRegistry) {
-                    registry.requireCompleteControlledRegistration();
-                }
-            } catch (Throwable error) {
-                failure = error;
-            } finally {
-                registry.close();
-                out.flush();
-                err.flush();
-                complete = topologyStillIsolated(context, root, captureAppender);
+                audit = audit(texts, registry.materials(), complete);
+            } catch (RuntimeException auditFailure) {
+                audit = failedAudit();
+                failure = combine(failure, auditFailure);
             }
         } catch (Throwable auditInfrastructureFailure) {
-            failure = failure == null ? auditInfrastructureFailure : failure;
+            registry.close();
             complete = false;
+            audit = failedAudit();
+            failure = combine(failure, auditInfrastructureFailure);
         } finally {
             System.setOut(originalOut);
             System.setErr(originalErr);
-            restoreLogback(context, loggerStates, captureAppender);
-            CAPTURE_LOCK.unlock();
+            try {
+                if (context != null && captureAppender != null) {
+                    restoreLogback(context, loggerStates, captureAppender);
+                }
+            } catch (Throwable error) {
+                restoreFailure = error;
+            } finally {
+                CAPTURE_LOCK.unlock();
+            }
         }
-
-        List<CapturedText> texts = new ArrayList<>();
-        texts.add(new CapturedText("STDOUT", stdout.toString(StandardCharsets.UTF_8)));
-        texts.add(new CapturedText("STDERR", stderr.toString(StandardCharsets.UTF_8)));
-        for (ILoggingEvent event : captureAppender.list) {
-            texts.add(new CapturedText("LOG", event.getFormattedMessage()));
-            appendThrowableProxy(texts, event.getThrowableProxy(),
-                    Collections.newSetFromMap(new IdentityHashMap<>()));
-        }
-        appendThrowable(texts, failure,
-                Collections.newSetFromMap(new IdentityHashMap<>()));
-
-        AuditResult audit;
-        try {
-            audit = audit(texts, registry.materials(), complete);
-        } catch (RuntimeException auditFailure) {
-            audit = new AuditResult(false, false,
-                    List.of(new AuditHit("AUDIT", HitCategory.AUDIT_FAILURE, 0)));
-            failure = failure == null ? auditFailure : failure;
+        if (restoreFailure != null) {
+            audit = failedAudit();
+            failure = combine(failure, restoreFailure);
         }
         if (failure != null) {
             Exception safeFailure = failure instanceof Exception exception
@@ -139,6 +162,21 @@ public final class TushareControlledAcceptanceOutputAudit {
             throw new CapturedExecutionException(safeFailure, audit);
         }
         return new Captured<>(result, audit);
+    }
+
+    private static AuditResult failedAudit() {
+        return new AuditResult(false, false,
+                List.of(new AuditHit("AUDIT", HitCategory.AUDIT_FAILURE, 0)));
+    }
+
+    private static Throwable combine(Throwable first, Throwable next) {
+        if (first == null) {
+            return next;
+        }
+        if (first != next) {
+            first.addSuppressed(next);
+        }
+        return first;
     }
 
     @FunctionalInterface

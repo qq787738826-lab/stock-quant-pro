@@ -1,6 +1,7 @@
 package com.stockquant.server.agent.marketfacts;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.stockquant.server.agent.backtest.BacktestCanonicalHashService;
 import com.stockquant.server.agent.temporal.MarketDataDatasetVersionRepository;
 import com.stockquant.server.agent.temporal.SecurityStatusEventRepository;
@@ -37,7 +38,7 @@ final class TushareControlledAcceptanceComponents implements AutoCloseable {
         Objects.requireNonNull(dataSource, "dataSource");
         Objects.requireNonNull(token, "token");
         Objects.requireNonNull(clock, "clock");
-        ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+        ObjectMapper mapper = new ObjectMapper().registerModule(new JavaTimeModule());
         JdbcTemplate jdbc = new JdbcTemplate(dataSource);
         DataSourceTransactionManager transactions =
                 new DataSourceTransactionManager(dataSource);

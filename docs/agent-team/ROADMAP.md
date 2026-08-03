@@ -269,7 +269,7 @@
 - 既有规划状态：iFinD 里程碑规划提交 `23baf11ed3a236800b5f3feba8681d261a71d9f9` 已通过 ChatGPT 对实际 Git 提交的验收，并经用户批准纯 fast-forward 合入。精确验收和批准时间无仓库证据，记为 `UNKNOWN`。
 - 免费优先更新：最终提交 `c47b88e586f6751563fe210f40137a3b7ce5e576` 已通过 ChatGPT 对实际 Git 提交的验收，并经用户批准纯 fast-forward 合入。系统先用免费数据验证产品形态和效果；只有系统显示可重复使用价值、数据成为可量化主要瓶颈，且同范围免费/付费 A/B 方案和成本意愿均明确后，才考虑 iFinD 或其他付费 Provider。
 - 日期边界：iFinD 试用不得绑定 `2026-08-31`、2026 年 8 月 31 日或任何其他固定日期。日历日期只能作为非权威临时估算，不属于路线图依赖，不得因预计日期临近而降低验收标准。
-- 当前集成 HEAD：`0e2b607bc068910319134790360d71a18a6a9e02`。当前状态：`F0_AUDIT_RESULT=PARTIAL`、`FREE_IMPLEMENTATION_PATH=RESEARCH_PREVIEW_FIRST`、`FREE_PRODUCT_PREVIEW_GATE=PASS`、`FREE_PROVIDER_VALIDATION_GATE=BLOCKED`、`PAID_PROVIDER_UPGRADE_DECISION=PENDING`、`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`。正常业务库 V13 未执行，iFinD 调用数为 0；Track A、Track B0、Track B1、F1A—F1E 均已验收并纯 fast-forward 合入。TS-WP-001/002 已闭环当前个人研究书面许可；完整 F1 仍为 `F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE`。F1E 专用本地实现已合入但 operational 未接受；F1F-A 只准备受控验收机制，真实验收仍未运行。F2B/F3 均未开始，Day 002 未创建，scheduler 关闭，3B 未开始。
+- 当前集成 HEAD：`e3777602fadd65f3af0a2ba8ac6e886693d745d5`。当前状态：`F0_AUDIT_RESULT=PARTIAL`、`FREE_IMPLEMENTATION_PATH=RESEARCH_PREVIEW_FIRST`、`FREE_PRODUCT_PREVIEW_GATE=PASS`、`FREE_PROVIDER_VALIDATION_GATE=BLOCKED`、`PAID_PROVIDER_UPGRADE_DECISION=PENDING`、`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`。正常业务库 V13 未执行，iFinD 调用数为 0；Track A、Track B0、Track B1、F1A—F1E、F1F-A 与 F1F-B1 均已验收并纯 fast-forward 合入。TS-WP-001/002 已闭环当前个人研究书面许可；完整 F1 仍为 `F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE`。F1E 专用本地实现已合入但 operational 未接受；F1F-B2-RUNNER 仍在任务分支，真实验收仍未运行。F2B/F3 均未开始，Day 002 未创建，scheduler 关闭，3B 未开始。
 
 #### 3A-R3B-0：Provider 中立离线闭环与试用准备（已完成并合入）
 
@@ -399,7 +399,7 @@
 
 - B2-PRE：基于 `e3777602...` 的只读审计结论为 `NOT_READY`；该 SHA 不再是未来正式验收冻结 SHA。
 - 交付：[B2-RUNNER 任务书](tasks/3ar3b-f1f-b2-controlled-runner.md)和[B2-RUNNER 阶段记录](stage-3ar3b-f1f-b2-controlled-runner.md)。
-- 实现：普通 Java 一次性入口、手工组件白名单、全流程输出审计、受控秘密通道、专用非池化 DataSource、显式 V14 bootstrap、PREPARATION/CONTROLLED 双模式、Maven Wrapper 与本地/远程 SHA 证明。
+- 实现：普通 Java 一次性入口、手工组件白名单、全流程输出审计、受控秘密通道、专用非池化 DataSource、显式 V14 bootstrap、PREPARATION/CONTROLLED 双模式、隔离 commit 构建、不可覆盖的 `JarLauncher`、Maven Wrapper 与本地/远程 SHA/Java 运行时证明。合并前最终审查已补齐精确主/治理 history 和数据库错误身份零 DDL 反例。
 - 隔离：任务不调用 Provider、不访问数据库、不执行 V13/V14、不签发正式授权或构建证明。`CONTROLLED_ACCEPTANCE_STATUS=NOT_RUN`、`REDUCED_RESEARCH_OPERATIONAL_READY=false`。
 - 下一入口：仅在任务提交通过实际 Git 复验并纯 fast-forward 合入后，基于新的集成 SHA 重新执行完整 B2-PRE；不得直接执行真实 B2。
 

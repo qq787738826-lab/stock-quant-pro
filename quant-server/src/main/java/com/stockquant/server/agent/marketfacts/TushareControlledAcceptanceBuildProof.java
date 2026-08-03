@@ -2,7 +2,6 @@ package com.stockquant.server.agent.marketfacts;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
@@ -121,7 +120,7 @@ public final class TushareControlledAcceptanceBuildProof {
         ManifestProof manifest = new ManifestProof(
                 gitCommit, gitCommit, REQUIRED_INTEGRATION_BRANCH, true, true,
                 Instant.parse("2026-08-01T00:00:00Z"),
-                "17-test", MODULE_VERSION, MAVEN_WRAPPER_VERSION,
+                currentJavaVersion(), MODULE_VERSION, MAVEN_WRAPPER_VERSION,
                 BuildMode.CONTROLLED_BUILD_ARTIFACT,
                 TushareControlledAcceptanceExecution.EXECUTOR_VERSION,
                 TushareControlledAcceptanceExecution.RULE_VERSION);
@@ -129,7 +128,7 @@ public final class TushareControlledAcceptanceBuildProof {
                 gitCommit, gitCommit, REQUIRED_INTEGRATION_BRANCH, true, true,
                 artifactSha256, artifactSha256,
                 Instant.parse("2026-08-01T00:00:00Z"),
-                "17-test", MODULE_VERSION, MAVEN_WRAPPER_VERSION,
+                currentJavaVersion(), MODULE_VERSION, MAVEN_WRAPPER_VERSION,
                 BuildMode.CONTROLLED_BUILD_ARTIFACT,
                 TushareControlledAcceptanceExecution.EXECUTOR_VERSION,
                 TushareControlledAcceptanceExecution.RULE_VERSION,
@@ -208,6 +207,7 @@ public final class TushareControlledAcceptanceBuildProof {
                     || untrackedScopeClean != manifest.untrackedScopeClean()
                     || !buildTime.equals(manifest.buildTime())
                     || !javaVersion.equals(manifest.javaVersion())
+                    || !javaVersion.equals(currentJavaVersion())
                     || !MODULE_VERSION.equals(moduleVersion)
                     || !moduleVersion.equals(manifest.moduleVersion())
                     || !MAVEN_WRAPPER_VERSION.equals(mavenWrapperVersion)
@@ -298,18 +298,29 @@ public final class TushareControlledAcceptanceBuildProof {
     }
 
     private static Path currentExecutorArtifact() {
-        try {
-            Path path = Path.of(TushareControlledAcceptanceExecutor.class
-                    .getProtectionDomain().getCodeSource().getLocation().toURI())
-                    .toAbsolutePath().normalize();
-            if (!Files.isRegularFile(path)
-                    || !path.getFileName().toString().endsWith(".jar")) {
-                throw invalid("TUSHARE_CONTROLLED_ACCEPTANCE_RUNNING_ARTIFACT_INVALID");
-            }
-            return path;
-        } catch (URISyntaxException | NullPointerException error) {
+        return requireSingleJarClasspath(System.getProperty("java.class.path"));
+    }
+
+    static Path requireSingleJarClasspath(String classPath) {
+        if (classPath == null || classPath.isBlank()) {
             throw invalid("TUSHARE_CONTROLLED_ACCEPTANCE_RUNNING_ARTIFACT_INVALID");
         }
+        String[] entries = classPath.split(
+                java.util.regex.Pattern.quote(System.getProperty("path.separator")), -1);
+        if (entries.length != 1 || entries[0].isBlank()) {
+            throw invalid("TUSHARE_CONTROLLED_ACCEPTANCE_RUNNING_ARTIFACT_INVALID");
+        }
+        Path path;
+        try {
+            path = Path.of(entries[0]).toAbsolutePath().normalize();
+        } catch (RuntimeException error) {
+            throw invalid("TUSHARE_CONTROLLED_ACCEPTANCE_RUNNING_ARTIFACT_INVALID");
+        }
+        if (!Files.isRegularFile(path)
+                || !path.getFileName().toString().endsWith(".jar")) {
+            throw invalid("TUSHARE_CONTROLLED_ACCEPTANCE_RUNNING_ARTIFACT_INVALID");
+        }
+        return path;
     }
 
     private static ManifestProof readManifest(Path artifact) {
@@ -349,6 +360,11 @@ public final class TushareControlledAcceptanceBuildProof {
         } catch (IOException | NoSuchAlgorithmException error) {
             throw invalid("TUSHARE_CONTROLLED_ACCEPTANCE_ARTIFACT_HASH_FAILED");
         }
+    }
+
+    static String currentJavaVersion() {
+        return TushareControlledAcceptanceExecution.safeText(
+                System.getProperty("java.version"));
     }
 
     private static boolean branchAllowedForMode(String branchName, BuildMode buildMode) {

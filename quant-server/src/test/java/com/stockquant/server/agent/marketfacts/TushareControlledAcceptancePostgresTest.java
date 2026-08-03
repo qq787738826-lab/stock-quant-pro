@@ -9,6 +9,7 @@ import com.stockquant.server.agent.marketfacts.TushareDedicatedResearchBatchMode
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.postgresql.ds.PGSimpleDataSource;
@@ -29,6 +30,8 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.Executors;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 @EnabledIfEnvironmentVariable(named = "F1F_B1_POSTGRES_JDBC_URL", matches = ".+")
 class TushareControlledAcceptancePostgresTest {
@@ -36,46 +39,20 @@ class TushareControlledAcceptancePostgresTest {
     private static final String SHA = "a".repeat(64);
     private static DataSource dataSource;
     private static JdbcTemplate jdbc;
-    private static boolean defaultFlywayExcludedV14;
 
     @BeforeAll
-    static void migrate() {
+    static void connect() {
         PGSimpleDataSource source = new PGSimpleDataSource();
         source.setURL(System.getenv("F1F_B1_POSTGRES_JDBC_URL"));
         source.setUser(System.getenv("F1F_B1_POSTGRES_USER"));
         dataSource = source;
         jdbc = new JdbcTemplate(dataSource);
-        jdbc.execute("CREATE SCHEMA tushare_research AUTHORIZATION stock_quant_research");
+    }
 
-        Flyway.configure().dataSource(dataSource)
-                .schemas("tushare_research").defaultSchema("tushare_research")
-                .locations("classpath:db/migration")
-                .cleanDisabled(true)
-                .load().migrate();
-        defaultFlywayExcludedV14 = mainVersions().equals(List.of(
-                "1", "2", "3", "4", "5", "6", "7", "8", "9",
-                "10", "11", "12", "13"))
-                && !Boolean.TRUE.equals(jdbc.queryForObject("""
-                SELECT to_regclass(
-                  'tushare_research.tushare_controlled_acceptance_execution') IS NOT NULL
-                """, Boolean.class));
-
-        assertThrows(RuntimeException.class, () -> Flyway.configure()
-                .dataSource(dataSource)
-                .schemas("tushare_research").defaultSchema("tushare_research")
-                .locations("classpath:db/migration", "classpath:db/controlled-acceptance")
-                .cleanDisabled(true)
-                .load().migrate());
-        assertEquals(List.of("1", "2", "3", "4", "5", "6", "7", "8", "9",
-                "10", "11", "12", "13"), mainVersions());
-        assertFalse(Boolean.TRUE.equals(jdbc.queryForObject("""
-                SELECT to_regclass(
-                  'tushare_research.tushare_controlled_acceptance_execution') IS NOT NULL
-                """, Boolean.class)));
-
-        TushareControlledAcceptanceDatabaseGuard.migrateGovernance(
-                dataSource, TushareDedicatedResearchPersistenceGuard.DATABASE_PURPOSE,
-                authorization(), buildProof());
+    @BeforeEach
+    void freshGovernedSchema() {
+        resetToMainV13();
+        migrateGovernance(dataSource);
     }
 
     @AfterAll
@@ -87,24 +64,36 @@ class TushareControlledAcceptancePostgresTest {
 
     @Test
     void defaultFlywayStopsAtV13AndGovernanceUsesIndependentHistory() {
-        assertTrue(defaultFlywayExcludedV14);
         assertEquals(List.of("1", "2", "3", "4", "5", "6", "7", "8", "9",
                 "10", "11", "12", "13"), mainVersions());
-        assertEquals(List.of("13", "14"), jdbc.queryForList("""
-                SELECT version
+        assertEquals(List.of(
+                new HistoryEntry("13", "BASELINE",
+                        "explicit verified dedicated V1-V13 base "
+                                + TushareControlledAcceptanceExecution.RULE_VERSION),
+                new HistoryEntry("14", "SQL",
+                        "V14__tushare_controlled_acceptance_execution.sql")),
+                jdbc.query("""
+                SELECT version, type, script
                   FROM tushare_research.flyway_controlled_acceptance_history
                  WHERE success ORDER BY installed_rank
-                """, String.class));
+                """, (row, ignored) -> new HistoryEntry(
+                        row.getString("version"), row.getString("type"),
+                        row.getString("script"))));
         assertEquals(0, jdbc.queryForObject("""
                 SELECT count(*)
                   FROM tushare_research.flyway_controlled_acceptance_history
                  WHERE NOT success
                 """, Integer.class));
+        assertThrows(RuntimeException.class, () -> Flyway.configure()
+                .dataSource(dataSource)
+                .schemas("tushare_research").defaultSchema("tushare_research")
+                .locations("classpath:db/migration", "classpath:db/controlled-acceptance")
+                .cleanDisabled(true)
+                .load().migrate());
+        assertEquals(List.of("1", "2", "3", "4", "5", "6", "7", "8", "9",
+                "10", "11", "12", "13"), mainVersions());
         assertDoesNotThrow(() ->
-                TushareControlledAcceptanceDatabaseGuard.migrateGovernance(
-                        dataSource,
-                        TushareDedicatedResearchPersistenceGuard.DATABASE_PURPOSE,
-                        authorization(), buildProof()));
+                migrateGovernance(dataSource));
         assertEquals(List.of("13", "14"), jdbc.queryForList("""
                 SELECT version
                   FROM tushare_research.flyway_controlled_acceptance_history
@@ -130,6 +119,102 @@ class TushareControlledAcceptancePostgresTest {
                     OR to_regclass(
                   'public.tushare_controlled_acceptance_execution') IS NOT NULL
                 """, Boolean.class)));
+    }
+
+    @Test
+    void searchPathWithPublicFallbackIsRejectedBeforeGovernanceDdl() {
+        resetToMainV13();
+        PGSimpleDataSource unsafe = source(System.getenv("F1F_B1_POSTGRES_JDBC_URL")
+                .replace("currentSchema=tushare_research",
+                        "currentSchema=tushare_research,public"),
+                System.getenv("F1F_B1_POSTGRES_USER"));
+
+        assertThrows(RuntimeException.class, () -> migrateGovernance(unsafe));
+        assertFalse(governanceHistoryExists(jdbc));
+    }
+
+    @Test
+    void failedMainHistoryIsRejectedBeforeGovernanceDdl() {
+        resetToMainV13();
+        insertMainHistory("13.1", "FAILED_TEST", "SQL", "failed-test.sql", false);
+
+        assertThrows(IllegalStateException.class, () -> migrateGovernance(dataSource));
+        assertFalse(governanceHistoryExists(jdbc));
+    }
+
+    @Test
+    void absentMissingAndFutureMainHistoryAreRejectedBeforeGovernanceDdl() {
+        dropAndCreateSchema(jdbc);
+        assertThrows(RuntimeException.class, () -> migrateGovernance(dataSource));
+        assertFalse(governanceHistoryExists(jdbc));
+
+        resetToMainV13();
+        jdbc.update("DELETE FROM tushare_research.flyway_schema_history "
+                + "WHERE version='13'");
+        assertThrows(RuntimeException.class, () -> migrateGovernance(dataSource));
+        assertFalse(governanceHistoryExists(jdbc));
+
+        resetToMainV13();
+        insertMainHistory("99", "FUTURE_TEST", "SQL", "future-test.sql", true);
+        assertThrows(RuntimeException.class, () -> migrateGovernance(dataSource));
+        assertFalse(governanceHistoryExists(jdbc));
+    }
+
+    @Test
+    void partialAndUnknownGovernanceHistoryAreRejectedWithoutV14Ddl() {
+        resetToMainV13();
+        baselineGovernance();
+        jdbc.update("DELETE FROM tushare_research.flyway_controlled_acceptance_history");
+        assertThrows(RuntimeException.class, () -> migrateGovernance(dataSource));
+        assertFalse(governanceObjectsExist(jdbc));
+
+        resetToMainV13();
+        baselineGovernance();
+        insertGovernanceHistory("15", "UNKNOWN_TEST", "SQL", "V15__unknown.sql", true);
+        assertThrows(RuntimeException.class, () -> migrateGovernance(dataSource));
+        assertFalse(governanceObjectsExist(jdbc));
+
+        resetToMainV13();
+        baselineGovernance();
+        jdbc.update("""
+                UPDATE tushare_research.flyway_controlled_acceptance_history
+                   SET type='SQL', script='forged-baseline.sql'
+                 WHERE version='13'
+                """);
+        assertThrows(RuntimeException.class, () -> migrateGovernance(dataSource));
+        assertFalse(governanceObjectsExist(jdbc));
+    }
+
+    @Test
+    void wrongDatabaseAndWrongUserAreRejectedBeforeGovernanceDdl() {
+        String baseUrl = System.getenv("F1F_B1_POSTGRES_JDBC_URL");
+        PGSimpleDataSource wrongDatabase = source(
+                baseUrl.replace("/stock_quant_research", "/postgres"),
+                System.getenv("F1F_B1_POSTGRES_USER"));
+        JdbcTemplate wrongDatabaseJdbc = new JdbcTemplate(wrongDatabase);
+        dropAndCreateSchema(wrongDatabaseJdbc);
+        migrateMain(wrongDatabase);
+        try {
+            assertThrows(RuntimeException.class, () -> migrateGovernance(wrongDatabase));
+            assertFalse(governanceHistoryExists(wrongDatabaseJdbc));
+        } finally {
+            wrongDatabaseJdbc.execute("DROP SCHEMA tushare_research CASCADE");
+        }
+
+        resetToMainV13();
+        jdbc.execute("DROP ROLE IF EXISTS stock_quant_wrong_user");
+        jdbc.execute("CREATE ROLE stock_quant_wrong_user LOGIN");
+        jdbc.execute("GRANT USAGE ON SCHEMA tushare_research TO stock_quant_wrong_user");
+        jdbc.execute("GRANT SELECT ON tushare_research.flyway_schema_history "
+                + "TO stock_quant_wrong_user");
+        PGSimpleDataSource wrongUser = source(baseUrl, "stock_quant_wrong_user");
+        try {
+            assertThrows(RuntimeException.class, () -> migrateGovernance(wrongUser));
+            assertFalse(governanceHistoryExists(jdbc));
+        } finally {
+            jdbc.execute("DROP OWNED BY stock_quant_wrong_user");
+            jdbc.execute("DROP ROLE stock_quant_wrong_user");
+        }
     }
 
     @Test
@@ -267,6 +352,108 @@ class TushareControlledAcceptancePostgresTest {
                 """, String.class);
     }
 
+    private static void resetToMainV13() {
+        dropAndCreateSchema(jdbc);
+        migrateMain(dataSource);
+    }
+
+    private static void dropAndCreateSchema(JdbcTemplate target) {
+        target.execute("DROP SCHEMA IF EXISTS tushare_research CASCADE");
+        target.execute("CREATE SCHEMA tushare_research "
+                + "AUTHORIZATION stock_quant_research");
+    }
+
+    private static void migrateMain(DataSource target) {
+        Flyway.configure().dataSource(target)
+                .schemas("tushare_research").defaultSchema("tushare_research")
+                .locations("classpath:db/migration")
+                .cleanDisabled(true)
+                .load().migrate();
+    }
+
+    private static void baselineGovernance() {
+        Flyway.configure().dataSource(dataSource)
+                .schemas("tushare_research").defaultSchema("tushare_research")
+                .table(TushareControlledAcceptanceDatabaseGuard.GOVERNANCE_HISTORY_TABLE)
+                .locations(TushareControlledAcceptanceDatabaseGuard.GOVERNANCE_LOCATION)
+                .baselineOnMigrate(false)
+                .baselineVersion("13")
+                .baselineDescription("explicit verified dedicated V1-V13 base "
+                        + TushareControlledAcceptanceExecution.RULE_VERSION)
+                .cleanDisabled(true)
+                .load().baseline();
+    }
+
+    private static void migrateGovernance(DataSource target) {
+        TushareControlledAcceptanceDatabaseGuard.migrateGovernance(
+                target, TushareDedicatedResearchPersistenceGuard.DATABASE_PURPOSE,
+                authorization(), buildProof());
+    }
+
+    private static boolean governanceHistoryExists(JdbcTemplate target) {
+        return Boolean.TRUE.equals(target.queryForObject("""
+                SELECT to_regclass(
+                  'tushare_research.flyway_controlled_acceptance_history') IS NOT NULL
+                """, Boolean.class));
+    }
+
+    private static boolean governanceObjectsExist(JdbcTemplate target) {
+        return Boolean.TRUE.equals(target.queryForObject("""
+                SELECT to_regclass(
+                  'tushare_research.tushare_controlled_acceptance_execution') IS NOT NULL
+                    OR to_regclass(
+                  'tushare_research.tushare_controlled_acceptance_transition') IS NOT NULL
+                """, Boolean.class));
+    }
+
+    private static void insertMainHistory(
+            String version,
+            String description,
+            String type,
+            String script,
+            boolean success
+    ) {
+        insertHistory("flyway_schema_history", version, description, type,
+                script, success);
+    }
+
+    private static void insertGovernanceHistory(
+            String version,
+            String description,
+            String type,
+            String script,
+            boolean success
+    ) {
+        insertHistory("flyway_controlled_acceptance_history", version,
+                description, type, script, success);
+    }
+
+    private static void insertHistory(
+            String table,
+            String version,
+            String description,
+            String type,
+            String script,
+            boolean success
+    ) {
+        jdbc.update("""
+                INSERT INTO tushare_research.%s(
+                    installed_rank, version, description, type, script,
+                    checksum, installed_by, execution_time, success)
+                SELECT COALESCE(max(installed_rank), 0) + 1,
+                       ?, ?, ?, ?, NULL, current_user, 0, ?
+                  FROM tushare_research.%s
+                """.formatted(table, table), version, description, type,
+                script, success);
+    }
+
+    private static PGSimpleDataSource source(String url, String user) {
+        PGSimpleDataSource source = new PGSimpleDataSource();
+        source.setURL(url);
+        source.setUser(user);
+        return source;
+    }
+
     private static CommittedFacts insertFacts(
             TushareDedicatedResearchPersistenceGuard guard,
             LocalDate tradeDate,
@@ -396,6 +583,9 @@ class TushareControlledAcceptancePostgresTest {
     ) {
     }
 
+    private record HistoryEntry(String version, String type, String script) {
+    }
+
     private static boolean reserve(
             TushareControlledAcceptanceExecutionRepository repository,
             Reservation reservation
@@ -436,6 +626,11 @@ class TushareControlledAcceptancePostgresTest {
     }
 
     private static TushareControlledAcceptanceBuildProof.VerifiedBuildProof buildProof() {
-        return TushareControlledAcceptanceBuildProof.verifiedTestProof(COMMIT, SHA);
+        var proof = mock(
+                TushareControlledAcceptanceBuildProof.VerifiedBuildProof.class);
+        when(proof.gitCommit()).thenReturn(COMMIT);
+        when(proof.actualArtifactSha256()).thenReturn(SHA);
+        when(proof.governanceEligible()).thenReturn(true);
+        return proof;
     }
 }

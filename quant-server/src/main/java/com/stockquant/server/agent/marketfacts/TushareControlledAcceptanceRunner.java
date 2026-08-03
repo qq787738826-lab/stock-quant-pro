@@ -105,6 +105,7 @@ public final class TushareControlledAcceptanceRunner {
                     Arrays.fill(runtimeCopy, '\0');
                 }
             }
+            execution.closeBeforeFinalAudit();
             threads.verifyNoNewNonDaemonThreads();
             return execution;
         } catch (Throwable error) {
@@ -152,6 +153,8 @@ public final class TushareControlledAcceptanceRunner {
     }
 
     interface ExecutionHandle extends AutoCloseable {
+        void closeBeforeFinalAudit();
+
         Decision complete(AuditResult audit);
 
         @Override
@@ -256,6 +259,16 @@ public final class TushareControlledAcceptanceRunner {
                 throw error;
             }
             return new ExecutionHandle() {
+                private boolean componentsClosed;
+
+                @Override
+                public void closeBeforeFinalAudit() {
+                    if (!componentsClosed) {
+                        components.close();
+                        componentsClosed = true;
+                    }
+                }
+
                 @Override
                 public Decision complete(AuditResult audit) {
                     return executor.completeAfterAudit(pending, audit);
@@ -264,7 +277,7 @@ public final class TushareControlledAcceptanceRunner {
                 @Override
                 public void close() {
                     try {
-                        components.close();
+                        closeBeforeFinalAudit();
                     } finally {
                         database.close();
                     }

@@ -29,11 +29,13 @@ class TushareControlledAcceptanceRunnerTest {
         assertTrue(environment.auditInstalledAtBuildProof);
         assertTrue(environment.auditInstalledAtDatabaseSecret);
         assertTrue(environment.auditInstalledAtDataSource);
+        assertTrue(environment.auditInstalledAtPreAuditClose);
         assertEquals(List.of(
                 "build-proof", "launch-plan", "secret-channel",
                 "database-secret", "open-database", "governance",
                 "secret-channel", "tushare-token", "execute",
-                "complete", "execution-close", "database-close"),
+                "execution-pre-audit-close", "complete", "execution-close",
+                "database-close"),
                 environment.events);
         assertTrue(environment.databaseClosed);
         assertTrue(environment.executionClosed);
@@ -50,6 +52,50 @@ class TushareControlledAcceptanceRunnerTest {
         assertFalse(environment.completed);
         assertTrue(environment.databaseClosed);
         assertTrue(environment.executionClosed);
+    }
+
+    @Test
+    void componentCloseOutputIsIncludedInFinalAuditBeforePass() {
+        FakeEnvironment environment = new FakeEnvironment(false) {
+            @Override
+            public TushareControlledAcceptanceRunner.ExecutionHandle execute(
+                    TushareControlledAcceptanceRunner.RuntimeDatabase ignored,
+                    TushareControlledAcceptanceLaunchPlan ignoredPlan,
+                    TushareControlledAcceptanceAuthorization ignoredAuthorization,
+                    VerifiedBuildProof ignoredProof,
+                    char[] token
+            ) {
+                events.add("execute");
+                return new TushareControlledAcceptanceRunner.ExecutionHandle() {
+                    @Override
+                    public void closeBeforeFinalAudit() {
+                        events.add("execution-pre-audit-close");
+                        System.out.print("fake-tushare-token-value");
+                    }
+
+                    @Override
+                    public Decision complete(AuditResult audit) {
+                        completed = true;
+                        return Decision.internalPassed();
+                    }
+
+                    @Override
+                    public void close() {
+                        events.add("execution-close");
+                        executionClosed = true;
+                        openedDatabase.close();
+                    }
+                };
+            }
+        };
+
+        int exit = TushareControlledAcceptanceRunner.run(
+                new String[]{"--authorization-file=fake.properties"}, environment);
+
+        assertEquals(TushareControlledAcceptanceRunner.EXIT_REJECTED, exit);
+        assertFalse(environment.completed);
+        assertTrue(environment.executionClosed);
+        assertTrue(environment.databaseClosed);
     }
 
     @Test
@@ -112,6 +158,12 @@ class TushareControlledAcceptanceRunnerTest {
                 worker.setDaemon(false);
                 worker.start();
                 return new TushareControlledAcceptanceRunner.ExecutionHandle() {
+                    @Override
+                    public void closeBeforeFinalAudit() {
+                        // Deliberately leave the worker alive so the runner's
+                        // post-component-close thread guard must reject it.
+                    }
+
                     @Override
                     public Decision complete(AuditResult audit) {
                         completed = true;
@@ -190,11 +242,45 @@ class TushareControlledAcceptanceRunnerTest {
     }
 
     @Test
+    void failedExplicitGovernanceBaselineNeverRunsMigration() {
+        var verification = mock(
+                TushareDedicatedResearchPersistenceGuard.Verification.class);
+        AtomicInteger migrations = new AtomicInteger();
+
+        assertThrows(IllegalStateException.class, () ->
+                TushareControlledAcceptanceDatabaseGuard
+                        .performGuardedGovernanceInitialization(
+                                () -> new TushareControlledAcceptanceDatabaseGuard
+                                        .PreMigrationVerification(
+                                        verification,
+                                        TushareControlledAcceptanceDatabaseGuard
+                                                .GovernanceState.ABSENT),
+                                ignored -> new TushareControlledAcceptanceDatabaseGuard
+                                        .GovernanceOperations() {
+                                    @Override
+                                    public void baseline() {
+                                        throw new IllegalStateException(
+                                                "TEST_BASELINE_FAILED");
+                                    }
+
+                                    @Override
+                                    public void migrate() {
+                                        migrations.incrementAndGet();
+                                    }
+                                }));
+
+        assertEquals(0, migrations.get());
+    }
+
+    @Test
     void launcherAndBuildScriptsFreezeTheDedicatedOfflineBoundary() {
         String runner = readSource("src/main/java/com/stockquant/server/agent/marketfacts/"
                 + "TushareControlledAcceptanceRunner.java");
         String build = readSource("scripts/prepare-f1f-b2-build-proof.ps1");
         String launch = readSource("scripts/run-f1f-b2-controlled-acceptance.ps1");
+        String components = readSource(
+                "src/main/java/com/stockquant/server/agent/marketfacts/"
+                        + "TushareControlledAcceptanceComponents.java");
 
         assertFalse(runner.contains("SpringApplication"));
         assertFalse(runner.contains("QuantServerApplication"));
@@ -209,13 +295,30 @@ class TushareControlledAcceptanceRunnerTest {
         assertTrue(build.contains("CONTROLLED_BUILD_ARTIFACT"));
         assertTrue(build.contains("mvnw.cmd"));
         assertFalse(build.matches("(?s).*&\\s+mvn\\s+.*"));
+        assertTrue(build.contains("git archive --format=zip"));
+        assertTrue(build.contains("-o -pl quant-server -am package"));
+        assertFalse(build.contains("-am clean package"));
+        assertTrue(build.contains("quant-server-1.3.1-f1f-b2-runner.jar"));
         assertTrue(build.contains("$ErrorActionPreference = 'Continue'"));
         assertTrue(build.contains("$javaVersionExitCode = $LASTEXITCODE"));
+        assertTrue(build.contains("-XshowSettings:properties"));
         assertTrue(build.contains("TUSHARE_CONTROLLED_ACCEPTANCE_JAVA_VERSION_UNAVAILABLE"));
+        assertTrue(build.contains(
+                "TUSHARE_CONTROLLED_ACCEPTANCE_BUILD_JAVA_VERSION_MISMATCH"));
         assertTrue(build.contains("Stock-Quant-Maven-Wrapper-Version"));
         assertTrue(build.contains("Stock-Quant-Git-Remote-Commit"));
-        assertTrue(launch.contains("TushareControlledAcceptanceRunner"));
+        assertTrue(build.contains(
+                "Main-Class: org.springframework.boot.loader.launch.JarLauncher"));
+        assertTrue(build.contains(
+                "Start-Class: com.stockquant.server.agent.marketfacts."
+                        + "TushareControlledAcceptanceRunner"));
         assertFalse(launch.contains("QuantServerApplication"));
+        assertTrue(launch.contains("& java -jar $artifact"));
+        assertFalse(launch.contains("loader.main"));
+        assertFalse(build.contains("PropertiesLauncher"));
+        assertTrue(components.contains("registerModule(new JavaTimeModule())"));
+        assertFalse(components.contains("findAndRegisterModules"));
+        assertFalse(components.contains("ServiceLoader"));
     }
 
     private static TushareControlledAcceptanceDatabaseGuard.GovernanceOperations
@@ -256,6 +359,7 @@ class TushareControlledAcceptanceRunnerTest {
         boolean auditInstalledAtBuildProof;
         boolean auditInstalledAtDatabaseSecret;
         boolean auditInstalledAtDataSource;
+        boolean auditInstalledAtPreAuditClose;
         boolean completed;
         boolean executionClosed;
         boolean databaseClosed;
@@ -344,9 +448,17 @@ class TushareControlledAcceptanceRunnerTest {
             }
             return new TushareControlledAcceptanceRunner.ExecutionHandle() {
                 @Override
+                public void closeBeforeFinalAudit() {
+                    events.add("execution-pre-audit-close");
+                    auditInstalledAtPreAuditClose = System.out != originalOut;
+                }
+
+                @Override
                 public Decision complete(AuditResult audit) {
                     events.add("complete");
                     completed = true;
+                    assertSame(originalOut, System.out,
+                            "PASSED persistence occurs only after the final audit");
                     assertTrue(audit.clean());
                     return Decision.internalPassed();
                 }

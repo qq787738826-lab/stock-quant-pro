@@ -6,14 +6,51 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $requiredBranch = 'feature/1.4.0-agent-team'
+$artifactName = 'quant-server-1.3.1-f1f-b2-runner.jar'
+$temporaryPrefix = 'stock-quant-f1f-b2-build-'
+$tempBase = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\', '/')
+$tempRoot = $null
+$tempArtifact = $null
+$tempProof = $null
+$completed = $false
+
+function Remove-VerifiedBuildRoot([string] $Path) {
+    if (-not $Path -or -not (Test-Path -LiteralPath $Path)) {
+        return
+    }
+    $resolved = [IO.Path]::GetFullPath($Path).TrimEnd('\', '/')
+    $parent = [IO.Path]::GetDirectoryName($resolved).TrimEnd('\', '/')
+    $leaf = [IO.Path]::GetFileName($resolved)
+    if ($parent -ne $tempBase -or -not $leaf.StartsWith($temporaryPrefix)) {
+        throw 'TUSHARE_CONTROLLED_ACCEPTANCE_TEMP_ROOT_INVALID'
+    }
+    Remove-Item -LiteralPath $resolved -Recurse -Force
+}
+
+function Read-ZipEntryText([string] $Archive, [string] $EntryName) {
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $zip = [IO.Compression.ZipFile]::OpenRead($Archive)
+    try {
+        $entry = $zip.GetEntry($EntryName)
+        if ($null -eq $entry) {
+            throw 'TUSHARE_CONTROLLED_ACCEPTANCE_ARTIFACT_MANIFEST_INVALID'
+        }
+        $reader = [IO.StreamReader]::new($entry.Open(), [Text.Encoding]::UTF8)
+        try { return $reader.ReadToEnd() }
+        finally { $reader.Dispose() }
+    } finally {
+        $zip.Dispose()
+    }
+}
+
 if ($ExpectedCommit -notmatch '^[0-9a-f]{40}$') {
     throw 'TUSHARE_CONTROLLED_ACCEPTANCE_COMMIT_INVALID'
 }
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
-$manifestFragment = $null
-$tempArtifact = $null
-$tempProof = $null
-$completed = $false
+$artifact = Join-Path $repoRoot "quant-server\target\$artifactName"
+$proofPath = "$artifact.f1f-b2-proof.properties"
+$originalArtifact = "$artifact.original"
+
 Push-Location $repoRoot
 try {
     $actualCommit = (git rev-parse HEAD).Trim()
@@ -41,7 +78,7 @@ try {
         -not $actualBranch.StartsWith('codex/')) {
         throw 'TUSHARE_CONTROLLED_ACCEPTANCE_PREPARATION_BRANCH_INVALID'
     }
-    $statusLines = @(git status --porcelain=v1 --untracked-files=all)
+    $statusLines = @(git status --porcelain=v1 --untracked-files=normal)
     $unexpected = @($statusLines | Where-Object {
         $_ -and $_ -notmatch '^\?\? \.ai(?:/|$)'
     })
@@ -50,64 +87,96 @@ try {
         throw 'TUSHARE_CONTROLLED_ACCEPTANCE_WORKSPACE_NOT_CLEAN'
     }
 
-    $artifact = Join-Path $repoRoot 'quant-server\target\quant-server-1.3.1.jar'
-    $proofPath = "$artifact.f1f-b2-proof.properties"
-    foreach ($old in @($artifact, $proofPath)) {
+    foreach ($old in @($artifact, $proofPath, $originalArtifact)) {
         if (Test-Path -LiteralPath $old) {
             Remove-Item -LiteralPath $old -Force
         }
     }
+    $targetDirectory = Split-Path -Parent $artifact
+    if (-not (Test-Path -LiteralPath $targetDirectory)) {
+        New-Item -ItemType Directory -Path $targetDirectory | Out-Null
+    }
+
+    $tempRoot = Join-Path $tempBase ($temporaryPrefix + [Guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Path $tempRoot | Out-Null
+    $archivePath = Join-Path $tempRoot 'source.zip'
+    $sourceRoot = Join-Path $tempRoot 'source'
+    New-Item -ItemType Directory -Path $sourceRoot | Out-Null
+    git archive --format=zip --output=$archivePath $actualCommit
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $archivePath)) {
+        throw 'TUSHARE_CONTROLLED_ACCEPTANCE_SOURCE_ARCHIVE_FAILED'
+    }
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    [IO.Compression.ZipFile]::ExtractToDirectory($archivePath, $sourceRoot)
 
     $mavenWrapper = if ($IsLinux -or $IsMacOS) {
-        Join-Path $repoRoot 'mvnw'
+        Join-Path $sourceRoot 'mvnw'
     } else {
-        Join-Path $repoRoot 'mvnw.cmd'
+        Join-Path $sourceRoot 'mvnw.cmd'
     }
     if (-not (Test-Path -LiteralPath $mavenWrapper)) {
         throw 'TUSHARE_CONTROLLED_ACCEPTANCE_MAVEN_WRAPPER_MISSING'
     }
-    $mavenVersionOutput = @(& $mavenWrapper -version 2>&1)
-    $mavenVersionMatch = [regex]::Match(
-        ($mavenVersionOutput -join "`n"), 'Apache Maven\s+([0-9]+(?:\.[0-9]+)+)')
-    if (-not $mavenVersionMatch.Success -or
-        $mavenVersionMatch.Groups[1].Value -ne '3.9.16') {
-        throw 'TUSHARE_CONTROLLED_ACCEPTANCE_MAVEN_WRAPPER_VERSION_INVALID'
+    Push-Location $sourceRoot
+    try {
+        $mavenVersionOutput = @(& $mavenWrapper -version 2>&1)
+        $mavenVersionMatch = [regex]::Match(
+            ($mavenVersionOutput -join "`n"),
+            'Apache Maven\s+([0-9]+(?:\.[0-9]+)+)')
+        if (-not $mavenVersionMatch.Success -or
+            $mavenVersionMatch.Groups[1].Value -ne '3.9.16') {
+            throw 'TUSHARE_CONTROLLED_ACCEPTANCE_MAVEN_WRAPPER_VERSION_INVALID'
+        }
+        $mavenWrapperVersion = $mavenVersionMatch.Groups[1].Value
+        $mavenJavaVersionMatch = [regex]::Match(
+            ($mavenVersionOutput -join "`n"),
+            '(?m)^Java version:\s*([A-Za-z0-9._+\-]+)(?:,|\s*$)')
+        if (-not $mavenJavaVersionMatch.Success) {
+            throw 'TUSHARE_CONTROLLED_ACCEPTANCE_BUILD_JAVA_VERSION_UNAVAILABLE'
+        }
+        $mavenJavaVersion = $mavenJavaVersionMatch.Groups[1].Value
+        & $mavenWrapper -o -pl quant-server -am package -DskipTests
+        if ($LASTEXITCODE -ne 0) {
+            throw 'TUSHARE_CONTROLLED_ACCEPTANCE_BUILD_FAILED'
+        }
+    } finally {
+        Pop-Location
     }
-    $mavenWrapperVersion = $mavenVersionMatch.Groups[1].Value
 
-    & $mavenWrapper -pl quant-server -am clean package -DskipTests
-    if ($LASTEXITCODE -ne 0) {
-        throw 'TUSHARE_CONTROLLED_ACCEPTANCE_BUILD_FAILED'
+    $isolatedArtifact = Join-Path $sourceRoot 'quant-server\target\quant-server-1.3.1.jar'
+    if (-not (Test-Path -LiteralPath $isolatedArtifact)) {
+        throw 'TUSHARE_CONTROLLED_ACCEPTANCE_BUILD_ARTIFACT_MISSING'
     }
-    $artifact = (Resolve-Path $artifact).Path
-    $proofPath = "$artifact.f1f-b2-proof.properties"
     $temporaryId = [Guid]::NewGuid().ToString('N')
     $tempArtifact = "$artifact.$temporaryId.tmp.jar"
     $tempProof = "$proofPath.$temporaryId.tmp"
-    Move-Item -LiteralPath $artifact -Destination $tempArtifact
-    $manifestFragment = Join-Path $env:TEMP (
-        'stock-quant-f1f-b2-manifest-' + [Guid]::NewGuid().ToString('N') + '.mf')
+    Copy-Item -LiteralPath $isolatedArtifact -Destination $tempArtifact
+
     $javaVersionOutput = @()
     $javaVersionExitCode = -1
     $previousErrorActionPreference = $ErrorActionPreference
     try {
-        # The Java launcher writes its version to stderr even on success. Windows
-        # PowerShell turns redirected native stderr into ErrorRecord instances
-        # when Stop is active, so capture it under Continue and verify the real
-        # process exit code before restoring the fail-closed script preference.
         $ErrorActionPreference = 'Continue'
-        $javaVersionOutput = @(& java -version 2>&1)
+        $javaVersionOutput = @(& java -XshowSettings:properties -version 2>&1)
         $javaVersionExitCode = $LASTEXITCODE
     } finally {
         $ErrorActionPreference = $previousErrorActionPreference
     }
-    if ($javaVersionExitCode -ne 0 -or $javaVersionOutput.Count -eq 0) {
+    $javaVersionMatch = [regex]::Match(
+        ($javaVersionOutput -join "`n"),
+        '(?m)^\s*java\.version\s*=\s*([A-Za-z0-9._+\-]+)\s*$')
+    if ($javaVersionExitCode -ne 0 -or -not $javaVersionMatch.Success) {
         throw 'TUSHARE_CONTROLLED_ACCEPTANCE_JAVA_VERSION_UNAVAILABLE'
     }
-    $javaVersionLine = $javaVersionOutput[0].ToString()
-    $javaVersion = ($javaVersionLine -replace '[^A-Za-z0-9_.-]', '_')
+    $javaVersion = $javaVersionMatch.Groups[1].Value
+    if ($mavenJavaVersion -ne $javaVersion) {
+        throw 'TUSHARE_CONTROLLED_ACCEPTANCE_BUILD_JAVA_VERSION_MISMATCH'
+    }
     $buildTime = [DateTimeOffset]::UtcNow.ToString('o')
+    $manifestFragment = Join-Path $tempRoot 'runner-manifest.mf'
     $manifestContent = @(
+        'Main-Class: org.springframework.boot.loader.launch.JarLauncher'
+        'Start-Class: com.stockquant.server.agent.marketfacts.TushareControlledAcceptanceRunner'
         "Stock-Quant-Git-Commit: $actualCommit"
         "Stock-Quant-Git-Remote-Commit: $remoteCommit"
         "Stock-Quant-Git-Branch: $actualBranch"
@@ -128,11 +197,25 @@ try {
     if ($LASTEXITCODE -ne 0) {
         throw 'TUSHARE_CONTROLLED_ACCEPTANCE_MANIFEST_BIND_FAILED'
     }
+
     $jarEntries = @(& jar --list --file $tempArtifact)
-    if ($LASTEXITCODE -ne 0 -or @($jarEntries | Where-Object {
-        $_ -match '(^|/)\.ai(/|$)'
-    }).Count -ne 0) {
+    $runnerEntry = 'BOOT-INF/classes/com/stockquant/server/agent/marketfacts/' +
+        'TushareControlledAcceptanceRunner.class'
+    $forbiddenEntries = @($jarEntries | Where-Object {
+        $_ -match '(^|/)\.ai(/|$)' -or
+        $_ -match '(^|/)(test|tests|test-classes)(/|$)' -or
+        $_ -match 'Test\.class$' -or
+        $_ -match 'BOOT-INF/lib/(junit|mockito|testcontainers)'
+    })
+    if ($LASTEXITCODE -ne 0 -or $jarEntries -notcontains $runnerEntry -or
+        $forbiddenEntries.Count -ne 0) {
         throw 'TUSHARE_CONTROLLED_ACCEPTANCE_BUILD_CONTEXT_INVALID'
+    }
+    $manifest = (Read-ZipEntryText $tempArtifact 'META-INF/MANIFEST.MF') `
+        -replace "`r?`n ", ''
+    if ($manifest -notmatch '(?m)^Main-Class: org\.springframework\.boot\.loader\.launch\.JarLauncher\s*$' -or
+        $manifest -notmatch '(?m)^Start-Class: com\.stockquant\.server\.agent\.marketfacts\.TushareControlledAcceptanceRunner\s*$') {
+        throw 'TUSHARE_CONTROLLED_ACCEPTANCE_RUNNER_MANIFEST_INVALID'
     }
 
     $artifactHash = (Get-FileHash -LiteralPath $tempArtifact -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -163,22 +246,17 @@ try {
     Write-Output "ARTIFACT_SHA256=$artifactHash"
 } finally {
     Pop-Location
-    if ($manifestFragment -and (Test-Path -LiteralPath $manifestFragment)) {
-        Remove-Item -LiteralPath $manifestFragment -Force
-    }
     foreach ($temporary in @($tempArtifact, $tempProof)) {
         if ($temporary -and (Test-Path -LiteralPath $temporary)) {
             Remove-Item -LiteralPath $temporary -Force
         }
     }
     if (-not $completed) {
-        foreach ($incomplete in @(
-            (Join-Path $repoRoot 'quant-server\target\quant-server-1.3.1.jar'),
-            (Join-Path $repoRoot 'quant-server\target\quant-server-1.3.1.jar.f1f-b2-proof.properties')
-        )) {
-            if (Test-Path -LiteralPath $incomplete) {
+        foreach ($incomplete in @($artifact, $proofPath, $originalArtifact)) {
+            if ($incomplete -and (Test-Path -LiteralPath $incomplete)) {
                 Remove-Item -LiteralPath $incomplete -Force
             }
         }
     }
+    Remove-VerifiedBuildRoot $tempRoot
 }
