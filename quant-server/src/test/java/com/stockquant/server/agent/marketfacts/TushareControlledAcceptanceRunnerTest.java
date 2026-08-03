@@ -209,6 +209,9 @@ class TushareControlledAcceptanceRunnerTest {
         assertTrue(build.contains("CONTROLLED_BUILD_ARTIFACT"));
         assertTrue(build.contains("mvnw.cmd"));
         assertFalse(build.matches("(?s).*&\\s+mvn\\s+.*"));
+        assertTrue(build.contains("$ErrorActionPreference = 'Continue'"));
+        assertTrue(build.contains("$javaVersionExitCode = $LASTEXITCODE"));
+        assertTrue(build.contains("TUSHARE_CONTROLLED_ACCEPTANCE_JAVA_VERSION_UNAVAILABLE"));
         assertTrue(build.contains("Stock-Quant-Maven-Wrapper-Version"));
         assertTrue(build.contains("Stock-Quant-Git-Remote-Commit"));
         assertTrue(launch.contains("TushareControlledAcceptanceRunner"));

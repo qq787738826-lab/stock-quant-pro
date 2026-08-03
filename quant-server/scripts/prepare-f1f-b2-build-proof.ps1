@@ -87,7 +87,24 @@ try {
     Move-Item -LiteralPath $artifact -Destination $tempArtifact
     $manifestFragment = Join-Path $env:TEMP (
         'stock-quant-f1f-b2-manifest-' + [Guid]::NewGuid().ToString('N') + '.mf')
-    $javaVersionLine = (& java -version 2>&1 | Select-Object -First 1).ToString()
+    $javaVersionOutput = @()
+    $javaVersionExitCode = -1
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        # The Java launcher writes its version to stderr even on success. Windows
+        # PowerShell turns redirected native stderr into ErrorRecord instances
+        # when Stop is active, so capture it under Continue and verify the real
+        # process exit code before restoring the fail-closed script preference.
+        $ErrorActionPreference = 'Continue'
+        $javaVersionOutput = @(& java -version 2>&1)
+        $javaVersionExitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+    if ($javaVersionExitCode -ne 0 -or $javaVersionOutput.Count -eq 0) {
+        throw 'TUSHARE_CONTROLLED_ACCEPTANCE_JAVA_VERSION_UNAVAILABLE'
+    }
+    $javaVersionLine = $javaVersionOutput[0].ToString()
     $javaVersion = ($javaVersionLine -replace '[^A-Za-z0-9_.-]', '_')
     $buildTime = [DateTimeOffset]::UtcNow.ToString('o')
     $manifestContent = @(
