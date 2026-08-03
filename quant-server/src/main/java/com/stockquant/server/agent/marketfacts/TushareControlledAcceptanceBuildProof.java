@@ -43,6 +43,19 @@ public final class TushareControlledAcceptanceBuildProof {
                 null);
     }
 
+    public static VerifiedBuildProof loadCurrentExecutorArtifact(
+            Path declaredProofPath
+    ) {
+        Path artifact = currentExecutorArtifact();
+        Path expected = Path.of(artifact.toString() + SIDECAR_SUFFIX)
+                .toAbsolutePath().normalize();
+        if (declaredProofPath == null
+                || !expected.equals(declaredProofPath.toAbsolutePath().normalize())) {
+            throw invalid("TUSHARE_CONTROLLED_ACCEPTANCE_BUILD_PROOF_PATH_INVALID");
+        }
+        return loadBoundArtifact(artifact, expected, null);
+    }
+
     static VerifiedBuildProof loadBoundTestArtifact(Path artifact, Path sidecar) {
         return loadBoundArtifact(artifact, sidecar, ProofSource.TEST_ONLY);
     }

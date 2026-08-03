@@ -64,9 +64,9 @@ public final class TushareControlledAcceptanceRunner {
         RuntimeDatabase database = null;
         ExecutionHandle execution = null;
         try {
-            VerifiedBuildProof proof = environment.loadBuildProof();
             TushareControlledAcceptanceLaunchPlan plan =
                     environment.loadPlan(args);
+            VerifiedBuildProof proof = environment.loadBuildProof(plan);
             plan.validateBuildProof(proof);
             TushareControlledAcceptanceAuthorization authorization =
                     plan.authorization(proof);
@@ -119,7 +119,8 @@ public final class TushareControlledAcceptanceRunner {
     }
 
     interface RunnerEnvironment {
-        VerifiedBuildProof loadBuildProof();
+        VerifiedBuildProof loadBuildProof(
+                TushareControlledAcceptanceLaunchPlan plan);
 
         TushareControlledAcceptanceLaunchPlan loadPlan(String[] args);
 
@@ -173,9 +174,12 @@ public final class TushareControlledAcceptanceRunner {
         }
 
         @Override
-        public VerifiedBuildProof loadBuildProof() {
+        public VerifiedBuildProof loadBuildProof(
+                TushareControlledAcceptanceLaunchPlan plan
+        ) {
             VerifiedBuildProof proof =
-                    TushareControlledAcceptanceBuildProof.loadCurrentExecutorArtifact();
+                    TushareControlledAcceptanceBuildProof
+                            .loadCurrentExecutorArtifact(plan.buildProofPath());
             if (!proof.governanceEligible()) {
                 throw new IllegalStateException(
                         "TUSHARE_CONTROLLED_ACCEPTANCE_FORMAL_BUILD_REQUIRED");

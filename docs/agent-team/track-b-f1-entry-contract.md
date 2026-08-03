@@ -281,6 +281,26 @@ sidecar 和 JAR SHA-256；构建必须从核验 commit 的隔离归档完成，M
 版本一致。PREPARATION 永远不具治理资格。B2-RUNNER 合入后仍须基于新的冻结集成
 SHA 重新执行完整 B2-PRE；不得沿用旧 JAR、旧 sidecar、旧授权草稿或 `e3777602...`。
 
+### 5.6 F1F-B2 专用数据库准备与冻结清单
+
+Runner 已在 `213264bc63a2584f0fbb30dca059abf272e62a64` 合入。其后首次 B2-FREEZE
+为历史 `NOT_READY`：错误清单使用了 Runner 不存在的松散构建/数据库参数，且缺少安全的
+专用数据库 V1—V13 准备入口。旧草案 ID `F1FB2_20260803_140506_96C6DFB7`
+永久废弃，不能进入数据库、授权或治理证据。
+
+专用数据库准备固定使用非 Spring 一次性进程、`127.0.0.1`、显式端口、数据库/用户
+`stock_quant_research`、Schema/search path `tushare_research`。正式目标必须是没有其他业务
+数据库的全新专用 PostgreSQL 实例；同名数据库或角色存在即拒绝。准备只执行主
+`classpath:db/migration` 的精确 V1—V13，`baselineOnMigrate=false`、clean/repair 不可达；
+独立治理 location/history 和 V14 均不执行。默认 `PREPARATION_ONLY` 不连接数据库，正式
+`CONTROLLED_DATABASE_PREPARATION` 必须由用户在后续轮显式批准。
+
+正式 Runner 只接受一个 `AuthorizationFile`。该文件冻结构建证明路径、数据库
+host/port/name/user/schema、证券、日期、Endpoint、三次/零重试预算和 JAR SHA-256，禁止
+Token、密码及命令行覆盖。重复、未知、缺失或类型错误字段必须拒绝。DBPREP 合入后只能基于
+新的集成 SHA 重新生成 JAR/sidecar/授权并运行简化 FREEZE；不改变完整 F1 技术阻断、
+`CONTROLLED_ACCEPTANCE_STATUS=NOT_RUN` 或 `REDUCED_RESEARCH_OPERATIONAL_READY=false`。
+
 ## 6. 继续禁止
 
 - F1A 验收完成后不追加无授权 Tushare 调用；

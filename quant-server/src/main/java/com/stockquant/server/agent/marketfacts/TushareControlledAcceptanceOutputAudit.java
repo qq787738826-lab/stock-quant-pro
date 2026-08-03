@@ -53,18 +53,26 @@ public final class TushareControlledAcceptanceOutputAudit {
             registry.registerAll(List.copyOf(Objects.requireNonNull(
                     sensitiveMaterialSource.call(), "sensitiveMaterials")));
             return action.call();
-        }, false);
+        }, RegistryRequirement.NONE);
     }
 
     static <T> Captured<T> captureControlledProcess(
             DynamicAction<T> action
     ) throws Exception {
-        return captureDynamic(Objects.requireNonNull(action, "action"), true);
+        return captureDynamic(Objects.requireNonNull(action, "action"),
+                RegistryRequirement.CONTROLLED_ACCEPTANCE);
+    }
+
+    static <T> Captured<T> captureDatabasePreparationProcess(
+            DynamicAction<T> action
+    ) throws Exception {
+        return captureDynamic(Objects.requireNonNull(action, "action"),
+                RegistryRequirement.DATABASE_PREPARATION);
     }
 
     private static <T> Captured<T> captureDynamic(
             DynamicAction<T> action,
-            boolean requireControlledRegistry
+            RegistryRequirement registryRequirement
     ) throws Exception {
         SensitiveRegistry registry = new SensitiveRegistry();
         CAPTURE_LOCK.lockInterruptibly();
@@ -95,13 +103,7 @@ public final class TushareControlledAcceptanceOutputAudit {
                 System.setErr(err);
                 try {
                     result = action.call(registry);
-                    if (registry.materials().isEmpty()) {
-                        throw new IllegalStateException(
-                                "TUSHARE_CONTROLLED_ACCEPTANCE_SENSITIVE_REGISTRY_REQUIRED");
-                    }
-                    if (requireControlledRegistry) {
-                        registry.requireCompleteControlledRegistration();
-                    }
+                    registryRequirement.validate(registry);
                 } catch (Throwable error) {
                     failure = error;
                 } finally {
@@ -186,7 +188,10 @@ public final class TushareControlledAcceptanceOutputAudit {
 
     enum SensitiveKind {
         DATABASE_PASSWORD,
-        TUSHARE_TOKEN
+        TUSHARE_TOKEN,
+        ADMINISTRATOR_DATABASE_PASSWORD,
+        DEDICATED_BOOTSTRAP_PASSWORD,
+        DEDICATED_DATABASE_PASSWORD
     }
 
     static final class SensitiveRegistry {
@@ -223,6 +228,28 @@ public final class TushareControlledAcceptanceOutputAudit {
             }
         }
 
+        private void requireCompleteDatabasePreparationRegistration() {
+            if ((databasePreparationSecretsRequired
+                    && !kinds.equals(List.of(
+                    SensitiveKind.ADMINISTRATOR_DATABASE_PASSWORD,
+                    SensitiveKind.DEDICATED_BOOTSTRAP_PASSWORD,
+                    SensitiveKind.DEDICATED_DATABASE_PASSWORD)))
+                    || (!databasePreparationSecretsRequired
+                    && !kinds.isEmpty())) {
+                throw new IllegalStateException(
+                        "TUSHARE_DATABASE_PREPARATION_SENSITIVE_REGISTRY_INCOMPLETE");
+            }
+        }
+
+        void requireDatabasePreparationSecrets() {
+            if (!active || databasePreparationSecretsRequired
+                    || !kinds.isEmpty()) {
+                throw new IllegalStateException(
+                        "TUSHARE_DATABASE_PREPARATION_SENSITIVE_REGISTRY_INVALID");
+            }
+            databasePreparationSecretsRequired = true;
+        }
+
         boolean active() {
             return active;
         }
@@ -238,6 +265,35 @@ public final class TushareControlledAcceptanceOutputAudit {
         private void close() {
             active = false;
         }
+
+        private boolean databasePreparationSecretsRequired;
+    }
+
+    private enum RegistryRequirement {
+        NONE {
+            @Override
+            void validate(SensitiveRegistry registry) {
+                if (registry.materials().isEmpty()) {
+                    throw new IllegalStateException(
+                            "TUSHARE_CONTROLLED_ACCEPTANCE_SENSITIVE_REGISTRY_REQUIRED");
+                }
+            }
+        },
+        CONTROLLED_ACCEPTANCE {
+            @Override
+            void validate(SensitiveRegistry registry) {
+                NONE.validate(registry);
+                registry.requireCompleteControlledRegistration();
+            }
+        },
+        DATABASE_PREPARATION {
+            @Override
+            void validate(SensitiveRegistry registry) {
+                registry.requireCompleteDatabasePreparationRegistration();
+            }
+        };
+
+        abstract void validate(SensitiveRegistry registry);
     }
 
     static AuditResult audit(

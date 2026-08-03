@@ -31,7 +31,7 @@ class TushareControlledAcceptanceRunnerTest {
         assertTrue(environment.auditInstalledAtDataSource);
         assertTrue(environment.auditInstalledAtPreAuditClose);
         assertEquals(List.of(
-                "build-proof", "launch-plan", "secret-channel",
+                "launch-plan", "build-proof", "secret-channel",
                 "database-secret", "open-database", "governance",
                 "secret-channel", "tushare-token", "execute",
                 "execution-pre-audit-close", "complete", "execution-close",
@@ -102,7 +102,9 @@ class TushareControlledAcceptanceRunnerTest {
     void missingBuildProofFailsBeforeSecretOrDatabaseInitialization() {
         FakeEnvironment environment = new FakeEnvironment(false) {
             @Override
-            public VerifiedBuildProof loadBuildProof() {
+            public VerifiedBuildProof loadBuildProof(
+                    TushareControlledAcceptanceLaunchPlan ignoredPlan
+            ) {
                 events.add("build-proof");
                 throw new IllegalStateException(
                         "TUSHARE_CONTROLLED_ACCEPTANCE_BUILD_PROOF_MISSING");
@@ -112,7 +114,7 @@ class TushareControlledAcceptanceRunnerTest {
         int exit = TushareControlledAcceptanceRunner.run(new String[0], environment);
 
         assertEquals(TushareControlledAcceptanceRunner.EXIT_REJECTED, exit);
-        assertEquals(List.of("build-proof"), environment.events);
+        assertEquals(List.of("launch-plan", "build-proof"), environment.events);
         assertFalse(environment.databaseClosed);
     }
 
@@ -131,7 +133,7 @@ class TushareControlledAcceptanceRunnerTest {
                 new String[]{"--authorization-file=fake.properties"}, environment);
 
         assertEquals(TushareControlledAcceptanceRunner.EXIT_REJECTED, exit);
-        assertEquals(List.of("build-proof", "launch-plan", "secret-channel"),
+        assertEquals(List.of("launch-plan", "build-proof", "secret-channel"),
                 environment.events);
         assertFalse(environment.databaseClosed);
     }
@@ -371,7 +373,9 @@ class TushareControlledAcceptanceRunnerTest {
         }
 
         @Override
-        public VerifiedBuildProof loadBuildProof() {
+        public VerifiedBuildProof loadBuildProof(
+                TushareControlledAcceptanceLaunchPlan ignoredPlan
+        ) {
             events.add("build-proof");
             auditInstalledAtBuildProof = System.out != originalOut;
             return proof;

@@ -18,6 +18,16 @@ interface TushareControlledAcceptanceSecretChannel {
 
     SecretValue readTushareToken();
 
+    default SecretValue readAdministratorDatabasePassword() {
+        throw new IllegalStateException(
+                "TUSHARE_DATABASE_PREPARATION_ADMIN_SECRET_UNAVAILABLE");
+    }
+
+    default SecretValue readDedicatedDatabasePassword() {
+        throw new IllegalStateException(
+                "TUSHARE_DATABASE_PREPARATION_DEDICATED_SECRET_UNAVAILABLE");
+    }
+
     static TushareControlledAcceptanceSecretChannel consoleOnly() {
         Console console = System.console();
         if (console == null) {
@@ -83,6 +93,16 @@ interface TushareControlledAcceptanceSecretChannel {
         @Override
         public SecretValue readTushareToken() {
             return read("Tushare token: ");
+        }
+
+        @Override
+        public SecretValue readAdministratorDatabasePassword() {
+            return read("Local PostgreSQL administrator password: ");
+        }
+
+        @Override
+        public SecretValue readDedicatedDatabasePassword() {
+            return read("New dedicated research database password: ");
         }
 
         private SecretValue read(String prompt) {

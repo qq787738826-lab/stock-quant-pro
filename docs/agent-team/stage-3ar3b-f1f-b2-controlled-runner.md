@@ -4,7 +4,9 @@
 
 F1F-B1 双提交链已经验收并合入 `e3777602fadd65f3af0a2ba8ac6e886693d745d5`。随后 B2-PRE 审计结论为 `NOT_READY`：该提交缺少可正式启动的一次性最小进程，输出审计没有覆盖秘密与数据库初始化前的最早边界，治理 V14 仍依赖自动 baseline 语义，构建脚本没有默认非正式模式且使用环境 Maven。
 
-本任务在同一冻结基线上完成最小修复。代码与文档在任务分支完成后仍待 ChatGPT 基于实际 Git 提交复验，尚未合入。`e3777602...` 只保留为开发父提交，不再作为未来真实验收冻结 SHA。
+四提交链已通过实际 Git 复验并经用户批准纯 fast-forward 合入 `213264bc63a2584f0fbb30dca059abf272e62a64`。`e3777602...` 只保留为开发父提交，不再作为未来真实验收冻结 SHA。
+
+合入后的首次 B2-FREEZE 仍判 `NOT_READY`：清单错误使用了 Runner 不支持的松散数据库/构建参数，且尚无正式 V1—V13 专用数据库准备入口。后续 DBPREP 任务只修复这两个缺口；该历史结论不否定 Runner 的代码验收。
 
 ## 实现结果
 
@@ -32,7 +34,7 @@ F1F-B1 双提交链已经验收并合入 `e3777602fadd65f3af0a2ba8ac6e886693d745
 
 ## 安全边界
 
-本阶段没有调用 Tushare/iFinD，没有读取 Token 或数据库密码，没有访问 PostgreSQL，没有执行 V13/V14，没有创建或消费 acceptance ID，也没有执行 `CONTROLLED_BUILD_ARTIFACT`。证券、日期、数据库运行参数和正式授权仍未签发。
+本阶段没有调用 Tushare/iFinD，没有读取 Token 或数据库密码，没有访问正式 PostgreSQL，没有执行正式 V13/V14，没有创建或消费 acceptance ID，也没有执行 `CONTROLLED_BUILD_ARTIFACT`。证券、日期、数据库运行参数和正式授权仍未签发。正式 Runner 唯一启动参数是 `AuthorizationFile`；构建证明和所有非敏感运行参数必须在严格授权文件中冻结，不能使用松散命令行覆盖。
 
 七项状态保持：
 
@@ -46,4 +48,4 @@ PAID_PROVIDER_UPGRADE_DECISION=PENDING
 IFIND_TRIAL_ACTIVATION_GATE=BLOCKED
 ```
 
-完整 F1 十项技术阻断不变。合入后唯一允许的下一动作是基于新的冻结集成 SHA 重新进行完整 B2-PRE；不得直接执行真实受控验收。
+完整 F1 十项技术阻断不变。首次 B2-FREEZE 已确定先完成 DBPREP，再基于 DBPREP 合入后的新集成 SHA 重新执行简化 FREEZE；不得直接执行真实受控验收。

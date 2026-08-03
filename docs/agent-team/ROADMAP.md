@@ -269,7 +269,7 @@
 - 既有规划状态：iFinD 里程碑规划提交 `23baf11ed3a236800b5f3feba8681d261a71d9f9` 已通过 ChatGPT 对实际 Git 提交的验收，并经用户批准纯 fast-forward 合入。精确验收和批准时间无仓库证据，记为 `UNKNOWN`。
 - 免费优先更新：最终提交 `c47b88e586f6751563fe210f40137a3b7ce5e576` 已通过 ChatGPT 对实际 Git 提交的验收，并经用户批准纯 fast-forward 合入。系统先用免费数据验证产品形态和效果；只有系统显示可重复使用价值、数据成为可量化主要瓶颈，且同范围免费/付费 A/B 方案和成本意愿均明确后，才考虑 iFinD 或其他付费 Provider。
 - 日期边界：iFinD 试用不得绑定 `2026-08-31`、2026 年 8 月 31 日或任何其他固定日期。日历日期只能作为非权威临时估算，不属于路线图依赖，不得因预计日期临近而降低验收标准。
-- 当前集成 HEAD：`e3777602fadd65f3af0a2ba8ac6e886693d745d5`。当前状态：`F0_AUDIT_RESULT=PARTIAL`、`FREE_IMPLEMENTATION_PATH=RESEARCH_PREVIEW_FIRST`、`FREE_PRODUCT_PREVIEW_GATE=PASS`、`FREE_PROVIDER_VALIDATION_GATE=BLOCKED`、`PAID_PROVIDER_UPGRADE_DECISION=PENDING`、`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`。正常业务库 V13 未执行，iFinD 调用数为 0；Track A、Track B0、Track B1、F1A—F1E、F1F-A 与 F1F-B1 均已验收并纯 fast-forward 合入。TS-WP-001/002 已闭环当前个人研究书面许可；完整 F1 仍为 `F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE`。F1E 专用本地实现已合入但 operational 未接受；F1F-B2-RUNNER 仍在任务分支，真实验收仍未运行。F2B/F3 均未开始，Day 002 未创建，scheduler 关闭，3B 未开始。
+- 当前集成 HEAD：`213264bc63a2584f0fbb30dca059abf272e62a64`。当前状态：`F0_AUDIT_RESULT=PARTIAL`、`FREE_IMPLEMENTATION_PATH=RESEARCH_PREVIEW_FIRST`、`FREE_PRODUCT_PREVIEW_GATE=PASS`、`FREE_PROVIDER_VALIDATION_GATE=BLOCKED`、`PAID_PROVIDER_UPGRADE_DECISION=PENDING`、`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`。正常业务库 V13 未执行，iFinD 调用数为 0；Track A、Track B0、Track B1、F1A—F1E、F1F-A、F1F-B1 与 F1F-B2-RUNNER 均已验收并纯 fast-forward 合入。TS-WP-001/002 已闭环当前个人研究书面许可；完整 F1 仍为 `F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE`。F1E 专用本地实现已合入但 operational 未接受；首次 B2-FREEZE 为历史 `NOT_READY`，DBPREP 仍在任务分支待实际 Git 复验，真实验收未运行。F2B/F3 均未开始，Day 002 未创建，scheduler 关闭，3B 未开始。
 
 #### 3A-R3B-0：Provider 中立离线闭环与试用准备（已完成并合入）
 
@@ -395,13 +395,22 @@
 - 隔离：离线 TEST 只能得到候选；真实 F1F-B2 未运行，`CONTROLLED_ACCEPTANCE_STATUS=NOT_RUN`、`REDUCED_RESEARCH_OPERATIONAL_READY=false`。
 - 合入：双提交链 `e0dfba061a1b2e335c2f0db9bc9efeac012d75c8` → `e3777602fadd65f3af0a2ba8ac6e886693d745d5` 已经实际 Git 复验、用户批准并纯 fast-forward 合入。
 
-#### 3A-R3B-F1F-B2-RUNNER：专用执行入口与冻结安全门（任务分支完成，待复验）
+#### 3A-R3B-F1F-B2-RUNNER：专用执行入口与冻结安全门（已完成并合入）
 
 - B2-PRE：基于 `e3777602...` 的只读审计结论为 `NOT_READY`；该 SHA 不再是未来正式验收冻结 SHA。
 - 交付：[B2-RUNNER 任务书](tasks/3ar3b-f1f-b2-controlled-runner.md)和[B2-RUNNER 阶段记录](stage-3ar3b-f1f-b2-controlled-runner.md)。
 - 实现：普通 Java 一次性入口、手工组件白名单、全流程输出审计、受控秘密通道、专用非池化 DataSource、显式 V14 bootstrap、PREPARATION/CONTROLLED 双模式、隔离 commit 构建、不可覆盖的 `JarLauncher`、Maven Wrapper 与本地/远程 SHA/Java 运行时证明。合并前最终审查已补齐精确主/治理 history 和数据库错误身份零 DDL 反例。
-- 隔离：任务不调用 Provider、不访问数据库、不执行 V13/V14、不签发正式授权或构建证明。`CONTROLLED_ACCEPTANCE_STATUS=NOT_RUN`、`REDUCED_RESEARCH_OPERATIONAL_READY=false`。
-- 下一入口：仅在任务提交通过实际 Git 复验并纯 fast-forward 合入后，基于新的集成 SHA 重新执行完整 B2-PRE；不得直接执行真实 B2。
+- 合入：四提交链 `4c136b32` → `0d8109cc` → `e18623f4` → `213264bc63a2584f0fbb30dca059abf272e62a64` 已通过实际 Git 复验并纯 fast-forward 合入。
+- 隔离：真实 B2、Provider、数据库、V13/V14、正式授权和正式构建证明均未执行。`CONTROLLED_ACCEPTANCE_STATUS=NOT_RUN`、`REDUCED_RESEARCH_OPERATIONAL_READY=false`。
+
+#### 3A-R3B-F1F-B2-DBPREP：专用数据库准备链与冻结清单校正（任务分支完成，待复验）
+
+- 首次 FREEZE：`2026-08-03` 基于 `213264bc...` 的清单审计为历史 `NOT_READY`；清单使用了不存在的松散 Runner 参数，且缺少从全新专用实例创建目标并只执行主 V1—V13 的安全入口。旧 ID `F1FB2_20260803_140506_96C6DFB7` 已废弃。
+- 交付：[DBPREP 任务书](tasks/3ar3b-f1f-b2-database-preparation.md)、[DBPREP 阶段记录](stage-3ar3b-f1f-b2-database-preparation.md)和[首次 FREEZE 记录](stage-3ar3b-f1f-b2-freeze.md)。
+- 实现：非 Spring 一次性数据库准备入口、Console-only 双密码、输出审计、固定本机专用实例/数据库/角色/Schema、PUBLIC 收紧、主 V1—V13 精确迁移与回读、失败后 `INCOMPLETE_NOT_APPROVED`；默认 PREPARATION 不连接数据库。
+- 启动合同：Runner 只接受 `AuthorizationFile`；构建证明、数据库、证券、日期、Endpoint、预算和 JAR 摘要来自严格非敏感授权文件，不能被命令行覆盖。
+- 隔离：任务只使用全新临时 PostgreSQL 16 测试，不执行正式准备、治理 V14、Provider、acceptance ID 或真实 B2；七项状态不变。
+- 下一入口：任务通过实际 Git 复验并合入后，基于新的集成 SHA 重新执行简化 B2-FREEZE；只冻结正式端口、正式构建摘要和用户最终参数表，不沿用旧 SHA/JAR/sidecar/授权草案。
 
 #### 3A-R3B-F1：完整 Provider Adapter 与 V13 闭环（当前仅技术证据阻断）
 

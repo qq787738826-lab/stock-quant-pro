@@ -5,13 +5,16 @@ import com.stockquant.server.agent.marketfacts.TushareControlledAcceptanceDataSo
 import com.stockquant.server.agent.marketfacts.TushareDedicatedResearchBatchCommand.SecuritySelection;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
 import java.util.Set;
@@ -21,6 +24,7 @@ record TushareControlledAcceptanceLaunchPlan(
         String acceptanceId,
         String codeBaselineCommit,
         String artifactSha256,
+        Path buildProofPath,
         SecuritySelection security,
         LocalDate tradeDate,
         Instant issuedAt,
@@ -32,12 +36,15 @@ record TushareControlledAcceptanceLaunchPlan(
     static final String AUTHORIZATION_VERSION = "F1F_B2_AUTHORIZATION_V1";
     static final String AUTHORIZATION_STATUS = "USER_APPROVED";
     static final String PURPOSE = "F1F_B2_CONTROLLED_ACCEPTANCE";
+    static final String DATABASE_HOST = "127.0.0.1";
+    static final String OBSOLETE_DRAFT_ACCEPTANCE_ID =
+            "F1FB2_20260803_140506_96C6DFB7";
     static final Set<String> REQUIRED_KEYS = Set.of(
             "authorization.status", "authorization.version", "acceptance.id",
-            "git.commit", "artifact.sha256", "provider.code",
+            "git.commit", "artifact.sha256", "build.proof.path", "provider.code",
             "security.symbol", "security.exchange", "trade.date",
             "endpoints", "maximum.provider.requests", "retry.budget",
-            "database.name", "database.user", "database.port",
+            "database.host", "database.name", "database.user", "database.port",
             "database.ssl.mode", "schema.name", "base.schema.version",
             "governance.schema.version", "issued.at", "expires.at",
             "purpose", "execution.source", "user.approval.reference");
@@ -48,6 +55,8 @@ record TushareControlledAcceptanceLaunchPlan(
                 codeBaselineCommit);
         artifactSha256 = TushareControlledAcceptanceExecution.sha256(
                 artifactSha256);
+        buildProofPath = Objects.requireNonNull(buildProofPath, "buildProofPath")
+                .toAbsolutePath().normalize();
         security = Objects.requireNonNull(security, "security");
         tradeDate = Objects.requireNonNull(tradeDate, "tradeDate");
         issuedAt = Objects.requireNonNull(issuedAt, "issuedAt");
@@ -55,7 +64,8 @@ record TushareControlledAcceptanceLaunchPlan(
         sslMode = Objects.requireNonNull(sslMode, "sslMode");
         userApprovalReference = required(
                 userApprovalReference, "userApprovalReference");
-        if (databasePort <= 0 || databasePort > 65_535
+        if (OBSOLETE_DRAFT_ACCEPTANCE_ID.equals(acceptanceId)
+                || databasePort <= 0 || databasePort > 65_535
                 || !expiresAt.isAfter(issuedAt)) {
             throw invalid();
         }
@@ -64,9 +74,27 @@ record TushareControlledAcceptanceLaunchPlan(
     static TushareControlledAcceptanceLaunchPlan load(Path file) {
         Objects.requireNonNull(file, "file");
         Properties properties = new Properties();
-        try (InputStream input = Files.newInputStream(
-                file.toAbsolutePath().normalize())) {
-            properties.load(input);
+        try {
+            Map<String, String> strict = new LinkedHashMap<>();
+            List<String> lines = Files.readAllLines(
+                    file.toAbsolutePath().normalize(), StandardCharsets.UTF_8);
+            for (String line : lines) {
+                if (line.isBlank() || line.startsWith("#")) {
+                    continue;
+                }
+                int separator = line.indexOf('=');
+                if (separator <= 0 || separator == line.length() - 1
+                        || line.indexOf('=', separator + 1) >= 0) {
+                    throw invalid();
+                }
+                String key = line.substring(0, separator);
+                String value = line.substring(separator + 1);
+                if (!key.equals(key.trim()) || !value.equals(value.trim())
+                        || strict.putIfAbsent(key, value) != null) {
+                    throw invalid();
+                }
+            }
+            strict.forEach(properties::setProperty);
         } catch (IOException error) {
             throw new IllegalArgumentException(
                     "TUSHARE_CONTROLLED_ACCEPTANCE_AUTHORIZATION_UNREADABLE", error);
@@ -87,6 +115,7 @@ record TushareControlledAcceptanceLaunchPlan(
         requireExact(properties, "endpoints", "daily,adj_factor,trade_cal");
         requireExact(properties, "maximum.provider.requests", "3");
         requireExact(properties, "retry.budget", "0");
+        requireExact(properties, "database.host", DATABASE_HOST);
         requireExact(properties, "database.name",
                 TushareDedicatedResearchPersistenceGuard.REQUIRED_DATABASE);
         requireExact(properties, "database.user",
@@ -102,6 +131,7 @@ record TushareControlledAcceptanceLaunchPlan(
                     properties.getProperty("acceptance.id"),
                     properties.getProperty("git.commit"),
                     properties.getProperty("artifact.sha256"),
+                    Path.of(properties.getProperty("build.proof.path")),
                     new SecuritySelection(
                             properties.getProperty("security.symbol"),
                             properties.getProperty("security.exchange")),

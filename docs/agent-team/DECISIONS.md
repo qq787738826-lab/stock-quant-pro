@@ -263,3 +263,11 @@
 146. **F1F-B2 必须由非 Spring 一次性最小进程执行，并采用显式受守卫治理初始化**：专用 runner 不启动普通 Spring Boot、Web、Controller、scheduler 或任何 Agent/回测/Shadow/交易入口；组件只按白名单手工装配。输出审计必须先于构建/授权解析、秘密读取、DataSource、Flyway 和 Provider 客户端。治理 V14 固定 `baselineOnMigrate(false)`；只有构建、授权、数据库身份、search path 与主历史 V1—V13 全部通过后，才允许显式 baseline 13 和迁移 V14。该机制完成不改变 `CONTROLLED_ACCEPTANCE_STATUS=NOT_RUN`、`REDUCED_RESEARCH_OPERATIONAL_READY=false`、完整 F1 技术阻断或四项正式门禁。
 
 147. **F1F-B2-RUNNER 的正式执行产物必须由单一专用 JAR 决定入口并从隔离 commit 构建**：构建脚本从核验 commit 的 `git archive` 在系统临时目录离线构建，不使用共享工作区产物；MANIFEST 固定不可由 `loader.main` 覆盖的 `JarLauncher` 和 Runner `Start-Class`，运行时只接受单一真实 JAR classpath。Maven 构建 JVM、实际启动 JVM、MANIFEST 与 sidecar 的 `java.version` 必须一致；主 Flyway history 必须精确 V1—V13 且无失败，独立治理 history 必须精确 BASELINE/13 与 SQL/V14 的类型和脚本。上述加固不签发正式证明或授权，也不改变任何门禁。
+
+148. **F1F-B2-RUNNER 四提交链已验收合入，但真实验收仍为 NOT_RUN**：`4c136b32` → `0d8109cc` → `e18623f4` → `213264bc63a2584f0fbb30dca059abf272e62a64` 已通过实际 Git 复验并纯 fast-forward 合入。该合入只提供执行机制，不等于签发正式构建证明、授权、acceptance ID 或消费三次 Provider 预算；`CONTROLLED_ACCEPTANCE_STATUS=NOT_RUN` 与 `REDUCED_RESEARCH_OPERATIONAL_READY=false` 不变。
+
+149. **首次 B2-FREEZE 为 NOT_READY，旧草案永久废弃**：`2026-08-03` 基于 `213264bc...` 的清单审计确认两个阻断：Runner 只接受 `AuthorizationFile`，不能接受清单中的松散构建/数据库参数；仓库缺少安全创建全新专用数据库并只执行主 V1—V13 的入口。旧草案 ID `F1FB2_20260803_140506_96C6DFB7` 不得写库、授权、入证或复用。
+
+150. **专用数据库准备必须使用一次性非 Spring、全新专用实例和主 V1—V13 白名单**：固定目标为 `127.0.0.1`、数据库/用户 `stock_quant_research`、Schema/search path `tushare_research` 与显式端口。目标数据库、角色或其他业务数据库存在即在 DDL 前拒绝。输出审计先于秘密；管理员秘密在最终专用用户密码读取前清零；Flyway 只扫描 `classpath:db/migration`，禁止 baseline、repair、clean、治理 location 和 V14。部分失败不自动删除目标，只标记 `INCOMPLETE_NOT_APPROVED` 等待人工处置。
+
+151. **F1F-B2 正式 Runner 只接受严格单一 AuthorizationFile**：授权文件必须绑定最终冻结 SHA、JAR SHA-256、构建证明路径、固定数据库身份与端口、证券、日期、Endpoint 和三次/零重试预算，且不得包含 Token 或密码。重复、未知、缺失、空白或类型错误字段全部拒绝；Runner 不增加任何松散参数。DBPREP 合入后必须用新的集成 SHA 重跑简化 FREEZE，不得沿用旧 SHA、JAR、sidecar 或授权草案。
