@@ -48,4 +48,39 @@ PAID_PROVIDER_UPGRADE_DECISION=PENDING
 IFIND_TRIAL_ACTIVATION_GATE=BLOCKED
 ```
 
-完整 F1 十项技术阻断不变。首次 B2-FREEZE 已确定先完成 DBPREP，再基于 DBPREP 合入后的新集成 SHA 重新执行简化 FREEZE；不得直接执行真实受控验收。
+## 2026-08-03 真实验收与事务边界修复
+
+首次实际进入 Provider 与捕获链的授权 ID
+`F1FB2_20260803_REISSUE_C5A3D7B92A94` 已永久封存。该次执行按
+`daily → adj_factor → trade_cal` 精确完成 3 次真实调用，重试为 0；治理 V14
+已完成，但在第一次 Repository 写入前由数据库守卫拒绝：
+
+```text
+CONTROLLED_ACCEPTANCE_STATUS=FAILED_DATABASE_GUARD
+failure_stage=DATABASE_GUARD
+safe_failure_reason=TUSHARE_DEDICATED_RESEARCH_TRANSACTION_REQUIRED
+capture_batch_id=NULL
+F1F_B2_PROVIDER_REAL_CALL_COUNT=3
+TUSHARE_TOTAL_REAL_BUSINESS_CALL_COUNT=23
+```
+
+实际调用图确认 Runner 继续使用非 Spring、手工白名单装配；因此 F1E 捕获入口上的
+`@Transactional` 没有经过代理，`TransactionSynchronizationManager` 在守卫执行时没有
+专用 DataSource 的活动资源。增量修复不改变 Runner 架构，也不删除或放宽守卫；捕获服务
+改用构造时已有、绑定专用 DataSource 的 `PlatformTransactionManager` 和显式
+`TransactionTemplate`，把全部 Temporal、batch、observation 与 typed fact 写入包在同一
+事务中。错误事务管理器仍在写前被原 reason code 拒绝，第三类事实写入失败必须整批回滚。
+
+本修复不读取 Token，不调用 Tushare/iFinD，不访问永久专用数据库，不创建新 acceptance
+ID，不重新执行 F1F-B2。当前仍为：
+
+```text
+F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE
+REDUCED_RESEARCH_OPERATIONAL_READY=false
+FREE_PRODUCT_PREVIEW_GATE=PASS
+FREE_PROVIDER_VALIDATION_GATE=BLOCKED
+PAID_PROVIDER_UPGRADE_DECISION=PENDING
+IFIND_TRIAL_ACTIVATION_GATE=BLOCKED
+```
+
+完整 F1 十项技术阻断不变。先完成 DBPREP、再按新集成 SHA 冻结和授权的顺序属于已执行的历史准入要求；当前必须先完成本事务修复的实际 Git 复验与合入，再由用户另行批准新的冻结和验收，失败 ID 不得重试。

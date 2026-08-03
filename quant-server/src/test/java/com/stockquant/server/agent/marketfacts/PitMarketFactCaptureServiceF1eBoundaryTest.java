@@ -14,6 +14,7 @@ import com.stockquant.server.agent.marketfacts.TushareDedicatedResearchBatchComm
 import com.stockquant.server.agent.temporal.TemporalMarketFoundationService;
 import org.junit.jupiter.api.Test;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionStatus;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -25,6 +26,8 @@ import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -194,10 +197,58 @@ class PitMarketFactCaptureServiceF1eBoundaryTest {
         verifyNoInteractions(repository);
     }
 
+    @Test
+    void missingDedicatedTransactionKeepsOriginalReasonAndZeroWrites() {
+        Fixture fixture = fixture();
+        TushareDedicatedResearchCaptureContract contract =
+                TushareDedicatedResearchCaptureContract.validated(
+                        fixture.command(),
+                        fixture.session(),
+                        fixture.responses());
+        PitMarketFactRepository repository =
+                mock(PitMarketFactRepository.class);
+        TushareDedicatedResearchPersistenceGuard guard =
+                mock(TushareDedicatedResearchPersistenceGuard.class);
+        when(guard.verifyTransactional()).thenThrow(
+                new TushareDedicatedResearchPersistenceGuard.GuardException(
+                        "TUSHARE_DEDICATED_RESEARCH_TRANSACTION_REQUIRED"));
+
+        TushareDedicatedResearchPersistenceGuard.GuardException error =
+                assertThrows(
+                        TushareDedicatedResearchPersistenceGuard
+                                .GuardException.class,
+                        () -> captureService(repository, guard)
+                                .captureAuthorizedDedicatedResearchBatch(
+                                        contract,
+                                        OBSERVED_AT,
+                                        TushareDedicatedResearchBatchAuthorization
+                                                .manualPersonalResearch(),
+                                        verification(false)));
+
+        assertEquals(
+                "TUSHARE_DEDICATED_RESEARCH_TRANSACTION_REQUIRED",
+                error.safeCode());
+        verifyNoInteractions(repository);
+    }
+
     private static PitMarketFactCaptureService captureService(
             PitMarketFactRepository repository
     ) {
+        return captureService(
+                repository,
+                mock(TushareDedicatedResearchPersistenceGuard.class));
+    }
+
+    private static PitMarketFactCaptureService captureService(
+            PitMarketFactRepository repository,
+            TushareDedicatedResearchPersistenceGuard dedicatedGuard
+    ) {
         ObjectMapper mapper = new ObjectMapper();
+        PlatformTransactionManager transactions =
+                mock(PlatformTransactionManager.class);
+        TransactionStatus transactionStatus = mock(TransactionStatus.class);
+        when(transactions.getTransaction(any())).thenReturn(
+                transactionStatus);
         return new PitMarketFactCaptureService(
                 mapper,
                 new PitMarketFactsCanonicalService(
@@ -206,9 +257,9 @@ class PitMarketFactCaptureServiceF1eBoundaryTest {
                 repository,
                 mock(TemporalMarketFoundationService.class),
                 mock(TushareReducedResearchPersistenceGuard.class),
-                mock(TushareDedicatedResearchPersistenceGuard.class),
+                dedicatedGuard,
                 Clock.fixed(OBSERVED_AT, ZoneOffset.UTC),
-                mock(PlatformTransactionManager.class));
+                transactions);
     }
 
     private static Fixture fixture() {

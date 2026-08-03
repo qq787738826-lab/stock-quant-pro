@@ -271,3 +271,7 @@
 150. **专用数据库准备必须使用一次性非 Spring、全新专用实例和主 V1—V13 白名单**：固定目标为 `127.0.0.1`、数据库/用户 `stock_quant_research`、Schema/search path `tushare_research` 与显式端口。目标数据库、角色或其他业务数据库存在即在 DDL 前拒绝。输出审计先于秘密；管理员秘密在最终专用用户密码读取前清零；Flyway 只扫描 `classpath:db/migration`，禁止 baseline、repair、clean、治理 location 和 V14。部分失败不自动删除目标，只标记 `INCOMPLETE_NOT_APPROVED` 等待人工处置。
 
 151. **F1F-B2 正式 Runner 只接受严格单一 AuthorizationFile**：授权文件必须绑定最终冻结 SHA、JAR SHA-256、构建证明路径、固定数据库身份与端口、证券、日期、Endpoint 和三次/零重试预算，且不得包含 Token 或密码。重复、未知、缺失、空白或类型错误字段全部拒绝；Runner 不增加任何松散参数。DBPREP 合入后必须用新的集成 SHA 重跑简化 FREEZE，不得沿用旧 SHA、JAR、sidecar 或授权草案。
+
+152. **首次真实 F1F-B2 的数据库守卫失败是安全失败，不能提升 operational**：ID `F1FB2_20260803_REISSUE_C5A3D7B92A94` 在 `2026-08-03` 按冻结顺序完成 3 次 Provider 调用且零重试，治理 V14 已完成；捕获前因 `TUSHARE_DEDICATED_RESEARCH_TRANSACTION_REQUIRED` 被拒绝，`capture_batch_id=NULL`，ID 永久封存。Tushare 累计真实业务请求更新为 23。该结果固定为 `CONTROLLED_ACCEPTANCE_STATUS=FAILED_DATABASE_GUARD`，`REDUCED_RESEARCH_OPERATIONAL_READY=false`，不允许补跑或把 Provider 响应成功替代原子持久化证据。
+
+153. **非 Spring Runner 的 F1E 捕获必须使用专用 DataSource 的显式事务**：Runner 的手工白名单装配不依赖 Spring 代理，因此捕获服务不能只依赖方法上的 `@Transactional`。F1E 专用捕获必须通过构造时注入的 `PlatformTransactionManager` 显式执行；活动事务必须在首次 Repository 写入前绑定守卫所核对的同一专用 DataSource，并覆盖 Temporal dataset、capture batch、observation 与全部 typed fact。错误事务管理器、无事务或绑定错误 DataSource 继续返回既有守卫 reason；任一事实写入失败整批回滚，不得伪造事务状态或放宽守卫。

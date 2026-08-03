@@ -181,6 +181,24 @@ public class PitMarketFactCaptureService {
             TushareDedicatedResearchPersistenceGuard.Verification
                     preProviderVerification
     ) {
+        return Objects.requireNonNull(
+                transactionTemplate.execute(status ->
+                        captureAuthorizedDedicatedResearchBatchWithinTransaction(
+                                captureContract,
+                                observedAt,
+                                authorization,
+                                preProviderVerification)),
+                "dedicated research capture transaction result");
+    }
+
+    private F1eDedicatedCaptureResult
+    captureAuthorizedDedicatedResearchBatchWithinTransaction(
+            TushareDedicatedResearchCaptureContract captureContract,
+            Instant observedAt,
+            TushareDedicatedResearchBatchAuthorization authorization,
+            TushareDedicatedResearchPersistenceGuard.Verification
+                    preProviderVerification
+    ) {
         Objects.requireNonNull(
                 authorization, "dedicated research authorization")
                 .validateFrozen();

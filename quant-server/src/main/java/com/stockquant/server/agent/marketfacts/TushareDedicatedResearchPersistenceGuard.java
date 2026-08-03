@@ -217,8 +217,9 @@ public final class TushareDedicatedResearchPersistenceGuard {
             boolean transactionBound =
                     TransactionSynchronizationManager
                             .isActualTransactionActive()
-                            && TransactionSynchronizationManager
-                            .hasResource(dataSource);
+                    && TransactionSynchronizationManager
+                            .hasResource(dataSource)
+                    && !connection.getAutoCommit();
             return new SchemaState(
                     database,
                     user,

@@ -1,11 +1,20 @@
 package com.stockquant.server.agent.marketfacts;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.stockquant.server.agent.backtest.BacktestCanonicalHashService;
 import com.stockquant.server.agent.marketfacts.TushareControlledAcceptanceAuthorization.ControlledEndpoint;
 import com.stockquant.server.agent.marketfacts.TushareControlledAcceptanceExecution.ExecutionSource;
 import com.stockquant.server.agent.marketfacts.TushareControlledAcceptanceExecution.ExecutionStatus;
 import com.stockquant.server.agent.marketfacts.TushareControlledAcceptanceExecution.Reservation;
+import com.stockquant.server.agent.marketfacts.TushareDedicatedResearchBatchCommand.SecuritySelection;
 import com.stockquant.server.agent.marketfacts.TushareDedicatedResearchBatchModels.DatabaseExecutionIdentity;
+import com.stockquant.server.agent.temporal.MarketDataDatasetVersionRepository;
+import com.stockquant.server.agent.temporal.SecurityStatusEventRepository;
+import com.stockquant.server.agent.temporal.SecurityStatusHistoryRepository;
+import com.stockquant.server.agent.temporal.SecurityStatusStateHasher;
+import com.stockquant.server.agent.temporal.TemporalMarketFoundationService;
+import com.stockquant.server.agent.temporal.TradingCalendarRevisionRepository;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -14,12 +23,17 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.postgresql.ds.PGSimpleDataSource;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.AbstractDataSource;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import javax.sql.DataSource;
+import java.sql.Connection;
+import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
@@ -343,6 +357,247 @@ class TushareControlledAcceptancePostgresTest {
                 Instant.now().truncatedTo(ChronoUnit.MICROS),
                 envelopesOnly.writeIdentity(), envelopesOnly.sourceInstrumentId(),
                 "600000", "SSE", envelopesOnly.tradeDate()));
+    }
+
+    @Test
+    void manuallyAssembledRunnerPathStartsDedicatedCaptureTransaction() {
+        LocalDate tradeDate = LocalDate.of(2025, 1, 3);
+        F1eSyntheticTushareGateway gateway =
+                new F1eSyntheticTushareGateway();
+        ManualRuntime runtime = manualRuntime(
+                gateway,
+                new DataSourceTransactionManager(dataSource),
+                Instant.parse("2026-08-03T08:00:00Z"));
+
+        var result = runtime.batch().run(
+                TushareDedicatedResearchBatchAuthorization
+                        .manualPersonalResearch(),
+                dedicatedCommand(tradeDate));
+
+        assertEquals(3, gateway.calls());
+        assertEquals(3, result.providerCallCount());
+        assertEquals(0, result.retryCount());
+        assertEquals(1, result.symbolResults().size());
+        long batchId = result.symbolResults().get(0)
+                .captureResult().batchId();
+        assertTrue(batchId > 0);
+        assertEquals(1, countWhere("pit_market_fact_batches", "id", batchId));
+        assertEquals(3, countWhere(
+                "pit_market_fact_observations", "batch_id", batchId));
+        assertEquals(1, typedCount("raw_daily_bar_facts_v2", batchId));
+        assertEquals(1, typedCount("adjustment_factor_facts_v1", batchId));
+        assertEquals(1, typedCount("trading_calendar_facts_v1", batchId));
+        assertEquals(
+                result.databaseIdentity().backendPidBefore(),
+                result.databaseIdentity().backendPidAfter());
+    }
+
+    @Test
+    void wrongTransactionManagerIsRejectedBeforePersistence() {
+        LocalDate tradeDate = LocalDate.of(2025, 1, 3);
+        F1eSyntheticTushareGateway gateway =
+                new F1eSyntheticTushareGateway();
+        DataSource wrongTransactionResourceKey = new AbstractDataSource() {
+            @Override
+            public Connection getConnection() throws SQLException {
+                return dataSource.getConnection();
+            }
+
+            @Override
+            public Connection getConnection(
+                    String username,
+                    String password
+            ) throws SQLException {
+                return dataSource.getConnection(username, password);
+            }
+        };
+        ManualRuntime runtime = manualRuntime(
+                gateway,
+                new DataSourceTransactionManager(
+                        wrongTransactionResourceKey),
+                Instant.parse("2026-08-03T08:01:00Z"));
+        int datasetsBefore = count("market_data_dataset_versions");
+        int batchesBefore = count("pit_market_fact_batches");
+        int observationsBefore = count("pit_market_fact_observations");
+        int rawBefore = count("raw_daily_bar_facts_v2");
+        int factorsBefore = count("adjustment_factor_facts_v1");
+        int calendarsBefore = count("trading_calendar_facts_v1");
+
+        TushareDedicatedResearchPersistenceGuard.GuardException error =
+                assertThrows(
+                        TushareDedicatedResearchPersistenceGuard
+                                .GuardException.class,
+                        () -> runtime.batch().run(
+                                TushareDedicatedResearchBatchAuthorization
+                                        .manualPersonalResearch(),
+                                dedicatedCommand(tradeDate)));
+
+        assertEquals(
+                "TUSHARE_DEDICATED_RESEARCH_TRANSACTION_REQUIRED",
+                error.safeCode());
+        assertEquals(3, gateway.calls());
+        assertEquals(datasetsBefore,
+                count("market_data_dataset_versions"));
+        assertEquals(batchesBefore, count("pit_market_fact_batches"));
+        assertEquals(observationsBefore,
+                count("pit_market_fact_observations"));
+        assertEquals(rawBefore, count("raw_daily_bar_facts_v2"));
+        assertEquals(factorsBefore,
+                count("adjustment_factor_facts_v1"));
+        assertEquals(calendarsBefore,
+                count("trading_calendar_facts_v1"));
+    }
+
+    @Test
+    void thirdTypedFactFailureRollsBackManualCapture() {
+        LocalDate tradeDate = LocalDate.of(2025, 1, 3);
+        F1eSyntheticTushareGateway gateway =
+                new F1eSyntheticTushareGateway();
+        ManualRuntime runtime = manualRuntime(
+                gateway,
+                new DataSourceTransactionManager(dataSource),
+                Instant.parse("2026-08-03T08:02:00Z"));
+        int datasetsBefore = count("market_data_dataset_versions");
+        int batchesBefore = count("pit_market_fact_batches");
+        int observationsBefore = count("pit_market_fact_observations");
+        int rawBefore = count("raw_daily_bar_facts_v2");
+        int factorsBefore = count("adjustment_factor_facts_v1");
+        int calendarsBefore = count("trading_calendar_facts_v1");
+        jdbc.execute("""
+                CREATE FUNCTION f1f_b2_fail_third_typed_fact()
+                RETURNS trigger LANGUAGE plpgsql AS $$
+                BEGIN
+                    RAISE EXCEPTION 'synthetic third typed fact failure';
+                END
+                $$
+                """);
+        jdbc.execute("""
+                CREATE TRIGGER f1f_b2_fail_third_typed_fact
+                BEFORE INSERT ON trading_calendar_facts_v1
+                FOR EACH ROW EXECUTE FUNCTION
+                    f1f_b2_fail_third_typed_fact()
+                """);
+        try {
+            assertThrows(RuntimeException.class, () -> runtime.batch().run(
+                    TushareDedicatedResearchBatchAuthorization
+                            .manualPersonalResearch(),
+                    dedicatedCommand(tradeDate)));
+        } finally {
+            jdbc.execute("DROP TRIGGER f1f_b2_fail_third_typed_fact "
+                    + "ON trading_calendar_facts_v1");
+            jdbc.execute("DROP FUNCTION f1f_b2_fail_third_typed_fact()");
+        }
+
+        assertEquals(3, gateway.calls());
+        assertEquals(datasetsBefore,
+                count("market_data_dataset_versions"));
+        assertEquals(batchesBefore, count("pit_market_fact_batches"));
+        assertEquals(observationsBefore,
+                count("pit_market_fact_observations"));
+        assertEquals(rawBefore, count("raw_daily_bar_facts_v2"));
+        assertEquals(factorsBefore,
+                count("adjustment_factor_facts_v1"));
+        assertEquals(calendarsBefore,
+                count("trading_calendar_facts_v1"));
+    }
+
+    private static ManualRuntime manualRuntime(
+            F1eSyntheticTushareGateway gateway,
+            PlatformTransactionManager transactionManager,
+            Instant observedAt
+    ) {
+        Clock clock = Clock.fixed(observedAt, ZoneOffset.UTC);
+        ObjectMapper mapper = new ObjectMapper()
+                .registerModule(new JavaTimeModule());
+        JdbcTemplate dedicatedJdbc = new JdbcTemplate(dataSource);
+        TushareDedicatedResearchPersistenceGuard dedicatedGuard =
+                new TushareDedicatedResearchPersistenceGuard(
+                        dedicatedJdbc,
+                        TushareDedicatedResearchPersistenceGuard
+                                .DATABASE_PURPOSE);
+        TushareReducedResearchPersistenceGuard reducedGuard =
+                new TushareReducedResearchPersistenceGuard(
+                        dedicatedJdbc,
+                        TushareReducedResearchPersistenceGuard
+                                .DATABASE_PURPOSE);
+        PitMarketFactsCanonicalService canonical =
+                new PitMarketFactsCanonicalService(
+                        mapper,
+                        new BacktestCanonicalHashService(mapper));
+        PitMarketFactRepository facts =
+                new PitMarketFactRepository(dedicatedJdbc, mapper);
+        TemporalMarketFoundationService temporal =
+                new TemporalMarketFoundationService(
+                        new MarketDataDatasetVersionRepository(
+                                dedicatedJdbc, mapper),
+                        new SecurityStatusEventRepository(
+                                dedicatedJdbc, mapper),
+                        new SecurityStatusHistoryRepository(dedicatedJdbc),
+                        new TradingCalendarRevisionRepository(dedicatedJdbc),
+                        new SecurityStatusStateHasher(),
+                        clock);
+        PitMarketFactCaptureService capture =
+                new PitMarketFactCaptureService(
+                        mapper,
+                        canonical,
+                        facts,
+                        temporal,
+                        reducedGuard,
+                        dedicatedGuard,
+                        clock,
+                        transactionManager);
+        TushareMarketFactProperties properties =
+                new TushareMarketFactProperties();
+        properties.setMode(
+                TushareMarketFactProperties.Mode.MANUAL_BOUNDED);
+        properties.setMaximumRateLimitRetries(0);
+        properties.setToken("synthetic-f1f-b2-transaction-token");
+        TushareMarketFactProvider provider =
+                new TushareMarketFactProvider(
+                        mapper, properties, gateway);
+        return new ManualRuntime(
+                new TushareDedicatedResearchBatchService(
+                        provider, dedicatedGuard, capture, clock));
+    }
+
+    private static TushareDedicatedResearchBatchCommand
+    dedicatedCommand(LocalDate tradeDate) {
+        return new TushareDedicatedResearchBatchCommand(
+                tradeDate,
+                List.of(new SecuritySelection("600000", "SSE")),
+                Duration.ofSeconds(5));
+    }
+
+    private static int count(String table) {
+        return jdbc.queryForObject(
+                "SELECT count(*) FROM " + table, Integer.class);
+    }
+
+    private static int countWhere(
+            String table,
+            String column,
+            long value
+    ) {
+        return jdbc.queryForObject(
+                "SELECT count(*) FROM " + table
+                        + " WHERE " + column + "=?",
+                Integer.class,
+                value);
+    }
+
+    private static int typedCount(String table, long batchId) {
+        return jdbc.queryForObject("""
+                SELECT count(*)
+                  FROM %s typed
+                  JOIN pit_market_fact_observations observation
+                    ON observation.id=typed.observation_id
+                 WHERE observation.batch_id=?
+                """.formatted(table), Integer.class, batchId);
+    }
+
+    private record ManualRuntime(
+            TushareDedicatedResearchBatchService batch
+    ) {
     }
 
     private static List<String> mainVersions() {
