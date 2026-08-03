@@ -126,9 +126,11 @@ class TushareControlledAcceptanceTrustedMechanismTest {
                 "PREPARATION_ONLY");
 
         VerifiedBuildProof proof = TushareControlledAcceptanceBuildProof
-                .loadBoundTestArtifact(jar, sidecar);
+                .loadBoundPreparationArtifactForTest(jar, sidecar);
         assertEquals(TushareControlledAcceptanceBuildProof.BuildMode.PREPARATION_ONLY,
                 proof.buildMode());
+        assertEquals(TushareControlledAcceptanceBuildProof.ProofSource.PREPARATION_ONLY,
+                proof.source());
         assertFalse(proof.governanceEligible());
 
         String forged = Files.readString(sidecar, StandardCharsets.UTF_8)
@@ -136,7 +138,8 @@ class TushareControlledAcceptanceTrustedMechanismTest {
                         "build.mode=CONTROLLED_BUILD_ARTIFACT");
         Files.writeString(sidecar, forged, StandardCharsets.UTF_8);
         assertThrows(IllegalArgumentException.class, () ->
-                TushareControlledAcceptanceBuildProof.loadBoundTestArtifact(jar, sidecar));
+                TushareControlledAcceptanceBuildProof
+                        .loadBoundPreparationArtifactForTest(jar, sidecar));
     }
 
     @Test

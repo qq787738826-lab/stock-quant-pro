@@ -24,6 +24,8 @@ F1F-B1 双提交链已经验收并合入 `e3777602fadd65f3af0a2ba8ac6e886693d745
 - `quant-core` 全量：`4 / 0 / 0 / 0`。
 - `quant-server` 安全离线全量：`621 / 0 / 0 / 112`；112 项均为需数据库、Python 或真实 Provider 的显式条件跳过，本阶段没有以跳过替代 B2-RUNNER 定向断言。
 - Java `clean compile`、PowerShell 语法解析与 `git diff --check` 通过。
+- 默认 `PREPARATION_ONLY` 构建预演通过：Maven Wrapper 为 `3.9.16`，JAR、MANIFEST 与 sidecar 均绑定 PREPARATION 模式，生产来源解析为 `PREPARATION_ONLY` 且 `governanceEligible=false`。首次预演发现并修复 Windows PowerShell 将 `java -version` 正常 stderr 误判为失败的问题；修复后定向回归仍为 `28 / 0 / 0 / 0`。
+- 预演 JAR、原始 JAR、sidecar、临时 MANIFEST 和依赖模块 JAR 已精确删除，相关构建产物残留为 0。
 - 按阶段禁令未运行 PostgreSQL 测试、Live 测试或任何真实受控验收。
 
 ## 安全边界

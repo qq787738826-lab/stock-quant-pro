@@ -48,6 +48,13 @@ public final class TushareControlledAcceptanceBuildProof {
         return loadBoundArtifact(artifact, sidecar, ProofSource.TEST_ONLY);
     }
 
+    static VerifiedBuildProof loadBoundPreparationArtifactForTest(
+            Path artifact,
+            Path sidecar
+    ) {
+        return loadBoundArtifact(artifact, sidecar, null);
+    }
+
     private static VerifiedBuildProof loadBoundArtifact(
             Path artifact,
             Path proofSidecar,
