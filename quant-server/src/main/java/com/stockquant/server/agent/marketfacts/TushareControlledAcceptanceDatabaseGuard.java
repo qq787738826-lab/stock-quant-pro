@@ -7,12 +7,16 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import javax.sql.DataSource;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.Function;
+import java.util.function.Supplier;
 
 /**
  * Explicit governance-migration and runtime guard for F1F controlled acceptance.
  *
  * <p>This type is deliberately not a Spring bean. The future dedicated F1F-B2
- * process must call {@link #migrateGovernance(DataSource, String)} before it
+ * process must call {@link #migrateGovernance(DataSource, String,
+ * TushareControlledAcceptanceAuthorization,
+ * TushareControlledAcceptanceBuildProof.VerifiedBuildProof)} before it
  * constructs the executor. Normal application Flyway never includes the
  * controlled-acceptance location.</p>
  */
@@ -39,37 +43,65 @@ public final class TushareControlledAcceptanceDatabaseGuard {
      */
     public static ControlledVerification migrateGovernance(
             DataSource dataSource,
-            String databasePurpose
+            String databasePurpose,
+            TushareControlledAcceptanceAuthorization authorization,
+            TushareControlledAcceptanceBuildProof.VerifiedBuildProof buildProof
     ) {
         Objects.requireNonNull(dataSource, "dataSource");
+        Objects.requireNonNull(authorization, "authorization").validateFrozen();
+        Objects.requireNonNull(buildProof, "buildProof").validate();
+        if (!buildProof.governanceEligible()
+                || !authorization.codeBaselineCommit().equals(buildProof.gitCommit())
+                || !authorization.artifactSha256().equals(
+                buildProof.actualArtifactSha256())) {
+            throw blocked("TUSHARE_CONTROLLED_ACCEPTANCE_BUILD_PROOF_INVALID");
+        }
         JdbcTemplate jdbc = new JdbcTemplate(dataSource);
         TushareDedicatedResearchPersistenceGuard base =
                 new TushareDedicatedResearchPersistenceGuard(jdbc, databasePurpose);
-        TushareDedicatedResearchPersistenceGuard.Verification before =
-                base.verifyBeforeProvider();
-        requireGovernanceStateBeforeMigration(jdbc);
+        PreMigrationVerification before = performGuardedGovernanceInitialization(
+                () -> new PreMigrationVerification(
+                        base.verifyBeforeProvider(),
+                        requireGovernanceStateBeforeMigration(jdbc)),
+                ignored -> flywayOperations(dataSource));
 
-        Flyway.configure()
+        ControlledVerification after =
+                new TushareControlledAcceptanceDatabaseGuard(jdbc, base)
+                        .verifyBeforeProvider();
+        base.verifySameTarget(before.baseVerification(), after.baseVerification());
+        return after;
+    }
+
+    private static GovernanceOperations flywayOperations(DataSource dataSource) {
+        Flyway flyway = Flyway.configure()
                 .dataSource(dataSource)
                 .schemas(TushareDedicatedResearchPersistenceGuard.REQUIRED_SCHEMA)
                 .defaultSchema(TushareDedicatedResearchPersistenceGuard.REQUIRED_SCHEMA)
                 .table(GOVERNANCE_HISTORY_TABLE)
                 .locations(GOVERNANCE_LOCATION)
                 .target(MigrationVersion.fromVersion("14"))
-                .baselineOnMigrate(true)
+                .baselineOnMigrate(false)
                 .baselineVersion(MigrationVersion.fromVersion("13"))
-                .baselineDescription("verified dedicated V1-V13 base")
+                .baselineDescription("explicit verified dedicated V1-V13 base "
+                        + TushareControlledAcceptanceExecution.RULE_VERSION)
                 .outOfOrder(false)
                 .validateOnMigrate(true)
                 .cleanDisabled(true)
-                .load()
-                .migrate();
+                .load();
+        if (flyway.getConfiguration().isBaselineOnMigrate()) {
+            throw blocked("TUSHARE_CONTROLLED_ACCEPTANCE_AUTOMATIC_BASELINE_FORBIDDEN");
+        }
+        return new GovernanceOperations() {
+            @Override
+            public void baseline() {
+                flyway.baseline();
+            }
 
-        ControlledVerification after =
-                new TushareControlledAcceptanceDatabaseGuard(jdbc, base)
-                        .verifyBeforeProvider();
-        base.verifySameTarget(before, after.baseVerification());
-        return after;
+            @Override
+            public void migrate() {
+                flyway.migrate();
+            }
+        };
     }
 
     public ControlledVerification verifyBeforeProvider() {
@@ -123,7 +155,7 @@ public final class TushareControlledAcceptanceDatabaseGuard {
         return Boolean.TRUE.equals(present);
     }
 
-    private static void requireGovernanceStateBeforeMigration(JdbcTemplate jdbc) {
+    private static GovernanceState requireGovernanceStateBeforeMigration(JdbcTemplate jdbc) {
         Boolean historyExists = jdbc.queryForObject("""
                 SELECT to_regclass(
                   'tushare_research.flyway_controlled_acceptance_history') IS NOT NULL
@@ -138,7 +170,64 @@ public final class TushareControlledAcceptanceDatabaseGuard {
             if (Boolean.TRUE.equals(acceptanceObjectsExist)) {
                 throw blocked("TUSHARE_CONTROLLED_ACCEPTANCE_UNTRACKED_SCHEMA_OBJECTS");
             }
+            return GovernanceState.ABSENT;
         }
+        List<String> versions = jdbc.queryForList("""
+                SELECT version
+                  FROM tushare_research.flyway_controlled_acceptance_history
+                 WHERE success
+                 ORDER BY installed_rank
+                """, String.class);
+        Integer failed = jdbc.queryForObject("""
+                SELECT count(*)
+                  FROM tushare_research.flyway_controlled_acceptance_history
+                 WHERE NOT success
+                """, Integer.class);
+        if (failed == null || failed != 0
+                || !versions.equals(List.of("13"))
+                && !versions.equals(GOVERNANCE_MIGRATIONS)) {
+            throw blocked("TUSHARE_CONTROLLED_ACCEPTANCE_GOVERNANCE_HISTORY_INVALID");
+        }
+        return versions.equals(GOVERNANCE_MIGRATIONS)
+                ? GovernanceState.COMPLETE : GovernanceState.BASELINED;
+    }
+
+    enum GovernanceState {
+        ABSENT,
+        BASELINED,
+        COMPLETE
+    }
+
+    static PreMigrationVerification performGuardedGovernanceInitialization(
+            Supplier<PreMigrationVerification> verifier,
+            Function<PreMigrationVerification, GovernanceOperations> operationFactory
+    ) {
+        PreMigrationVerification verified = Objects.requireNonNull(
+                Objects.requireNonNull(verifier, "verifier").get(), "verified");
+        GovernanceOperations operations = Objects.requireNonNull(
+                Objects.requireNonNull(operationFactory, "operationFactory")
+                        .apply(verified), "operations");
+        if (verified.governanceState() == GovernanceState.ABSENT) {
+            operations.baseline();
+        }
+        operations.migrate();
+        return verified;
+    }
+
+    record PreMigrationVerification(
+            TushareDedicatedResearchPersistenceGuard.Verification baseVerification,
+            GovernanceState governanceState
+    ) {
+        PreMigrationVerification {
+            Objects.requireNonNull(baseVerification, "baseVerification");
+            Objects.requireNonNull(governanceState, "governanceState");
+        }
+    }
+
+    interface GovernanceOperations {
+        void baseline();
+
+        void migrate();
     }
 
     public record ControlledVerification(

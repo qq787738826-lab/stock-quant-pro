@@ -115,6 +115,31 @@ class TushareControlledAcceptanceTrustedMechanismTest {
     }
 
     @Test
+    void preparationArtifactMayBeRehearsedButCannotBecomeGovernanceEligible(
+            @TempDir Path temp
+    ) throws Exception {
+        String taskBranch = "codex/1.4.0-stage-f1f-b2-runner";
+        Path jar = temp.resolve("quant-server-1.3.1.jar");
+        writeJar(jar, COMMIT, COMMIT, taskBranch, "PREPARATION_ONLY");
+        Path sidecar = Path.of(jar + TushareControlledAcceptanceBuildProof.SIDECAR_SUFFIX);
+        writeSidecar(sidecar, COMMIT, COMMIT, sha256(jar), taskBranch,
+                "PREPARATION_ONLY");
+
+        VerifiedBuildProof proof = TushareControlledAcceptanceBuildProof
+                .loadBoundTestArtifact(jar, sidecar);
+        assertEquals(TushareControlledAcceptanceBuildProof.BuildMode.PREPARATION_ONLY,
+                proof.buildMode());
+        assertFalse(proof.governanceEligible());
+
+        String forged = Files.readString(sidecar, StandardCharsets.UTF_8)
+                .replace("build.mode=PREPARATION_ONLY",
+                        "build.mode=CONTROLLED_BUILD_ARTIFACT");
+        Files.writeString(sidecar, forged, StandardCharsets.UTF_8);
+        assertThrows(IllegalArgumentException.class, () ->
+                TushareControlledAcceptanceBuildProof.loadBoundTestArtifact(jar, sidecar));
+    }
+
+    @Test
     void auditFindsExactPrefixSuffixEncodedHeadersQueryAndEnvironmentForms() {
         String secret = "fake-token-0123456789";
         AuditResult result = TushareControlledAcceptanceOutputAudit.audit(
@@ -491,16 +516,29 @@ class TushareControlledAcceptanceTrustedMechanismTest {
 
     private static void writeJar(Path jar, String commit, String branch)
             throws IOException {
+        writeJar(jar, commit, commit, branch, "CONTROLLED_BUILD_ARTIFACT");
+    }
+
+    private static void writeJar(
+            Path jar,
+            String commit,
+            String remoteCommit,
+            String branch,
+            String buildMode
+    ) throws IOException {
         Manifest manifest = new Manifest();
         Attributes attributes = manifest.getMainAttributes();
         attributes.put(Attributes.Name.MANIFEST_VERSION, "1.0");
         attributes.putValue("Stock-Quant-Git-Commit", commit);
+        attributes.putValue("Stock-Quant-Git-Remote-Commit", remoteCommit);
         attributes.putValue("Stock-Quant-Git-Branch", branch);
         attributes.putValue("Stock-Quant-Tracked-Clean", "true");
         attributes.putValue("Stock-Quant-Untracked-Scope-Clean", "true");
         attributes.putValue("Stock-Quant-Build-Time", "2026-08-01T00:00:00Z");
         attributes.putValue("Stock-Quant-Java-Version", "17-test");
         attributes.putValue("Stock-Quant-Module-Version", "1.3.1");
+        attributes.putValue("Stock-Quant-Maven-Wrapper-Version", "3.9.16");
+        attributes.putValue("Stock-Quant-Build-Mode", buildMode);
         attributes.putValue("Stock-Quant-Executor-Version",
                 TushareControlledAcceptanceExecution.EXECUTOR_VERSION);
         attributes.putValue("Stock-Quant-Qualification-Rule-Version",
@@ -523,8 +561,21 @@ class TushareControlledAcceptanceTrustedMechanismTest {
             String artifactHash,
             String branch
     ) throws IOException {
+        writeSidecar(sidecar, commit, commit, artifactHash, branch,
+                "CONTROLLED_BUILD_ARTIFACT");
+    }
+
+    private static void writeSidecar(
+            Path sidecar,
+            String commit,
+            String remoteCommit,
+            String artifactHash,
+            String branch,
+            String buildMode
+    ) throws IOException {
         Files.writeString(sidecar, """
                 git.commit=%s
+                git.remote.commit=%s
                 git.branch=%s
                 git.trackedClean=true
                 git.untrackedScopeClean=true
@@ -532,9 +583,12 @@ class TushareControlledAcceptanceTrustedMechanismTest {
                 build.time=2026-08-01T00:00:00Z
                 java.version=17-test
                 module.version=1.3.1
+                maven.wrapper.version=3.9.16
+                build.mode=%s
                 executor.version=TUSHARE_CONTROLLED_ACCEPTANCE_EXECUTOR_V1
                 qualification.rule.version=TUSHARE_CONTROLLED_ACCEPTANCE_RULE_V1
-                """.formatted(commit, branch, artifactHash), StandardCharsets.UTF_8);
+                """.formatted(commit, remoteCommit, branch, artifactHash, buildMode),
+                StandardCharsets.UTF_8);
     }
 
     private static String sha256(Path file) throws Exception {

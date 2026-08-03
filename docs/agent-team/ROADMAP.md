@@ -387,13 +387,21 @@
 - 投影：默认 `NOT_RUN`；离线成功只能生成 `CANDIDATE`，没有公开 `PASSED` 构造入口，因此 `REDUCED_RESEARCH_OPERATIONAL_READY=false`。候选证据明确保留配置声明基线、对象实例消费、敏感输出未证明及数据库时间未回读状态；未来F1F-B需要用户单独批准，并补持久化唯一消费、构建产物基线、输出审计和数据库时间回读，Provider预算上限为3次、零重试。
 - 状态：F1F-A不改变完整F1十项技术阻断、生产/正常业务库、scheduler、Agent、回测、Shadow、F2B/F3、交易或四项正式门禁。
 
-#### 3A-R3B-F1F-B1：受控验收可信执行机制（安全加固完成，待最终复验）
+#### 3A-R3B-F1F-B1：受控验收可信执行机制（已验收合入）
 
 - 交付：[F1F-B1 任务书](tasks/3ar3b-f1f-b1-controlled-acceptance-executor.md)和[F1F-B1 阶段记录](stage-3ar3b-f1f-b1-controlled-acceptance-executor.md)。
 - 机制：V14 使用独立 location、独立治理历史与脚本内身份/历史守卫，默认主历史保持 V1—V13；跨进程唯一 acceptance ID、先提交 RUNNING、可信当前 JAR/集成 SHA 证明、先安装隔离再登记敏感材料的输出审计、提交后 envelope 与三类 typed fact 回读、内部 PASSED 持久化后再加载重验及不可复用恢复均已实现。
 - 边界：构建与证据 SHA-256 是完整性核对，不是抵抗特权系统/数据库管理员的外部签名；输出审计不覆盖任意外部文件、未桥接日志框架或边界结束后的脱离线程。未来 B2 必须采用最小专用进程、专用最小权限账号、输出白名单和无未等待后台任务。
 - 隔离：离线 TEST 只能得到候选；真实 F1F-B2 未运行，`CONTROLLED_ACCEPTANCE_STATUS=NOT_RUN`、`REDUCED_RESEARCH_OPERATIONAL_READY=false`。
-- 下一入口：仅在 B1 实际 Git 复验并合入后，由用户单独授权基于冻结集成 SHA 的 F1F-B2；预算精确 3 次、零重试。
+- 合入：双提交链 `e0dfba061a1b2e335c2f0db9bc9efeac012d75c8` → `e3777602fadd65f3af0a2ba8ac6e886693d745d5` 已经实际 Git 复验、用户批准并纯 fast-forward 合入。
+
+#### 3A-R3B-F1F-B2-RUNNER：专用执行入口与冻结安全门（任务分支完成，待复验）
+
+- B2-PRE：基于 `e3777602...` 的只读审计结论为 `NOT_READY`；该 SHA 不再是未来正式验收冻结 SHA。
+- 交付：[B2-RUNNER 任务书](tasks/3ar3b-f1f-b2-controlled-runner.md)和[B2-RUNNER 阶段记录](stage-3ar3b-f1f-b2-controlled-runner.md)。
+- 实现：普通 Java 一次性入口、手工组件白名单、全流程输出审计、受控秘密通道、专用非池化 DataSource、显式 V14 bootstrap、PREPARATION/CONTROLLED 双模式、Maven Wrapper 与本地/远程 SHA 证明。
+- 隔离：任务不调用 Provider、不访问数据库、不执行 V13/V14、不签发正式授权或构建证明。`CONTROLLED_ACCEPTANCE_STATUS=NOT_RUN`、`REDUCED_RESEARCH_OPERATIONAL_READY=false`。
+- 下一入口：仅在任务提交通过实际 Git 复验并纯 fast-forward 合入后，基于新的集成 SHA 重新执行完整 B2-PRE；不得直接执行真实 B2。
 
 #### 3A-R3B-F1：完整 Provider Adapter 与 V13 闭环（当前仅技术证据阻断）
 

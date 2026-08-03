@@ -255,3 +255,9 @@
 - **F1F-B1 信任边界**：JAR/sidecar SHA-256 和数据库 evidence digest 用于检测意外变化与普通应用路径篡改，不是外部根密钥签名；能够同时改写 Git/JAR/sidecar 或完整数据库行、转换历史和证据的特权管理员超出本阶段防护范围。输出审计覆盖边界内 stdout/stderr、当前 Logback 和同步完成的异常/线程输出，不证明任意外部文件、未桥接日志框架或边界结束后的脱离线程无泄漏。F1F-B2 必须使用最小专用进程、专用最小权限账号、输出白名单、无未等待后台任务和用户一次性授权。
 
 143. **F1F-B1 离线成功不改变治理状态**：`TEST` 来源永远只得到 `SUCCEEDED_CANDIDATE`。本阶段没有调用 Provider、没有执行 F1F-B2，继续保持 `CONTROLLED_ACCEPTANCE_STATUS=NOT_RUN`、`REDUCED_RESEARCH_OPERATIONAL_READY=false`、`F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE` 及四项正式门禁。
+
+144. **F1F-B1 已验收合入，但 B2-PRE 的启动审计独立判为 NOT_READY**：B1 双提交链已经纯 fast-forward 合入 `e3777602fadd65f3af0a2ba8ac6e886693d745d5`。B2-PRE 认可其持久化状态机、回读与强证明基础，但确认真实启动还缺专用最小进程、覆盖秘密/数据源初始化前的输出审计、显式 V14 bootstrap、默认非正式构建模式和 Maven Wrapper 冻结。因此 `e3777602...` 只作为 B2-RUNNER 开发父提交，不再作为未来真实验收冻结 SHA。
+
+145. **正式受控构建与准备演练严格分离**：构建模式只有 `PREPARATION_ONLY` 与 `CONTROLLED_BUILD_ARTIFACT`，默认必须是前者。两者都使用 Maven Wrapper `3.9.16` 并绑定本地/远程 Git、MANIFEST、sidecar 和 JAR SHA-256；只有显式正式模式、冻结集成分支和本地/远程同 SHA 才可能取得治理资格。准备产物即使改名或篡改 sidecar 模式，也不能生成真实授权、`REAL_CONTROLLED_ACCEPTANCE`、`PASSED` 或 operational 投影。
+
+146. **F1F-B2 必须由非 Spring 一次性最小进程执行，并采用显式受守卫治理初始化**：专用 runner 不启动普通 Spring Boot、Web、Controller、scheduler 或任何 Agent/回测/Shadow/交易入口；组件只按白名单手工装配。输出审计必须先于构建/授权解析、秘密读取、DataSource、Flyway 和 Provider 客户端。治理 V14 固定 `baselineOnMigrate(false)`；只有构建、授权、数据库身份、search path 与主历史 V1—V13 全部通过后，才允许显式 baseline 13 和迁移 V14。该机制完成不改变 `CONTROLLED_ACCEPTANCE_STATUS=NOT_RUN`、`REDUCED_RESEARCH_OPERATIONAL_READY=false`、完整 F1 技术阻断或四项正式门禁。

@@ -49,7 +49,24 @@ public final class TushareControlledAcceptanceOutputAudit {
     ) throws Exception {
         Objects.requireNonNull(sensitiveMaterialSource, "sensitiveMaterialSource");
         Objects.requireNonNull(action, "action");
-        List<SensitiveMaterial> materials = List.of();
+        return captureDynamic(registry -> {
+            registry.registerAll(List.copyOf(Objects.requireNonNull(
+                    sensitiveMaterialSource.call(), "sensitiveMaterials")));
+            return action.call();
+        }, false);
+    }
+
+    static <T> Captured<T> captureControlledProcess(
+            DynamicAction<T> action
+    ) throws Exception {
+        return captureDynamic(Objects.requireNonNull(action, "action"), true);
+    }
+
+    private static <T> Captured<T> captureDynamic(
+            DynamicAction<T> action,
+            boolean requireControlledRegistry
+    ) throws Exception {
+        SensitiveRegistry registry = new SensitiveRegistry();
         CAPTURE_LOCK.lockInterruptibly();
         PrintStream originalOut = System.out;
         PrintStream originalErr = System.err;
@@ -70,16 +87,18 @@ public final class TushareControlledAcceptanceOutputAudit {
             System.setOut(out);
             System.setErr(err);
             try {
-                materials = List.copyOf(Objects.requireNonNull(
-                        sensitiveMaterialSource.call(), "sensitiveMaterials"));
-                if (materials.isEmpty()) {
+                result = action.call(registry);
+                if (registry.materials().isEmpty()) {
                     throw new IllegalStateException(
                             "TUSHARE_CONTROLLED_ACCEPTANCE_SENSITIVE_REGISTRY_REQUIRED");
                 }
-                result = action.call();
+                if (requireControlledRegistry) {
+                    registry.requireCompleteControlledRegistration();
+                }
             } catch (Throwable error) {
                 failure = error;
             } finally {
+                registry.close();
                 out.flush();
                 err.flush();
                 complete = topologyStillIsolated(context, root, captureAppender);
@@ -107,7 +126,7 @@ public final class TushareControlledAcceptanceOutputAudit {
 
         AuditResult audit;
         try {
-            audit = audit(texts, materials, complete);
+            audit = audit(texts, registry.materials(), complete);
         } catch (RuntimeException auditFailure) {
             audit = new AuditResult(false, false,
                     List.of(new AuditHit("AUDIT", HitCategory.AUDIT_FAILURE, 0)));
@@ -119,13 +138,68 @@ public final class TushareControlledAcceptanceOutputAudit {
                     "CONTROLLED_EXECUTION_FAILED", failure);
             throw new CapturedExecutionException(safeFailure, audit);
         }
-        if (!audit.captureComplete()) {
-            throw new CapturedExecutionException(
-                    new IllegalStateException(
-                            "TUSHARE_CONTROLLED_ACCEPTANCE_OUTPUT_CAPTURE_INCOMPLETE"),
-                    audit);
-        }
         return new Captured<>(result, audit);
+    }
+
+    @FunctionalInterface
+    interface DynamicAction<T> {
+        T call(SensitiveRegistry registry) throws Exception;
+    }
+
+    enum SensitiveKind {
+        DATABASE_PASSWORD,
+        TUSHARE_TOKEN
+    }
+
+    static final class SensitiveRegistry {
+        private final List<SensitiveMaterial> materials = new ArrayList<>();
+        private final List<SensitiveKind> kinds = new ArrayList<>();
+        private boolean active = true;
+
+        void register(SensitiveKind kind, char[] secret) {
+            Objects.requireNonNull(kind, "kind");
+            Objects.requireNonNull(secret, "secret");
+            if (!active || kinds.contains(kind)) {
+                throw new IllegalStateException(
+                        "TUSHARE_CONTROLLED_ACCEPTANCE_SENSITIVE_REGISTRY_INVALID");
+            }
+            String value = new String(secret);
+            materials.add(SensitiveMaterial.register(value));
+            kinds.add(kind);
+        }
+
+        private void registerAll(List<SensitiveMaterial> values) {
+            if (!active || values.isEmpty()) {
+                throw new IllegalStateException(
+                        "TUSHARE_CONTROLLED_ACCEPTANCE_SENSITIVE_REGISTRY_REQUIRED");
+            }
+            materials.addAll(values);
+        }
+
+        private void requireCompleteControlledRegistration() {
+            if (!kinds.equals(List.of(
+                    SensitiveKind.DATABASE_PASSWORD,
+                    SensitiveKind.TUSHARE_TOKEN))) {
+                throw new IllegalStateException(
+                        "TUSHARE_CONTROLLED_ACCEPTANCE_SENSITIVE_REGISTRY_INCOMPLETE");
+            }
+        }
+
+        boolean active() {
+            return active;
+        }
+
+        List<SensitiveKind> registeredKinds() {
+            return List.copyOf(kinds);
+        }
+
+        private List<SensitiveMaterial> materials() {
+            return List.copyOf(materials);
+        }
+
+        private void close() {
+            active = false;
+        }
     }
 
     static AuditResult audit(

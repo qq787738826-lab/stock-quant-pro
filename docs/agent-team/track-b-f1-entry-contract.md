@@ -261,6 +261,22 @@ F1F-B1 补齐持久化唯一 acceptance ID、不可逆状态机、可信构建�
 
 完整 F1 的公司行动、稳定事件身份、factor/action、Provider revision/历史版本、永久证券身份、全历史 DAILY_EXACT 与完整 QFQ lineage 等技术阻断不因该运行机制完成而解除；`F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE`。
 
+### 5.5 F1F-B2 专用启动与构建证明边界
+
+B2-PRE 在 B1 合入后判定 `NOT_READY`，因为可信机制尚无可正式使用的一次性最小进程。后续
+B2-RUNNER 必须采用非 Spring 专用 `main`、手工组件白名单、安全控制台秘密通道、非池化专用
+DataSource 和全流程输出审计；审计安装必须先于任何构建/授权解析、秘密读取、数据库或 Provider
+客户端初始化。进程完成一次执行后必须关闭资源并主动退出，不能遗留非 daemon 线程。
+
+治理 V14 固定 `baselineOnMigrate(false)`。构建证明、一次性授权、专用数据库身份、严格 search
+path 与完整 V1—V13 主历史先通过，随后才允许在治理 history 不存在时显式 baseline 13 并迁移
+V14；错误 public、错误数据库/用户或不完整历史必须保持治理 DDL 调用为 0。
+
+构建证明分为默认 `PREPARATION_ONLY` 与显式 `CONTROLLED_BUILD_ARTIFACT`。两种模式都只能使用
+Maven Wrapper，并绑定本地/远程 Git、分支、Java、Maven、模块、executor、rule、时间、MANIFEST、
+sidecar 和 JAR SHA-256。PREPARATION 永远不具治理资格。B2-RUNNER 合入后仍须基于新的冻结集成
+SHA 重新执行完整 B2-PRE；不得沿用旧 JAR、旧 sidecar、旧授权草稿或 `e3777602...`。
+
 ## 6. 继续禁止
 
 - F1A 验收完成后不追加无授权 Tushare 调用；

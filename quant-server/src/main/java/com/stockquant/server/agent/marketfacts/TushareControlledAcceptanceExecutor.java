@@ -9,7 +9,6 @@ import com.stockquant.server.agent.marketfacts.TushareControlledAcceptanceExecut
 import com.stockquant.server.agent.marketfacts.TushareControlledAcceptanceExecution.Reservation;
 import com.stockquant.server.agent.marketfacts.TushareControlledAcceptanceEvaluator.EncodedEvidence;
 import com.stockquant.server.agent.marketfacts.TushareControlledAcceptanceEvaluator.CandidateAssessment;
-import com.stockquant.server.agent.marketfacts.TushareControlledAcceptanceOutputAudit.Captured;
 import com.stockquant.server.agent.marketfacts.TushareControlledAcceptanceOutputAudit.SensitiveMaterial;
 import com.stockquant.server.agent.marketfacts.TushareDedicatedResearchBatchModels.TushareDedicatedResearchBatchResult;
 import java.time.Clock;
@@ -19,7 +18,6 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Explicit F1F-B execution boundary. It is intentionally not a Spring bean,
@@ -61,11 +59,33 @@ public final class TushareControlledAcceptanceExecutor {
             ExecutionSource executionSource,
             SensitiveMaterialSource sensitiveMaterialSource
     ) {
+        try {
+            TushareControlledAcceptanceOutputAudit.Captured<PendingExecution> captured =
+                    TushareControlledAcceptanceOutputAudit.captureAfterRegistration(
+                            () -> List.copyOf(Objects.requireNonNull(
+                                    sensitiveMaterialSource.materials(),
+                                    "sensitiveMaterials")),
+                            () -> executeBeforeFinalAudit(
+                                    authorization, command, buildProof, executionSource));
+            return completeAfterAudit(captured.value(), captured.auditResult());
+        } catch (TushareControlledAcceptanceOutputAudit.CapturedExecutionException error) {
+            throw blocked("TUSHARE_CONTROLLED_ACCEPTANCE_EXECUTION_FAILED");
+        } catch (Exception error) {
+            throw error instanceof RuntimeException runtime ? runtime
+                    : blocked("TUSHARE_CONTROLLED_ACCEPTANCE_EXECUTION_FAILED");
+        }
+    }
+
+    PendingExecution executeBeforeFinalAudit(
+            TushareControlledAcceptanceAuthorization authorization,
+            TushareDedicatedResearchBatchCommand command,
+            VerifiedBuildProof buildProof,
+            ExecutionSource executionSource
+    ) {
         Objects.requireNonNull(authorization, "authorization");
         Objects.requireNonNull(command, "command");
         Objects.requireNonNull(buildProof, "buildProof").validate();
         Objects.requireNonNull(executionSource, "executionSource");
-        Objects.requireNonNull(sensitiveMaterialSource, "sensitiveMaterialSource");
         Instant startedAt = clock.instant().truncatedTo(ChronoUnit.MICROS);
         validateExactScope(authorization, command, buildProof, executionSource, startedAt);
         TushareControlledAcceptanceDatabaseGuard.ControlledVerification preProvider =
@@ -91,44 +111,16 @@ public final class TushareControlledAcceptanceExecutor {
             throw error;
         }
 
-        AtomicLong providerAttemptsBefore = new AtomicLong(-1L);
+        long providerAttemptsBefore = batchService.totalProviderAttemptCount();
         ExecutionPayload payload;
-        TushareControlledAcceptanceOutputAudit.AuditResult audit;
         try {
-            Captured<ExecutionPayload> captured =
-                    TushareControlledAcceptanceOutputAudit.captureAfterRegistration(
-                            () -> List.copyOf(Objects.requireNonNull(
-                                    sensitiveMaterialSource.materials(),
-                                    "sensitiveMaterials")),
-                            () -> {
-                                long before = batchService.totalProviderAttemptCount();
-                                providerAttemptsBefore.set(before);
-                                return runAndReadback(command, startedAt, before);
-                            });
-            payload = captured.value();
-            audit = captured.auditResult();
-            if (!audit.clean()) {
-                repository.markFailed(authorization.acceptanceId(), ExecutionStatus.RUNNING,
-                        ExecutionStatus.FAILED_OUTPUT_AUDIT, "OUTPUT_AUDIT",
-                        "TUSHARE_CONTROLLED_ACCEPTANCE_SENSITIVE_OUTPUT_DETECTED",
-                        providerAttemptsSince(providerAttemptsBefore.get()));
-                throw blocked("TUSHARE_CONTROLLED_ACCEPTANCE_SENSITIVE_OUTPUT_DETECTED");
-            }
-        } catch (TushareControlledAcceptanceOutputAudit.CapturedExecutionException error) {
-            FailureClassification failure = error.auditResult().clean()
-                    ? classifyCleanFailure(error.getCause(),
-                    providerAttemptsBefore.get())
-                    : new FailureClassification(
-                    ExecutionStatus.FAILED_OUTPUT_AUDIT, "OUTPUT_AUDIT",
-                    "TUSHARE_CONTROLLED_ACCEPTANCE_SENSITIVE_OUTPUT_DETECTED");
+            payload = runAndReadback(command, startedAt, providerAttemptsBefore);
+        } catch (Exception error) {
+            FailureClassification failure = classifyCleanFailure(
+                    error, providerAttemptsBefore);
             repository.markFailed(authorization.acceptanceId(), ExecutionStatus.RUNNING,
                     failure.status(), failure.stage(), failure.reasonCode(),
-                    providerAttemptsSince(providerAttemptsBefore.get()));
-            throw blocked("TUSHARE_CONTROLLED_ACCEPTANCE_EXECUTION_FAILED");
-        } catch (Exception error) {
-            repository.markFailed(authorization.acceptanceId(), ExecutionStatus.RUNNING,
-                    ExecutionStatus.FAILED_VALIDATION, "EXECUTION",
-                    safeReason(error), providerAttemptsSince(providerAttemptsBefore.get()));
+                    providerAttemptsSince(providerAttemptsBefore));
             throw error instanceof RuntimeException runtime ? runtime
                     : blocked("TUSHARE_CONTROLLED_ACCEPTANCE_EXECUTION_FAILED");
         }
@@ -137,14 +129,35 @@ public final class TushareControlledAcceptanceExecutor {
         if (!endedAt.isAfter(startedAt)) {
             endedAt = startedAt.plus(1, ChronoUnit.MICROS);
         }
+        return new PendingExecution(
+                authorization, executionSource, buildProof, payload,
+                providerAttemptsBefore, startedAt, endedAt);
+    }
+
+    Decision completeAfterAudit(
+            PendingExecution pending,
+            TushareControlledAcceptanceOutputAudit.AuditResult audit
+    ) {
+        Objects.requireNonNull(pending, "pending");
+        Objects.requireNonNull(audit, "audit");
+        TushareControlledAcceptanceAuthorization authorization = pending.authorization();
+        if (!audit.captureComplete() || !audit.clean()) {
+            repository.markFailed(authorization.acceptanceId(), ExecutionStatus.RUNNING,
+                    ExecutionStatus.FAILED_OUTPUT_AUDIT, "OUTPUT_AUDIT",
+                    "TUSHARE_CONTROLLED_ACCEPTANCE_SENSITIVE_OUTPUT_DETECTED",
+                    providerAttemptsSince(pending.providerAttemptsBefore()));
+            throw blocked("TUSHARE_CONTROLLED_ACCEPTANCE_SENSITIVE_OUTPUT_DETECTED");
+        }
+        ExecutionPayload payload = pending.payload();
+        VerifiedBuildProof buildProof = pending.buildProof();
         RedactedEvidence evidence = new RedactedEvidence(
-                authorization.acceptanceId(), executionSource,
+                authorization.acceptanceId(), pending.executionSource(),
                 buildProof.gitCommit(), buildProof.actualArtifactSha256(),
                 payload.result().providerCallCount(), payload.result().retryCount(),
                 payload.batchId(), endpointCounts(), payload.readback(), audit,
                 TushareControlledAcceptanceBoundaryAttestor.attest(getClass()),
                 payload.formulaOnlyQfqValid(), false, false, false, false,
-                startedAt, endedAt,
+                pending.startedAt(), pending.endedAt(),
                 TushareControlledAcceptanceExecution.EXECUTOR_VERSION,
                 TushareControlledAcceptanceExecution.RULE_VERSION);
         EncodedEvidence encoded = evaluator.encode(evidence);
@@ -307,6 +320,29 @@ public final class TushareControlledAcceptanceExecutor {
             DatabaseReadbackEvidence readback,
             boolean formulaOnlyQfqValid
     ) {
+    }
+
+    record PendingExecution(
+            TushareControlledAcceptanceAuthorization authorization,
+            ExecutionSource executionSource,
+            VerifiedBuildProof buildProof,
+            ExecutionPayload payload,
+            long providerAttemptsBefore,
+            Instant startedAt,
+            Instant endedAt
+    ) {
+        PendingExecution {
+            Objects.requireNonNull(authorization, "authorization");
+            Objects.requireNonNull(executionSource, "executionSource");
+            Objects.requireNonNull(buildProof, "buildProof");
+            Objects.requireNonNull(payload, "payload");
+            Objects.requireNonNull(startedAt, "startedAt");
+            Objects.requireNonNull(endedAt, "endedAt");
+            if (providerAttemptsBefore < 0 || !endedAt.isAfter(startedAt)) {
+                throw new IllegalArgumentException(
+                        "TUSHARE_CONTROLLED_ACCEPTANCE_PENDING_INVALID");
+            }
+        }
     }
 
     record FailureClassification(

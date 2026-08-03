@@ -4,6 +4,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 
 import java.net.URI;
 import java.time.Duration;
+import java.util.Arrays;
 
 /**
  * Explicitly gated Tushare settings for the limited personal-research adapter.
@@ -24,7 +25,7 @@ public class TushareMarketFactProperties {
 
     private Mode mode = Mode.DISABLED;
     private String baseUrl = "https://" + OFFICIAL_API_HOST;
-    private String token;
+    private char[] token;
     private int officialRateLimitPerMinute =
             FROZEN_OFFICIAL_RATE_LIMIT_PER_MINUTE;
     private int officialDailyLimitPerApi =
@@ -56,11 +57,24 @@ public class TushareMarketFactProperties {
     }
 
     public String getToken() {
-        return token;
+        return token == null ? null : new String(token);
     }
 
     public void setToken(String token) {
-        this.token = token;
+        clearToken();
+        this.token = token == null ? null : token.toCharArray();
+    }
+
+    void setToken(char[] token) {
+        clearToken();
+        this.token = token == null ? null : token.clone();
+    }
+
+    void clearToken() {
+        if (token != null) {
+            Arrays.fill(token, '\0');
+            token = null;
+        }
     }
 
     public int getOfficialRateLimitPerMinute() {
@@ -138,7 +152,15 @@ public class TushareMarketFactProperties {
     }
 
     public boolean tokenPresent() {
-        return token != null && !token.isBlank();
+        if (token == null || token.length == 0) {
+            return false;
+        }
+        for (char value : token) {
+            if (!Character.isWhitespace(value)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     String requireManualBoundedToken() {
@@ -150,7 +172,7 @@ public class TushareMarketFactProperties {
             throw new IllegalStateException(
                     "TUSHARE_TOKEN_NOT_CONFIGURED");
         }
-        return token;
+        return new String(token);
     }
 
     URI validatedBaseUri() {

@@ -32,6 +32,8 @@ import static org.junit.jupiter.api.Assertions.*;
 
 @EnabledIfEnvironmentVariable(named = "F1F_B1_POSTGRES_JDBC_URL", matches = ".+")
 class TushareControlledAcceptancePostgresTest {
+    private static final String COMMIT = "e3777602fadd65f3af0a2ba8ac6e886693d745d5";
+    private static final String SHA = "a".repeat(64);
     private static DataSource dataSource;
     private static JdbcTemplate jdbc;
     private static boolean defaultFlywayExcludedV14;
@@ -72,7 +74,8 @@ class TushareControlledAcceptancePostgresTest {
                 """, Boolean.class)));
 
         TushareControlledAcceptanceDatabaseGuard.migrateGovernance(
-                dataSource, TushareDedicatedResearchPersistenceGuard.DATABASE_PURPOSE);
+                dataSource, TushareDedicatedResearchPersistenceGuard.DATABASE_PURPOSE,
+                authorization(), buildProof());
     }
 
     @AfterAll
@@ -100,7 +103,8 @@ class TushareControlledAcceptancePostgresTest {
         assertDoesNotThrow(() ->
                 TushareControlledAcceptanceDatabaseGuard.migrateGovernance(
                         dataSource,
-                        TushareDedicatedResearchPersistenceGuard.DATABASE_PURPOSE));
+                        TushareDedicatedResearchPersistenceGuard.DATABASE_PURPOSE,
+                        authorization(), buildProof()));
         assertEquals(List.of("13", "14"), jdbc.queryForList("""
                 SELECT version
                   FROM tushare_research.flyway_controlled_acceptance_history
@@ -117,7 +121,8 @@ class TushareControlledAcceptancePostgresTest {
         assertThrows(RuntimeException.class, () ->
                 TushareControlledAcceptanceDatabaseGuard.migrateGovernance(
                         publicSource,
-                        TushareDedicatedResearchPersistenceGuard.DATABASE_PURPOSE));
+                        TushareDedicatedResearchPersistenceGuard.DATABASE_PURPOSE,
+                        authorization(), buildProof()));
         JdbcTemplate publicJdbc = new JdbcTemplate(publicSource);
         assertFalse(Boolean.TRUE.equals(publicJdbc.queryForObject("""
                 SELECT to_regclass(
@@ -419,5 +424,18 @@ class TushareControlledAcceptancePostgresTest {
                 "f68d84403ebb82babe92a1cb0f78d845ed39547a", "a".repeat(64),
                 "stock_quant_research", "stock_quant_research", "tushare_research",
                 14, created, created.plusSeconds(120));
+    }
+
+    private static TushareControlledAcceptanceAuthorization authorization() {
+        Instant issued = Instant.now().minusSeconds(30);
+        return TushareControlledAcceptanceAuthorization.issueUserApprovedDurable(
+                "F1FB2_PG_MIGRATION", COMMIT, SHA,
+                new TushareDedicatedResearchBatchCommand.SecuritySelection(
+                        "600000", "SSE"),
+                LocalDate.of(2025, 1, 2), issued, issued.plusSeconds(120));
+    }
+
+    private static TushareControlledAcceptanceBuildProof.VerifiedBuildProof buildProof() {
+        return TushareControlledAcceptanceBuildProof.verifiedTestProof(COMMIT, SHA);
     }
 }

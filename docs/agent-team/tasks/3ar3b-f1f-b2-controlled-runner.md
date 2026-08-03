@@ -1,0 +1,40 @@
+# 3A-R3B-F1F-B2-RUNNER：专用执行入口与冻结安全门修复
+
+## 基线与目标
+
+- 集成基线：`e3777602fadd65f3af0a2ba8ac6e886693d745d5`。
+- 任务分支：`codex/1.4.0-stage-3ar3b-f1f-b2-controlled-runner`。
+- B2-PRE 结论：`NOT_READY`。
+- 本任务只补齐最小专用进程、输出审计时序、显式治理 bootstrap、构建双模式和 Maven Wrapper 证明；不执行真实受控验收。
+
+## 冻结实现合同
+
+1. `TushareControlledAcceptanceRunner` 是唯一专用一次性入口；它不启动普通 Spring Boot、Web、Controller、scheduler、Agent、回测、Shadow 或交易入口。
+2. 组件通过 `TushareControlledAcceptanceComponents` 手工白名单装配，不进行组件扫描或 ServiceLoader 自动发现。
+3. stdout/stderr 与 Logback 拓扑先于构建证明、授权、秘密和 DataSource 安装；数据库密码和 Token 只从安全控制台通道读取为可清除字符数组，读取后立即登记审计变体。
+4. 治理 V14 固定 `baselineOnMigrate(false)`；数据库身份、search path、主历史 V1—V13、构建证明与授权先于治理操作验证。治理历史首次不存在时，只能显式 `baseline()` 后迁移 V14。
+5. 构建模式只有 `PREPARATION_ONLY` 和 `CONTROLLED_BUILD_ARTIFACT`，默认前者。PREPARATION 证明不能取得治理资格或形成真实 `PASSED`。
+6. 构建只使用仓库 Maven Wrapper `3.9.16`；MANIFEST 与相邻 sidecar 同时绑定本地/远程 SHA、分支、Java、Wrapper、模块、executor、rule、模式、时间和 JAR SHA-256。
+7. 本任务不签发证券、日期、数据库端口、SSL、owner、权限 DDL、保留策略、acceptance ID、到期时间或正式 JAR 摘要；这些仍是 `PROVISIONAL/DRAFT_NOT_AUTHORIZED`。
+
+## 状态与禁止项
+
+```text
+CONTROLLED_ACCEPTANCE_STATUS=NOT_RUN
+F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE
+REDUCED_RESEARCH_OPERATIONAL_READY=false
+FREE_PRODUCT_PREVIEW_GATE=PASS
+FREE_PROVIDER_VALIDATION_GATE=BLOCKED
+PAID_PROVIDER_UPGRADE_DECISION=PENDING
+IFIND_TRIAL_ACTIVATION_GATE=BLOCKED
+```
+
+本任务 Provider 调用、数据库连接、V13/V14 执行和真实秘密读取均为 0。不得执行 `CONTROLLED_BUILD_ARTIFACT`、F1F-B2、scheduler、Agent、回测、Shadow、Day 002、F2B、F3、3A-R3B-1、3B 或交易。
+
+## 验收
+
+- 专用 runner 与构建证明定向测试全部离线通过。
+- 错误身份或不完整主历史时，治理 operation factory 与 DDL 调用均为 0。
+- 敏感输出、缺构建证明、缺授权或缺安全秘密通道均 fail closed。
+- PREPARATION 演练只产生临时非治理产物，验证后精确删除 JAR、sidecar 和临时文件。
+- 合入后必须基于新的集成 SHA 重新执行完整 B2-PRE；本任务不得直接进入真实 B2。

@@ -20,11 +20,14 @@ import java.util.jar.JarFile;
 public final class TushareControlledAcceptanceBuildProof {
     static final String SIDECAR_SUFFIX = ".f1f-b2-proof.properties";
     static final String MODULE_VERSION = "1.3.1";
+    static final String MAVEN_WRAPPER_VERSION = "3.9.16";
     static final String REQUIRED_INTEGRATION_BRANCH = "feature/1.4.0-agent-team";
     private static final Set<String> REQUIRED_PROPERTIES = Set.of(
-            "git.commit", "git.branch", "git.trackedClean", "git.untrackedScopeClean",
+            "git.commit", "git.remote.commit", "git.branch", "git.trackedClean",
+            "git.untrackedScopeClean",
             "artifact.sha256", "build.time", "java.version", "module.version",
-            "executor.version", "qualification.rule.version");
+            "maven.wrapper.version", "build.mode", "executor.version",
+            "qualification.rule.version");
 
     private TushareControlledAcceptanceBuildProof() {
     }
@@ -38,7 +41,7 @@ public final class TushareControlledAcceptanceBuildProof {
         return loadBoundArtifact(
                 artifact,
                 Path.of(artifact.toString() + SIDECAR_SUFFIX),
-                ProofSource.CONTROLLED_BUILD_ARTIFACT);
+                null);
     }
 
     static VerifiedBuildProof loadBoundTestArtifact(Path artifact, Path sidecar) {
@@ -73,8 +76,16 @@ public final class TushareControlledAcceptanceBuildProof {
         String actualArtifactSha = sha256(normalizedArtifact);
         VerifiedBuildProof proof;
         try {
+            BuildMode buildMode = BuildMode.valueOf(
+                    properties.getProperty("build.mode"));
+            ProofSource effectiveSource = source == ProofSource.TEST_ONLY
+                    ? ProofSource.TEST_ONLY
+                    : buildMode == BuildMode.CONTROLLED_BUILD_ARTIFACT
+                    ? ProofSource.CONTROLLED_BUILD_ARTIFACT
+                    : ProofSource.PREPARATION_ONLY;
             proof = new VerifiedBuildProof(
                     properties.getProperty("git.commit"),
+                    properties.getProperty("git.remote.commit"),
                     properties.getProperty("git.branch"),
                     Boolean.parseBoolean(properties.getProperty("git.trackedClean")),
                     Boolean.parseBoolean(properties.getProperty("git.untrackedScopeClean")),
@@ -83,11 +94,13 @@ public final class TushareControlledAcceptanceBuildProof {
                     Instant.parse(properties.getProperty("build.time")),
                     properties.getProperty("java.version"),
                     properties.getProperty("module.version"),
+                    properties.getProperty("maven.wrapper.version"),
+                    buildMode,
                     properties.getProperty("executor.version"),
                     properties.getProperty("qualification.rule.version"),
                     manifest,
-                    source);
-        } catch (DateTimeParseException error) {
+                    effectiveSource);
+        } catch (DateTimeParseException | IllegalArgumentException error) {
             throw invalid("TUSHARE_CONTROLLED_ACCEPTANCE_BUILD_PROOF_FIELDS_INVALID");
         }
         proof.validate();
@@ -99,16 +112,18 @@ public final class TushareControlledAcceptanceBuildProof {
             String artifactSha256
     ) {
         ManifestProof manifest = new ManifestProof(
-                gitCommit, REQUIRED_INTEGRATION_BRANCH, true, true,
+                gitCommit, gitCommit, REQUIRED_INTEGRATION_BRANCH, true, true,
                 Instant.parse("2026-08-01T00:00:00Z"),
-                "17-test", MODULE_VERSION,
+                "17-test", MODULE_VERSION, MAVEN_WRAPPER_VERSION,
+                BuildMode.CONTROLLED_BUILD_ARTIFACT,
                 TushareControlledAcceptanceExecution.EXECUTOR_VERSION,
                 TushareControlledAcceptanceExecution.RULE_VERSION);
         return new VerifiedBuildProof(
-                gitCommit, REQUIRED_INTEGRATION_BRANCH, true, true,
+                gitCommit, gitCommit, REQUIRED_INTEGRATION_BRANCH, true, true,
                 artifactSha256, artifactSha256,
                 Instant.parse("2026-08-01T00:00:00Z"),
-                "17-test", MODULE_VERSION,
+                "17-test", MODULE_VERSION, MAVEN_WRAPPER_VERSION,
+                BuildMode.CONTROLLED_BUILD_ARTIFACT,
                 TushareControlledAcceptanceExecution.EXECUTOR_VERSION,
                 TushareControlledAcceptanceExecution.RULE_VERSION,
                 manifest, ProofSource.TEST_ONLY);
@@ -116,6 +131,7 @@ public final class TushareControlledAcceptanceBuildProof {
 
     public static final class VerifiedBuildProof {
         private final String gitCommit;
+        private final String remoteGitCommit;
         private final String branchName;
         private final boolean trackedWorkspaceClean;
         private final boolean untrackedScopeClean;
@@ -124,6 +140,8 @@ public final class TushareControlledAcceptanceBuildProof {
         private final Instant buildTime;
         private final String javaVersion;
         private final String moduleVersion;
+        private final String mavenWrapperVersion;
+        private final BuildMode buildMode;
         private final String executorVersion;
         private final String qualificationRuleVersion;
         private final ManifestProof manifest;
@@ -131,6 +149,7 @@ public final class TushareControlledAcceptanceBuildProof {
 
         private VerifiedBuildProof(
                 String gitCommit,
+                String remoteGitCommit,
                 String branchName,
                 boolean trackedWorkspaceClean,
                 boolean untrackedScopeClean,
@@ -139,12 +158,16 @@ public final class TushareControlledAcceptanceBuildProof {
                 Instant buildTime,
                 String javaVersion,
                 String moduleVersion,
+                String mavenWrapperVersion,
+                BuildMode buildMode,
                 String executorVersion,
                 String qualificationRuleVersion,
                 ManifestProof manifest,
                 ProofSource source
         ) {
             this.gitCommit = TushareControlledAcceptanceExecution.commit(gitCommit);
+            this.remoteGitCommit = TushareControlledAcceptanceExecution.commit(
+                    remoteGitCommit);
             this.branchName = Objects.requireNonNull(branchName, "branchName");
             this.trackedWorkspaceClean = trackedWorkspaceClean;
             this.untrackedScopeClean = untrackedScopeClean;
@@ -155,6 +178,9 @@ public final class TushareControlledAcceptanceBuildProof {
             this.buildTime = Objects.requireNonNull(buildTime, "buildTime");
             this.javaVersion = TushareControlledAcceptanceExecution.safeText(javaVersion);
             this.moduleVersion = TushareControlledAcceptanceExecution.safeText(moduleVersion);
+            this.mavenWrapperVersion = TushareControlledAcceptanceExecution.safeText(
+                    mavenWrapperVersion);
+            this.buildMode = Objects.requireNonNull(buildMode, "buildMode");
             this.executorVersion = TushareControlledAcceptanceExecution.safeText(executorVersion);
             this.qualificationRuleVersion = TushareControlledAcceptanceExecution.safeText(
                     qualificationRuleVersion);
@@ -166,7 +192,10 @@ public final class TushareControlledAcceptanceBuildProof {
             if (!trackedWorkspaceClean || !untrackedScopeClean
                     || !actualArtifactSha256.equals(declaredArtifactSha256)
                     || !gitCommit.equals(manifest.gitCommit())
-                    || !REQUIRED_INTEGRATION_BRANCH.equals(branchName)
+                    || !remoteGitCommit.equals(manifest.remoteGitCommit())
+                    || !branchAllowedForMode(branchName, buildMode)
+                    || buildMode == BuildMode.CONTROLLED_BUILD_ARTIFACT
+                    && !gitCommit.equals(remoteGitCommit)
                     || !branchName.equals(manifest.branchName())
                     || trackedWorkspaceClean != manifest.trackedWorkspaceClean()
                     || untrackedScopeClean != manifest.untrackedScopeClean()
@@ -174,6 +203,9 @@ public final class TushareControlledAcceptanceBuildProof {
                     || !javaVersion.equals(manifest.javaVersion())
                     || !MODULE_VERSION.equals(moduleVersion)
                     || !moduleVersion.equals(manifest.moduleVersion())
+                    || !MAVEN_WRAPPER_VERSION.equals(mavenWrapperVersion)
+                    || !mavenWrapperVersion.equals(manifest.mavenWrapperVersion())
+                    || buildMode != manifest.buildMode()
                     || !TushareControlledAcceptanceExecution.EXECUTOR_VERSION.equals(
                     executorVersion)
                     || !executorVersion.equals(manifest.executorVersion())
@@ -187,10 +219,12 @@ public final class TushareControlledAcceptanceBuildProof {
 
         boolean governanceEligible() {
             validate();
-            return source == ProofSource.CONTROLLED_BUILD_ARTIFACT;
+            return source == ProofSource.CONTROLLED_BUILD_ARTIFACT
+                    && buildMode == BuildMode.CONTROLLED_BUILD_ARTIFACT;
         }
 
         public String gitCommit() { return gitCommit; }
+        public String remoteGitCommit() { return remoteGitCommit; }
         public String branchName() { return branchName; }
         public boolean trackedWorkspaceClean() { return trackedWorkspaceClean; }
         public boolean untrackedScopeClean() { return untrackedScopeClean; }
@@ -199,6 +233,8 @@ public final class TushareControlledAcceptanceBuildProof {
         public Instant buildTime() { return buildTime; }
         public String javaVersion() { return javaVersion; }
         public String moduleVersion() { return moduleVersion; }
+        public String mavenWrapperVersion() { return mavenWrapperVersion; }
+        public BuildMode buildMode() { return buildMode; }
         public String executorVersion() { return executorVersion; }
         public String qualificationRuleVersion() { return qualificationRuleVersion; }
         public ProofSource source() { return source; }
@@ -206,28 +242,37 @@ public final class TushareControlledAcceptanceBuildProof {
         @Override
         public String toString() {
             return "VerifiedBuildProof[gitCommit=" + gitCommit
+                    + ", remoteGitCommit=" + remoteGitCommit
                     + ", branchName=" + branchName
-                    + ", artifactSha256=[SHA256], source=" + source + ']';
+                    + ", artifactSha256=[SHA256], buildMode=" + buildMode
+                    + ", source=" + source + ']';
         }
     }
 
     record ManifestProof(
             String gitCommit,
+            String remoteGitCommit,
             String branchName,
             boolean trackedWorkspaceClean,
             boolean untrackedScopeClean,
             Instant buildTime,
             String javaVersion,
             String moduleVersion,
+            String mavenWrapperVersion,
+            BuildMode buildMode,
             String executorVersion,
             String qualificationRuleVersion
     ) {
         ManifestProof {
             gitCommit = TushareControlledAcceptanceExecution.commit(gitCommit);
+            remoteGitCommit = TushareControlledAcceptanceExecution.commit(remoteGitCommit);
             branchName = Objects.requireNonNull(branchName, "branchName");
             buildTime = Objects.requireNonNull(buildTime, "buildTime");
             javaVersion = TushareControlledAcceptanceExecution.safeText(javaVersion);
             moduleVersion = TushareControlledAcceptanceExecution.safeText(moduleVersion);
+            mavenWrapperVersion = TushareControlledAcceptanceExecution.safeText(
+                    mavenWrapperVersion);
+            buildMode = Objects.requireNonNull(buildMode, "buildMode");
             executorVersion = TushareControlledAcceptanceExecution.safeText(executorVersion);
             qualificationRuleVersion = TushareControlledAcceptanceExecution.safeText(
                     qualificationRuleVersion);
@@ -236,7 +281,13 @@ public final class TushareControlledAcceptanceBuildProof {
 
     public enum ProofSource {
         CONTROLLED_BUILD_ARTIFACT,
+        PREPARATION_ONLY,
         TEST_ONLY
+    }
+
+    public enum BuildMode {
+        PREPARATION_ONLY,
+        CONTROLLED_BUILD_ARTIFACT
     }
 
     private static Path currentExecutorArtifact() {
@@ -262,6 +313,7 @@ public final class TushareControlledAcceptanceBuildProof {
             Attributes attributes = jar.getManifest().getMainAttributes();
             return new ManifestProof(
                     attributes.getValue("Stock-Quant-Git-Commit"),
+                    attributes.getValue("Stock-Quant-Git-Remote-Commit"),
                     attributes.getValue("Stock-Quant-Git-Branch"),
                     Boolean.parseBoolean(attributes.getValue("Stock-Quant-Tracked-Clean")),
                     Boolean.parseBoolean(attributes.getValue(
@@ -269,9 +321,11 @@ public final class TushareControlledAcceptanceBuildProof {
                     Instant.parse(attributes.getValue("Stock-Quant-Build-Time")),
                     attributes.getValue("Stock-Quant-Java-Version"),
                     attributes.getValue("Stock-Quant-Module-Version"),
+                    attributes.getValue("Stock-Quant-Maven-Wrapper-Version"),
+                    BuildMode.valueOf(attributes.getValue("Stock-Quant-Build-Mode")),
                     attributes.getValue("Stock-Quant-Executor-Version"),
                     attributes.getValue("Stock-Quant-Qualification-Rule-Version"));
-        } catch (IOException | DateTimeParseException error) {
+        } catch (IOException | DateTimeParseException | IllegalArgumentException error) {
             throw invalid("TUSHARE_CONTROLLED_ACCEPTANCE_ARTIFACT_MANIFEST_INVALID");
         }
     }
@@ -288,6 +342,14 @@ public final class TushareControlledAcceptanceBuildProof {
         } catch (IOException | NoSuchAlgorithmException error) {
             throw invalid("TUSHARE_CONTROLLED_ACCEPTANCE_ARTIFACT_HASH_FAILED");
         }
+    }
+
+    private static boolean branchAllowedForMode(String branchName, BuildMode buildMode) {
+        if (buildMode == BuildMode.CONTROLLED_BUILD_ARTIFACT) {
+            return REQUIRED_INTEGRATION_BRANCH.equals(branchName);
+        }
+        return REQUIRED_INTEGRATION_BRANCH.equals(branchName)
+                || branchName.startsWith("codex/");
     }
 
     private static IllegalArgumentException invalid(String code) {

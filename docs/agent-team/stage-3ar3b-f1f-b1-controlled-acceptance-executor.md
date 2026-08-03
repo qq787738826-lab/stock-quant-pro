@@ -5,8 +5,8 @@
 F1F-A 已以双提交链合入集成分支 `f68d84403ebb82babe92a1cb0f78d845ed39547a`。
 F1F-B1 初始任务提交 `e0dfba061a1b2e335c2f0db9bc9efeac012d75c8` 在合并前完整审查中
 发现 V14 隔离、状态机、构建证明、输出隔离、提交后回读、PASSED 重验和失败调用计数仍需
-加固；本阶段在同一任务分支完成最小修复和回归，待 ChatGPT 基于最终实际 Git 提交复验，
-尚未合入。
+加固；修复提交 `e3777602fadd65f3af0a2ba8ac6e886693d745d5` 已通过实际 Git 最终复验，
+经用户批准纯 fast-forward 合入集成分支。
 
 本阶段没有执行 F1F-B2，没有真实 Provider 调用，也没有生成治理认可的真实 `PASSED`。
 当前仍为：
@@ -33,11 +33,12 @@ IFIND_TRIAL_ACTIVATION_GATE=BLOCKED
   尝试和失败尝试均可审计，不能靠业务返回计数掩盖实际委托。
 - 输出捕获包装后的异常按可信原因码重新分类为 Provider、QFQ、Persistence、Database Guard、
   Validation 或 Output Audit 终态；敏感材料未成功登记时不能误记为 Provider 失败。
-- 构建脚本只允许在冻结集成分支上生成证明，要求本地/远程集成 SHA 与期望提交一致，计算
+- B1 当时的构建脚本只允许在冻结集成分支上生成证明，要求本地/远程集成 SHA 与期望提交一致，计算
   当前 executor JAR SHA-256，并把分支、SHA、产物摘要、Java/模块/执行器/规则版本同时写入
   MANIFEST 与相邻 sidecar。加载时再次计算实际 JAR 摘要并交叉核对；TEST proof 无治理资格。
-- 执行器无 Spring/Controller/Runner/Scheduled 入口；静态边界证明同时拒绝组件注解、
-  `@Bean` 和 Agent/回测/Shadow/交易等依赖。未来 F1F-B2 仍必须使用显式最小进程启动。
+- B1 执行器无 Spring/Controller/Runner/Scheduled 入口；静态边界证明同时拒绝组件注解、
+  `@Bean` 和 Agent/回测/Shadow/交易等依赖。后续 B2-PRE 已确认仍需另行实现显式最小进程；
+  该缺口由独立 F1F-B2-RUNNER 任务处理，不回写 B1 的历史实现结论。
 - 输出审计在敏感材料 supplier 执行前安装，独占替换并最终恢复全部当前 Logback logger/
   appender，包括 non-additive 与 AsyncAppender；同时捕获 stdout/stderr、嵌套和 suppressed
   exception。空登记、原文/前后缀、编码/Hash、Authorization/Bearer、JDBC 认证参数或
@@ -89,3 +90,10 @@ SHA-256 sidecar 和证据 digest 是完整性核对，不是外部签名。能�
 完整 F1 十项技术阻断、正常业务库、生产运行、scheduler、Agent、回测、Shadow、Day 002、
 F2B、F3、3A-R3B-1、3B 与交易均未启动。F1F-B2 必须在本阶段审查合入后的冻结集成 SHA
 上重新生成授权和构建证明，不能复用任务分支或 TEST 证明。
+
+## 后续 B2-PRE 结论
+
+F1F-B1 合入后，B2-PRE 对真实启动条件的进一步审计结论为 `NOT_READY`。它确认 B1 的持久化、
+状态机、回读与证明基础继续有效，但 `e3777602...` 尚缺专用 launcher、覆盖秘密/数据源初始化
+之前的审计时序、显式治理 bootstrap、默认 PREPARATION 构建模式与 Maven Wrapper 冻结。
+这些是后续 F1F-B2-RUNNER 的新增安全门，不表示 B1 已验收证据失效，也不授权真实 B2。
