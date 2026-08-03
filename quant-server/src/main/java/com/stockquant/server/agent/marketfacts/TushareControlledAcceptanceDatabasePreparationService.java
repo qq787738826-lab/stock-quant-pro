@@ -101,13 +101,24 @@ final class TushareControlledAcceptanceDatabasePreparationService {
                 createDedicatedDatabase(admin);
             }
 
-            phase = Phase.PERMISSIONS_HARDENED;
+            phase = Phase.DEDICATED_SCHEMA_CREATED;
             try (var adminTargetSource = dataSource(
                     plan.databasePort(),
                     TushareControlledAcceptanceDatabasePreparationPlan.DATABASE,
                     plan.administratorUser(), null, adminSecret);
                  Connection adminTarget = adminTargetSource.getConnection()) {
-                hardenTargetAndCreateOwnedSchema(adminTarget);
+                hardenTargetForDedicatedBootstrap(adminTarget);
+                try (var bootstrapSource = dataSource(
+                        plan.databasePort(),
+                        TushareControlledAcceptanceDatabasePreparationPlan.DATABASE,
+                        TushareControlledAcceptanceDatabasePreparationPlan.USER,
+                        null, bootstrapSecret);
+                     Connection bootstrapConnection =
+                             bootstrapSource.getConnection()) {
+                    createDedicatedSchemaAndExtension(bootstrapConnection);
+                }
+                phase = Phase.PERMISSIONS_HARDENED;
+                finishTargetHardening(adminTarget);
             }
             Arrays.fill(adminSecret, '\0');
 
@@ -393,18 +404,32 @@ final class TushareControlledAcceptanceDatabasePreparationService {
         }
     }
 
-    private static void hardenTargetAndCreateOwnedSchema(Connection connection)
+    private static void hardenTargetForDedicatedBootstrap(Connection connection)
             throws SQLException {
         try (Statement statement = connection.createStatement()) {
             statement.execute("REVOKE ALL ON DATABASE stock_quant_research FROM PUBLIC");
             statement.execute("GRANT CONNECT ON DATABASE stock_quant_research TO stock_quant_research");
+            statement.execute("GRANT CREATE ON DATABASE stock_quant_research TO stock_quant_research");
             statement.execute("REVOKE ALL ON SCHEMA public FROM PUBLIC");
             statement.execute("REVOKE ALL ON SCHEMA public FROM stock_quant_research");
-            statement.execute("CREATE SCHEMA tushare_research AUTHORIZATION stock_quant_research");
+        }
+    }
+
+    private static void createDedicatedSchemaAndExtension(Connection connection)
+            throws SQLException {
+        try (Statement statement = connection.createStatement()) {
+            statement.execute("CREATE SCHEMA tushare_research");
             statement.execute("REVOKE ALL ON SCHEMA tushare_research FROM PUBLIC");
             statement.execute("GRANT USAGE, CREATE ON SCHEMA tushare_research TO stock_quant_research");
             statement.execute("CREATE EXTENSION btree_gist WITH SCHEMA tushare_research");
             statement.execute("ALTER ROLE stock_quant_research IN DATABASE stock_quant_research SET search_path TO tushare_research");
+        }
+    }
+
+    private static void finishTargetHardening(Connection connection)
+            throws SQLException {
+        try (Statement statement = connection.createStatement()) {
+            statement.execute("REVOKE CREATE ON DATABASE stock_quant_research FROM stock_quant_research");
         }
     }
 
@@ -603,6 +628,7 @@ final class TushareControlledAcceptanceDatabasePreparationService {
         ADMIN_PREFLIGHT,
         ROLE_CREATED,
         DATABASE_CREATED,
+        DEDICATED_SCHEMA_CREATED,
         PERMISSIONS_HARDENED,
         DEDICATED_SECRET_CONFIGURED,
         MAIN_MIGRATIONS_APPLIED,

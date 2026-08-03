@@ -146,6 +146,10 @@ class TushareControlledAcceptanceDatabasePreparationPostgresTest {
     void publicCreateAndDatabasePublicPrivilegesAreRevoked() throws Exception {
         assertEquals("false", scalar(dedicated,
                 "SELECT has_schema_privilege(current_user, 'public', 'CREATE')::text"));
+        assertEquals("false", scalar(dedicated, """
+                SELECT has_database_privilege(
+                    current_user, 'stock_quant_research', 'CREATE')::text
+                """));
         assertEquals("0", scalar(administrator, """
                 SELECT count(*)::text
                   FROM pg_database d,

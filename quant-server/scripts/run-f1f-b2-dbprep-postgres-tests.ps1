@@ -6,6 +6,7 @@ $dataDir = Join-Path $tempRoot 'data'
 $port = Get-Random -Minimum 20000 -Maximum 45000
 $oldPort = $env:F1F_B2_DBPREP_POSTGRES_PORT
 try {
+    Write-Output "F1F_B2_DBPREP_TEST_PORT=$port"
     New-Item -ItemType Directory -Path $tempRoot | Out-Null
     & "$pgBin\initdb.exe" -D $dataDir -A trust -U postgres `
         --no-locale --encoding=UTF8 | Out-Null
