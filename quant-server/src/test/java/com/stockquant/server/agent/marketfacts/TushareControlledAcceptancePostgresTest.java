@@ -319,6 +319,8 @@ class TushareControlledAcceptancePostgresTest {
         assertEquals(0, stored.providerCallCount());
         assertEquals(0, stored.retryCount());
         assertNull(stored.captureBatchId());
+        assertFalse(first.recoverStrandedRunning(
+                acceptanceId, "STRANDED_RUNNING_PROCESS_EXITED"));
         assertEquals(List.of(ExecutionStatus.AUTHORIZED,
                         ExecutionStatus.RESERVED, ExecutionStatus.RUNNING,
                         ExecutionStatus.INTERRUPTED),

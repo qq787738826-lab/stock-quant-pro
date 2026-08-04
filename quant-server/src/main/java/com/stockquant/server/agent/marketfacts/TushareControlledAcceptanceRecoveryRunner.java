@@ -31,8 +31,13 @@ public final class TushareControlledAcceptanceRecoveryRunner {
     }
 
     static int run(String[] args) {
+        RecoveryPlan plan;
         try {
-            RecoveryPlan plan = RecoveryPlan.parse(args);
+            plan = RecoveryPlan.parse(args);
+        } catch (Throwable ignored) {
+            return EXIT_REJECTED;
+        }
+        try {
             Captured<RecoveryResult> captured =
                     TushareControlledAcceptanceOutputAudit.captureControlledProcess(
                             registry -> recover(plan, registry));
@@ -44,14 +49,38 @@ public final class TushareControlledAcceptanceRecoveryRunner {
             System.out.println("F1F_B2_RECOVERY_STATUS=" + result.status());
             System.out.println("F1F_B2_RECOVERY_FINALIZED_AT=" + result.finalizedAt());
             System.out.println("F1F_B2_RECOVERY_REASON=" + result.reason());
-            Files.writeString(RecoveryPlan.parse(args).resultFile(),
+            System.out.println("F1F_B2_RECOVERY_APPLIED=" + result.applied());
+            Files.writeString(plan.resultFile(),
                     "status=" + result.status() + '\n'
                             + "finalizedAt=" + result.finalizedAt() + '\n'
-                            + "reason=" + result.reason() + '\n',
+                            + "reason=" + result.reason() + '\n'
+                            + "applied=" + result.applied() + '\n',
                     StandardCharsets.UTF_8);
             return EXIT_SUCCESS;
-        } catch (Throwable ignored) {
+        } catch (Throwable error) {
+            writeSafeFailure(plan.resultFile(), error);
             return EXIT_REJECTED;
+        }
+    }
+
+    private static void writeSafeFailure(Path resultFile, Throwable error) {
+        String reason = "TUSHARE_CONTROLLED_ACCEPTANCE_RECOVERY_FAILED";
+        Throwable current = error;
+        while (current != null) {
+            String message = current.getMessage();
+            if (message != null
+                    && message.matches("[A-Z][A-Z0-9_]{7,127}")) {
+                reason = message;
+            }
+            current = current.getCause();
+        }
+        try {
+            Files.writeString(resultFile,
+                    "status=FAILED\nreason=" + reason + '\n',
+                    StandardCharsets.UTF_8);
+        } catch (Exception ignored) {
+            // The process exit code remains authoritative when even the
+            // caller-approved, secret-free result path cannot be written.
         }
     }
 
@@ -98,14 +127,14 @@ public final class TushareControlledAcceptanceRecoveryRunner {
                             new ObjectMapper().registerModule(new JavaTimeModule()),
                             new DataSourceTransactionManager(source),
                             Clock.systemUTC());
-            if (!repository.recoverStrandedRunning(
-                    plan.acceptanceId(), RECOVERY_REASON)) {
-                throw blocked("TUSHARE_CONTROLLED_ACCEPTANCE_RECOVERY_NOT_APPLIED");
-            }
+            boolean applied = repository.recoverStrandedRunning(
+                    plan.acceptanceId(), RECOVERY_REASON);
             var stored = repository.find(plan.acceptanceId()).orElseThrow(() ->
                     blocked("TUSHARE_CONTROLLED_ACCEPTANCE_RECORD_MISSING"));
             if (stored.status() != ExecutionStatus.INTERRUPTED
                     || stored.finalizedAt() == null
+                    || !"RECOVERY".equals(stored.failureStage())
+                    || !RECOVERY_REASON.equals(stored.safeFailureReason())
                     || stored.providerCallCount() != 0
                     || stored.retryCount() != 0
                     || stored.captureBatchId() != null) {
@@ -113,7 +142,7 @@ public final class TushareControlledAcceptanceRecoveryRunner {
             }
             return new RecoveryResult(
                     stored.status(), stored.finalizedAt(),
-                    stored.safeFailureReason());
+                    stored.safeFailureReason(), applied);
         } finally {
             if (source != null) {
                 source.close();
@@ -170,7 +199,8 @@ public final class TushareControlledAcceptanceRecoveryRunner {
     private record RecoveryResult(
             ExecutionStatus status,
             Instant finalizedAt,
-            String reason
+            String reason,
+            boolean applied
     ) {
     }
 
