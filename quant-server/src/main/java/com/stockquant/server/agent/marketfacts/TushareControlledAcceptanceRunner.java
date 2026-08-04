@@ -86,11 +86,19 @@ public final class TushareControlledAcceptanceRunner {
         Throwable current = error;
         String generic = null;
         StringBuilder types = new StringBuilder();
+        StackTraceElement applicationLocation = null;
         while (current != null) {
             if (!types.isEmpty()) {
                 types.append('>');
             }
             types.append(current.getClass().getSimpleName());
+            for (StackTraceElement location : current.getStackTrace()) {
+                if (location.getClassName().startsWith(
+                        "com.stockquant.server.agent.marketfacts.")) {
+                    applicationLocation = location;
+                    break;
+                }
+            }
             String message = current.getMessage();
             if (message != null && message.matches("[A-Z][A-Z0-9_]{7,127}")) {
                 if (message.startsWith("TUSHARE_")
@@ -99,6 +107,7 @@ public final class TushareControlledAcceptanceRunner {
                             "TUSHARE_CONTROLLED_ACCEPTANCE_SAFE_FAILURE=" + message);
                     System.err.println(
                             "TUSHARE_CONTROLLED_ACCEPTANCE_SAFE_FAILURE_TYPES=" + types);
+                    writeSafeLocation(applicationLocation);
                     return;
                 }
                 generic = message;
@@ -110,6 +119,17 @@ public final class TushareControlledAcceptanceRunner {
                         + (generic == null ? "CONTROLLED_EXECUTION_FAILED" : generic));
         System.err.println(
                 "TUSHARE_CONTROLLED_ACCEPTANCE_SAFE_FAILURE_TYPES=" + types);
+        writeSafeLocation(applicationLocation);
+    }
+
+    private static void writeSafeLocation(StackTraceElement location) {
+        if (location != null) {
+            System.err.println(
+                    "TUSHARE_CONTROLLED_ACCEPTANCE_SAFE_FAILURE_LOCATION="
+                            + location.getClassName() + '#'
+                            + location.getMethodName() + ':'
+                            + location.getLineNumber());
+        }
     }
 
     private static ExecutionHandle prepare(
