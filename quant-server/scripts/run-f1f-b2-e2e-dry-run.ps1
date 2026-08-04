@@ -89,6 +89,11 @@ try {
     & "$pgBin\createdb.exe" -h 127.0.0.1 -p $port -U postgres `
         -O stock_quant_research stock_quant_research
     if ($LASTEXITCODE -ne 0) { throw 'F1F_B2_E2E_DATABASE_CREATE_FAILED' }
+    & "$pgBin\psql.exe" -X -q -h 127.0.0.1 -p $port `
+        -U stock_quant_research -d stock_quant_research `
+        -v ON_ERROR_STOP=1 -c `
+        'CREATE SCHEMA tushare_research AUTHORIZATION stock_quant_research' | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'F1F_B2_E2E_SCHEMA_CREATE_FAILED' }
     & "$pgBin\psql.exe" -X -q -h 127.0.0.1 -p $port -U postgres `
         -d stock_quant_research -v ON_ERROR_STOP=1 -c `
         'REVOKE CREATE ON SCHEMA public FROM PUBLIC; REVOKE CREATE ON SCHEMA public FROM stock_quant_research; ALTER ROLE stock_quant_research IN DATABASE stock_quant_research SET search_path TO tushare_research' | Out-Null
