@@ -34,3 +34,7 @@ PostgreSQL/凭据存在性检查、一次 Runner 启动和脱敏结果只读确�
 - F1F-B2 `PASSED` 与七项治理状态保持不变；Day001 成功仍不自动开放 F2B。
 
 完整操作合同见 [本地自动执行说明](stock-quant-local-automation.md)。
+
+后续 `STOCK-QUANT-HOST-BROKER` 阶段确认 Codex restricted-token 身份与真实用户 Credential
+Manager 隔离，因此正式 Codex 入口已改为只写非敏感请求并触发固定宿主任务；本阶段的
+`run-stock-quant-local-automation.ps1` 保留为宿主内部执行器，不再允许 CodexSandbox 直接调用。

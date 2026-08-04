@@ -65,18 +65,5 @@ enable_socks5_udp = false
 "dlcdn.apache.org" = "allow"
 
 [permissions.stock_quant_formal_runner]
-description = "Exact formal Day001 Runner network extension"
+description = "Host-broker request creation and fixed scheduled-task trigger only"
 extends = "stock_quant_local"
-
-[permissions.stock_quant_formal_runner.network]
-enabled = true
-mode = "limited"
-allow_local_binding = false
-allow_upstream_proxy = false
-enable_socks5 = false
-enable_socks5_udp = false
-
-[permissions.stock_quant_formal_runner.network.domains]
-"127.0.0.1" = "allow"
-"localhost" = "allow"
-"api.tushare.pro" = "allow"

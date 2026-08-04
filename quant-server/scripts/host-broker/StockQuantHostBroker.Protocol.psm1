@@ -1,0 +1,546 @@
+Set-StrictMode -Version Latest
+
+$script:ProtocolVersion = 'STOCK_QUANT_HOST_BROKER_REQUEST_V1'
+$script:ResultVersion = 'STOCK_QUANT_HOST_BROKER_RESULT_V1'
+$script:TaskName = 'StockQuantLocalBroker'
+$script:AllowedOperations = @(
+    'CHECK_CREDENTIAL_STATUS'
+    'RUN_FAKE_E2E'
+    'RUN_DAY001'
+    'READ_SANITIZED_RESULT'
+)
+$script:RequiredKeys = @(
+    'schema.version'
+    'request.id'
+    'operation'
+    'git.commit'
+    'jar.path'
+    'jar.sha256'
+    'authorization.file'
+    'day001.mode'
+    'security.symbol'
+    'security.exchange'
+    'trade.date'
+    'database.host'
+    'database.port'
+    'database.name'
+    'database.user'
+    'schema.name'
+    'provider'
+    'provider.endpoints'
+    'endpoint.daily.requests'
+    'endpoint.adj_factor.requests'
+    'endpoint.trade_cal.requests'
+    'maximum.provider.requests'
+    'retry.budget'
+    'redirects'
+    'created.at'
+    'expires.at'
+    'execution.source'
+    'no.retry'
+    'source.request.id'
+)
+$script:AuthorizationKeys = @(
+    'authorization.status'
+    'authorization.version'
+    'run.id'
+    'git.commit'
+    'artifact.sha256'
+    'build.proof.path'
+    'provider'
+    'security.symbol'
+    'security.exchange'
+    'trade.date'
+    'day001.mode'
+    'endpoints'
+    'endpoint.daily.requests'
+    'endpoint.adj_factor.requests'
+    'endpoint.trade_cal.requests'
+    'maximum.provider.requests'
+    'retry.budget'
+    'redirects'
+    'database.host'
+    'database.port'
+    'database.name'
+    'database.user'
+    'database.ssl.mode'
+    'schema.name'
+    'issued.at'
+    'expires.at'
+    'purpose'
+    'execution.source'
+    'user.approval.reference'
+)
+
+function Get-StockQuantHostBrokerPaths {
+    $repoRoot = [IO.Path]::GetFullPath(
+        (Join-Path $PSScriptRoot '..\..\..')).TrimEnd('\', '/')
+    $base = Join-Path $repoRoot `
+        'quant-server\target\stock-quant-host-broker'
+    [pscustomobject]@{
+        RepositoryRoot = $repoRoot
+        TargetRoot = Join-Path $repoRoot 'quant-server\target'
+        Base = $base
+        Requests = Join-Path $base 'requests'
+        Results = Join-Path $base 'results'
+        TaskName = $script:TaskName
+        BrokerScript = Join-Path $PSScriptRoot 'stock-quant-host-broker.ps1'
+    }
+}
+
+function Initialize-StockQuantHostBrokerDirectories {
+    $paths = Get-StockQuantHostBrokerPaths
+    foreach ($directory in @($paths.Base, $paths.Requests, $paths.Results)) {
+        if (-not (Test-Path -LiteralPath $directory -PathType Container)) {
+            New-Item -ItemType Directory -Path $directory | Out-Null
+        }
+    }
+    return $paths
+}
+
+function ConvertTo-StockQuantSafeCode {
+    param(
+        [AllowNull()]
+        [object] $ErrorValue,
+        [string] $Fallback = 'STOCK_QUANT_HOST_BROKER_FAILED'
+    )
+    $current = $ErrorValue
+    if ($current -is [System.Management.Automation.ErrorRecord]) {
+        $current = $current.Exception
+    }
+    while ($null -ne $current) {
+        $message = [string]$current.Message
+        if ($message -match '^[A-Z][A-Z0-9_]{7,127}$') {
+            return $message
+        }
+        $current = $current.InnerException
+    }
+    return $Fallback
+}
+
+function Assert-StockQuantPathInside {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $Path,
+        [Parameter(Mandatory = $true)]
+        [string] $Root,
+        [string] $FailureCode = 'STOCK_QUANT_HOST_BROKER_PATH_INVALID',
+        [switch] $MustExist,
+        [ValidateSet('Any', 'Leaf', 'Container')]
+        [string] $PathType = 'Any'
+    )
+    if ([string]::IsNullOrWhiteSpace($Path) -or
+        -not [IO.Path]::IsPathRooted($Path)) {
+        throw $FailureCode
+    }
+    $full = [IO.Path]::GetFullPath($Path).TrimEnd('\', '/')
+    $rootFull = [IO.Path]::GetFullPath($Root).TrimEnd('\', '/')
+    $prefix = $rootFull + [IO.Path]::DirectorySeparatorChar
+    if (-not $full.StartsWith(
+            $prefix, [StringComparison]::OrdinalIgnoreCase) -or
+        ($full -split '[\\/]') -contains '.ai') {
+        throw $FailureCode
+    }
+    if ($MustExist) {
+        $exists = switch ($PathType) {
+            'Leaf' { Test-Path -LiteralPath $full -PathType Leaf }
+            'Container' { Test-Path -LiteralPath $full -PathType Container }
+            default { Test-Path -LiteralPath $full }
+        }
+        if (-not $exists) { throw $FailureCode }
+    }
+    return $full
+}
+
+function Read-StrictStockQuantProperties {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $Path
+    )
+    $bytes = [IO.File]::ReadAllBytes($Path)
+    if ($bytes.Length -lt 1 -or $bytes.Length -gt 16384 -or
+        ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and
+            $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF)) {
+        throw 'STOCK_QUANT_HOST_BROKER_REQUEST_ENCODING_INVALID'
+    }
+    $strictUtf8 = [Text.UTF8Encoding]::new($false, $true)
+    try {
+        $content = $strictUtf8.GetString($bytes)
+    } catch {
+        throw 'STOCK_QUANT_HOST_BROKER_REQUEST_ENCODING_INVALID'
+    }
+    if ($content.IndexOf([char]0) -ge 0 -or
+        $content -match '(?i)(database\.password|jdbc\.password|provider\.token|token\.sha|credentialblob)') {
+        throw 'STOCK_QUANT_HOST_BROKER_REQUEST_SECRET_FIELD_FORBIDDEN'
+    }
+    $values = [ordered]@{}
+    foreach ($line in ($content -split "`r?`n")) {
+        if ([string]::IsNullOrEmpty($line)) { continue }
+        if ($line.StartsWith('#') -or $line.StartsWith(';')) {
+            throw 'STOCK_QUANT_HOST_BROKER_REQUEST_LINE_INVALID'
+        }
+        $separator = $line.IndexOf('=')
+        if ($separator -le 0 -or $separator -eq $line.Length - 1 -or
+            $line.IndexOf('=', $separator + 1) -ge 0) {
+            throw 'STOCK_QUANT_HOST_BROKER_REQUEST_LINE_INVALID'
+        }
+        $key = $line.Substring(0, $separator)
+        $value = $line.Substring($separator + 1)
+        if ($key -notmatch '^[a-z][a-z0-9._]{1,63}$' -or
+            $value -match '[\x00-\x1F\x7F]' -or
+            $values.Contains($key)) {
+            throw 'STOCK_QUANT_HOST_BROKER_REQUEST_LINE_INVALID'
+        }
+        $values[$key] = $value
+    }
+    return $values
+}
+
+function ConvertTo-StockQuantTimestamp {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $Value
+    )
+    [DateTimeOffset] $parsed = [DateTimeOffset]::MinValue
+    if (-not [DateTimeOffset]::TryParse(
+            $Value,
+            [Globalization.CultureInfo]::InvariantCulture,
+            [Globalization.DateTimeStyles]::RoundtripKind,
+            [ref] $parsed) -or $parsed.Offset -ne [TimeSpan]::Zero) {
+        throw 'STOCK_QUANT_HOST_BROKER_REQUEST_TIME_INVALID'
+    }
+    return $parsed
+}
+
+function Assert-StockQuantAuthorizationNonSensitive {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $Path,
+        [Parameter(Mandatory = $true)]
+        [string] $ExpectedGitCommit,
+        [Parameter(Mandatory = $true)]
+        [string] $ExpectedArtifactHash,
+        [Parameter(Mandatory = $true)]
+        [string] $ExpectedBuildProof,
+        [DateTimeOffset] $Now = [DateTimeOffset]::UtcNow
+    )
+    $content = [IO.File]::ReadAllText($Path, [Text.Encoding]::UTF8)
+    if ($content -match '(?im)^\s*(database\.password|jdbc\.password|provider\.token|token|password)\s*=') {
+        throw 'STOCK_QUANT_HOST_BROKER_AUTHORIZATION_SECRET_FORBIDDEN'
+    }
+    $values = Read-StrictStockQuantProperties -Path $Path
+    if ($values.Count -ne $script:AuthorizationKeys.Count) {
+        throw 'STOCK_QUANT_HOST_BROKER_AUTHORIZATION_INVALID'
+    }
+    foreach ($key in $script:AuthorizationKeys) {
+        if (-not $values.Contains($key) -or
+            [string]::IsNullOrWhiteSpace([string]$values[$key])) {
+            throw 'STOCK_QUANT_HOST_BROKER_AUTHORIZATION_INVALID'
+        }
+    }
+    foreach ($key in $values.Keys) {
+        if ($key -notin $script:AuthorizationKeys) {
+            throw 'STOCK_QUANT_HOST_BROKER_AUTHORIZATION_INVALID'
+        }
+    }
+    $status = [string]$values['authorization.status']
+    if ($status -notin @('USER_APPROVED', 'E2E_DRY_RUN') -or
+        $values['authorization.version'] -ne
+            'REDUCED_RESEARCH_DAY001_AUTHORIZATION_V1' -or
+        $values['run.id'] -notmatch '^[A-Za-z0-9][A-Za-z0-9_-]{7,95}$' -or
+        $values['git.commit'] -cne $ExpectedGitCommit -or
+        $values['artifact.sha256'] -cne $ExpectedArtifactHash -or
+        $values['provider'] -ne 'TUSHARE' -or
+        $values['security.symbol'] -ne '600000' -or
+        $values['security.exchange'] -ne 'SSE' -or
+        $values['trade.date'] -ne '2025-01-03' -or
+        $values['day001.mode'] -ne 'IDEMPOTENCY_VERIFICATION' -or
+        $values['endpoints'] -ne 'daily,adj_factor,trade_cal' -or
+        $values['endpoint.daily.requests'] -ne '1' -or
+        $values['endpoint.adj_factor.requests'] -ne '1' -or
+        $values['endpoint.trade_cal.requests'] -ne '1' -or
+        $values['maximum.provider.requests'] -ne '3' -or
+        $values['retry.budget'] -ne '0' -or
+        $values['redirects'] -ne 'NEVER' -or
+        $values['database.host'] -ne '127.0.0.1' -or
+        $values['database.name'] -ne 'stock_quant_research' -or
+        $values['database.user'] -ne 'stock_quant_research' -or
+        $values['database.ssl.mode'] -ne 'DISABLE_LOCAL_ONLY' -or
+        $values['schema.name'] -ne 'tushare_research' -or
+        $values['purpose'] -ne '3A_R3B_RR_DAY001' -or
+        $values['execution.source'] -ne
+            'REDUCED_RESEARCH_MANUAL_DAY001') {
+        throw 'STOCK_QUANT_HOST_BROKER_AUTHORIZATION_INVALID'
+    }
+    $actualProof = ([IO.Path]::GetFullPath(
+            $values['build.proof.path'])).TrimEnd('\', '/')
+    $expectedProof = ([IO.Path]::GetFullPath(
+            $ExpectedBuildProof)).TrimEnd('\', '/')
+    if (-not $actualProof.Equals(
+            $expectedProof, [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'STOCK_QUANT_HOST_BROKER_AUTHORIZATION_INVALID'
+    }
+    $issued = ConvertTo-StockQuantTimestamp $values['issued.at']
+    $expires = ConvertTo-StockQuantTimestamp $values['expires.at']
+    if ($expires -le $issued -or
+        $expires - $issued -gt [TimeSpan]::FromMinutes(30) -or
+        $Now -lt $issued.AddMinutes(-1) -or $Now -ge $expires) {
+        throw 'STOCK_QUANT_HOST_BROKER_AUTHORIZATION_EXPIRED'
+    }
+    if ($status -eq 'USER_APPROVED') {
+        if ($values['database.port'] -ne '38432' -or
+            $values['user.approval.reference'] -eq
+                'NOT_APPLICABLE_E2E_DRY_RUN') {
+            throw 'STOCK_QUANT_HOST_BROKER_AUTHORIZATION_INVALID'
+        }
+    } elseif ($values['database.port'] -eq '38432' -or
+        $values['user.approval.reference'] -ne
+            'NOT_APPLICABLE_E2E_DRY_RUN') {
+        throw 'STOCK_QUANT_HOST_BROKER_AUTHORIZATION_INVALID'
+    }
+    return $status
+}
+
+function Read-StockQuantHostBrokerRequest {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $Path,
+        [DateTimeOffset] $Now = [DateTimeOffset]::UtcNow
+    )
+    $paths = Get-StockQuantHostBrokerPaths
+    $full = Assert-StockQuantPathInside -Path $Path -Root $paths.Requests `
+        -FailureCode 'STOCK_QUANT_HOST_BROKER_REQUEST_PATH_INVALID' `
+        -MustExist -PathType Leaf
+    if ([IO.Path]::GetDirectoryName($full).TrimEnd('\', '/') -ne
+        $paths.Requests.TrimEnd('\', '/') -or
+        [IO.Path]::GetFileName($full) -notmatch
+        '^SQHB_[0-9]{8}T[0-9]{6}Z_[A-F0-9]{12}\.(request|processing)\.properties$') {
+        throw 'STOCK_QUANT_HOST_BROKER_REQUEST_PATH_INVALID'
+    }
+    $values = Read-StrictStockQuantProperties -Path $full
+    if ($values.Count -ne $script:RequiredKeys.Count) {
+        throw 'STOCK_QUANT_HOST_BROKER_REQUEST_FIELDS_INVALID'
+    }
+    foreach ($key in $script:RequiredKeys) {
+        if (-not $values.Contains($key) -or
+            [string]::IsNullOrWhiteSpace([string]$values[$key])) {
+            throw 'STOCK_QUANT_HOST_BROKER_REQUEST_FIELDS_INVALID'
+        }
+    }
+    foreach ($key in $values.Keys) {
+        if ($key -notin $script:RequiredKeys) {
+            throw 'STOCK_QUANT_HOST_BROKER_REQUEST_FIELDS_INVALID'
+        }
+    }
+    if ($values['schema.version'] -ne $script:ProtocolVersion -or
+        $values['request.id'] -notmatch
+            '^SQHB_[0-9]{8}T[0-9]{6}Z_[A-F0-9]{12}$' -or
+        $values['operation'] -notin $script:AllowedOperations -or
+        $values['git.commit'] -notmatch '^[0-9a-f]{40}$' -or
+        $values['jar.sha256'] -notmatch '^[0-9a-f]{64}$') {
+        throw 'STOCK_QUANT_HOST_BROKER_REQUEST_FIELDS_INVALID'
+    }
+    $fileRequestId = ([IO.Path]::GetFileName($full) -split '\.')[0]
+    if ($fileRequestId -cne $values['request.id']) {
+        throw 'STOCK_QUANT_HOST_BROKER_REQUEST_ID_MISMATCH'
+    }
+    if ($values['day001.mode'] -ne 'IDEMPOTENCY_VERIFICATION' -or
+        $values['security.symbol'] -ne '600000' -or
+        $values['security.exchange'] -ne 'SSE' -or
+        $values['trade.date'] -ne '2025-01-03' -or
+        $values['database.host'] -ne '127.0.0.1' -or
+        $values['database.port'] -ne '38432' -or
+        $values['database.name'] -ne 'stock_quant_research' -or
+        $values['database.user'] -ne 'stock_quant_research' -or
+        $values['schema.name'] -ne 'tushare_research' -or
+        $values['provider'] -ne 'TUSHARE' -or
+        $values['provider.endpoints'] -ne 'daily,adj_factor,trade_cal' -or
+        $values['endpoint.daily.requests'] -ne '1' -or
+        $values['endpoint.adj_factor.requests'] -ne '1' -or
+        $values['endpoint.trade_cal.requests'] -ne '1' -or
+        $values['maximum.provider.requests'] -ne '3' -or
+        $values['retry.budget'] -ne '0' -or
+        $values['redirects'] -ne 'NEVER' -or
+        $values['execution.source'] -ne 'REDUCED_RESEARCH_MANUAL_DAY001' -or
+        $values['no.retry'] -ne 'true') {
+        throw 'STOCK_QUANT_HOST_BROKER_REQUEST_SCOPE_INVALID'
+    }
+    if ($values['operation'] -eq 'READ_SANITIZED_RESULT') {
+        if ($values['source.request.id'] -notmatch
+                '^SQHB_[0-9]{8}T[0-9]{6}Z_[A-F0-9]{12}$') {
+            throw 'STOCK_QUANT_HOST_BROKER_SOURCE_REQUEST_INVALID'
+        }
+    } elseif ($values['source.request.id'] -ne 'NONE') {
+        throw 'STOCK_QUANT_HOST_BROKER_SOURCE_REQUEST_INVALID'
+    }
+    $created = ConvertTo-StockQuantTimestamp $values['created.at']
+    $expires = ConvertTo-StockQuantTimestamp $values['expires.at']
+    $validity = $expires - $created
+    if ($expires -le $created -or $validity -gt [TimeSpan]::FromMinutes(15) -or
+        $Now -lt $created.AddMinutes(-1) -or $Now -ge $expires) {
+        throw 'STOCK_QUANT_HOST_BROKER_REQUEST_EXPIRED'
+    }
+    $jar = Assert-StockQuantPathInside -Path $values['jar.path'] `
+        -Root $paths.TargetRoot `
+        -FailureCode 'STOCK_QUANT_HOST_BROKER_JAR_PATH_INVALID' `
+        -MustExist -PathType Leaf
+    if ([IO.Path]::GetExtension($jar) -ne '.jar') {
+        throw 'STOCK_QUANT_HOST_BROKER_JAR_PATH_INVALID'
+    }
+    $actualHash = ((Get-FileHash -LiteralPath $jar `
+        -Algorithm SHA256).Hash).ToLowerInvariant()
+    if ($actualHash -cne $values['jar.sha256']) {
+        throw 'STOCK_QUANT_HOST_BROKER_JAR_HASH_MISMATCH'
+    }
+    $proof = "$jar.f1f-b2-proof.properties"
+    if (-not (Test-Path -LiteralPath $proof -PathType Leaf)) {
+        throw 'STOCK_QUANT_HOST_BROKER_BUILD_PROOF_MISSING'
+    }
+    $authorization = Assert-StockQuantPathInside `
+        -Path $values['authorization.file'] -Root $paths.TargetRoot `
+        -FailureCode 'STOCK_QUANT_HOST_BROKER_AUTHORIZATION_PATH_INVALID' `
+        -MustExist -PathType Leaf
+    if ([IO.Path]::GetExtension($authorization) -ne '.properties') {
+        throw 'STOCK_QUANT_HOST_BROKER_AUTHORIZATION_PATH_INVALID'
+    }
+    $authorizationStatus = Assert-StockQuantAuthorizationNonSensitive `
+        -Path $authorization `
+        -ExpectedGitCommit $values['git.commit'] `
+        -ExpectedArtifactHash $values['jar.sha256'] `
+        -ExpectedBuildProof $proof -Now $Now
+    if (($values['operation'] -eq 'RUN_DAY001' -and
+            $authorizationStatus -ne 'USER_APPROVED') -or
+        ($values['operation'] -eq 'RUN_FAKE_E2E' -and
+            $authorizationStatus -ne 'E2E_DRY_RUN')) {
+        throw 'STOCK_QUANT_HOST_BROKER_AUTHORIZATION_MODE_INVALID'
+    }
+    [pscustomobject]@{
+        SchemaVersion = $values['schema.version']
+        RequestId = $values['request.id']
+        Operation = $values['operation']
+        GitCommit = $values['git.commit']
+        JarPath = $jar
+        JarSha256 = $values['jar.sha256']
+        BuildProofPath = $proof
+        AuthorizationFile = $authorization
+        AuthorizationStatus = $authorizationStatus
+        CreatedAt = $created
+        ExpiresAt = $expires
+        SourceRequestId = $values['source.request.id']
+        NoRetry = $true
+    }
+}
+
+function Assert-StockQuantHostBrokerRequestIdAvailable {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $RequestId
+    )
+    if ($RequestId -notmatch
+            '^SQHB_[0-9]{8}T[0-9]{6}Z_[A-F0-9]{12}$') {
+        throw 'STOCK_QUANT_HOST_BROKER_REQUEST_ID_INVALID'
+    }
+    $paths = Initialize-StockQuantHostBrokerDirectories
+    if (@(Get-ChildItem -LiteralPath $paths.Requests -File -Filter "$RequestId.*").Count -gt 0 -or
+        @(Get-ChildItem -LiteralPath $paths.Results -File -Filter "$RequestId.*").Count -gt 0) {
+        throw 'STOCK_QUANT_HOST_BROKER_REQUEST_ID_ALREADY_USED'
+    }
+}
+
+function Write-StockQuantHostBrokerRequest {
+    param(
+        [Parameter(Mandatory = $true)]
+        [System.Collections.IDictionary] $Values
+    )
+    foreach ($key in $script:RequiredKeys) {
+        if (-not $Values.Contains($key)) {
+            throw 'STOCK_QUANT_HOST_BROKER_REQUEST_FIELDS_INVALID'
+        }
+    }
+    if ($Values.Count -ne $script:RequiredKeys.Count) {
+        throw 'STOCK_QUANT_HOST_BROKER_REQUEST_FIELDS_INVALID'
+    }
+    $requestId = [string]$Values['request.id']
+    Assert-StockQuantHostBrokerRequestIdAvailable -RequestId $requestId
+    $paths = Initialize-StockQuantHostBrokerDirectories
+    $destination = Join-Path $paths.Requests "$requestId.request.properties"
+    $temporary = Join-Path $paths.Requests `
+        (".$requestId." + [Guid]::NewGuid().ToString('N') + '.tmp')
+    $lines = foreach ($key in $script:RequiredKeys) {
+        $value = [string]$Values[$key]
+        if ([string]::IsNullOrWhiteSpace($value) -or
+            $value -match '[\x00-\x1F\x7F]') {
+            throw 'STOCK_QUANT_HOST_BROKER_REQUEST_FIELDS_INVALID'
+        }
+        "$key=$value"
+    }
+    $content = ($lines -join "`n") + "`n"
+    if ($content -match '(?i)(database\.password|jdbc\.password|provider\.token|token\.sha|credentialblob)') {
+        throw 'STOCK_QUANT_HOST_BROKER_REQUEST_SECRET_FIELD_FORBIDDEN'
+    }
+    try {
+        [IO.File]::WriteAllText(
+            $temporary, $content, [Text.UTF8Encoding]::new($false))
+        [IO.File]::Move($temporary, $destination)
+    } finally {
+        if (Test-Path -LiteralPath $temporary) {
+            Remove-Item -LiteralPath $temporary -Force
+        }
+    }
+    Read-StockQuantHostBrokerRequest -Path $destination | Out-Null
+    return $destination
+}
+
+function Write-StockQuantHostBrokerResult {
+    param(
+        [Parameter(Mandatory = $true)]
+        [System.Collections.IDictionary] $Result
+    )
+    $requestId = [string]$Result['requestId']
+    if ($requestId -notmatch
+            '^SQHB_[0-9]{8}T[0-9]{6}Z_[A-F0-9]{12}$') {
+        throw 'STOCK_QUANT_HOST_BROKER_RESULT_ID_INVALID'
+    }
+    $paths = Initialize-StockQuantHostBrokerDirectories
+    $destination = Join-Path $paths.Results "$requestId.result.json"
+    if (Test-Path -LiteralPath $destination) {
+        throw 'STOCK_QUANT_HOST_BROKER_RESULT_ALREADY_EXISTS'
+    }
+    $Result['schemaVersion'] = $script:ResultVersion
+    $json = $Result | ConvertTo-Json -Depth 8
+    if ($json -match '(?i)"[^"\r\n]*(password|token|credentialblob|jdbc)[^"\r\n]*"\s*:' -or
+        $json -match '(?i)StockQuant/TushareToken') {
+        throw 'STOCK_QUANT_HOST_BROKER_RESULT_SECRET_FIELD_FORBIDDEN'
+    }
+    $temporary = Join-Path $paths.Results `
+        (".$requestId." + [Guid]::NewGuid().ToString('N') + '.tmp')
+    try {
+        [IO.File]::WriteAllText(
+            $temporary, $json + "`n", [Text.UTF8Encoding]::new($false))
+        [IO.File]::Move($temporary, $destination)
+    } finally {
+        if (Test-Path -LiteralPath $temporary) {
+            Remove-Item -LiteralPath $temporary -Force
+        }
+    }
+    return $destination
+}
+
+function New-StockQuantHostBrokerRequestId {
+    $timestamp = [DateTimeOffset]::UtcNow.ToString(
+        'yyyyMMddTHHmmssZ', [Globalization.CultureInfo]::InvariantCulture)
+    $suffix = ([Guid]::NewGuid().ToString('N').Substring(0, 12)).ToUpperInvariant()
+    return "SQHB_${timestamp}_$suffix"
+}
+
+Export-ModuleMember -Function @(
+    'Get-StockQuantHostBrokerPaths'
+    'Initialize-StockQuantHostBrokerDirectories'
+    'ConvertTo-StockQuantSafeCode'
+    'Assert-StockQuantPathInside'
+    'Read-StockQuantHostBrokerRequest'
+    'Assert-StockQuantHostBrokerRequestIdAvailable'
+    'Write-StockQuantHostBrokerRequest'
+    'Write-StockQuantHostBrokerResult'
+    'New-StockQuantHostBrokerRequestId'
+)

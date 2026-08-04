@@ -35,6 +35,31 @@ function Invoke-PsqlScalar([string] $Sql) {
     return ($value | Select-Object -Last 1).Trim()
 }
 
+function Start-TemporaryPostgres {
+    $pgCtlOutput = Join-Path $tempRoot 'pg-ctl-start.stdout.log'
+    $pgCtlError = Join-Path $tempRoot 'pg-ctl-start.stderr.log'
+    $arguments = '-D "{0}" -l "{1}" ' +
+        '-o "-h 127.0.0.1 -p {2}" -w start'
+    $arguments = $arguments -f $dataDir, $serverLog, $port
+    $process = Start-Process -FilePath "$pgBin\pg_ctl.exe" `
+        -ArgumentList $arguments -WorkingDirectory $tempRoot `
+        -RedirectStandardOutput $pgCtlOutput `
+        -RedirectStandardError $pgCtlError -WindowStyle Hidden -PassThru
+    try {
+        [void]$process.Handle
+        $process.WaitForExit()
+        $exitCode = $process.ExitCode
+        if (Test-Path -LiteralPath (Join-Path $dataDir 'postmaster.pid')) {
+            $script:started = $true
+        }
+        if ($exitCode -ne 0 -or -not $script:started) {
+            throw 'TUSHARE_REDUCED_RESEARCH_E2E_POSTGRES_START_FAILED'
+        }
+    } finally {
+        $process.Dispose()
+    }
+}
+
 function Assert-Exact([object] $Actual, [object] $Expected, [string] $Code) {
     if ([string]$Actual -ne [string]$Expected) {
         throw $Code
@@ -101,12 +126,20 @@ function Invoke-JavaRunner(
     [string] $Result,
     [int] $FailAtCall = -1
 ) {
-    & java "-Dstockquant.reduced-research.e2e.fail-at-call=$FailAtCall" `
-        "-Dloader.main=$runnerClass" -cp $artifact `
-        'org.springframework.boot.loader.launch.PropertiesLauncher' `
-        "--authorization-file=$Authorization" "--result-file=$Result" |
-        Out-Host
-    return $LASTEXITCODE
+    $previousErrorActionPreference = $ErrorActionPreference
+    $exitCode = -1
+    try {
+        $ErrorActionPreference = 'Continue'
+        & java "-Dstockquant.reduced-research.e2e.fail-at-call=$FailAtCall" `
+            "-Dloader.main=$runnerClass" -cp $artifact `
+            'org.springframework.boot.loader.launch.PropertiesLauncher' `
+            "--authorization-file=$Authorization" "--result-file=$Result" `
+            2>&1 | ForEach-Object { [string]$_ } | Out-Host
+        $exitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+    return $exitCode
 }
 
 function Assert-SuccessResult(
@@ -196,11 +229,7 @@ try {
     if ($LASTEXITCODE -ne 0) {
         throw 'TUSHARE_REDUCED_RESEARCH_E2E_INITDB_FAILED'
     }
-    & "$pgBin\pg_ctl.exe" -D $dataDir -l $serverLog `
-        -o "-h 127.0.0.1 -p $port" -w start
-    if ($LASTEXITCODE -ne 0) {
-        throw 'TUSHARE_REDUCED_RESEARCH_E2E_POSTGRES_START_FAILED'
-    }
+    Start-TemporaryPostgres
     $started = $true
     & "$pgBin\psql.exe" -X -q -h 127.0.0.1 -p $port -U postgres `
         -d postgres -v ON_ERROR_STOP=1 -c `
@@ -335,9 +364,15 @@ SELECT (to_regclass('tushare_research.tushare_controlled_acceptance_execution') 
     Write-Output 'TUSHARE_REDUCED_RESEARCH_DAY001_REAL_PROVIDER_CALLS=0'
 } finally {
     Pop-Location
-    if ($started -and (Test-Path -LiteralPath $dataDir)) {
+    $postmasterPid = Join-Path $dataDir 'postmaster.pid'
+    if (($started -or (Test-Path -LiteralPath $postmasterPid)) -and
+        (Test-Path -LiteralPath $dataDir)) {
         & "$pgBin\pg_ctl.exe" -D $dataDir -m immediate -w stop `
             2>$null | Out-Null
+        if ($LASTEXITCODE -ne 0 -or
+            (Test-Path -LiteralPath $postmasterPid)) {
+            throw 'TUSHARE_REDUCED_RESEARCH_E2E_POSTGRES_STOP_FAILED'
+        }
     }
     Remove-ExactTempRoot $tempRoot
     foreach ($generated in @($artifact, $proof, "$artifact.original")) {

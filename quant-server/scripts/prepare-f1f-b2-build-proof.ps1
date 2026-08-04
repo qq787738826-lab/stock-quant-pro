@@ -122,10 +122,11 @@ try {
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     [IO.Compression.ZipFile]::ExtractToDirectory($archivePath, $sourceRoot)
 
-    $mavenWrapper = if ($IsLinux -or $IsMacOS) {
-        Join-Path $sourceRoot 'mvnw'
-    } else {
+    $mavenWrapper = if ([Environment]::OSVersion.Platform -eq
+            [PlatformID]::Win32NT) {
         Join-Path $sourceRoot 'mvnw.cmd'
+    } else {
+        Join-Path $sourceRoot 'mvnw'
     }
     if (-not (Test-Path -LiteralPath $mavenWrapper)) {
         throw 'TUSHARE_CONTROLLED_ACCEPTANCE_MAVEN_WRAPPER_MISSING'

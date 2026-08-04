@@ -181,15 +181,25 @@ Vue 修改后：
   已审查脚本创建并在同次运行清理的随机临时端口，严禁改写永久库。
 - Windows Credential Manager 只允许两个 Target：`StockQuant/ResearchDbPassword` 和
   `StockQuant/TushareToken`。Codex 不得枚举凭据、读取或回传原文，也不得调用 `cmdkey`
-  或其他凭据导出工具；只能执行存在性检查或由正式 Runner 在进程内读取。
-- 真实 Tushare 网络请求只允许通过
-  `quant-server/scripts/run-stock-quant-local-automation.ps1` 启动已证明 Start-Class 的
-  `TushareReducedResearchManualRunner`，且必须绑定尚未消费、未过期的用户正式授权。
-  只有该命令可使用 `stock_quant_formal_runner` 权限配置；普通构建、测试和诊断固定使用
-  默认 `stock_quant_local`，后者不允许访问 Tushare 域名。
-  任何测试、E2E、诊断、修复、构建或普通 Java/PowerShell 命令均不得访问真实 Provider。
+  或其他凭据导出工具。CodexSandbox 身份不得直接读取这两个 Target；正式秘密只能由当前
+  真实 Windows 用户账户下的固定 `StockQuantLocalBroker` 计划任务在 Runner 进程内读取。
+- Codex 只能在 `quant-server/target/stock-quant-host-broker/requests` 写严格非敏感请求，
+  并从同级 `results` 读取脱敏结果。operation 只允许 `CHECK_CREDENTIAL_STATUS`、
+  `RUN_FAKE_E2E`、`RUN_DAY001`、`READ_SANITIZED_RESULT`；禁止命令文本、动态脚本路径、
+  动态 Credential Target、秘密字段、路径逃逸、过期或重复 requestId。
+- 真实 Tushare 网络请求只允许固定宿主 Broker 以真实用户身份调用
+  `quant-server/scripts/run-stock-quant-local-automation.ps1`，再启动已证明 Start-Class 的
+  `TushareReducedResearchManualRunner`。Codex 只能通过
+  `quant-server/scripts/host-broker/invoke-stock-quant-host-broker.ps1` 写请求并执行固定
+  `schtasks.exe /Run /TN "StockQuantLocalBroker"`；不得直接启动正式 Runner。
+  `stock_quant_formal_runner` 只用于请求和触发，不允许访问 Tushare 域名。任何测试、E2E、
+  诊断、修复、构建或普通 Java/PowerShell 命令均不得访问真实 Provider。
 - 禁止把秘密写入参数、环境变量、文件、日志、证据、聊天或云端任务。正式凭据模式禁止
   在 Codex Cloud、CI、非 Windows 或无法确认本机上下文的环境运行；失败时必须关闭并
   保持 fail-closed，不得自动回退 Console、明文文件或环境变量。
 - 自动修复循环可以在任务授权范围内执行定向测试、临时 PostgreSQL、打包 Fake Provider
   E2E、提交和普通 push；真实运行失败后不得重试、补跑、复用 runId 或自动签发新授权。
+- Broker 安装只能由真实 Windows 用户显式执行一次；任务固定为 `Interactive/Limited`、
+  无触发器、按需启动、固定脚本且不保存账户密码。安装时只授予精确 CodexSandbox SID
+  对任务的读取/执行权，并拒绝该 SID 修改 Broker 脚本；不得改为 Authenticated Users、
+  SYSTEM、高权限、开机启动或定时真实 Provider 运行。

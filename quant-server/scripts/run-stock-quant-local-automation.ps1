@@ -111,6 +111,12 @@ function Assert-PostgresListening {
 
 Push-Location $repoRoot
 try {
+    $stage = 'HOST_CONTEXT'
+    $windowsIdentity = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+    if ($windowsIdentity -match '(?i)CodexSandbox') {
+        throw 'STOCK_QUANT_HOST_BROKER_REQUIRED'
+    }
+
     $stage = 'PATH_VALIDATION'
     $authorization = Resolve-RequiredFile $AuthorizationFile `
         'STOCK_QUANT_LOCAL_AUTOMATION_AUTHORIZATION_MISSING'

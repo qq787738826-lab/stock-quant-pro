@@ -116,9 +116,7 @@ class StockQuantLocalAutomationContractTest {
         assertTrue(config.contains("Microsoft/Credentials/**"));
         assertTrue(config.contains("\"127.0.0.1\" = \"allow\""));
         assertTrue(config.contains("[permissions.stock_quant_formal_runner]"));
-        assertTrue(config.contains("\"api.tushare.pro\" = \"allow\""));
-        assertTrue(config.indexOf("\"api.tushare.pro\" = \"allow\"")
-                > config.indexOf("[permissions.stock_quant_formal_runner]"));
+        assertFalse(config.contains("api.tushare.pro"));
         assertFalse(config.contains("danger-full-access"));
         assertTrue(agents.contains("run-stock-quant-local-automation.ps1"));
         assertTrue(agents.contains("不得枚举凭据"));
