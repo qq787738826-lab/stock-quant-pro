@@ -11,7 +11,7 @@ import java.util.Objects;
 import java.util.Properties;
 import java.util.logging.Logger;
 
-/** Single-purpose, non-pooling DataSource for the one-shot B2 process. */
+/** Single-purpose, non-pooling DataSource for trusted one-shot processes. */
 final class TushareControlledAcceptanceDataSource
         implements DataSource, AutoCloseable {
     private final String jdbcUrl;

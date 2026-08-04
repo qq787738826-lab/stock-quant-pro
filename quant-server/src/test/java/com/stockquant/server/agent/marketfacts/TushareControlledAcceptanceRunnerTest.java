@@ -516,6 +516,9 @@ class TushareControlledAcceptanceRunnerTest {
         String components = readSource(
                 "src/main/java/com/stockquant/server/agent/marketfacts/"
                         + "TushareControlledAcceptanceComponents.java");
+        String sharedRuntime = readSource(
+                "src/main/java/com/stockquant/server/agent/marketfacts/"
+                        + "TushareDedicatedResearchRuntimeComponents.java");
 
         assertFalse(runner.contains("SpringApplication"));
         assertFalse(runner.contains("QuantServerApplication"));
@@ -552,9 +555,11 @@ class TushareControlledAcceptanceRunnerTest {
         assertTrue(recovery.contains("Get-Content -Raw -Encoding UTF8"));
         assertFalse(launch.contains("loader.main"));
         assertFalse(build.contains("PropertiesLauncher"));
-        assertTrue(components.contains("registerModule(new JavaTimeModule())"));
+        assertTrue(sharedRuntime.contains("registerModule(new JavaTimeModule())"));
         assertFalse(components.contains("findAndRegisterModules"));
+        assertFalse(sharedRuntime.contains("findAndRegisterModules"));
         assertFalse(components.contains("ServiceLoader"));
+        assertFalse(sharedRuntime.contains("ServiceLoader"));
     }
 
     private static TushareControlledAcceptanceDatabaseGuard.GovernanceOperations

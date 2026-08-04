@@ -285,3 +285,13 @@
 157. **最终真实 F1F-B2 PASSED 只解除缩减研究受控验收门**：`F1FB2_20260804_FINAL_69B5B6AF9814` 的权威持久化结果为 `AUTHORIZED → RESERVED → RUNNING → SUCCEEDED_CANDIDATE → PASSED`，`capture_batch_id=4`、Provider 调用 3、重试 0，输出审计与捕获均完整，证据摘要、digest 和终结时间均存在。因此 `CONTROLLED_ACCEPTANCE_STATUS=PASSED`、`REDUCED_RESEARCH_OPERATIONAL_READY=true`，Tushare 累计真实业务请求为 32。该投影不改变 `F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE`、完整 F1 十项技术阻断、生产/正常业务库、scheduler、Agent、回测、Shadow、交易、F2B/F3、3A-R3B-1、3B 或四项正式门禁。
 
 158. **已持久化 PASSED 的后置资源关闭失败不能覆盖成功退出码**：只有当最终审计 `captureComplete=true` 且 clean、执行决策精确为 `PASSED / REAL_CONTROLLED_ACCEPTANCE_PASSED`、缩减研究 operational 已投影且 blockers 为空时，Runner 才可把随后 `ExecutionHandle.close()` 的异常记录为脱敏 post-pass warning 并保持进程退出码 0。FAILED、INTERRUPTED、候选、审计不完整或审计不干净继续非 0；不得通过该规则伪造或补写 PASSED，也不得修改既有持久化证据。
+
+159. **Day 001 运行入口独立于 F1F-B2 与 F2B，且一次授权最多产生一个人工批次**：
+`3A-R3B-RR-DAY001` 只能在既有 `CONTROLLED_ACCEPTANCE_STATUS=PASSED` 与
+`REDUCED_RESEARCH_OPERATIONAL_READY=true` 治理基线下，由用户另行签发短期非敏感授权，
+人工执行单证券、单历史开市日、三 Endpoint 各一次、零重试的专用研究捕获。入口复用既有
+Gateway、预算器、数据库守卫、显式事务、F1E batch、提交后回读、formula-only QFQ、输出
+审计和构建证明，但不得调用 F1F-B2 executor、写 V14 治理表或产生新的 `PASSED`。授权以
+独立非敏感文件标记一次消费，失败不自动重试；结果只写脱敏文件。Day 001 成功不改变完整
+F1 十项技术阻断、七项治理状态，也不授权 Day 002、scheduler、Agent、Shadow、回测、
+F2B/F3 或交易。

@@ -269,7 +269,7 @@
 - 既有规划状态：iFinD 里程碑规划提交 `23baf11ed3a236800b5f3feba8681d261a71d9f9` 已通过 ChatGPT 对实际 Git 提交的验收，并经用户批准纯 fast-forward 合入。精确验收和批准时间无仓库证据，记为 `UNKNOWN`。
 - 免费优先更新：最终提交 `c47b88e586f6751563fe210f40137a3b7ce5e576` 已通过 ChatGPT 对实际 Git 提交的验收，并经用户批准纯 fast-forward 合入。系统先用免费数据验证产品形态和效果；只有系统显示可重复使用价值、数据成为可量化主要瓶颈，且同范围免费/付费 A/B 方案和成本意愿均明确后，才考虑 iFinD 或其他付费 Provider。
 - 日期边界：iFinD 试用不得绑定 `2026-08-31`、2026 年 8 月 31 日或任何其他固定日期。日历日期只能作为非权威临时估算，不属于路线图依赖，不得因预计日期临近而降低验收标准。
-- 当前集成 HEAD：`a9d928b51ac2b7af3f25af3973e4259a049c22f1`。当前状态：`F0_AUDIT_RESULT=PARTIAL`、`FREE_IMPLEMENTATION_PATH=RESEARCH_PREVIEW_FIRST`、`FREE_PRODUCT_PREVIEW_GATE=PASS`、`FREE_PROVIDER_VALIDATION_GATE=BLOCKED`、`PAID_PROVIDER_UPGRADE_DECISION=PENDING`、`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`。正常业务库 V13 未执行，iFinD 调用数为 0；Track A、Track B0、Track B1、F1A—F1E、F1F-A、F1F-B1、F1F-B2-RUNNER、DBPREP、事务、typed fact identity、SYSTEM_KNOWLEDGE 回读修复与 E2E-CLOSEOUT 均已验收并纯 fast-forward 合入。TS-WP-001/002 已闭环当前个人研究书面许可；完整 F1 仍为 `F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE`。悬挂 ID 已正式恢复为 `INTERRUPTED`；最终真实验收已达到 `PASSED`，当前 `CONTROLLED_ACCEPTANCE_STATUS=PASSED`、`REDUCED_RESEARCH_OPERATIONAL_READY=true`，Tushare 累计真实请求为 32。该结果不开放生产/正常业务库、scheduler、Agent、回测、Shadow、交易或后续阶段；F2B/F3 均未开始，Day 002 未创建，scheduler 关闭，3B 未开始。
+- 当前集成 HEAD：`120673dc26c510b945e26269d77b1f313b2ba9fb`。当前状态：`F0_AUDIT_RESULT=PARTIAL`、`FREE_IMPLEMENTATION_PATH=RESEARCH_PREVIEW_FIRST`、`FREE_PRODUCT_PREVIEW_GATE=PASS`、`FREE_PROVIDER_VALIDATION_GATE=BLOCKED`、`PAID_PROVIDER_UPGRADE_DECISION=PENDING`、`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`。正常业务库 V13 未执行，iFinD 调用数为 0；Track A、Track B0、Track B1、F1A—F1E、F1F-A、F1F-B1、F1F-B2-RUNNER、DBPREP、事务、typed fact identity、SYSTEM_KNOWLEDGE 回读修复、E2E-CLOSEOUT 与成功退出码投影均已验收并纯 fast-forward 合入。TS-WP-001/002 已闭环当前个人研究书面许可；完整 F1 仍为 `F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE`。悬挂 ID 已正式恢复为 `INTERRUPTED`；最终真实验收已达到 `PASSED`，当前 `CONTROLLED_ACCEPTANCE_STATUS=PASSED`、`REDUCED_RESEARCH_OPERATIONAL_READY=true`，Tushare 累计真实请求为 32。该结果不开放生产/正常业务库、scheduler、Agent、回测、Shadow、交易或后续阶段；F2B/F3 均未开始，Day 002 未创建，scheduler 关闭，3B 未开始。
 
 #### 3A-R3B-0：Provider 中立离线闭环与试用准备（已完成并合入）
 
@@ -434,6 +434,21 @@
 - 最终真实结果：`F1FB2_20260804_FINAL_69B5B6AF9814` 的权威回读为 `AUTHORIZED → RESERVED → RUNNING → SUCCEEDED_CANDIDATE → PASSED`；`capture_batch_id=4`、Provider 调用 3、重试 0、`outputAudit.clean=true`、`captureComplete=true`，证据摘要、digest 和 `finalized_at` 均非空。Tushare 累计真实业务请求为 32。
 - 治理投影：`CONTROLLED_ACCEPTANCE_STATUS=PASSED`、`REDUCED_RESEARCH_OPERATIONAL_READY=true`。完整 F1 十项技术阻断仍保持，`F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE`；生产/正常业务库、scheduler、Agent、回测、Shadow、交易、F2B/F3、3A-R3B-1 和 3B 均不因该投影启动。
 - 进程退出码缺陷：Runner 已持久化 `PASSED` 并完成最终输出审计后，try-with-resources 的资源关闭异常会覆盖待返回的成功码，外层安全拒绝映射为 20。最小修复仅把“已确认持久化 PASSED + capture complete + clean audit”的后置关闭异常投影为退出码 0；失败或中断决策继续非 0，不改写既有数据库证据。
+
+#### 3A-R3B-RR-DAY001：缩减研究人工单次捕获（Runner 待审查）
+
+- 定位：在 `REDUCED_RESEARCH_OPERATIONAL_READY=true` 后提供独立非 Spring、人工、一次性
+  的缩减研究入口；不调用 F1F-B2 验收状态机，不创建治理记录，不启动 F2B 或自动化阶段。
+- 冻结范围：单证券、单已结束交易日、`daily/adj_factor/trade_cal` 各 1 次、总预算 3、
+  重试 0；只允许永久专用研究数据库。授权绑定完整 Git/JAR 构建证明并以非敏感标记一次
+  消费，结果写入脱敏文件。
+- 候选：永久库无交互只读检查在认证前失败，因此依据仓库既有已验收事实回退为
+  `600000 / SSE / 2025-01-03`，`DAY001_MODE=IDEMPOTENCY_VERIFICATION`；没有调用 Provider
+  探测日期。
+- 边界：不新增 Flyway/V14/Controller/Bean/scheduler，不改变完整 F1 十项技术阻断或七项
+  治理状态。Day 001 成功也不自动开放下一正式阶段
+  `3A-R3B-F2B：选定 Provider 支持的真实产品闭环（未开始）`。
+- 阶段记录：[缩减研究 Day 001 Runner](stage-3ar3b-rr-day001-manual-runner.md)。
 
 #### 3A-R3B-F1：完整 Provider Adapter 与 V13 闭环（当前仅技术证据阻断）
 
