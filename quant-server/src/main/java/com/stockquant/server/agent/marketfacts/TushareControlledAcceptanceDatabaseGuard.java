@@ -248,6 +248,9 @@ public final class TushareControlledAcceptanceDatabaseGuard {
     ) {
         PreMigrationVerification verified = Objects.requireNonNull(
                 Objects.requireNonNull(verifier, "verifier").get(), "verified");
+        if (verified.governanceState() == GovernanceState.COMPLETE) {
+            return verified;
+        }
         GovernanceOperations operations = Objects.requireNonNull(
                 Objects.requireNonNull(operationFactory, "operationFactory")
                         .apply(verified), "operations");

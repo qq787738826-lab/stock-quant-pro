@@ -389,6 +389,30 @@ class TushareControlledAcceptanceRunnerTest {
     }
 
     @Test
+    void completeGovernanceStateSkipsFlywayConstructionAndExecution() {
+        var verification = mock(
+                TushareDedicatedResearchPersistenceGuard.Verification.class);
+        AtomicInteger operationFactories = new AtomicInteger();
+
+        var result = TushareControlledAcceptanceDatabaseGuard
+                .performGuardedGovernanceInitialization(
+                        () -> new TushareControlledAcceptanceDatabaseGuard
+                                .PreMigrationVerification(
+                                verification,
+                                TushareControlledAcceptanceDatabaseGuard
+                                        .GovernanceState.COMPLETE),
+                        ignored -> {
+                            operationFactories.incrementAndGet();
+                            throw new AssertionError(
+                                    "complete governance must not construct Flyway");
+                        });
+
+        assertEquals(TushareControlledAcceptanceDatabaseGuard
+                .GovernanceState.COMPLETE, result.governanceState());
+        assertEquals(0, operationFactories.get());
+    }
+
+    @Test
     void launcherAndBuildScriptsFreezeTheDedicatedOfflineBoundary() {
         String runner = readSource("src/main/java/com/stockquant/server/agent/marketfacts/"
                 + "TushareControlledAcceptanceRunner.java");
