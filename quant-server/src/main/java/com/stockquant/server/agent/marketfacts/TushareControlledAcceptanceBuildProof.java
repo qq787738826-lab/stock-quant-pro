@@ -101,6 +101,8 @@ public final class TushareControlledAcceptanceBuildProof {
                     ? ProofSource.TEST_ONLY
                     : buildMode == BuildMode.CONTROLLED_BUILD_ARTIFACT
                     ? ProofSource.CONTROLLED_BUILD_ARTIFACT
+                    : buildMode == BuildMode.E2E_DRY_RUN
+                    ? ProofSource.E2E_DRY_RUN
                     : ProofSource.PREPARATION_ONLY;
             proof = new VerifiedBuildProof(
                     properties.getProperty("git.commit"),
@@ -243,6 +245,12 @@ public final class TushareControlledAcceptanceBuildProof {
                     && buildMode == BuildMode.CONTROLLED_BUILD_ARTIFACT;
         }
 
+        boolean e2eDryRunEligible() {
+            validate();
+            return source == ProofSource.E2E_DRY_RUN
+                    && buildMode == BuildMode.E2E_DRY_RUN;
+        }
+
         public String gitCommit() { return gitCommit; }
         public String remoteGitCommit() { return remoteGitCommit; }
         public String branchName() { return branchName; }
@@ -301,13 +309,15 @@ public final class TushareControlledAcceptanceBuildProof {
 
     public enum ProofSource {
         CONTROLLED_BUILD_ARTIFACT,
+        E2E_DRY_RUN,
         PREPARATION_ONLY,
         TEST_ONLY
     }
 
     public enum BuildMode {
         PREPARATION_ONLY,
-        CONTROLLED_BUILD_ARTIFACT
+        CONTROLLED_BUILD_ARTIFACT,
+        E2E_DRY_RUN
     }
 
     private static Path currentExecutorArtifact() {

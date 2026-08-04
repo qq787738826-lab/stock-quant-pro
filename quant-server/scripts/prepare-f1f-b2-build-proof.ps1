@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory = $true)] [string] $ExpectedCommit,
-    [ValidateSet('PREPARATION_ONLY', 'CONTROLLED_BUILD_ARTIFACT')]
+    [ValidateSet('PREPARATION_ONLY', 'CONTROLLED_BUILD_ARTIFACT', 'E2E_DRY_RUN')]
     [string] $Mode = 'PREPARATION_ONLY'
 )
 

@@ -214,6 +214,25 @@ class TushareControlledAcceptanceDatabasePreparerTest {
     }
 
     @Test
+    void e2eDryRunAuthorizationIsTypedAndCannotMasqueradeAsUserApproval() {
+        Properties properties = authorizationProperties();
+        properties.setProperty("authorization.status", "E2E_DRY_RUN");
+        properties.setProperty("purpose", "F1F_B2_E2E_DRY_RUN");
+        properties.setProperty("execution.source", "TEST");
+        properties.setProperty("user.approval.reference",
+                "NOT_APPLICABLE_E2E_DRY_RUN");
+
+        var plan = TushareControlledAcceptanceLaunchPlan.from(properties);
+
+        assertTrue(plan.e2eDryRun());
+        assertEquals(TushareControlledAcceptanceExecution.ExecutionSource.TEST,
+                plan.executionSource());
+        properties.setProperty("execution.source", "REAL_CONTROLLED_ACCEPTANCE");
+        assertThrows(IllegalArgumentException.class,
+                () -> TushareControlledAcceptanceLaunchPlan.from(properties));
+    }
+
+    @Test
     void strictAuthorizationFileRejectsDuplicateAndUnknownFields(@TempDir Path temp)
             throws Exception {
         Properties properties = authorizationProperties();

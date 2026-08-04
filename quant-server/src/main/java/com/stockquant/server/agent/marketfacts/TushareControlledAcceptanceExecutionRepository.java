@@ -152,10 +152,76 @@ final class TushareControlledAcceptanceExecutionRepository {
         return recovered;
     }
 
+    boolean recoverStrandedRunning(
+            String acceptanceId,
+            String safeReason
+    ) {
+        String id = TushareControlledAcceptanceExecution.safeId(acceptanceId);
+        String reason = TushareControlledAcceptanceExecution.safeText(safeReason);
+        return Boolean.TRUE.equals(requiresNew.execute(status -> {
+            StoredExecution current = findForUpdate(id).orElseThrow(() ->
+                    blocked("TUSHARE_CONTROLLED_ACCEPTANCE_RECORD_MISSING"));
+            if (!current.status().incomplete()) {
+                return false;
+            }
+            if (current.status() != ExecutionStatus.RUNNING
+                    || current.providerCallCount() != 0
+                    || current.retryCount() != 0
+                    || current.captureBatchId() != null) {
+                throw blocked(
+                        "TUSHARE_CONTROLLED_ACCEPTANCE_STRANDED_RECOVERY_REJECTED");
+            }
+            transitionExact(id, ExecutionStatus.RUNNING,
+                    ExecutionStatus.INTERRUPTED, clock.instant(), "RECOVERY",
+                    reason, 0, 0, null, null);
+            return true;
+        }));
+    }
+
+    boolean interruptIncomplete(
+            String acceptanceId,
+            String failureStage,
+            String safeReason,
+            int providerCalls
+    ) {
+        String id = TushareControlledAcceptanceExecution.safeId(acceptanceId);
+        String stage = TushareControlledAcceptanceExecution.safeText(failureStage);
+        String reason = TushareControlledAcceptanceExecution.safeText(safeReason);
+        if (providerCalls < 0 || providerCalls > 3) {
+            throw blocked(
+                    "TUSHARE_CONTROLLED_ACCEPTANCE_PROVIDER_ATTEMPT_COUNT_INVALID");
+        }
+        return Boolean.TRUE.equals(requiresNew.execute(status -> {
+            StoredExecution current = findForUpdate(id).orElseThrow(() ->
+                    blocked("TUSHARE_CONTROLLED_ACCEPTANCE_RECORD_MISSING"));
+            if (!current.status().incomplete()) {
+                return false;
+            }
+            if (current.status() == ExecutionStatus.AUTHORIZED) {
+                throw blocked(
+                        "TUSHARE_CONTROLLED_ACCEPTANCE_UNRESERVED_RECOVERY_REJECTED");
+            }
+            transitionExact(id, current.status(), ExecutionStatus.INTERRUPTED,
+                    clock.instant(), stage, reason,
+                    Math.max(current.providerCallCount(), providerCalls),
+                    current.retryCount(), null, null);
+            return true;
+        }));
+    }
+
     Optional<StoredExecution> find(String acceptanceId) {
         List<StoredExecution> values = jdbc.query("""
                 SELECT * FROM tushare_controlled_acceptance_execution
                  WHERE acceptance_id = ?
+                """, this::mapExecution,
+                TushareControlledAcceptanceExecution.safeId(acceptanceId));
+        return values.stream().findFirst();
+    }
+
+    private Optional<StoredExecution> findForUpdate(String acceptanceId) {
+        List<StoredExecution> values = jdbc.query("""
+                SELECT * FROM tushare_controlled_acceptance_execution
+                 WHERE acceptance_id = ? FOR UPDATE
                 """, this::mapExecution,
                 TushareControlledAcceptanceExecution.safeId(acceptanceId));
         return values.stream().findFirst();

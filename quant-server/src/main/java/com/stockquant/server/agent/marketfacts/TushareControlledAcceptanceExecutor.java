@@ -104,34 +104,49 @@ public final class TushareControlledAcceptanceExecutor {
             authorization.validateAndConsumeDurable(command, buildProof.gitCommit(),
                     startedAt, preProvider);
             repository.markRunning(authorization.acceptanceId());
-        } catch (RuntimeException error) {
-            repository.markFailed(authorization.acceptanceId(), ExecutionStatus.RESERVED,
-                    ExecutionStatus.FAILED_PRE_PROVIDER, "PRE_PROVIDER",
-                    safeReason(error), 0);
-            throw error;
+        } catch (Throwable error) {
+            finalizePreProviderFailure(authorization.acceptanceId(), error);
+            throw propagate(error);
         }
 
-        long providerAttemptsBefore = batchService.totalProviderAttemptCount();
-        ExecutionPayload payload;
+        long providerAttemptsBefore = -1;
         try {
-            payload = runAndReadback(command, startedAt, providerAttemptsBefore);
-        } catch (Exception error) {
+            providerAttemptsBefore = batchService.totalProviderAttemptCount();
+            ExecutionPayload payload = runAndReadback(
+                    command, startedAt, providerAttemptsBefore);
+            Instant endedAt = clock.instant().truncatedTo(ChronoUnit.MICROS);
+            if (!endedAt.isAfter(startedAt)) {
+                endedAt = startedAt.plus(1, ChronoUnit.MICROS);
+            }
+            return new PendingExecution(
+                    authorization, executionSource, buildProof, payload,
+                    providerAttemptsBefore, startedAt, endedAt);
+        } catch (Throwable error) {
             FailureClassification failure = classifyCleanFailure(
                     error, providerAttemptsBefore);
-            repository.markFailed(authorization.acceptanceId(), ExecutionStatus.RUNNING,
-                    failure.status(), failure.stage(), failure.reasonCode(),
-                    providerAttemptsSince(providerAttemptsBefore));
-            throw error instanceof RuntimeException runtime ? runtime
-                    : blocked("TUSHARE_CONTROLLED_ACCEPTANCE_EXECUTION_FAILED");
+            int providerCalls = providerAttemptsSinceOrZero(
+                    providerAttemptsBefore, error);
+            try {
+                repository.markFailed(authorization.acceptanceId(),
+                        ExecutionStatus.RUNNING, failure.status(),
+                        failure.stage(), failure.reasonCode(), providerCalls);
+            } catch (Throwable finalizationFailure) {
+                error.addSuppressed(finalizationFailure);
+            }
+            throw propagate(error);
         }
+    }
 
-        Instant endedAt = clock.instant().truncatedTo(ChronoUnit.MICROS);
-        if (!endedAt.isAfter(startedAt)) {
-            endedAt = startedAt.plus(1, ChronoUnit.MICROS);
-        }
-        return new PendingExecution(
-                authorization, executionSource, buildProof, payload,
-                providerAttemptsBefore, startedAt, endedAt);
+    boolean interruptUnexpected(
+            String acceptanceId,
+            Throwable error
+    ) {
+        Objects.requireNonNull(error, "error");
+        int providerCalls = providerAttemptsSinceOrZero(0, error);
+        return repository.interruptIncomplete(
+                acceptanceId, "RUNNER",
+                "TUSHARE_CONTROLLED_ACCEPTANCE_RUNNER_INTERRUPTED",
+                providerCalls);
     }
 
     Decision completeAfterAudit(
@@ -214,6 +229,40 @@ public final class TushareControlledAcceptanceExecutor {
         return Math.toIntExact(difference);
     }
 
+    private int providerAttemptsSinceOrZero(
+            long before,
+            Throwable primaryFailure
+    ) {
+        if (before < 0) {
+            return 0;
+        }
+        try {
+            return providerAttemptsSince(before);
+        } catch (Throwable countFailure) {
+            primaryFailure.addSuppressed(countFailure);
+            return 0;
+        }
+    }
+
+    private void finalizePreProviderFailure(
+            String acceptanceId,
+            Throwable error
+    ) {
+        try {
+            repository.markFailed(acceptanceId, ExecutionStatus.RESERVED,
+                    ExecutionStatus.FAILED_PRE_PROVIDER, "PRE_PROVIDER",
+                    safeReason(error), 0);
+        } catch (Throwable firstFinalizationFailure) {
+            error.addSuppressed(firstFinalizationFailure);
+            try {
+                repository.interruptIncomplete(acceptanceId, "PRE_PROVIDER",
+                        "TUSHARE_CONTROLLED_ACCEPTANCE_PRE_PROVIDER_INTERRUPTED", 0);
+            } catch (Throwable recoveryFailure) {
+                error.addSuppressed(recoveryFailure);
+            }
+        }
+    }
+
     private static void validateExactScope(
             TushareControlledAcceptanceAuthorization authorization,
             TushareDedicatedResearchBatchCommand command,
@@ -232,7 +281,12 @@ public final class TushareControlledAcceptanceExecutor {
                 || !command.securities().get(0).equals(authorization.security())
                 || !now.isBefore(authorization.expiresAt())
                 || source == ExecutionSource.REAL_CONTROLLED_ACCEPTANCE
-                && !proof.governanceEligible()) {
+                && (!proof.governanceEligible()
+                || authorization.userApproval()
+                != TushareControlledAcceptanceAuthorization.UserApproval.CONFIRMED)
+                || authorization.userApproval()
+                == TushareControlledAcceptanceAuthorization.UserApproval.E2E_DRY_RUN
+                && source != ExecutionSource.TEST) {
             throw blocked("TUSHARE_CONTROLLED_ACCEPTANCE_SCOPE_INVALID");
         }
     }
@@ -257,11 +311,14 @@ public final class TushareControlledAcceptanceExecutor {
             long providerAttemptsBefore
     ) {
         String reason = safeReason(error);
-        if (providerAttemptsBefore < 0
-                || reason.startsWith(
+        if (reason.startsWith(
                 "TUSHARE_CONTROLLED_ACCEPTANCE_SENSITIVE_REGISTRY_")) {
             return new FailureClassification(
                     ExecutionStatus.FAILED_OUTPUT_AUDIT, "OUTPUT_AUDIT", reason);
+        }
+        if (providerAttemptsBefore < 0) {
+            return new FailureClassification(
+                    ExecutionStatus.INTERRUPTED, "PRE_PROVIDER", reason);
         }
         if (hasCause(error, TushareApiGateway.GatewayException.class)
                 || reason.startsWith("TUSHARE_TIMEOUT")
@@ -354,11 +411,22 @@ public final class TushareControlledAcceptanceExecutor {
             Objects.requireNonNull(status, "status");
             stage = TushareControlledAcceptanceExecution.safeText(stage);
             reasonCode = TushareControlledAcceptanceExecution.safeText(reasonCode);
-            if (!status.name().startsWith("FAILED_")) {
+            if (!status.name().startsWith("FAILED_")
+                    && status != ExecutionStatus.INTERRUPTED) {
                 throw new IllegalArgumentException(
                         "TUSHARE_CONTROLLED_ACCEPTANCE_FAILURE_STATUS_INVALID");
             }
         }
+    }
+
+    private static RuntimeException propagate(Throwable error) {
+        if (error instanceof RuntimeException runtime) {
+            return runtime;
+        }
+        if (error instanceof Error fatal) {
+            throw fatal;
+        }
+        return blocked("TUSHARE_CONTROLLED_ACCEPTANCE_EXECUTION_FAILED");
     }
 
     private static IllegalStateException blocked(String code) {

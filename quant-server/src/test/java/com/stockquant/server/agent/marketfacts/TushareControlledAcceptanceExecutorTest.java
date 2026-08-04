@@ -95,6 +95,51 @@ class TushareControlledAcceptanceExecutorTest {
                 ExecutionStatus.FAILED_OUTPUT_AUDIT, "OUTPUT_AUDIT");
     }
 
+    @Test
+    void providerCounterInitializationFailureTerminatesCommittedRunningRecord() {
+        TushareControlledAcceptanceExecutionRepository repository =
+                mock(TushareControlledAcceptanceExecutionRepository.class);
+        TushareControlledAcceptanceDatabaseGuard guard =
+                mock(TushareControlledAcceptanceDatabaseGuard.class);
+        TushareDedicatedResearchBatchService batchService =
+                mock(TushareDedicatedResearchBatchService.class);
+        when(guard.verifyBeforeProvider()).thenReturn(verification());
+        when(batchService.totalProviderAttemptCount()).thenThrow(
+                new IllegalStateException("TUSHARE_PROVIDER_COMPONENT_INIT_FAILED"));
+        TushareControlledAcceptanceExecutor executor =
+                new TushareControlledAcceptanceExecutor(
+                        repository, guard, batchService,
+                        mock(TushareControlledAcceptanceReadbackService.class),
+                        mock(TushareControlledAcceptanceEvaluator.class),
+                        Clock.fixed(NOW, ZoneOffset.UTC));
+        SecuritySelection security = new SecuritySelection("600000", "SSE");
+        var authorization = TushareControlledAcceptanceAuthorization
+                .issueUserApprovedDurable(
+                        "F1FB2_PRE_PROVIDER_FAILURE", COMMIT, SHA, security,
+                        LocalDate.of(2025, 1, 2), NOW.minusSeconds(1),
+                        NOW.plusSeconds(60));
+        var command = new TushareDedicatedResearchBatchCommand(
+                LocalDate.of(2025, 1, 2), List.of(security),
+                Duration.ofSeconds(10));
+
+        assertThrows(IllegalStateException.class,
+                () -> executor.executeBeforeFinalAudit(
+                        authorization, command,
+                        TushareControlledAcceptanceBuildProof
+                                .verifiedTestProof(COMMIT, SHA),
+                        ExecutionSource.TEST));
+
+        InOrder order = inOrder(repository, batchService);
+        order.verify(repository).reserve(any());
+        order.verify(repository).markRunning("F1FB2_PRE_PROVIDER_FAILURE");
+        order.verify(batchService).totalProviderAttemptCount();
+        order.verify(repository).markFailed(
+                "F1FB2_PRE_PROVIDER_FAILURE", ExecutionStatus.RUNNING,
+                ExecutionStatus.INTERRUPTED, "PRE_PROVIDER",
+                "TUSHARE_PROVIDER_COMPONENT_INIT_FAILED", 0);
+        verify(batchService, never()).run(any(), any());
+    }
+
     private static void assertFailure(
             String reason,
             long attemptsBefore,

@@ -58,7 +58,8 @@ public final class TushareControlledAcceptanceAuthorization {
     ) {
         this(acceptanceId, codeBaselineCommit, security, tradeDate,
                 issuedAt, expiresAt, 13, null,
-                ReuseProtectionScope.OBJECT_INSTANCE_CAS_ONLY);
+                ReuseProtectionScope.OBJECT_INSTANCE_CAS_ONLY,
+                UserApproval.CONFIRMED);
     }
 
     private TushareControlledAcceptanceAuthorization(
@@ -70,7 +71,8 @@ public final class TushareControlledAcceptanceAuthorization {
             Instant expiresAt,
             int schemaVersion,
             String artifactSha256,
-            ReuseProtectionScope reuseProtectionScope
+            ReuseProtectionScope reuseProtectionScope,
+            UserApproval userApproval
     ) {
         this.acceptanceId = requireAcceptanceId(acceptanceId);
         this.codeBaselineCommit = requireCommit(codeBaselineCommit);
@@ -89,7 +91,7 @@ public final class TushareControlledAcceptanceAuthorization {
         this.schemaVersion = schemaVersion;
         this.artifactSha256 = artifactSha256 == null ? null
                 : requireSha256(artifactSha256);
-        this.userApproval = UserApproval.CONFIRMED;
+        this.userApproval = Objects.requireNonNull(userApproval, "userApproval");
         this.runtimeBoundary = RuntimeBoundary.forbidAll();
         this.reuseProtectionScope = Objects.requireNonNull(
                 reuseProtectionScope, "reuseProtectionScope");
@@ -112,7 +114,24 @@ public final class TushareControlledAcceptanceAuthorization {
         return new TushareControlledAcceptanceAuthorization(
                 acceptanceId, codeBaselineCommit, security, tradeDate,
                 issuedAt, expiresAt, 14, artifactSha256,
-                ReuseProtectionScope.DURABLE_ACCEPTANCE_ID_RESERVATION);
+                ReuseProtectionScope.DURABLE_ACCEPTANCE_ID_RESERVATION,
+                UserApproval.CONFIRMED);
+    }
+
+    static TushareControlledAcceptanceAuthorization issueE2eDryRunDurable(
+            String acceptanceId,
+            String codeBaselineCommit,
+            String artifactSha256,
+            SecuritySelection security,
+            LocalDate tradeDate,
+            Instant issuedAt,
+            Instant expiresAt
+    ) {
+        return new TushareControlledAcceptanceAuthorization(
+                acceptanceId, codeBaselineCommit, security, tradeDate,
+                issuedAt, expiresAt, 14, artifactSha256,
+                ReuseProtectionScope.DURABLE_ACCEPTANCE_ID_RESERVATION,
+                UserApproval.E2E_DRY_RUN);
     }
 
     static TushareControlledAcceptanceAuthorization
@@ -204,7 +223,6 @@ public final class TushareControlledAcceptanceAuthorization {
                 || reuseProtectionScope
                 == ReuseProtectionScope.OBJECT_INSTANCE_CAS_ONLY
                 && artifactSha256 != null
-                || userApproval != UserApproval.CONFIRMED
                 || !runtimeBoundary.allForbidden()
                 || !expiresAt.isAfter(issuedAt)) {
             throw invalid("TUSHARE_CONTROLLED_ACCEPTANCE_AUTHORIZATION_INVALID");
@@ -420,7 +438,8 @@ public final class TushareControlledAcceptanceAuthorization {
     }
 
     public enum UserApproval {
-        CONFIRMED
+        CONFIRMED,
+        E2E_DRY_RUN
     }
 
     /**

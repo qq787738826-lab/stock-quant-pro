@@ -59,7 +59,8 @@ try {
         + '+manuallyAssembledRunnerPathStartsDedicatedCaptureTransaction' `
         + '+controlledAcceptanceProjectsCommittedBatchIdToCandidate' `
         + '+controlledAcceptanceBindsIdempotentFactsToCurrentBatch' `
-        + '+thirdTypedFactFailureRollsBackManualCapture'
+        + '+thirdTypedFactFailureRollsBackManualCapture' `
+        + '+exactStrandedRunningRecoveryIsSingleWinnerAndWritesFinalizedHistory'
     & "$PSScriptRoot\..\..\mvnw.cmd" -pl quant-server -am `
         "-Dtest=$testSpec" `
         '-Dsurefire.failIfNoSpecifiedTests=false' test

@@ -39,10 +39,6 @@ final class TushareControlledAcceptanceComponents implements AutoCloseable {
         Objects.requireNonNull(token, "token");
         Objects.requireNonNull(clock, "clock");
         ObjectMapper mapper = new ObjectMapper().registerModule(new JavaTimeModule());
-        JdbcTemplate jdbc = new JdbcTemplate(dataSource);
-        DataSourceTransactionManager transactions =
-                new DataSourceTransactionManager(dataSource);
-
         TushareMarketFactProperties properties = new TushareMarketFactProperties();
         properties.setMode(TushareMarketFactProperties.Mode.MANUAL_BOUNDED);
         properties.setMaximumRateLimitRetries(0);
@@ -55,6 +51,40 @@ final class TushareControlledAcceptanceComponents implements AutoCloseable {
         TushareTokenRateLimiter limiter = new TushareTokenRateLimiter(policy);
         TushareHttpApiGateway gateway = new TushareHttpApiGateway(
                 mapper, properties, limiter);
+        return assemble(dataSource, clock, mapper, properties, gateway);
+    }
+
+    static TushareControlledAcceptanceComponents createE2eDryRun(
+            DataSource dataSource,
+            Clock clock
+    ) {
+        Objects.requireNonNull(dataSource, "dataSource");
+        Objects.requireNonNull(clock, "clock");
+        ObjectMapper mapper = new ObjectMapper().registerModule(new JavaTimeModule());
+        TushareMarketFactProperties properties = new TushareMarketFactProperties();
+        properties.setMode(TushareMarketFactProperties.Mode.MANUAL_BOUNDED);
+        properties.setMaximumRateLimitRetries(0);
+        char[] syntheticToken = "E2E_DRY_RUN_FAKE_TOKEN".toCharArray();
+        try {
+            properties.setToken(syntheticToken);
+        } finally {
+            Arrays.fill(syntheticToken, '\0');
+        }
+        properties.validateFrozenContract();
+        return assemble(dataSource, clock, mapper, properties,
+                new TushareControlledAcceptanceE2eDryRunGateway());
+    }
+
+    private static TushareControlledAcceptanceComponents assemble(
+            DataSource dataSource,
+            Clock clock,
+            ObjectMapper mapper,
+            TushareMarketFactProperties properties,
+            TushareApiGateway gateway
+    ) {
+        JdbcTemplate jdbc = new JdbcTemplate(dataSource);
+        DataSourceTransactionManager transactions =
+                new DataSourceTransactionManager(dataSource);
         TushareMarketFactProvider provider = new TushareMarketFactProvider(
                 mapper, properties, gateway);
 

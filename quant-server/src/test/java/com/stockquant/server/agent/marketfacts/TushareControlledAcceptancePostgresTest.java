@@ -282,6 +282,52 @@ class TushareControlledAcceptancePostgresTest {
     }
 
     @Test
+    void exactStrandedRunningRecoveryIsSingleWinnerAndWritesFinalizedHistory()
+            throws Exception {
+        var first = repository();
+        var second = repository();
+        String acceptanceId = "F1FB2_STRANDED_RECOVERY";
+        first.reserve(reservation(acceptanceId, "9".repeat(64)));
+        first.markRunning(acceptanceId);
+
+        var recoverers = Executors.newFixedThreadPool(2);
+        long winners;
+        try {
+            var results = recoverers.invokeAll(List.of(
+                    (Callable<Boolean>) () -> first.recoverStrandedRunning(
+                            acceptanceId, "STRANDED_RUNNING_PROCESS_EXITED"),
+                    (Callable<Boolean>) () -> second.recoverStrandedRunning(
+                            acceptanceId, "STRANDED_RUNNING_PROCESS_EXITED")));
+            winners = results.stream().filter(result -> {
+                try {
+                    return result.get();
+                } catch (Exception error) {
+                    return false;
+                }
+            }).count();
+        } finally {
+            recoverers.shutdownNow();
+        }
+
+        var stored = first.find(acceptanceId).orElseThrow();
+        assertEquals(1, winners);
+        assertEquals(ExecutionStatus.INTERRUPTED, stored.status());
+        assertNotNull(stored.finalizedAt());
+        assertEquals("RECOVERY", stored.failureStage());
+        assertEquals("STRANDED_RUNNING_PROCESS_EXITED",
+                stored.safeFailureReason());
+        assertEquals(0, stored.providerCallCount());
+        assertEquals(0, stored.retryCount());
+        assertNull(stored.captureBatchId());
+        assertEquals(List.of(ExecutionStatus.AUTHORIZED,
+                        ExecutionStatus.RESERVED, ExecutionStatus.RUNNING,
+                        ExecutionStatus.INTERRUPTED),
+                first.history(acceptanceId).stream()
+                        .map(TushareControlledAcceptanceExecution.Transition::to)
+                        .toList());
+    }
+
+    @Test
     void databaseStateMachineRejectsSkippedStepsTerminalReuseAndEvidenceMutation() {
         var repository = repository();
         repository.reserve(reservation("F1FB1_PG_0002", "d".repeat(64)));

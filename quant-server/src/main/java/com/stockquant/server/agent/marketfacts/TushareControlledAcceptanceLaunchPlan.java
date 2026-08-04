@@ -2,6 +2,7 @@ package com.stockquant.server.agent.marketfacts;
 
 import com.stockquant.server.agent.marketfacts.TushareControlledAcceptanceBuildProof.VerifiedBuildProof;
 import com.stockquant.server.agent.marketfacts.TushareControlledAcceptanceDataSource.SslMode;
+import com.stockquant.server.agent.marketfacts.TushareControlledAcceptanceExecution.ExecutionSource;
 import com.stockquant.server.agent.marketfacts.TushareDedicatedResearchBatchCommand.SecuritySelection;
 
 import java.io.IOException;
@@ -31,11 +32,14 @@ record TushareControlledAcceptanceLaunchPlan(
         Instant expiresAt,
         int databasePort,
         SslMode sslMode,
-        String userApprovalReference
+        String userApprovalReference,
+        LaunchMode launchMode
 ) {
     static final String AUTHORIZATION_VERSION = "F1F_B2_AUTHORIZATION_V1";
     static final String AUTHORIZATION_STATUS = "USER_APPROVED";
+    static final String E2E_DRY_RUN_STATUS = "E2E_DRY_RUN";
     static final String PURPOSE = "F1F_B2_CONTROLLED_ACCEPTANCE";
+    static final String E2E_DRY_RUN_PURPOSE = "F1F_B2_E2E_DRY_RUN";
     static final String DATABASE_HOST = "127.0.0.1";
     static final String OBSOLETE_DRAFT_ACCEPTANCE_ID =
             "F1FB2_20260803_140506_96C6DFB7";
@@ -64,6 +68,7 @@ record TushareControlledAcceptanceLaunchPlan(
         sslMode = Objects.requireNonNull(sslMode, "sslMode");
         userApprovalReference = required(
                 userApprovalReference, "userApprovalReference");
+        launchMode = Objects.requireNonNull(launchMode, "launchMode");
         if (OBSOLETE_DRAFT_ACCEPTANCE_ID.equals(acceptanceId)
                 || databasePort <= 0 || databasePort > 65_535
                 || !expiresAt.isAfter(issuedAt)) {
@@ -109,7 +114,6 @@ record TushareControlledAcceptanceLaunchPlan(
                 TushareControlledAcceptanceLaunchPlan::secretLikeKey)) {
             throw invalid();
         }
-        requireExact(properties, "authorization.status", AUTHORIZATION_STATUS);
         requireExact(properties, "authorization.version", AUTHORIZATION_VERSION);
         requireExact(properties, "provider.code", TushareMarketFactProvider.PROVIDER_CODE);
         requireExact(properties, "endpoints", "daily,adj_factor,trade_cal");
@@ -124,8 +128,23 @@ record TushareControlledAcceptanceLaunchPlan(
                 TushareDedicatedResearchPersistenceGuard.REQUIRED_SCHEMA);
         requireExact(properties, "base.schema.version", "13");
         requireExact(properties, "governance.schema.version", "14");
-        requireExact(properties, "purpose", PURPOSE);
-        requireExact(properties, "execution.source", "REAL_CONTROLLED_ACCEPTANCE");
+        LaunchMode launchMode;
+        if (AUTHORIZATION_STATUS.equals(
+                properties.getProperty("authorization.status"))) {
+            requireExact(properties, "purpose", PURPOSE);
+            requireExact(properties, "execution.source",
+                    ExecutionSource.REAL_CONTROLLED_ACCEPTANCE.name());
+            launchMode = LaunchMode.REAL_CONTROLLED_ACCEPTANCE;
+        } else if (E2E_DRY_RUN_STATUS.equals(
+                properties.getProperty("authorization.status"))) {
+            requireExact(properties, "purpose", E2E_DRY_RUN_PURPOSE);
+            requireExact(properties, "execution.source", ExecutionSource.TEST.name());
+            requireExact(properties, "user.approval.reference",
+                    "NOT_APPLICABLE_E2E_DRY_RUN");
+            launchMode = LaunchMode.E2E_DRY_RUN;
+        } else {
+            throw invalid();
+        }
         try {
             return new TushareControlledAcceptanceLaunchPlan(
                     properties.getProperty("acceptance.id"),
@@ -141,7 +160,8 @@ record TushareControlledAcceptanceLaunchPlan(
                     Integer.parseInt(properties.getProperty("database.port")),
                     SslMode.valueOf(properties.getProperty(
                             "database.ssl.mode").toUpperCase(Locale.ROOT)),
-                    properties.getProperty("user.approval.reference"));
+                    properties.getProperty("user.approval.reference"),
+                    launchMode);
         } catch (RuntimeException error) {
             throw new IllegalArgumentException(
                     "TUSHARE_CONTROLLED_ACCEPTANCE_AUTHORIZATION_INVALID", error);
@@ -152,7 +172,11 @@ record TushareControlledAcceptanceLaunchPlan(
             VerifiedBuildProof buildProof
     ) {
         validateBuildProof(buildProof);
-        return TushareControlledAcceptanceAuthorization.issueUserApprovedDurable(
+        return launchMode == LaunchMode.E2E_DRY_RUN
+                ? TushareControlledAcceptanceAuthorization.issueE2eDryRunDurable(
+                acceptanceId, codeBaselineCommit, artifactSha256, security,
+                tradeDate, issuedAt, expiresAt)
+                : TushareControlledAcceptanceAuthorization.issueUserApprovedDurable(
                 acceptanceId, codeBaselineCommit, artifactSha256, security,
                 tradeDate, issuedAt, expiresAt);
     }
@@ -164,12 +188,24 @@ record TushareControlledAcceptanceLaunchPlan(
 
     void validateBuildProof(VerifiedBuildProof buildProof) {
         Objects.requireNonNull(buildProof, "buildProof").validate();
-        if (!buildProof.governanceEligible()
+        boolean eligible = launchMode == LaunchMode.E2E_DRY_RUN
+                ? buildProof.e2eDryRunEligible()
+                : buildProof.governanceEligible();
+        if (!eligible
                 || !codeBaselineCommit.equals(buildProof.gitCommit())
                 || !artifactSha256.equals(buildProof.actualArtifactSha256())) {
             throw new IllegalArgumentException(
                     "TUSHARE_CONTROLLED_ACCEPTANCE_BUILD_PROOF_INVALID");
         }
+    }
+
+    boolean e2eDryRun() {
+        return launchMode == LaunchMode.E2E_DRY_RUN;
+    }
+
+    ExecutionSource executionSource() {
+        return e2eDryRun() ? ExecutionSource.TEST
+                : ExecutionSource.REAL_CONTROLLED_ACCEPTANCE;
     }
 
     private static boolean secretLikeKey(String key) {
@@ -198,5 +234,10 @@ record TushareControlledAcceptanceLaunchPlan(
     private static IllegalArgumentException invalid() {
         return new IllegalArgumentException(
                 "TUSHARE_CONTROLLED_ACCEPTANCE_AUTHORIZATION_INVALID");
+    }
+
+    enum LaunchMode {
+        REAL_CONTROLLED_ACCEPTANCE,
+        E2E_DRY_RUN
     }
 }

@@ -11,6 +11,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -49,7 +50,8 @@ class TushareControlledAcceptanceRunnerTest {
                 new String[]{"--authorization-file=fake.properties"}, environment);
 
         assertEquals(TushareControlledAcceptanceRunner.EXIT_REJECTED, exit);
-        assertFalse(environment.completed);
+        assertTrue(environment.completed,
+                "dirty audit is presented to the terminal-state writer");
         assertTrue(environment.databaseClosed);
         assertTrue(environment.executionClosed);
     }
@@ -93,7 +95,8 @@ class TushareControlledAcceptanceRunnerTest {
                 new String[]{"--authorization-file=fake.properties"}, environment);
 
         assertEquals(TushareControlledAcceptanceRunner.EXIT_REJECTED, exit);
-        assertFalse(environment.completed);
+        assertTrue(environment.completed,
+                "the runner cannot trust a handle that ignores a dirty audit");
         assertTrue(environment.executionClosed);
         assertTrue(environment.databaseClosed);
     }
@@ -197,6 +200,117 @@ class TushareControlledAcceptanceRunnerTest {
         assertTrue(Thread.getAllStackTraces().keySet().stream()
                 .noneMatch(thread -> thread.isAlive()
                         && "f1f-b2-test-nondaemon".equals(thread.getName())));
+    }
+
+    @Test
+    void firstTerminalWriteFailureInvokesRecoveryBeforeProcessExit() {
+        AtomicInteger recoveryCalls = new AtomicInteger();
+        FakeEnvironment environment = new FakeEnvironment(false) {
+            @Override
+            public TushareControlledAcceptanceRunner.ExecutionHandle execute(
+                    TushareControlledAcceptanceRunner.RuntimeDatabase ignored,
+                    TushareControlledAcceptanceLaunchPlan ignoredPlan,
+                    TushareControlledAcceptanceAuthorization ignoredAuthorization,
+                    VerifiedBuildProof ignoredProof,
+                    char[] token
+            ) {
+                events.add("execute");
+                return new TushareControlledAcceptanceRunner.ExecutionHandle() {
+                    @Override
+                    public void closeBeforeFinalAudit() {
+                        events.add("execution-pre-audit-close");
+                    }
+
+                    @Override
+                    public Decision complete(AuditResult audit) {
+                        throw new IllegalStateException(
+                                "TUSHARE_FINAL_STATE_WRITE_FAILED");
+                    }
+
+                    @Override
+                    public void fail(Throwable error) {
+                        recoveryCalls.incrementAndGet();
+                    }
+
+                    @Override
+                    public void close() {
+                        executionClosed = true;
+                        openedDatabase.close();
+                    }
+                };
+            }
+        };
+
+        int exit = TushareControlledAcceptanceRunner.run(
+                new String[]{"--authorization-file=fake.properties"}, environment);
+
+        assertEquals(TushareControlledAcceptanceRunner.EXIT_REJECTED, exit);
+        assertEquals(1, recoveryCalls.get());
+        assertTrue(environment.executionClosed);
+        assertTrue(environment.databaseClosed);
+    }
+
+    @Test
+    void packagedE2eModeUsesNoRealSecretChannelAndCannotProjectOperationalPass() {
+        FakeEnvironment environment = new FakeEnvironment(false);
+        when(environment.plan.e2eDryRun()).thenReturn(true);
+
+        int exit = TushareControlledAcceptanceRunner.run(
+                new String[]{"--authorization-file=fake.properties"}, environment);
+
+        assertEquals(TushareControlledAcceptanceRunner.EXIT_SUCCESS, exit);
+        assertFalse(environment.events.contains("secret-channel"));
+        assertFalse(environment.events.contains("database-secret"));
+        assertFalse(environment.events.contains("tushare-token"));
+        assertTrue(environment.databaseClosed);
+        assertTrue(environment.executionClosed);
+    }
+
+    @Test
+    void failureAfterExecutionCreationIsFinalizedBeforeResourcesClose() {
+        AtomicInteger recoveryCalls = new AtomicInteger();
+        FakeEnvironment environment = new FakeEnvironment(false) {
+            @Override
+            public TushareControlledAcceptanceRunner.ExecutionHandle execute(
+                    TushareControlledAcceptanceRunner.RuntimeDatabase ignored,
+                    TushareControlledAcceptanceLaunchPlan ignoredPlan,
+                    TushareControlledAcceptanceAuthorization ignoredAuthorization,
+                    VerifiedBuildProof ignoredProof,
+                    char[] token
+            ) {
+                events.add("execute");
+                return new TushareControlledAcceptanceRunner.ExecutionHandle() {
+                    @Override
+                    public void closeBeforeFinalAudit() {
+                        throw new AssertionError("TUSHARE_PRE_AUDIT_CLOSE_FAILED");
+                    }
+
+                    @Override
+                    public Decision complete(AuditResult audit) {
+                        return Decision.internalPassed();
+                    }
+
+                    @Override
+                    public void fail(Throwable error) {
+                        recoveryCalls.incrementAndGet();
+                    }
+
+                    @Override
+                    public void close() {
+                        executionClosed = true;
+                        openedDatabase.close();
+                    }
+                };
+            }
+        };
+
+        int exit = TushareControlledAcceptanceRunner.run(
+                new String[]{"--authorization-file=fake.properties"}, environment);
+
+        assertEquals(TushareControlledAcceptanceRunner.EXIT_REJECTED, exit);
+        assertEquals(1, recoveryCalls.get());
+        assertTrue(environment.executionClosed);
+        assertTrue(environment.databaseClosed);
     }
 
     @Test
@@ -430,6 +544,25 @@ class TushareControlledAcceptanceRunnerTest {
         }
 
         @Override
+        public TushareControlledAcceptanceRunner.RuntimeDatabase
+        openE2eDryRunDatabase(TushareControlledAcceptanceLaunchPlan ignored) {
+            events.add("open-e2e-database");
+            openedDatabase = new TushareControlledAcceptanceRunner.RuntimeDatabase() {
+                @Override
+                public javax.sql.DataSource dataSource() {
+                    return mock(javax.sql.DataSource.class);
+                }
+
+                @Override
+                public void close() {
+                    events.add("database-close");
+                    databaseClosed = true;
+                }
+            };
+            return openedDatabase;
+        }
+
+        @Override
         public void initializeGovernance(
                 TushareControlledAcceptanceRunner.RuntimeDatabase ignored,
                 TushareControlledAcceptanceAuthorization ignoredAuthorization,
@@ -464,7 +597,21 @@ class TushareControlledAcceptanceRunnerTest {
                     assertSame(originalOut, System.out,
                             "PASSED persistence occurs only after the final audit");
                     assertTrue(audit.clean());
-                    return Decision.internalPassed();
+                    return plan.e2eDryRun()
+                            ? Decision.testCandidate(Set.of(
+                            "REAL_CONTROLLED_ACCEPTANCE_NOT_RUN"))
+                            : Decision.internalPassed();
+                }
+
+                @Override
+                public boolean successfulExit(Decision decision) {
+                    return plan.e2eDryRun()
+                            ? decision.status()
+                            == TushareControlledAcceptanceExecution
+                            .ExecutionStatus.SUCCEEDED_CANDIDATE
+                            && !decision.reducedResearchOperationalReady()
+                            : TushareControlledAcceptanceRunner.ExecutionHandle
+                            .super.successfulExit(decision);
                 }
 
                 @Override
@@ -474,6 +621,17 @@ class TushareControlledAcceptanceRunnerTest {
                     openedDatabase.close();
                 }
             };
+        }
+
+        @Override
+        public TushareControlledAcceptanceRunner.ExecutionHandle executeE2eDryRun(
+                TushareControlledAcceptanceRunner.RuntimeDatabase database,
+                TushareControlledAcceptanceLaunchPlan plan,
+                TushareControlledAcceptanceAuthorization authorization,
+                VerifiedBuildProof proof
+        ) {
+            return execute(database, plan, authorization, proof,
+                    "E2E_DRY_RUN_FAKE_TOKEN".toCharArray());
         }
     }
 }

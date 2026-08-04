@@ -56,7 +56,13 @@ public final class TushareControlledAcceptanceDatabaseGuard {
         Objects.requireNonNull(dataSource, "dataSource");
         Objects.requireNonNull(authorization, "authorization").validateFrozen();
         Objects.requireNonNull(buildProof, "buildProof").validate();
-        if (!buildProof.governanceEligible()
+        boolean proofEligible = (buildProof.governanceEligible()
+                && authorization.userApproval()
+                == TushareControlledAcceptanceAuthorization.UserApproval.CONFIRMED)
+                || (buildProof.e2eDryRunEligible()
+                && authorization.userApproval()
+                == TushareControlledAcceptanceAuthorization.UserApproval.E2E_DRY_RUN);
+        if (!proofEligible
                 || !authorization.codeBaselineCommit().equals(buildProof.gitCommit())
                 || !authorization.artifactSha256().equals(
                 buildProof.actualArtifactSha256())) {

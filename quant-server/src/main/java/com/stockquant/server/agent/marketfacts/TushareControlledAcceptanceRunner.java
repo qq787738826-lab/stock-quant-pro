@@ -16,6 +16,7 @@ import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * One-shot non-Spring entry point for a future user-approved F1F-B2 run.
@@ -37,18 +38,42 @@ public final class TushareControlledAcceptanceRunner {
 
     static int run(String[] args, RunnerEnvironment environment) {
         Objects.requireNonNull(environment, "environment");
+        AtomicReference<ExecutionHandle> prepared = new AtomicReference<>();
         try {
-            Captured<ExecutionHandle> captured =
-                    TushareControlledAcceptanceOutputAudit.captureControlledProcess(
-                            registry -> prepare(args, environment, registry));
+            environment.prepareE2eDryRunBeforeAudit(args);
+            Captured<ExecutionHandle> captured;
+            try {
+                captured = TushareControlledAcceptanceOutputAudit
+                        .captureControlledProcess(registry -> {
+                            ExecutionHandle handle = prepare(
+                                    args, environment, registry);
+                            prepared.set(handle);
+                            return handle;
+                        });
+            } catch (TushareControlledAcceptanceOutputAudit
+                     .CapturedExecutionException error) {
+                ExecutionHandle handle = prepared.getAndSet(null);
+                if (handle != null) {
+                    try {
+                        handle.failCapturedAudit(
+                                error.auditResult(), error);
+                    } finally {
+                        handle.close();
+                    }
+                }
+                return EXIT_REJECTED;
+            }
             try (ExecutionHandle handle = captured.value()) {
-                if (!captured.auditResult().captureComplete()
-                        || !captured.auditResult().clean()) {
+                prepared.set(null);
+                try {
+                    Decision decision = handle.complete(captured.auditResult());
+                    return captured.auditResult().clean()
+                            && handle.successfulExit(decision)
+                            ? EXIT_SUCCESS : EXIT_REJECTED;
+                } catch (Throwable error) {
+                    handle.fail(error);
                     return EXIT_REJECTED;
                 }
-                Decision decision = handle.complete(captured.auditResult());
-                return decision.reducedResearchOperationalReady()
-                        ? EXIT_SUCCESS : EXIT_REJECTED;
             }
         } catch (Throwable ignored) {
             return EXIT_REJECTED;
@@ -71,38 +96,48 @@ public final class TushareControlledAcceptanceRunner {
             TushareControlledAcceptanceAuthorization authorization =
                     plan.authorization(proof);
 
-            try (SecretValue password = environment.secretChannel()
-                    .readDatabasePassword()) {
-                char[] auditCopy = password.copy();
-                try {
-                    registry.register(SensitiveKind.DATABASE_PASSWORD, auditCopy);
-                } finally {
-                    Arrays.fill(auditCopy, '\0');
-                }
-                char[] dataSourceCopy = password.copy();
-                try {
-                    database = environment.openDatabase(plan, dataSourceCopy);
-                } finally {
-                    Arrays.fill(dataSourceCopy, '\0');
+            if (plan.e2eDryRun()) {
+                registerE2eDryRunSyntheticSecrets(registry);
+                database = environment.openE2eDryRunDatabase(plan);
+            } else {
+                try (SecretValue password = environment.secretChannel()
+                        .readDatabasePassword()) {
+                    char[] auditCopy = password.copy();
+                    try {
+                        registry.register(SensitiveKind.DATABASE_PASSWORD, auditCopy);
+                    } finally {
+                        Arrays.fill(auditCopy, '\0');
+                    }
+                    char[] dataSourceCopy = password.copy();
+                    try {
+                        database = environment.openDatabase(plan, dataSourceCopy);
+                    } finally {
+                        Arrays.fill(dataSourceCopy, '\0');
+                    }
                 }
             }
 
             environment.initializeGovernance(
                     database, authorization, proof);
 
-            try (SecretValue token = environment.secretChannel().readTushareToken()) {
-                char[] auditCopy = token.copy();
-                try {
-                    registry.register(SensitiveKind.TUSHARE_TOKEN, auditCopy);
-                } finally {
-                    Arrays.fill(auditCopy, '\0');
-                }
-                char[] runtimeCopy = token.copy();
-                try {
-                    execution = environment.execute(
-                            database, plan, authorization, proof, runtimeCopy);
-                } finally {
-                    Arrays.fill(runtimeCopy, '\0');
+            if (plan.e2eDryRun()) {
+                execution = environment.executeE2eDryRun(
+                        database, plan, authorization, proof);
+            } else {
+                try (SecretValue token = environment.secretChannel().readTushareToken()) {
+                    char[] auditCopy = token.copy();
+                    try {
+                        registry.register(SensitiveKind.TUSHARE_TOKEN, auditCopy);
+                    } finally {
+                        Arrays.fill(auditCopy, '\0');
+                    }
+                    char[] runtimeCopy = token.copy();
+                    try {
+                        execution = environment.execute(
+                                database, plan, authorization, proof, runtimeCopy);
+                    } finally {
+                        Arrays.fill(runtimeCopy, '\0');
+                    }
                 }
             }
             execution.closeBeforeFinalAudit();
@@ -110,7 +145,11 @@ public final class TushareControlledAcceptanceRunner {
             return execution;
         } catch (Throwable error) {
             if (execution != null) {
-                execution.close();
+                try {
+                    execution.fail(error);
+                } finally {
+                    execution.close();
+                }
             } else if (database != null) {
                 database.close();
             }
@@ -118,7 +157,27 @@ public final class TushareControlledAcceptanceRunner {
         }
     }
 
+    private static void registerE2eDryRunSyntheticSecrets(
+            SensitiveRegistry registry
+    ) {
+        char[] databasePassword =
+                "E2E_DRY_RUN_DATABASE_PASSWORD".toCharArray();
+        char[] providerToken = "E2E_DRY_RUN_FAKE_TOKEN".toCharArray();
+        try {
+            registry.register(SensitiveKind.DATABASE_PASSWORD, databasePassword);
+            registry.register(SensitiveKind.TUSHARE_TOKEN, providerToken);
+        } finally {
+            Arrays.fill(databasePassword, '\0');
+            Arrays.fill(providerToken, '\0');
+        }
+    }
+
     interface RunnerEnvironment {
+        default void prepareE2eDryRunBeforeAudit(String[] args) {
+            // Only the packaged production environment supports this
+            // network-free, fresh-database test bootstrap.
+        }
+
         VerifiedBuildProof loadBuildProof(
                 TushareControlledAcceptanceLaunchPlan plan);
 
@@ -130,6 +189,22 @@ public final class TushareControlledAcceptanceRunner {
                 TushareControlledAcceptanceLaunchPlan plan,
                 char[] password
         );
+
+        default RuntimeDatabase openE2eDryRunDatabase(
+                TushareControlledAcceptanceLaunchPlan plan
+        ) {
+            throw new IllegalStateException(
+                    "TUSHARE_E2E_DRY_RUN_ENVIRONMENT_UNAVAILABLE");
+        }
+
+        default void prepareE2eDryRunDatabase(
+                RuntimeDatabase database,
+                TushareControlledAcceptanceAuthorization authorization,
+                VerifiedBuildProof buildProof
+        ) {
+            throw new IllegalStateException(
+                    "TUSHARE_E2E_DRY_RUN_ENVIRONMENT_UNAVAILABLE");
+        }
 
         void initializeGovernance(
                 RuntimeDatabase database,
@@ -144,6 +219,16 @@ public final class TushareControlledAcceptanceRunner {
                 VerifiedBuildProof buildProof,
                 char[] token
         );
+
+        default ExecutionHandle executeE2eDryRun(
+                RuntimeDatabase database,
+                TushareControlledAcceptanceLaunchPlan plan,
+                TushareControlledAcceptanceAuthorization authorization,
+                VerifiedBuildProof buildProof
+        ) {
+            throw new IllegalStateException(
+                    "TUSHARE_E2E_DRY_RUN_ENVIRONMENT_UNAVAILABLE");
+        }
     }
 
     interface RuntimeDatabase extends AutoCloseable {
@@ -157,6 +242,20 @@ public final class TushareControlledAcceptanceRunner {
         void closeBeforeFinalAudit();
 
         Decision complete(AuditResult audit);
+
+        default void fail(Throwable error) {
+            Objects.requireNonNull(error, "error");
+        }
+
+        default void failCapturedAudit(AuditResult audit, Throwable error) {
+            Objects.requireNonNull(audit, "audit");
+            fail(error);
+        }
+
+        default boolean successfulExit(Decision decision) {
+            return Objects.requireNonNull(decision, "decision")
+                    .reducedResearchOperationalReady();
+        }
 
         @Override
         void close();
@@ -180,7 +279,10 @@ public final class TushareControlledAcceptanceRunner {
             VerifiedBuildProof proof =
                     TushareControlledAcceptanceBuildProof
                             .loadCurrentExecutorArtifact(plan.buildProofPath());
-            if (!proof.governanceEligible()) {
+            boolean eligible = plan.e2eDryRun()
+                    ? proof.e2eDryRunEligible()
+                    : proof.governanceEligible();
+            if (!eligible) {
                 throw new IllegalStateException(
                         "TUSHARE_CONTROLLED_ACCEPTANCE_FORMAL_BUILD_REQUIRED");
             }
@@ -214,17 +316,51 @@ public final class TushareControlledAcceptanceRunner {
             TushareControlledAcceptanceDataSource source =
                     new TushareControlledAcceptanceDataSource(
                             plan.databasePort(), plan.sslMode(), password);
-            return new RuntimeDatabase() {
-                @Override
-                public javax.sql.DataSource dataSource() {
-                    return source;
-                }
+            return runtimeDatabase(source);
+        }
 
-                @Override
-                public void close() {
-                    source.close();
-                }
-            };
+        @Override
+        public void prepareE2eDryRunBeforeAudit(String[] args) {
+            TushareControlledAcceptanceLaunchPlan plan = loadPlan(args);
+            if (!plan.e2eDryRun()) {
+                return;
+            }
+            VerifiedBuildProof proof = loadBuildProof(plan);
+            plan.validateBuildProof(proof);
+            TushareControlledAcceptanceAuthorization authorization =
+                    plan.authorization(proof);
+            try (RuntimeDatabase database = openE2eDryRunDatabase(plan)) {
+                prepareE2eDryRunDatabase(database, authorization, proof);
+            }
+        }
+
+        @Override
+        public RuntimeDatabase openE2eDryRunDatabase(
+                TushareControlledAcceptanceLaunchPlan plan
+        ) {
+            if (!plan.e2eDryRun()) {
+                throw new IllegalStateException(
+                        "TUSHARE_E2E_DRY_RUN_AUTHORIZATION_REQUIRED");
+            }
+            char[] syntheticPassword = "E2E_DRY_RUN_DATABASE_PASSWORD".toCharArray();
+            TushareControlledAcceptanceDataSource source;
+            try {
+                source = new TushareControlledAcceptanceDataSource(
+                        plan.databasePort(), plan.sslMode(), syntheticPassword);
+            } finally {
+                Arrays.fill(syntheticPassword, '\0');
+            }
+            return runtimeDatabase(source);
+        }
+
+        @Override
+        public void prepareE2eDryRunDatabase(
+                RuntimeDatabase database,
+                TushareControlledAcceptanceAuthorization authorization,
+                VerifiedBuildProof buildProof
+        ) {
+            TushareControlledAcceptanceE2eDryRunDatabase.initialize(
+                    database.dataSource(), authorization, buildProof);
         }
 
         @Override
@@ -251,15 +387,53 @@ public final class TushareControlledAcceptanceRunner {
             TushareControlledAcceptanceComponents components =
                     TushareControlledAcceptanceComponents.create(
                             database.dataSource(), token, Clock.systemUTC());
+            return startExecution(database, plan, authorization, buildProof,
+                    components, ExecutionSource.REAL_CONTROLLED_ACCEPTANCE);
+        }
+
+        @Override
+        public ExecutionHandle executeE2eDryRun(
+                RuntimeDatabase database,
+                TushareControlledAcceptanceLaunchPlan plan,
+                TushareControlledAcceptanceAuthorization authorization,
+                VerifiedBuildProof buildProof
+        ) {
+            if (!plan.e2eDryRun() || !buildProof.e2eDryRunEligible()
+                    || authorization.userApproval()
+                    != TushareControlledAcceptanceAuthorization.UserApproval.E2E_DRY_RUN) {
+                throw new IllegalStateException(
+                        "TUSHARE_E2E_DRY_RUN_AUTHORIZATION_REQUIRED");
+            }
+            TushareControlledAcceptanceComponents components =
+                    TushareControlledAcceptanceComponents.createE2eDryRun(
+                            database.dataSource(), Clock.systemUTC());
+            return startExecution(database, plan, authorization, buildProof,
+                    components, ExecutionSource.TEST);
+        }
+
+        private ExecutionHandle startExecution(
+                RuntimeDatabase database,
+                TushareControlledAcceptanceLaunchPlan plan,
+                TushareControlledAcceptanceAuthorization authorization,
+                VerifiedBuildProof buildProof,
+                TushareControlledAcceptanceComponents components,
+                ExecutionSource source
+        ) {
             TushareControlledAcceptanceExecutor executor = components.executor();
             PendingExecution pending;
             try {
                 pending = executor.executeBeforeFinalAudit(
-                        authorization, plan.command(), buildProof,
-                        ExecutionSource.REAL_CONTROLLED_ACCEPTANCE);
+                        authorization, plan.command(), buildProof, source);
             } catch (Throwable error) {
-                components.close();
-                database.close();
+                try {
+                    executor.interruptUnexpected(
+                            authorization.acceptanceId(), error);
+                } catch (Throwable recoveryFailure) {
+                    error.addSuppressed(recoveryFailure);
+                } finally {
+                    components.close();
+                    database.close();
+                }
                 throw error;
             }
             return new ExecutionHandle() {
@@ -279,12 +453,65 @@ public final class TushareControlledAcceptanceRunner {
                 }
 
                 @Override
+                public void fail(Throwable error) {
+                    try {
+                        executor.interruptUnexpected(
+                                authorization.acceptanceId(), error);
+                    } catch (Throwable recoveryFailure) {
+                        error.addSuppressed(recoveryFailure);
+                    }
+                }
+
+                @Override
+                public void failCapturedAudit(
+                        AuditResult audit,
+                        Throwable error
+                ) {
+                    try {
+                        executor.completeAfterAudit(pending, audit);
+                    } catch (Throwable auditFailure) {
+                        error.addSuppressed(auditFailure);
+                        fail(error);
+                    }
+                }
+
+                @Override
+                public boolean successfulExit(Decision decision) {
+                    if (source == ExecutionSource.TEST) {
+                        return decision.status()
+                                == TushareControlledAcceptanceExecution.ExecutionStatus
+                                .SUCCEEDED_CANDIDATE
+                                && decision.qualification()
+                                == TushareControlledAcceptanceExecution
+                                .EvidenceQualification.TEST_ONLY_CANDIDATE
+                                && !decision.reducedResearchOperationalReady();
+                    }
+                    return ExecutionHandle.super.successfulExit(decision);
+                }
+
+                @Override
                 public void close() {
                     try {
                         closeBeforeFinalAudit();
                     } finally {
                         database.close();
                     }
+                }
+            };
+        }
+
+        private static RuntimeDatabase runtimeDatabase(
+                TushareControlledAcceptanceDataSource source
+        ) {
+            return new RuntimeDatabase() {
+                @Override
+                public javax.sql.DataSource dataSource() {
+                    return source;
+                }
+
+                @Override
+                public void close() {
+                    source.close();
                 }
             };
         }
