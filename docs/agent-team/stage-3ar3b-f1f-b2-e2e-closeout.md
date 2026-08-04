@@ -26,12 +26,14 @@
 `SUCCEEDED_CANDIDATE / TEST_ONLY_CANDIDATE`，不能写 `PASSED` 或改变 operational。
 
 打包 JAR 进程级 Dry Run 已在全新 PostgreSQL 16.13 临时实例完成。主历史精确 V1—V13，
-独立治理历史精确 V14；最终 TEST acceptance ID 为
-`F1FB2_E2E_20260804042146_A5E1C2DFC6`，状态链为
+独立治理历史精确 V14；在代码与治理提交
+`dcb4fc700acd8a8caacca93b6503e3edd7b2ef85` 上完成的最终 TEST acceptance ID 为
+`F1FB2_E2E_20260804043903_3D7B3028A3`，状态链为
 `AUTHORIZED → RESERVED → RUNNING → SUCCEEDED_CANDIDATE`。Fake Provider 精确三次、重试 0，
 typed fact 回读 1/1/1，SYSTEM_KNOWLEDGE、formula-only QFQ、非空 capture batch、证据摘要、
-digest、输出审计与 `finalized_at` 均通过；`PASSED` 记录为 0，悬挂 RUNNING 为 0。临时端口
-`58087`、进程、目录、授权文件及 E2E 构建产物残留均为 0。
+digest、输出审计与 `finalized_at` 均通过；`PASSED` 记录为 0，悬挂 RUNNING 为 0。构建产物
+SHA-256 为 `e10873ab0b9ebe98aa6aa3c51ad5e480780cf5c6c4dbbc565ea67f597c71c966`；临时端口
+`59560`、进程、目录、授权文件及 E2E 构建产物残留均为 0。
 
 调试过程中发现治理 history 已完整时仍重放 Flyway，INFO 日志中的 JDBC 标识被输出审计
 正确拒绝。最终修复是在 COMPLETE 回读后跳过 Flyway 的构造与执行，而不是放宽审计。
