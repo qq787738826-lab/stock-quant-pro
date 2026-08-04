@@ -25,11 +25,42 @@
 输出审计运行；网络边界替换为固定 Fake Gateway。成功只能落到
 `SUCCEEDED_CANDIDATE / TEST_ONLY_CANDIDATE`，不能写 `PASSED` 或改变 operational。
 
-最终运行证据在本阶段验证完成后登记；在证据登记前不得宣称收口 READY。
+打包 JAR 进程级 Dry Run 已在全新 PostgreSQL 16.13 临时实例完成。主历史精确 V1—V13，
+独立治理历史精确 V14；最终 TEST acceptance ID 为
+`F1FB2_E2E_20260804042146_A5E1C2DFC6`，状态链为
+`AUTHORIZED → RESERVED → RUNNING → SUCCEEDED_CANDIDATE`。Fake Provider 精确三次、重试 0，
+typed fact 回读 1/1/1，SYSTEM_KNOWLEDGE、formula-only QFQ、非空 capture batch、证据摘要、
+digest、输出审计与 `finalized_at` 均通过；`PASSED` 记录为 0，悬挂 RUNNING 为 0。临时端口
+`58087`、进程、目录、授权文件及 E2E 构建产物残留均为 0。
+
+调试过程中发现治理 history 已完整时仍重放 Flyway，INFO 日志中的 JDBC 标识被输出审计
+正确拒绝。最终修复是在 COMPLETE 回读后跳过 Flyway 的构造与执行，而不是放宽审计。
+正式恢复脚本还修复了 Windows PowerShell 5.1 对 Maven UTF-8 classpath 中中文用户目录的
+错误解码；恢复结果无论成功或安全拒绝都只保存脱敏状态/reason。
+
+## 永久库恢复执行状态
+
+Codex 终端尝试以前台 PowerShell 启动正式恢复入口，但该执行环境没有可映射到用户桌面的
+Console 窗口；Java 已停在 `System.console().readPassword()`，窗口句柄为 0。按照安全合同，
+没有改用参数、环境变量、文件或管道提供密码。等待进程已按精确 PID 终止，未创建数据库
+连接，也未产生恢复结果文件。因此永久库中的目标 ID 仍按最后已知状态记录为：
+
+```text
+CONTROLLED_ACCEPTANCE_STATUS=RUNNING
+provider_call_count=0
+retry_count=0
+capture_batch_id=NULL
+finalized_at=NULL
+RECOVERY_EXECUTION_STATUS=BLOCKED_SECURE_CONSOLE_INTERACTION
+```
+
+只有用户在独立原生 Windows PowerShell 中执行正式恢复脚本并完成密码输入，且脱敏结果回读
+为 `INTERRUPTED / RECOVERY / STRANDED_RUNNING_PROCESS_EXITED` 后，本阶段才可判 READY。
 
 ## 状态保持
 
 ```text
+CONTROLLED_ACCEPTANCE_STATUS=RUNNING
 F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE
 REDUCED_RESEARCH_OPERATIONAL_READY=false
 FREE_PRODUCT_PREVIEW_GATE=PASS

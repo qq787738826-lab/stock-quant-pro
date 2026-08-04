@@ -194,3 +194,29 @@ FREE_PROVIDER_VALIDATION_GATE=BLOCKED
 PAID_PROVIDER_UPGRADE_DECISION=PENDING
 IFIND_TRIAL_ACTIVATION_GATE=BLOCKED
 ```
+
+## 2026-08-04 悬挂恢复与打包 E2E 收口
+
+SYSTEM_KNOWLEDGE 修复合入后的真实授权 ID
+`F1FB2_20260804_SK_POSTFIX_70E8249A333E` 在第一次 Provider 调用前进程退出，留下
+`RUNNING`、Provider 调用 0、重试 0、无 capture batch、无 `finalized_at` 的悬挂记录。
+本阶段没有复用该 ID 执行 Runner，而是新增正式单 ID 恢复入口：只接受上述精确状态，
+以专用事务管理器、`REQUIRES_NEW` 和行锁写入
+`INTERRUPTED / RECOVERY / STRANDED_RUNNING_PROCESS_EXITED`，并发只有一个状态转换获胜。
+
+Runner/Executor 的终结边界同步覆盖 Provider 组件初始化、第一次调用前失败、执行期
+`Throwable`、组件关闭、线程守卫、输出审计基础设施和首次终态写入失败；所有路径都必须
+尝试终结或留下可恢复的安全证据。没有放宽一次性 ID、三请求、零重试、事务、typed fact、
+SYSTEM_KNOWLEDGE 或输出审计门禁。
+
+最终打包进程级 E2E 使用全新临时 PostgreSQL 16.13、主 V1—V13、独立治理 V14、
+`E2E_DRY_RUN` JAR 与 Fake Provider。成功链固定为
+`AUTHORIZED → RESERVED → RUNNING → SUCCEEDED_CANDIDATE`；三 Endpoint 调用 3、重试 0，
+typed fact 为 1/1/1，SYSTEM_KNOWLEDGE、formula-only QFQ、输出审计、非空 batch/证据摘要/
+digest/终结时间均通过。治理 history 已 COMPLETE 时跳过 Flyway 重放，避免把 JDBC 标识写入
+审计窗口。临时端口、进程、目录、授权与构建产物残留均为 0。
+
+该证据来源为 TEST，不写真实 `PASSED`，不提升 operational。真实 Provider 新增调用为 0，
+Tushare 累计真实请求保持 29。Codex 执行环境无法提供恢复入口要求的原生可见
+`System.console()`，因此永久库恢复尚未执行，悬挂 ID 保持最后已知 `RUNNING`；继续保持完整
+F1 技术阻断及四项正式门禁。
