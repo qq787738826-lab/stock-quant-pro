@@ -85,13 +85,20 @@ public final class TushareControlledAcceptanceRunner {
     private static void writeSafeFailure(Throwable error) {
         Throwable current = error;
         String generic = null;
+        StringBuilder types = new StringBuilder();
         while (current != null) {
+            if (!types.isEmpty()) {
+                types.append('>');
+            }
+            types.append(current.getClass().getSimpleName());
             String message = current.getMessage();
             if (message != null && message.matches("[A-Z][A-Z0-9_]{7,127}")) {
                 if (message.startsWith("TUSHARE_")
                         || message.startsWith("F1F_")) {
                     System.err.println(
                             "TUSHARE_CONTROLLED_ACCEPTANCE_SAFE_FAILURE=" + message);
+                    System.err.println(
+                            "TUSHARE_CONTROLLED_ACCEPTANCE_SAFE_FAILURE_TYPES=" + types);
                     return;
                 }
                 generic = message;
@@ -101,6 +108,8 @@ public final class TushareControlledAcceptanceRunner {
         System.err.println(
                 "TUSHARE_CONTROLLED_ACCEPTANCE_SAFE_FAILURE="
                         + (generic == null ? "CONTROLLED_EXECUTION_FAILED" : generic));
+        System.err.println(
+                "TUSHARE_CONTROLLED_ACCEPTANCE_SAFE_FAILURE_TYPES=" + types);
     }
 
     private static ExecutionHandle prepare(
