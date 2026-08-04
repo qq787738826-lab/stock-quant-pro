@@ -42,29 +42,47 @@ SHA-256 为 `e10873ab0b9ebe98aa6aa3c51ad5e480780cf5c6c4dbbc565ea67f597c71c966`�
 
 ## 永久库恢复执行状态
 
-Codex 终端尝试以前台 PowerShell 启动正式恢复入口，但该执行环境没有可映射到用户桌面的
-Console 窗口；Java 已停在 `System.console().readPassword()`，窗口句柄为 0。按照安全合同，
-没有改用参数、环境变量、文件或管道提供密码。等待进程已按精确 PID 终止，未创建数据库
-连接，也未产生恢复结果文件。因此永久库中的目标 ID 仍按最后已知状态记录为：
+后续由用户在原生交互 Console 中执行正式恢复入口，永久库中的目标 ID 已按合同单向终结：
 
 ```text
-CONTROLLED_ACCEPTANCE_STATUS=RUNNING
+CONTROLLED_ACCEPTANCE_STATUS=INTERRUPTED
 provider_call_count=0
 retry_count=0
 capture_batch_id=NULL
-finalized_at=NULL
-RECOVERY_EXECUTION_STATUS=BLOCKED_SECURE_CONSOLE_INTERACTION
+reason=STRANDED_RUNNING_PROCESS_EXITED
+recoveryApplied=true
+JAVA_EXIT_CODE=0
+SCRIPT_EXIT_CODE=0
 ```
 
-只有用户在独立原生 Windows PowerShell 中执行正式恢复脚本并完成密码输入，且脱敏结果回读
-为 `INTERRUPTED / RECOVERY / STRANDED_RUNNING_PROCESS_EXITED` 后，本阶段才可判 READY。
+恢复没有调用 Provider，原 ID 永久不可复用。恢复执行发生在本阶段代码合入后；上述结果替代此前
+因 Codex 终端无安全 Console 而保留的历史 `RUNNING` 状态。
+
+## 后续真实验收结果
+
+最终真实 acceptance ID `F1FB2_20260804_FINAL_69B5B6AF9814` 的权威回读结果为：
+
+```text
+AUTHORIZED → RESERVED → RUNNING → SUCCEEDED_CANDIDATE → PASSED
+capture_batch_id=4
+provider_call_count=3
+retry_count=0
+outputAudit.clean=true
+captureComplete=true
+evidence_summary_json=NON_EMPTY
+evidence_digest=NON_EMPTY
+finalized_at=NON_NULL
+```
+
+该结果把缩减研究受控验收状态投影为 PASSED；Tushare 累计真实业务请求为 32。完整 F1 十项
+技术阻断、生产/正常业务库、scheduler、Agent、回测、Shadow、交易及后续阶段边界不变。
 
 ## 状态保持
 
 ```text
-CONTROLLED_ACCEPTANCE_STATUS=RUNNING
+CONTROLLED_ACCEPTANCE_STATUS=PASSED
 F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE
-REDUCED_RESEARCH_OPERATIONAL_READY=false
+REDUCED_RESEARCH_OPERATIONAL_READY=true
 FREE_PRODUCT_PREVIEW_GATE=PASS
 FREE_PROVIDER_VALIDATION_GATE=BLOCKED
 PAID_PROVIDER_UPGRADE_DECISION=PENDING

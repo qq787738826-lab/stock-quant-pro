@@ -39,6 +39,7 @@ public final class TushareControlledAcceptanceRunner {
     static int run(String[] args, RunnerEnvironment environment) {
         Objects.requireNonNull(environment, "environment");
         AtomicReference<ExecutionHandle> prepared = new AtomicReference<>();
+        boolean persistedPassExitConfirmed = false;
         try {
             environment.prepareE2eDryRunBeforeAudit(args);
             Captured<ExecutionHandle> captured;
@@ -68,18 +69,51 @@ public final class TushareControlledAcceptanceRunner {
                 prepared.set(null);
                 try {
                     Decision decision = handle.complete(captured.auditResult());
-                    return captured.auditResult().clean()
-                            && handle.successfulExit(decision)
-                            ? EXIT_SUCCESS : EXIT_REJECTED;
+                    boolean successful = captured.auditResult().captureComplete()
+                            && captured.auditResult().clean()
+                            && handle.successfulExit(decision);
+                    persistedPassExitConfirmed =
+                            successful && isPersistedPass(decision);
+                    return successful ? EXIT_SUCCESS : EXIT_REJECTED;
                 } catch (Throwable error) {
                     handle.fail(error);
                     return EXIT_REJECTED;
                 }
             }
         } catch (Throwable error) {
+            if (persistedPassExitConfirmed) {
+                writeSafePostPassCloseWarning(error);
+                return EXIT_SUCCESS;
+            }
             writeSafeFailure(error);
             return EXIT_REJECTED;
         }
+    }
+
+    private static boolean isPersistedPass(Decision decision) {
+        return decision.status()
+                == TushareControlledAcceptanceExecution.ExecutionStatus.PASSED
+                && decision.qualification()
+                == TushareControlledAcceptanceExecution.EvidenceQualification
+                .REAL_CONTROLLED_ACCEPTANCE_PASSED
+                && decision.reducedResearchOperationalReady()
+                && decision.blockers().isEmpty();
+    }
+
+    private static void writeSafePostPassCloseWarning(Throwable error) {
+        String reason = "TUSHARE_CONTROLLED_ACCEPTANCE_POST_PASS_CLOSE_FAILED";
+        Throwable current = error;
+        while (current != null) {
+            String message = current.getMessage();
+            if (message != null
+                    && message.matches("(?:TUSHARE_|F1F_)[A-Z0-9_]{3,123}")) {
+                reason = message;
+            }
+            current = current.getCause();
+        }
+        System.err.println(
+                "TUSHARE_CONTROLLED_ACCEPTANCE_POST_PASS_CLOSE_WARNING="
+                        + reason);
     }
 
     private static void writeSafeFailure(Throwable error) {

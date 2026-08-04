@@ -210,7 +210,7 @@ F1E 在 F1D 书面许可门 PASS 后建立类型化准入，但没有解除完�
 REDUCED_RESEARCH_ROUTE_DECISION=DEDICATED_LOCAL_RESEARCH_PATH
 REDUCED_RESEARCH_LOCAL_RUNTIME_IMPLEMENTATION_READY=true
 REDUCED_RESEARCH_CONTROLLED_ACCEPTANCE_READY=true
-REDUCED_RESEARCH_OPERATIONAL_READY=false
+REDUCED_RESEARCH_OPERATIONAL_READY=true
 REDUCED_RESEARCH_PRODUCTION_RUNTIME_READY=false
 NORMAL_BUSINESS_DATABASE_RUNTIME_READY=false
 F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE
@@ -247,9 +247,9 @@ F1F-A 当前只证明同一授权对象的单 JVM CAS 防重，不证明同 ID �
 first-observed/known-at 回读。验收后若提交哈希变化，现有精确相等规则必须判
 `INCOMPATIBLE_BASELINE`；不得通过配置声明兼容。
 
-即使未来受控验收通过，也只能独立讨论 `REDUCED_RESEARCH_OPERATIONAL_READY=true`；
+真实受控验收通过后已经独立投影 `REDUCED_RESEARCH_OPERATIONAL_READY=true`；
 不得改变完整F1十项技术阻断、生产/正常业务库、scheduler、Agent、回测、Shadow、F2B/F3、
-交易或四项正式门禁。本阶段真实Provider调用为0，F1F-B尚未授权。
+交易或四项正式门禁。该投影只证明缩减个人研究受控闭环，不证明完整技术合同或生产资格。
 
 ### 5.4 F1F-B1 可信执行机制
 
@@ -257,7 +257,7 @@ F1F-B1 补齐持久化唯一 acceptance ID、不可逆状态机、可信构建�
 
 构建证明必须绑定当前 executor JAR、MANIFEST、相邻 sidecar、冻结集成分支和本地/远程集成完整 SHA；TEST proof 永远无治理资格。输出隔离先于敏感材料读取，并捕获边界内 stdout/stderr、当前 Logback 拓扑和异常链。F1E 捕获事务提交后，回读必须在无活动事务中重新验证专用数据库身份，并同时核对 V13 envelope 与 raw/factor/calendar typed facts；捕获 PID 与回读 PID 分别记录。
 
-上述 SHA-256 与数据库 digest 是完整性核对而不是特权管理员不可伪造的外部签名；输出审计也不覆盖任意外部文件、未桥接日志框架或边界结束后的脱离线程。F1F-B2 必须使用最小专用进程、最小权限账号、输出白名单和无未等待后台任务。TEST 来源不能投影真实 PASSED；F1F-B2 未运行前继续保持 `CONTROLLED_ACCEPTANCE_STATUS=NOT_RUN` 与 `REDUCED_RESEARCH_OPERATIONAL_READY=false`。
+上述 SHA-256 与数据库 digest 是完整性核对而不是特权管理员不可伪造的外部签名；输出审计也不覆盖任意外部文件、未桥接日志框架或边界结束后的脱离线程。F1F-B2 必须使用最小专用进程、最小权限账号、输出白名单和无未等待后台任务。TEST 来源不能投影真实 PASSED；最终真实 F1F-B2 已持久化为 `CONTROLLED_ACCEPTANCE_STATUS=PASSED`，独立投影 `REDUCED_RESEARCH_OPERATIONAL_READY=true`，但不改变完整 F1 或生产边界。
 
 完整 F1 的公司行动、稳定事件身份、factor/action、Provider revision/历史版本、永久证券身份、全历史 DAILY_EXACT 与完整 QFQ lineage 等技术阻断不因该运行机制完成而解除；`F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE`。
 
@@ -298,8 +298,8 @@ Runner 已在 `213264bc63a2584f0fbb30dca059abf272e62a64` 合入。其后首次 B
 正式 Runner 只接受一个 `AuthorizationFile`。该文件冻结构建证明路径、数据库
 host/port/name/user/schema、证券、日期、Endpoint、三次/零重试预算和 JAR SHA-256，禁止
 Token、密码及命令行覆盖。重复、未知、缺失或类型错误字段必须拒绝。DBPREP 合入后只能基于
-新的集成 SHA 重新生成 JAR/sidecar/授权并运行简化 FREEZE；不改变完整 F1 技术阻断、
-`CONTROLLED_ACCEPTANCE_STATUS=NOT_RUN` 或 `REDUCED_RESEARCH_OPERATIONAL_READY=false`。
+新的集成 SHA 重新生成 JAR/sidecar/授权并运行简化 FREEZE；该段是正式验收前的历史冻结边界，
+不改变完整 F1 技术阻断。后续真实 PASSED 只允许独立更新受控验收和缩减研究 operational 状态。
 
 ## 6. 继续禁止
 

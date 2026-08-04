@@ -220,3 +220,55 @@ digest/终结时间均通过。治理 history 已 COMPLETE 时跳过 Flyway 重�
 Tushare 累计真实请求保持 29。Codex 执行环境无法提供恢复入口要求的原生可见
 `System.console()`，因此永久库恢复尚未执行，悬挂 ID 保持最后已知 `RUNNING`；继续保持完整
 F1 技术阻断及四项正式门禁。
+
+## 2026-08-04 最终真实 PASSED 与退出码收口
+
+上述末段是 E2E-CLOSEOUT 提交时的历史状态。随后用户在原生交互 Console 中完成正式恢复，
+`F1FB2_20260804_SK_POSTFIX_70E8249A333E` 已单向终结为
+`INTERRUPTED / STRANDED_RUNNING_PROCESS_EXITED`，恢复应用成功，Java/脚本退出码均为 0，
+Provider 调用 0，原 ID 永久不可复用。
+
+最终真实 ID `F1FB2_20260804_FINAL_69B5B6AF9814` 的权威持久化回读为：
+
+```text
+AUTHORIZED → RESERVED → RUNNING → SUCCEEDED_CANDIDATE → PASSED
+capture_batch_id=4
+provider_call_count=3
+retry_count=0
+outputAudit.clean=true
+captureComplete=true
+evidence_summary_json=NON_EMPTY
+evidence_digest=NON_EMPTY
+finalized_at=NON_NULL
+TUSHARE_TOTAL_REAL_BUSINESS_CALL_COUNT=32
+```
+
+本收尾阶段遵守无密码、无 Token 约束；尝试使用 `psql -w` 进行只读复核时在认证前因
+`no password supplied` 退出，未连接永久数据库，也未执行 SELECT、DDL 或 DML。因此本记录
+登记用户提供的权威真实回读结果，不虚构 Codex 独立数据库回读。
+
+持久化状态已经是 PASSED，但原 Runner 进程仍返回 20。精确根因是 Java try-with-resources
+先计算并暂存成功返回值，随后 `ExecutionHandle.close()` 的资源关闭异常覆盖该返回值并进入
+外层拒绝分支。最小修复仅在 `captureComplete=true`、输出审计 clean、`successfulExit=true`，
+且决策精确为 `PASSED / REAL_CONTROLLED_ACCEPTANCE_PASSED / operational=true / blockers=[]`
+时，把持久化 PASSED 后的关闭异常安全记录为脱敏 warning 并返回 0。FAILED、INTERRUPTED、
+审计不完整或不干净仍返回非 0；既有 PASSED 数据不重写，也不重新运行真实验收。
+
+当前治理投影为：
+
+```text
+CONTROLLED_ACCEPTANCE_STATUS=PASSED
+F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE
+REDUCED_RESEARCH_OPERATIONAL_READY=true
+FREE_PRODUCT_PREVIEW_GATE=PASS
+FREE_PROVIDER_VALIDATION_GATE=BLOCKED
+PAID_PROVIDER_UPGRADE_DECISION=PENDING
+IFIND_TRIAL_ACTIVATION_GATE=BLOCKED
+```
+
+完整 F1 十项技术阻断继续保持；生产/正常业务库、scheduler、Agent、回测、Shadow、Day 002、
+F2B、F3、3A-R3B-1、3B 和交易均未授权启动。本收尾新增 Provider 调用为 0。
+
+退出码与治理投影定向测试为 `28/0/0/0`，其中 Runner 16 项、受控验收资格与完整 F1
+阻断回归 12 项；Java `clean compile` 与 `git diff --check` 通过。测试没有连接数据库、读取
+Token 或调用 Provider。

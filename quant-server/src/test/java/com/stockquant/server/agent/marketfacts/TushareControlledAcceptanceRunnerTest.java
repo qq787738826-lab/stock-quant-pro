@@ -43,6 +43,99 @@ class TushareControlledAcceptanceRunnerTest {
     }
 
     @Test
+    void persistedPassedAndCompleteAuditReturnsZeroWhenResourceCloseFails() {
+        FakeEnvironment environment = new FakeEnvironment(false) {
+            @Override
+            public TushareControlledAcceptanceRunner.ExecutionHandle execute(
+                    TushareControlledAcceptanceRunner.RuntimeDatabase ignored,
+                    TushareControlledAcceptanceLaunchPlan ignoredPlan,
+                    TushareControlledAcceptanceAuthorization ignoredAuthorization,
+                    VerifiedBuildProof ignoredProof,
+                    char[] token
+            ) {
+                events.add("execute");
+                return new TushareControlledAcceptanceRunner.ExecutionHandle() {
+                    @Override
+                    public void closeBeforeFinalAudit() {
+                        events.add("execution-pre-audit-close");
+                    }
+
+                    @Override
+                    public Decision complete(AuditResult audit) {
+                        completed = true;
+                        assertTrue(audit.captureComplete());
+                        assertTrue(audit.clean());
+                        return Decision.internalPassed();
+                    }
+
+                    @Override
+                    public void close() {
+                        executionClosed = true;
+                        openedDatabase.close();
+                        throw new IllegalStateException(
+                                "TUSHARE_POST_PASS_RESOURCE_CLOSE_FAILED");
+                    }
+                };
+            }
+        };
+
+        int exit = TushareControlledAcceptanceRunner.run(
+                new String[]{"--authorization-file=fake.properties"}, environment);
+
+        assertEquals(TushareControlledAcceptanceRunner.EXIT_SUCCESS, exit);
+        assertTrue(environment.completed);
+        assertTrue(environment.executionClosed);
+        assertTrue(environment.databaseClosed);
+    }
+
+    @Test
+    void interruptedDecisionRemainsNonZeroWhenResourceCloseFails() {
+        FakeEnvironment environment = new FakeEnvironment(false) {
+            @Override
+            public TushareControlledAcceptanceRunner.ExecutionHandle execute(
+                    TushareControlledAcceptanceRunner.RuntimeDatabase ignored,
+                    TushareControlledAcceptanceLaunchPlan ignoredPlan,
+                    TushareControlledAcceptanceAuthorization ignoredAuthorization,
+                    VerifiedBuildProof ignoredProof,
+                    char[] token
+            ) {
+                events.add("execute");
+                return new TushareControlledAcceptanceRunner.ExecutionHandle() {
+                    @Override
+                    public void closeBeforeFinalAudit() {
+                        events.add("execution-pre-audit-close");
+                    }
+
+                    @Override
+                    public Decision complete(AuditResult audit) {
+                        completed = true;
+                        return Decision.failed(
+                                TushareControlledAcceptanceExecution.ExecutionStatus
+                                        .INTERRUPTED,
+                                Set.of("CONTROLLED_ACCEPTANCE_INTERRUPTED"));
+                    }
+
+                    @Override
+                    public void close() {
+                        executionClosed = true;
+                        openedDatabase.close();
+                        throw new IllegalStateException(
+                                "TUSHARE_INTERRUPTED_RESOURCE_CLOSE_FAILED");
+                    }
+                };
+            }
+        };
+
+        int exit = TushareControlledAcceptanceRunner.run(
+                new String[]{"--authorization-file=fake.properties"}, environment);
+
+        assertEquals(TushareControlledAcceptanceRunner.EXIT_REJECTED, exit);
+        assertTrue(environment.completed);
+        assertTrue(environment.executionClosed);
+        assertTrue(environment.databaseClosed);
+    }
+
+    @Test
     void auditedSecretOutputRejectsPassAndStillClosesResources() {
         FakeEnvironment environment = new FakeEnvironment(true);
 
