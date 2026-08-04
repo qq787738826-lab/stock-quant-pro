@@ -56,7 +56,11 @@ try {
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $classpathFile)) {
         throw 'TUSHARE_CONTROLLED_ACCEPTANCE_RECOVERY_CLASSPATH_FAILED'
     }
-    $dependencies = (Get-Content -Raw -LiteralPath $classpathFile).Trim()
+    # Maven writes the dependency classpath as UTF-8. Windows PowerShell 5.1
+    # otherwise decodes the non-ASCII user-profile path with the active ANSI
+    # code page and silently produces unusable dependency paths.
+    $dependencies = (Get-Content -Raw -Encoding UTF8 `
+        -LiteralPath $classpathFile).Trim()
     $classpath = (Join-Path $repoRoot 'quant-server\target\classes') + ';' +
         (Join-Path $repoRoot 'quant-core\target\classes') + ';' + $dependencies
     & java -cp $classpath `

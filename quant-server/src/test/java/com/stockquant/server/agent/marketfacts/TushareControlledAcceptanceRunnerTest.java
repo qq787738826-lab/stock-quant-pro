@@ -418,6 +418,8 @@ class TushareControlledAcceptanceRunnerTest {
                 + "TushareControlledAcceptanceRunner.java");
         String build = readSource("scripts/prepare-f1f-b2-build-proof.ps1");
         String launch = readSource("scripts/run-f1f-b2-controlled-acceptance.ps1");
+        String recovery = readSource(
+                "scripts/recover-f1f-b2-stranded-execution.ps1");
         String components = readSource(
                 "src/main/java/com/stockquant/server/agent/marketfacts/"
                         + "TushareControlledAcceptanceComponents.java");
@@ -454,6 +456,7 @@ class TushareControlledAcceptanceRunnerTest {
                         + "TushareControlledAcceptanceRunner"));
         assertFalse(launch.contains("QuantServerApplication"));
         assertTrue(launch.contains("& java -jar $artifact"));
+        assertTrue(recovery.contains("Get-Content -Raw -Encoding UTF8"));
         assertFalse(launch.contains("loader.main"));
         assertFalse(build.contains("PropertiesLauncher"));
         assertTrue(components.contains("registerModule(new JavaTimeModule())"));
