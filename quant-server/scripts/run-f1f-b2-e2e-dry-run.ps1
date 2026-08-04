@@ -133,7 +133,24 @@ try {
     & "$PSScriptRoot\run-f1f-b2-controlled-acceptance.ps1" `
         -AuthorizationFile $authorizationFile
     $runnerExit = $LASTEXITCODE
-    if ($runnerExit -ne 0) { throw 'F1F_B2_E2E_RUNNER_FAILED' }
+    if ($runnerExit -ne 0) {
+        $executionTable = Invoke-PsqlScalar stock_quant_research `
+            stock_quant_research `
+            "SELECT to_regclass('tushare_research.tushare_controlled_acceptance_execution') IS NOT NULL"
+        Write-Output "F1F_B2_E2E_FAILURE_EXECUTION_TABLE=$executionTable"
+        if ($executionTable -eq 't') {
+            $failure = Invoke-PsqlScalar stock_quant_research `
+                stock_quant_research @"
+SELECT status || '|' || COALESCE(failure_stage, '') || '|' ||
+       COALESCE(safe_failure_reason, '') || '|' || provider_call_count || '|' ||
+       retry_count || '|' || (finalized_at IS NOT NULL)
+  FROM tushare_research.tushare_controlled_acceptance_execution
+ WHERE acceptance_id='$acceptanceId'
+"@
+            Write-Output "F1F_B2_E2E_FAILURE_RECORD=$failure"
+        }
+        throw 'F1F_B2_E2E_RUNNER_FAILED'
+    }
 
     $execution = Invoke-PsqlScalar stock_quant_research stock_quant_research @"
 SELECT status || '|' || execution_source || '|' || provider_call_count || '|' ||
