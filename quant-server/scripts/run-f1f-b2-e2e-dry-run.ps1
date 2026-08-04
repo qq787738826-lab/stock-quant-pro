@@ -148,6 +148,21 @@ SELECT status || '|' || COALESCE(failure_stage, '') || '|' ||
  WHERE acceptance_id='$acceptanceId'
 "@
             Write-Output "F1F_B2_E2E_FAILURE_RECORD=$failure"
+        } else {
+            $baseState = Invoke-PsqlScalar stock_quant_research `
+                stock_quant_research @"
+SELECT current_database() || '|' || current_user || '|' ||
+       COALESCE(current_schema(), '') || '|' || current_setting('search_path') || '|' ||
+       (SELECT string_agg(version, ',' ORDER BY installed_rank)
+          FROM tushare_research.flyway_schema_history WHERE success) || '|' ||
+       (SELECT count(*) FROM tushare_research.flyway_schema_history
+         WHERE NOT success) || '|' ||
+       pg_get_userbyid((SELECT datdba FROM pg_database
+                         WHERE datname=current_database())) || '|' ||
+       pg_get_userbyid((SELECT nspowner FROM pg_namespace
+                         WHERE nspname='tushare_research'))
+"@
+            Write-Output "F1F_B2_E2E_FAILURE_BASE_STATE=$baseState"
         }
         throw 'F1F_B2_E2E_RUNNER_FAILED'
     }
