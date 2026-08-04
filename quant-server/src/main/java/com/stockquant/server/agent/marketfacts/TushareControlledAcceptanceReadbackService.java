@@ -40,6 +40,12 @@ public final class TushareControlledAcceptanceReadbackService {
             String expectedExchange,
             LocalDate expectedTradeDate
     ) {
+        if (expectedObservedAt == null
+                || executionStartedAt == null
+                || readbackAt == null) {
+            throw blocked(
+                    "TUSHARE_CONTROLLED_ACCEPTANCE_SYSTEM_KNOWLEDGE_READBACK_INVALID");
+        }
         if (TransactionSynchronizationManager.isActualTransactionActive()) {
             throw blocked("TUSHARE_CONTROLLED_ACCEPTANCE_POST_COMMIT_READBACK_REQUIRED");
         }
@@ -51,7 +57,9 @@ public final class TushareControlledAcceptanceReadbackService {
                 || writeIdentity.backendPidBefore() != writeIdentity.backendPidAfter()) {
             throw blocked("TUSHARE_CONTROLLED_ACCEPTANCE_READBACK_IDENTITY_CHANGED");
         }
-        Instant expectedMicros = expectedObservedAt.truncatedTo(ChronoUnit.MICROS);
+        Instant expectedMicros = postgresMicros(expectedObservedAt);
+        Instant executionStartedMicros = postgresMicros(executionStartedAt);
+        Instant readbackMicros = postgresMicros(readbackAt);
         List<BatchRow> batches = jdbc.query("""
                 SELECT id, source_code, source_instrument_id, range_start,
                        range_end, observed_at, run_namespace, capture_mode,
@@ -82,10 +90,33 @@ public final class TushareControlledAcceptanceReadbackService {
                 expectedSourceInstrumentId, expectedTradeDate, expectedMicros)) {
             throw blocked("TUSHARE_CONTROLLED_ACCEPTANCE_BATCH_READBACK_MISMATCH");
         }
-        List<ObservationRow> observations = jdbc.query("""
+        List<FactReferenceRow> references = jdbc.query("""
+                SELECT reference->>'factType' AS fact_type,
+                       reference->>'sourceIdentity' AS source_identity,
+                       reference->>'naturalKey' AS natural_key,
+                       reference->>'canonicalContentHash' AS content_hash
+                  FROM pit_market_fact_batches batch
+                  CROSS JOIN LATERAL jsonb_array_elements(
+                    batch.provider_metadata_json->'factReferences') reference
+                 WHERE batch.id = ?
+                 ORDER BY reference->>'factType'
+                """, (rs, row) -> new FactReferenceRow(
+                FactType.valueOf(rs.getString("fact_type")),
+                rs.getString("source_identity"),
+                rs.getString("natural_key"),
+                rs.getString("content_hash")), batchId);
+        if (!validReferences(references)) {
+            throw blocked(
+                    "TUSHARE_CONTROLLED_ACCEPTANCE_SYSTEM_KNOWLEDGE_READBACK_INVALID");
+        }
+        List<ObservationRow> observations = new ArrayList<>();
+        for (FactReferenceRow reference : references) {
+            List<ObservationRow> matching = jdbc.query("""
                 SELECT observation.id, observation.fact_type,
+                       observation.batch_id,
                        observation.source_code,
                        observation.source_instrument_id,
+                       observation.canonical_content_hash,
                        observation.first_observed_at, observation.known_at,
                        raw.observation_id AS raw_id, raw.symbol AS raw_symbol,
                        raw.exchange AS raw_exchange,
@@ -105,11 +136,18 @@ public final class TushareControlledAcceptanceReadbackService {
                     ON factor.observation_id=observation.id
                   LEFT JOIN trading_calendar_facts_v1 calendar
                     ON calendar.observation_id=observation.id
-                 WHERE observation.batch_id = ? ORDER BY observation.id
+                 WHERE observation.fact_type = ?
+                   AND observation.source_code = ?
+                   AND observation.source_instrument_id = ?
+                   AND observation.natural_key = ?
+                 ORDER BY observation.chain_sequence DESC, observation.id DESC
+                 LIMIT 1
                 """, (rs, row) -> new ObservationRow(
                 rs.getLong("id"), FactType.valueOf(rs.getString("fact_type")),
+                rs.getLong("batch_id"),
                 rs.getString("source_code"),
                 rs.getString("source_instrument_id"),
+                rs.getString("canonical_content_hash"),
                 rs.getTimestamp("first_observed_at").toInstant(),
                 rs.getTimestamp("known_at").toInstant(),
                 rs.getObject("raw_id", Long.class), rs.getString("raw_symbol"),
@@ -121,12 +159,27 @@ public final class TushareControlledAcceptanceReadbackService {
                 rs.getString("calendar_exchange"),
                 localDate(rs.getDate("calendar_date")),
                 rs.getObject("calendar_open", Boolean.class),
-                rs.getString("calendar_session")), batchId);
+                rs.getString("calendar_session")),
+                    reference.factType().name(),
+                    TushareMarketFactProvider.PROVIDER_CODE,
+                    reference.sourceIdentity(),
+                    reference.naturalKey());
+            if (matching.size() != 1
+                    || !matching.get(0).canonicalContentHash()
+                    .equals(reference.canonicalContentHash())) {
+                throw blocked(
+                        "TUSHARE_CONTROLLED_ACCEPTANCE_SYSTEM_KNOWLEDGE_READBACK_INVALID");
+            }
+            observations.add(matching.get(0));
+        }
         EnumMap<FactType, Integer> counts = new EnumMap<>(FactType.class);
         List<Long> ids = new ArrayList<>();
         for (ObservationRow row : observations) {
-            if (!row.isExpected(expectedSymbol, expectedExchange,
-                    expectedTradeDate)) {
+            FactReferenceRow reference = references.stream()
+                    .filter(candidate -> candidate.factType() == row.factType())
+                    .findFirst().orElseThrow();
+            if (!row.isExpected(reference, expectedSymbol,
+                    expectedExchange, expectedTradeDate)) {
                 throw blocked(
                         "TUSHARE_CONTROLLED_ACCEPTANCE_TYPED_FACT_READBACK_INVALID");
             }
@@ -145,11 +198,20 @@ public final class TushareControlledAcceptanceReadbackService {
                 .min(Instant::compareTo).orElse(Instant.EPOCH);
         Instant maxKnown = observations.stream().map(ObservationRow::knownAt)
                 .max(Instant::compareTo).orElse(Instant.EPOCH);
-        boolean exact = minFirst.equals(expectedMicros) && maxFirst.equals(expectedMicros)
-                && minKnown.equals(expectedMicros) && maxKnown.equals(expectedMicros);
-        if (!counts.equals(required) || observations.size() != 3 || !exact
-                || expectedMicros.isBefore(executionStartedAt)
-                || expectedMicros.isAfter(readbackAt)) {
+        int idempotentReferenceCount = Math.toIntExact(observations.stream()
+                .filter(row -> row.batchId() != batchId).count());
+        boolean exactMicroseconds = observations.stream().allMatch(row ->
+                isPostgresMicros(row.firstObservedAt())
+                        && isPostgresMicros(row.knownAt()));
+        boolean systemKnowledgeTimes = observations.stream().allMatch(row ->
+                row.firstObservedAt().equals(row.knownAt())
+                        && !row.firstObservedAt().isAfter(expectedMicros)
+                        && (row.batchId() != batchId
+                        || row.firstObservedAt().equals(expectedMicros)));
+        if (!counts.equals(required) || observations.size() != 3
+                || !exactMicroseconds || !systemKnowledgeTimes
+                || expectedMicros.isBefore(executionStartedMicros)
+                || expectedMicros.isAfter(readbackMicros)) {
             throw blocked("TUSHARE_CONTROLLED_ACCEPTANCE_SYSTEM_KNOWLEDGE_READBACK_INVALID");
         }
         return new DatabaseReadbackEvidence(
@@ -157,7 +219,34 @@ public final class TushareControlledAcceptanceReadbackService {
                 minKnown, maxKnown, writeIdentity.backendPidAfter(),
                 readbackIdentity.backendPid(),
                 readbackIdentity.currentDatabase(), readbackIdentity.currentUser(),
-                readbackIdentity.currentSchema(), true, true);
+                readbackIdentity.currentSchema(), true, true, true,
+                idempotentReferenceCount);
+    }
+
+    private static boolean validReferences(List<FactReferenceRow> references) {
+        if (references.size() != 3
+                || references.stream().map(FactReferenceRow::factType)
+                .distinct().count() != 3) {
+            return false;
+        }
+        return references.stream().allMatch(reference ->
+                reference.factType() != FactType.CORPORATE_ACTION
+                        && reference.sourceIdentity() != null
+                        && !reference.sourceIdentity().isBlank()
+                        && reference.naturalKey() != null
+                        && !reference.naturalKey().isBlank()
+                        && reference.canonicalContentHash() != null
+                        && reference.canonicalContentHash()
+                        .matches("[0-9a-f]{64}"));
+    }
+
+    private static Instant postgresMicros(Instant value) {
+        return Objects.requireNonNull(value, "time")
+                .truncatedTo(ChronoUnit.MICROS);
+    }
+
+    private static boolean isPostgresMicros(Instant value) {
+        return value != null && value.equals(postgresMicros(value));
     }
 
     private static LocalDate localDate(java.sql.Date value) {
@@ -213,8 +302,10 @@ public final class TushareControlledAcceptanceReadbackService {
     private record ObservationRow(
             long id,
             FactType factType,
+            long batchId,
             String sourceCode,
             String sourceInstrumentId,
+            String canonicalContentHash,
             Instant firstObservedAt,
             Instant knownAt,
             Long rawId,
@@ -231,6 +322,7 @@ public final class TushareControlledAcceptanceReadbackService {
             String calendarSession
     ) {
         boolean isExpected(
+                FactReferenceRow reference,
                 String expectedSymbol,
                 String expectedExchange,
                 LocalDate expectedTradeDate
@@ -246,10 +338,26 @@ public final class TushareControlledAcceptanceReadbackService {
                                 expectedExchange);
                 case CORPORATE_ACTION -> null;
             };
+            String expectedNaturalKey = switch (factType) {
+                case RAW_DAILY_BAR -> "RAW_DAILY_BAR|" + expectedSymbol
+                        + "|" + expectedTradeDate;
+                case ADJUSTMENT_FACTOR -> "ADJUSTMENT_FACTOR|"
+                        + expectedSymbol + "|QFQ|" + expectedTradeDate;
+                case TRADING_CALENDAR -> "TRADING_CALENDAR|"
+                        + expectedExchange + "|" + expectedTradeDate;
+                case CORPORATE_ACTION -> null;
+            };
             if (id <= 0
                     || !TushareMarketFactProvider.PROVIDER_CODE.equals(sourceCode)
                     || !Objects.equals(sourceInstrumentId,
-                            expectedTypedSourceIdentity)) {
+                            expectedTypedSourceIdentity)
+                    || reference.factType() != factType
+                    || !Objects.equals(reference.sourceIdentity(),
+                            sourceInstrumentId)
+                    || !Objects.equals(reference.naturalKey(),
+                            expectedNaturalKey)
+                    || !Objects.equals(reference.canonicalContentHash(),
+                            canonicalContentHash)) {
                 return false;
             }
             return switch (factType) {
@@ -271,6 +379,14 @@ public final class TushareControlledAcceptanceReadbackService {
                 case CORPORATE_ACTION -> false;
             };
         }
+    }
+
+    private record FactReferenceRow(
+            FactType factType,
+            String sourceIdentity,
+            String naturalKey,
+            String canonicalContentHash
+    ) {
     }
 
     private static IllegalStateException blocked(String code) {

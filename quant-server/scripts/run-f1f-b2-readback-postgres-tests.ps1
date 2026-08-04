@@ -52,11 +52,13 @@ try {
     $env:F1F_B1_POSTGRES_USER = 'stock_quant_research'
     $testSpec = 'TushareControlledAcceptancePostgresTest#' `
         + 'postCommitReadbackRequiresCommittedTypedFactsAndExactTarget' `
+        + '+systemKnowledgeRejectsMissingFutureAndPreExecutionTimes' `
         + '+postCommitReadbackRejectsWrongBatchAndTypedIdentityMismatch' `
         + '+postCommitReadbackDoesNotMixOlderBatchFacts' `
         + '+postCommitReadbackRejectsExtraTypedFactCount' `
         + '+manuallyAssembledRunnerPathStartsDedicatedCaptureTransaction' `
         + '+controlledAcceptanceProjectsCommittedBatchIdToCandidate' `
+        + '+controlledAcceptanceBindsIdempotentFactsToCurrentBatch' `
         + '+thirdTypedFactFailureRollsBackManualCapture'
     & "$PSScriptRoot\..\..\mvnw.cmd" -pl quant-server -am `
         "-Dtest=$testSpec" `

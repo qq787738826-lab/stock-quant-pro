@@ -382,7 +382,7 @@ class TushareControlledAcceptanceTrustedMechanismTest {
                         evidence.databaseReadback().minimumKnownAt(),
                         evidence.databaseReadback().maximumKnownAt(), 1234, 5678,
                         "stock_quant_research", "stock_quant_research",
-                        "tushare_research", true, true),
+                        "tushare_research", true, true, true, 0),
                 evidence.outputAudit(), evidence.prohibitedStageAttestation(),
                 true, false, false, false, false,
                 evidence.startedAt(), evidence.endedAt(), evidence.executorVersion(),
@@ -437,13 +437,27 @@ class TushareControlledAcceptanceTrustedMechanismTest {
                 new DatabaseReadbackEvidence(11L, List.of(21L, 21L, 23L),
                         exactCounts, START, START, START, START, START,
                         1234, 5678, "stock_quant_research",
-                        "stock_quant_research", "tushare_research", true, true));
+                        "stock_quant_research", "tushare_research", true, true,
+                        true, 0));
         assertThrows(IllegalArgumentException.class, () ->
                 new DatabaseReadbackEvidence(11L, List.of(21L, 22L, 23L),
                         Map.of(FactType.RAW_DAILY_BAR, 3),
                         START, START, START, START, START,
                         1234, 5678, "stock_quant_research",
-                        "stock_quant_research", "tushare_research", true, true));
+                        "stock_quant_research", "tushare_research", true, true,
+                        true, 0));
+        assertThrows(IllegalArgumentException.class, () ->
+                new DatabaseReadbackEvidence(11L, List.of(21L, 22L, 23L),
+                        exactCounts, START, START, START, START, START,
+                        1234, 5678, "stock_quant_research",
+                        "stock_quant_research", "tushare_research", true, true,
+                        false, 0));
+        assertThrows(IllegalArgumentException.class, () ->
+                new DatabaseReadbackEvidence(11L, List.of(21L, 22L, 23L),
+                        exactCounts, START, START, START, START, START,
+                        1234, 5678, "stock_quant_research",
+                        "stock_quant_research", "tushare_research", true, true,
+                        true, 4));
     }
 
     @Test
@@ -487,7 +501,8 @@ class TushareControlledAcceptanceTrustedMechanismTest {
                 FactType.ADJUSTMENT_FACTOR, 1,
                 FactType.TRADING_CALENDAR, 1), observed, observed, observed,
                 observed, observed, 1234, 5678, "stock_quant_research",
-                "stock_quant_research", "tushare_research", true, true);
+                "stock_quant_research", "tushare_research", true, true,
+                true, 0);
         return new RedactedEvidence("F1FB1_TEST_001", source, COMMIT, SHA,
                 3, 0, 11, Map.of(ControlledEndpoint.DAILY, 1,
                 ControlledEndpoint.ADJ_FACTOR, 1, ControlledEndpoint.TRADE_CAL, 1),

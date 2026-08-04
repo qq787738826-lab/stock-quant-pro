@@ -192,7 +192,9 @@ public final class TushareControlledAcceptanceExecution {
             String databaseUser,
             String schemaName,
             boolean committedReadbackVerified,
-            boolean exactMicrosecondMatch
+            boolean exactMicrosecondMatch,
+            boolean currentBatchFactReferencesVerified,
+            int idempotentReferenceCount
     ) {
         public DatabaseReadbackEvidence {
             observationIds = List.copyOf(Objects.requireNonNull(observationIds, "observationIds"));
@@ -217,9 +219,13 @@ public final class TushareControlledAcceptanceExecution {
                     || writeBackendPid <= 0
                     || committedReadbackBackendPid <= 0
                     || !committedReadbackVerified
+                    || !currentBatchFactReferencesVerified
+                    || idempotentReferenceCount < 0
+                    || idempotentReferenceCount > 3
                     || minimumFirstObservedAt.isAfter(maximumFirstObservedAt)
                     || minimumKnownAt.isAfter(maximumKnownAt)
-                    || exactMicrosecondMatch && (!observedAt.equals(minimumFirstObservedAt)
+                    || exactMicrosecondMatch && idempotentReferenceCount == 0
+                    && (!observedAt.equals(minimumFirstObservedAt)
                     || !observedAt.equals(maximumFirstObservedAt)
                     || !observedAt.equals(minimumKnownAt)
                     || !observedAt.equals(maximumKnownAt))) {

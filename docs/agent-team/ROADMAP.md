@@ -269,7 +269,7 @@
 - 既有规划状态：iFinD 里程碑规划提交 `23baf11ed3a236800b5f3feba8681d261a71d9f9` 已通过 ChatGPT 对实际 Git 提交的验收，并经用户批准纯 fast-forward 合入。精确验收和批准时间无仓库证据，记为 `UNKNOWN`。
 - 免费优先更新：最终提交 `c47b88e586f6751563fe210f40137a3b7ce5e576` 已通过 ChatGPT 对实际 Git 提交的验收，并经用户批准纯 fast-forward 合入。系统先用免费数据验证产品形态和效果；只有系统显示可重复使用价值、数据成为可量化主要瓶颈，且同范围免费/付费 A/B 方案和成本意愿均明确后，才考虑 iFinD 或其他付费 Provider。
 - 日期边界：iFinD 试用不得绑定 `2026-08-31`、2026 年 8 月 31 日或任何其他固定日期。日历日期只能作为非权威临时估算，不属于路线图依赖，不得因预计日期临近而降低验收标准。
-- 当前集成 HEAD：`aca9aae7dc7c60b203542a0b7c6d24af549c73fa`。当前状态：`F0_AUDIT_RESULT=PARTIAL`、`FREE_IMPLEMENTATION_PATH=RESEARCH_PREVIEW_FIRST`、`FREE_PRODUCT_PREVIEW_GATE=PASS`、`FREE_PROVIDER_VALIDATION_GATE=BLOCKED`、`PAID_PROVIDER_UPGRADE_DECISION=PENDING`、`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`。正常业务库 V13 未执行，iFinD 调用数为 0；Track A、Track B0、Track B1、F1A—F1E、F1F-A、F1F-B1、F1F-B2-RUNNER、DBPREP 与事务修复均已验收并纯 fast-forward 合入。TS-WP-001/002 已闭环当前个人研究书面许可；完整 F1 仍为 `F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE`。事务修复后的真实 F1F-B2 完成三次、零重试 Provider 调用并提交捕获事务，但 typed fact 回读错误地把 factor/calendar 类型化 identity 与批次证券 identity 比较，当前为 `CONTROLLED_ACCEPTANCE_STATUS=FAILED_VALIDATION`、`REDUCED_RESEARCH_OPERATIONAL_READY=false`；对应 ID 已永久封存，Tushare 累计真实请求为 26。F2B/F3 均未开始，Day 002 未创建，scheduler 关闭，3B 未开始。
+- 当前集成 HEAD：`6ec02ccea24492f6ec4bc83fa954442c1e19819d`。当前状态：`F0_AUDIT_RESULT=PARTIAL`、`FREE_IMPLEMENTATION_PATH=RESEARCH_PREVIEW_FIRST`、`FREE_PRODUCT_PREVIEW_GATE=PASS`、`FREE_PROVIDER_VALIDATION_GATE=BLOCKED`、`PAID_PROVIDER_UPGRADE_DECISION=PENDING`、`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`。正常业务库 V13 未执行，iFinD 调用数为 0；Track A、Track B0、Track B1、F1A—F1E、F1F-A、F1F-B1、F1F-B2-RUNNER、DBPREP、事务修复与 typed fact identity 回读修复均已验收并纯 fast-forward 合入。TS-WP-001/002 已闭环当前个人研究书面许可；完整 F1 仍为 `F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE`。最新真实 F1F-B2 完成三次、零重试 Provider 调用并通过事务及三类 typed identity 回读，但相同历史事实被 V13 幂等复用后，当前批次缺少到既有 SYSTEM_KNOWLEDGE 观察的不可变引用，当前为 `CONTROLLED_ACCEPTANCE_STATUS=FAILED_VALIDATION`、`REDUCED_RESEARCH_OPERATIONAL_READY=false`；对应 ID 已永久封存，Tushare 累计真实请求为 29。当前最小修复任务尚待复验合入，F2B/F3 均未开始，Day 002 未创建，scheduler 关闭，3B 未开始。
 
 #### 3A-R3B-0：Provider 中立离线闭环与试用准备（已完成并合入）
 
@@ -419,6 +419,8 @@
 - 事务修复状态：提交 `aca9aae7dc7c60b203542a0b7c6d24af549c73fa` 已通过复验并合入；旧 ID、旧 JAR、旧 sidecar 与旧授权均不得复用。
 - 第二次真实结果：`F1FB2_20260803_POSTFIX_EB61FFB9663C` 已永久封存；`FAILED_VALIDATION` / `VALIDATION` / `TUSHARE_CONTROLLED_ACCEPTANCE_TYPED_FACT_READBACK_INVALID`，Provider 调用 3、重试 0，Tushare 累计真实业务请求更新为 26。捕获事务返回批次后，回读仍错误地要求 raw/factor/calendar 共用批次证券 identity；failure transition 发生在候选证据写入前，所以 acceptance 的 `capture_batch_id=NULL`，不能据此推断捕获事务没有提交。
 - 当前修复边界：batch 继续校验证券级 identity；raw、factor、calendar 分别校验其生产捕获所使用的类型化 source identity。真实 Schema 的 `observation.batch_id` 与 typed 表 `observation_id` 关联、1/1/1 精确数量、时间、证券、交易所、开市日和事务守卫均不放宽；Provider 新增调用为 0。
+- 第三次真实结果：`F1FB2_20260804_READBACK_POSTFIX_D6D0F13C478D` 已永久封存；`FAILED_VALIDATION` / `VALIDATION` / `TUSHARE_CONTROLLED_ACCEPTANCE_SYSTEM_KNOWLEDGE_READBACK_INVALID`，Provider 调用 3、重试 0，Tushare 累计真实业务请求更新为 29。事务及三类 typed identity 已通过；V13 对与现有链尾内容相同的事实执行幂等，不为新批次追加 observation，旧回读却只查询当前 `batch_id`，因此无法证明当前响应对应的三类 SYSTEM_KNOWLEDGE 事实。
+- SYSTEM_KNOWLEDGE 修复边界：在当前 batch 的既有 metadata 中写入三类不可变事实引用，包含 fact type、类型化 source identity、natural key 和 canonical content hash；回读逐类解析引用并核对当前链尾，不伪造新 observation、不重写首次观察时间。当前 batch 时间、执行开始与回读时间统一按 PostgreSQL `TIMESTAMPTZ(6)` 的 UTC 微秒语义比较；既有幂等观察允许早于当前重观察时间，但不得晚于它。写事务前后必须保持同一 backend PID；提交后的只读连接可以使用不同 PID，因为该 PID 只作为已提交回读证据，不属于同一事务合同。该任务不调用 Provider、不读取 Token、不写永久数据库，也不改变 typed identity、事务、完整 F1 或正式门禁。
 
 #### 3A-R3B-F1：完整 Provider Adapter 与 V13 闭环（当前仅技术证据阻断）
 

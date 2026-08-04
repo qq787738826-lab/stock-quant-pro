@@ -139,3 +139,58 @@ FREE_PROVIDER_VALIDATION_GATE=BLOCKED
 PAID_PROVIDER_UPGRADE_DECISION=PENDING
 IFIND_TRIAL_ACTIVATION_GATE=BLOCKED
 ```
+
+## 2026-08-04 SYSTEM_KNOWLEDGE 回读失败与增量修复
+
+typed fact identity 修复合入后签发的 ID
+`F1FB2_20260804_READBACK_POSTFIX_D6D0F13C478D` 已执行并永久封存。该次执行
+精确完成 `daily → adj_factor → trade_cal` 三次真实调用、重试 0；事务守卫和三类
+typed fact identity 回读均已通过，最终状态为：
+
+```text
+CONTROLLED_ACCEPTANCE_STATUS=FAILED_VALIDATION
+failure_stage=VALIDATION
+safe_failure_reason=TUSHARE_CONTROLLED_ACCEPTANCE_SYSTEM_KNOWLEDGE_READBACK_INVALID
+F1F_B2_PROVIDER_REAL_CALL_COUNT=3
+TUSHARE_TOTAL_REAL_BUSINESS_CALL_COUNT=29
+```
+
+精确根因是 V13 的幂等语义与旧回读的批次关联假设冲突。相同证券、日期及内容的
+三类事实已存在于各自 append-only 链尾时，捕获会创建当前 batch，但不会追加重复
+observation；旧回读只按当前 `observation.batch_id` 查三条事实，因而把合法的 0 条
+新 observation 误判为 SYSTEM_KNOWLEDGE 缺失。`capture_batch_id` 仍只在回读和
+输出审计成功后由 `markCandidate` 投影，所以失败记录中的空值不否定捕获事务已经
+返回内部 batch ID。
+
+增量修复在 batch 的现有 `provider_metadata_json` 中冻结三类事实引用：fact type、
+类型化 source identity、natural key 和 canonical content hash。提交后回读逐项解析
+当前 batch 引用并核对对应链尾及 typed fact；新 observation 仍要求属于当前 batch，
+幂等复用则保留既有 observation 原始 `firstObservedAt/knownAt`，不伪造 successor，
+也不重写 SYSTEM_KNOWLEDGE 时间。执行开始、当前 batch observedAt、既有观察时间和
+回读时间全部以 UTC `Instant` 处理，并显式截断到 PostgreSQL 微秒精度；没有增加
+宽泛容差。写事务前后 backend PID 仍必须相同；提交后的只读回读可以使用不同连接
+和不同 PID，因为它不再属于写事务，但数据库、用户和 Schema 身份必须重新通过守卫。
+
+永久 `38432` 数据库仅尝试使用无密码、read-only 的 `psql -w` 连接；认证在建立连接
+前因没有密码失败，因此没有执行 SELECT、DDL 或 DML，也没有绕过秘密通道。根因由
+V13 幂等规则、实际失败顺序和全新 V1—V14 临时 PostgreSQL 的同输入重复捕获复现
+闭环；永久库具体行级时间未在本修复中直接读取。
+
+验证结果：SYSTEM_KNOWLEDGE、Runner 与 F1E 离线边界 `44/0/0/0`；全新
+PostgreSQL 16.13 的 V1—V14 定向组 `9/0/0/0`、`Skipped=0`，覆盖 UTC/微秒规范化、
+缺失/未来/早于执行开始的当前批次时间、错误批次与 identity、幂等三引用、候选 batch
+投影以及第三类事实失败整批回滚；QFQ 权威引擎 `19/0/0/0`，18 个黄金场景不变；
+Java `clean compile` 与 `git diff --check` 通过。临时 PostgreSQL 端口、进程和目录
+残留均为 0。
+
+本阶段不调用 Provider、不读取 Token、不生成新 acceptance ID、不执行新的 F1F-B2，
+也不修改永久数据库。当前 ID 保持永久封存，累计真实请求保持 29，继续保持：
+
+```text
+F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE
+REDUCED_RESEARCH_OPERATIONAL_READY=false
+FREE_PRODUCT_PREVIEW_GATE=PASS
+FREE_PROVIDER_VALIDATION_GATE=BLOCKED
+PAID_PROVIDER_UPGRADE_DECISION=PENDING
+IFIND_TRIAL_ACTIVATION_GATE=BLOCKED
+```

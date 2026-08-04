@@ -299,6 +299,20 @@ public class PitMarketFactCaptureService {
         List<TypedFact> facts = prepared.facts();
         ContentQualification contentQualification =
                 qualification.contentQualification(response);
+        List<FactCaptureReference> factReferences = facts.stream()
+                .map(fact -> new FactCaptureReference(
+                        fact,
+                        MarketFactProviderModels.sourceIdentity(fact.value()),
+                        MarketFactProviderModels.naturalKey(
+                                fact.type(), fact.value()),
+                        canonical.contentHash(
+                                fact.type(), response.sourceCode(),
+                                MarketFactProviderModels.sourceIdentity(
+                                        fact.value()),
+                                MarketFactProviderModels.naturalKey(
+                                        fact.type(), fact.value()),
+                                fact.value(), contentQualification)))
+                .toList();
         ObjectNode responsePayload = responsePayload(
                 response, facts, contentQualification);
         String responseHash = canonical.hash(responsePayload);
@@ -367,27 +381,22 @@ public class PitMarketFactCaptureService {
                 response.requestedStart(), response.requestedEnd(),
                 stableObservedAt, stableObservedAt, response.complete(),
                 response.recordCount(), factContracts, capabilities,
-                captureMetadata(response));
+                captureMetadata(response, factReferences));
 
         int appended = 0;
         int idempotent = 0;
-        List<TypedFact> persistableFacts = response.complete()
-                ? facts : List.of();
-        for (TypedFact typed : persistableFacts) {
-            String naturalKey = MarketFactProviderModels.naturalKey(
-                    typed.type(), typed.value());
-            String sourceIdentity =
-                    MarketFactProviderModels.sourceIdentity(typed.value());
+        for (FactCaptureReference reference : response.complete()
+                ? factReferences : List.<FactCaptureReference>of()) {
+            TypedFact typed = reference.fact();
+            String naturalKey = reference.naturalKey();
+            String sourceIdentity = reference.sourceIdentity();
             repository.lockChain(
                     typed.type(), response.sourceCode(),
                     sourceIdentity, naturalKey);
             FactEnvelope tail = repository.findTail(
                     typed.type(), response.sourceCode(),
                     sourceIdentity, naturalKey).orElse(null);
-            String contentHash = canonical.contentHash(
-                    typed.type(), response.sourceCode(),
-                    sourceIdentity, naturalKey, typed.value(),
-                    contentQualification);
+            String contentHash = reference.canonicalContentHash();
             ProviderVersion version = MarketFactProviderModels.version(typed.value());
             if (tail != null
                     && tail.canonicalContentHash().equals(contentHash)) {
@@ -713,12 +722,24 @@ public class PitMarketFactCaptureService {
         return result;
     }
 
-    private ObjectNode captureMetadata(MarketFactResponse response) {
+    private ObjectNode captureMetadata(
+            MarketFactResponse response,
+            List<FactCaptureReference> factReferences
+    ) {
         ObjectNode result = objectMapper.createObjectNode();
         result.set("providerMetadata", response.providerMetadata().deepCopy());
         result.set("errors", objectMapper.valueToTree(response.errors()));
         result.put("adapterVersion", response.adapterVersion());
         result.put("responseComplete", response.complete());
+        ArrayNode references = result.putArray("factReferences");
+        factReferences.forEach(reference -> {
+            ObjectNode item = references.addObject();
+            item.put("factType", reference.fact().type().name());
+            item.put("sourceIdentity", reference.sourceIdentity());
+            item.put("naturalKey", reference.naturalKey());
+            item.put("canonicalContentHash",
+                    reference.canonicalContentHash());
+        });
         return result;
     }
 
@@ -781,6 +802,22 @@ public class PitMarketFactCaptureService {
     }
 
     private record TypedFact(FactType type, Object value) {
+    }
+
+    private record FactCaptureReference(
+            TypedFact fact,
+            String sourceIdentity,
+            String naturalKey,
+            String canonicalContentHash
+    ) {
+        private FactCaptureReference {
+            fact = Objects.requireNonNull(fact, "fact");
+            sourceIdentity = Objects.requireNonNull(
+                    sourceIdentity, "sourceIdentity");
+            naturalKey = Objects.requireNonNull(naturalKey, "naturalKey");
+            canonicalContentHash = Objects.requireNonNull(
+                    canonicalContentHash, "canonicalContentHash");
+        }
     }
 
     private record PreparedCaptureInput(

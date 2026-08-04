@@ -121,6 +121,8 @@ final class TushareControlledAcceptanceEvaluator {
                 TushareControlledAcceptanceAuthorization.ControlledEndpoint.TRADE_CAL, 1))
                 || !evidence.databaseReadback().exactMicrosecondMatch()
                 || !evidence.databaseReadback().committedReadbackVerified()
+                || !evidence.databaseReadback()
+                .currentBatchFactReferencesVerified()
                 || evidence.captureBatchId() != evidence.databaseReadback().batchId()
                 || !Objects.equals(execution.captureBatchId(), evidence.captureBatchId())
                 || !execution.reservation().databaseIdentity().equals(

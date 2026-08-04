@@ -1,5 +1,6 @@
 package com.stockquant.server.agent.marketfacts;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.stockquant.server.agent.backtest.BacktestCanonicalHashService;
@@ -36,6 +37,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
@@ -340,6 +342,20 @@ class TushareControlledAcceptancePostgresTest {
         assertEquals(complete.writeIdentity().backendPidAfter(),
                 evidence.writeBackendPid());
         assertTrue(evidence.committedReadbackBackendPid() > 0);
+        assertNotEquals(evidence.writeBackendPid(),
+                evidence.committedReadbackBackendPid());
+        assertTrue(evidence.currentBatchFactReferencesVerified());
+        assertEquals(0, evidence.idempotentReferenceCount());
+
+        var normalized = readback.readAndVerify(
+                complete.batchId(), complete.observedAt().plusNanos(999),
+                OffsetDateTime.ofInstant(executionStarted, ZoneOffset.ofHours(8))
+                        .toInstant().plusNanos(999),
+                OffsetDateTime.ofInstant(readbackAt, ZoneOffset.ofHours(-5))
+                        .toInstant().plusNanos(999),
+                complete.writeIdentity(), complete.sourceInstrumentId(),
+                "600000", "SSE", complete.tradeDate());
+        assertTrue(normalized.exactMicrosecondMatch());
 
         var executionRepository = repository();
         executionRepository.reserve(reservation(
@@ -366,6 +382,38 @@ class TushareControlledAcceptancePostgresTest {
                 Instant.now().truncatedTo(ChronoUnit.MICROS),
                 envelopesOnly.writeIdentity(), envelopesOnly.sourceInstrumentId(),
                 "600000", "SSE", envelopesOnly.tradeDate()));
+    }
+
+    @Test
+    void systemKnowledgeRejectsMissingFutureAndPreExecutionTimes() {
+        TushareDedicatedResearchPersistenceGuard guard =
+                new TushareDedicatedResearchPersistenceGuard(
+                        jdbc, TushareDedicatedResearchPersistenceGuard.DATABASE_PURPOSE);
+        TransactionTemplate transaction = new TransactionTemplate(
+                new DataSourceTransactionManager(dataSource));
+        CommittedFacts complete = transaction.execute(status ->
+                insertFacts(guard, LocalDate.of(2025, 1, 3), "6", true));
+        assertNotNull(complete);
+        TushareControlledAcceptanceReadbackService readback =
+                new TushareControlledAcceptanceReadbackService(jdbc, guard);
+
+        assertSystemKnowledgeBlocked(() -> readback.readAndVerify(
+                complete.batchId(), null, complete.observedAt().minusSeconds(1),
+                complete.observedAt().plusSeconds(1), complete.writeIdentity(),
+                complete.sourceInstrumentId(), "600000", "SSE",
+                complete.tradeDate()));
+        assertSystemKnowledgeBlocked(() -> readback.readAndVerify(
+                complete.batchId(), complete.observedAt(),
+                complete.observedAt().plus(1, ChronoUnit.MICROS),
+                complete.observedAt().plusSeconds(1), complete.writeIdentity(),
+                complete.sourceInstrumentId(), "600000", "SSE",
+                complete.tradeDate()));
+        assertSystemKnowledgeBlocked(() -> readback.readAndVerify(
+                complete.batchId(), complete.observedAt(),
+                complete.observedAt().minusSeconds(1),
+                complete.observedAt().minus(1, ChronoUnit.MICROS),
+                complete.writeIdentity(), complete.sourceInstrumentId(),
+                "600000", "SSE", complete.tradeDate()));
     }
 
     @Test
@@ -561,6 +609,73 @@ class TushareControlledAcceptancePostgresTest {
                 "adjustment_factor_facts_v1", stored.captureBatchId()));
         assertEquals(1, typedCount(
                 "trading_calendar_facts_v1", stored.captureBatchId()));
+    }
+
+    @Test
+    void controlledAcceptanceBindsIdempotentFactsToCurrentBatch() {
+        Clock runtimeClock = Clock.systemUTC();
+        Instant now = runtimeClock.instant();
+        LocalDate tradeDate = LocalDate.of(2025, 1, 3);
+        F1eSyntheticTushareGateway gateway = new F1eSyntheticTushareGateway();
+        ManualRuntime runtime = manualRuntime(
+                gateway, new DataSourceTransactionManager(dataSource), runtimeClock);
+        var first = runtime.batch().run(
+                TushareDedicatedResearchBatchAuthorization
+                        .manualPersonalResearch(),
+                dedicatedCommand(tradeDate));
+        assertEquals(3, first.appendedCount());
+
+        ObjectMapper mapper = new ObjectMapper().registerModule(new JavaTimeModule());
+        TushareDedicatedResearchPersistenceGuard baseGuard =
+                new TushareDedicatedResearchPersistenceGuard(
+                        jdbc, TushareDedicatedResearchPersistenceGuard.DATABASE_PURPOSE);
+        TushareControlledAcceptanceExecutionRepository executionRepository =
+                new TushareControlledAcceptanceExecutionRepository(
+                        jdbc, mapper, new DataSourceTransactionManager(dataSource),
+                        runtimeClock);
+        TushareControlledAcceptanceExecutor executor =
+                new TushareControlledAcceptanceExecutor(
+                        executionRepository,
+                        new TushareControlledAcceptanceDatabaseGuard(jdbc, baseGuard),
+                        runtime.batch(),
+                        new TushareControlledAcceptanceReadbackService(jdbc, baseGuard),
+                        new TushareControlledAcceptanceEvaluator(mapper),
+                        runtimeClock);
+        SecuritySelection security = new SecuritySelection("600000", "SSE");
+        TushareControlledAcceptanceAuthorization authorization =
+                TushareControlledAcceptanceAuthorization.issueUserApprovedDurable(
+                        "F1FB2_SYSTEM_KNOWLEDGE_IDEMPOTENT", COMMIT, SHA,
+                        security, tradeDate, now.minusSeconds(1),
+                        now.plusSeconds(60));
+
+        var pending = executor.executeBeforeFinalAudit(
+                authorization,
+                new TushareDedicatedResearchBatchCommand(
+                        tradeDate, List.of(security), Duration.ofSeconds(5)),
+                TushareControlledAcceptanceBuildProof.verifiedTestProof(COMMIT, SHA),
+                ExecutionSource.TEST);
+        executor.completeAfterAudit(pending,
+                new TushareControlledAcceptanceOutputAudit.AuditResult(
+                        true, true, List.of()));
+
+        var stored = executionRepository.find(
+                "F1FB2_SYSTEM_KNOWLEDGE_IDEMPOTENT").orElseThrow();
+        assertEquals(ExecutionStatus.SUCCEEDED_CANDIDATE, stored.status());
+        assertNotNull(stored.captureBatchId());
+        assertEquals(0, countWhere(
+                "pit_market_fact_observations", "batch_id",
+                stored.captureBatchId()));
+        assertEquals(3, jdbc.queryForObject("""
+                SELECT jsonb_array_length(
+                         provider_metadata_json->'factReferences')
+                  FROM pit_market_fact_batches WHERE id=?
+                """, Integer.class, stored.captureBatchId()));
+        JsonNode evidence = readJson(stored.evidenceSummaryJson());
+        assertTrue(evidence.path("databaseReadback")
+                .path("currentBatchFactReferencesVerified").asBoolean());
+        assertEquals(3, evidence.path("databaseReadback")
+                .path("idempotentReferenceCount").asInt());
+        assertEquals(6, gateway.calls());
     }
 
     @Test
@@ -774,6 +889,24 @@ class TushareControlledAcceptancePostgresTest {
                 """.formatted(table), Integer.class, batchId);
     }
 
+    private static void assertSystemKnowledgeBlocked(
+            org.junit.jupiter.api.function.Executable executable
+    ) {
+        IllegalStateException error = assertThrows(
+                IllegalStateException.class, executable);
+        assertEquals(
+                "TUSHARE_CONTROLLED_ACCEPTANCE_SYSTEM_KNOWLEDGE_READBACK_INVALID",
+                error.getMessage());
+    }
+
+    private static JsonNode readJson(String value) {
+        try {
+            return new ObjectMapper().readTree(value);
+        } catch (com.fasterxml.jackson.core.JsonProcessingException error) {
+            throw new AssertionError(error);
+        }
+    }
+
     private record ManualRuntime(
             TushareDedicatedResearchBatchService batch
     ) {
@@ -940,10 +1073,12 @@ class TushareControlledAcceptancePostgresTest {
                     'FORMAL', 'PROVIDER_CAPTURE', 'TUSHARE_PRO', ?,
                     'SYSTEM_KNOWLEDGE_ONLY', 'SYSTEM_KNOWLEDGE_PIT',
                     'RESEARCH_ONLY', false, true, true, true, true,
-                    ?, ?, ?, true, 3, '{}'::jsonb, '{}'::jsonb, '{}'::jsonb)
+                    ?, ?, ?, true, 3, '{}'::jsonb, '{}'::jsonb, ?::jsonb)
                 RETURNING id
                 """, Long.class, (hashSeed + "8").repeat(32), datasetId,
-                sourceInstrumentId, tradeDate, tradeDate, Timestamp.from(observedAt));
+                sourceInstrumentId, tradeDate, tradeDate, Timestamp.from(observedAt),
+                factReferencesJson(tradeDate, hashSeed,
+                        factorSourceIdentity, calendarSourceIdentity));
         long rawId = insertObservation(batchId, "RAW_DAILY_BAR",
                 "RAW_DAILY_BAR_OBSERVATION_V2",
                 "RAW_DAILY_BAR|600000|" + tradeDate,
@@ -978,6 +1113,44 @@ class TushareControlledAcceptancePostgresTest {
         var after = guard.verifyTransactional();
         return new CommittedFacts(batchId, observedAt, tradeDate,
                 sourceInstrumentId, DatabaseExecutionIdentity.from(before, after));
+    }
+
+    private static String factReferencesJson(
+            LocalDate tradeDate,
+            String hashSeed,
+            String factorSourceIdentity,
+            String calendarSourceIdentity
+    ) {
+        ObjectMapper mapper = new ObjectMapper();
+        var root = mapper.createObjectNode();
+        var references = root.putArray("factReferences");
+        addFactReference(references, "RAW_DAILY_BAR",
+                TushareMarketFactProvider.rawSourceIdentity("600000", "SSE"),
+                "RAW_DAILY_BAR|600000|" + tradeDate,
+                (hashSeed + "a").repeat(32));
+        addFactReference(references, "ADJUSTMENT_FACTOR",
+                factorSourceIdentity,
+                "ADJUSTMENT_FACTOR|600000|QFQ|" + tradeDate,
+                (hashSeed + "c").repeat(32));
+        addFactReference(references, "TRADING_CALENDAR",
+                calendarSourceIdentity,
+                "TRADING_CALENDAR|SSE|" + tradeDate,
+                (hashSeed + "e").repeat(32));
+        return root.toString();
+    }
+
+    private static void addFactReference(
+            com.fasterxml.jackson.databind.node.ArrayNode references,
+            String factType,
+            String sourceIdentity,
+            String naturalKey,
+            String contentHash
+    ) {
+        var item = references.addObject();
+        item.put("factType", factType);
+        item.put("sourceIdentity", sourceIdentity);
+        item.put("naturalKey", naturalKey);
+        item.put("canonicalContentHash", contentHash);
     }
 
     private static void insertRawTypedFact(
