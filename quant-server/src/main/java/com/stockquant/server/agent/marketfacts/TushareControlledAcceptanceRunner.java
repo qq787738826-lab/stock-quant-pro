@@ -61,6 +61,7 @@ public final class TushareControlledAcceptanceRunner {
                         handle.close();
                     }
                 }
+                writeSafeFailure(error);
                 return EXIT_REJECTED;
             }
             try (ExecutionHandle handle = captured.value()) {
@@ -75,9 +76,25 @@ public final class TushareControlledAcceptanceRunner {
                     return EXIT_REJECTED;
                 }
             }
-        } catch (Throwable ignored) {
+        } catch (Throwable error) {
+            writeSafeFailure(error);
             return EXIT_REJECTED;
         }
+    }
+
+    private static void writeSafeFailure(Throwable error) {
+        Throwable current = error;
+        while (current != null) {
+            String message = current.getMessage();
+            if (message != null && message.matches("[A-Z][A-Z0-9_]{7,127}")) {
+                System.err.println(
+                        "TUSHARE_CONTROLLED_ACCEPTANCE_SAFE_FAILURE=" + message);
+                return;
+            }
+            current = current.getCause();
+        }
+        System.err.println(
+                "TUSHARE_CONTROLLED_ACCEPTANCE_SAFE_FAILURE=CONTROLLED_EXECUTION_FAILED");
     }
 
     private static ExecutionHandle prepare(
