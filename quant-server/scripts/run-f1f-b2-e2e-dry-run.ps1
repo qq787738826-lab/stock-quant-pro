@@ -79,7 +79,7 @@ try {
         --no-locale --encoding=UTF8 | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'F1F_B2_E2E_INITDB_FAILED' }
     & "$pgBin\pg_ctl.exe" -D $dataDir -l $serverLog `
-        -o "-h 127.0.0.1 -p $port" -w start | Out-Null
+        -o "-h 127.0.0.1 -p $port" -w start
     if ($LASTEXITCODE -ne 0) { throw 'F1F_B2_E2E_POSTGRES_START_FAILED' }
     $started = $true
     & "$pgBin\psql.exe" -X -q -h 127.0.0.1 -p $port -U postgres `
