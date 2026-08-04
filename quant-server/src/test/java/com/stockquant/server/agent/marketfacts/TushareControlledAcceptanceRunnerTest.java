@@ -546,10 +546,14 @@ class TushareControlledAcceptanceRunnerTest {
         assertTrue(build.contains("Stock-Quant-Maven-Wrapper-Version"));
         assertTrue(build.contains("Stock-Quant-Git-Remote-Commit"));
         assertTrue(build.contains(
-                "Main-Class: org.springframework.boot.loader.launch.JarLauncher"));
+                "Main-Class: org\\.springframework\\.boot\\.loader\\.launch\\.JarLauncher"));
+        assertTrue(build.contains("\"-Dstart-class=$runnerStartClass\""));
         assertTrue(build.contains(
-                "Start-Class: com.stockquant.server.agent.marketfacts."
+                "com.stockquant.server.agent.marketfacts."
                         + "TushareControlledAcceptanceRunner"));
+        assertTrue(build.contains(
+                "com.stockquant.server.agent.marketfacts."
+                        + "TushareReducedResearchManualRunner"));
         assertFalse(launch.contains("QuantServerApplication"));
         assertTrue(launch.contains("& java -jar $artifact"));
         assertTrue(recovery.contains("Get-Content -Raw -Encoding UTF8"));

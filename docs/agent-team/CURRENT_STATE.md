@@ -9,7 +9,7 @@
 - 当前稳定版本：`1.3.1`
 - 当前目标版本：`1.4.0`
 - 当前集成分支：`feature/1.4.0-agent-team`
-- 当前集成分支 HEAD：`120673dc26c510b945e26269d77b1f313b2ba9fb`
+- 当前集成分支 HEAD（本阶段冻结基线）：`e2a6fa9da30dc9d96c72b25a366f020e2ff40960`
 - 1D-4 验收来源分支：`codex/1.4.0-1d4-acceptance`
 - 1D-4 验收基线：`5bc492a feat(agent): add safe local team runtime scripts`
 - 阶段 2A 验收来源分支：`codex/1.4.0-2a-readonly-context`
@@ -160,15 +160,25 @@
 - 3A-R3B-F1F-B2-FREEZE 首次结论：`2026-08-03` 基于 `213264bc...` 的冻结审计为历史 `NOT_READY`。两个精确阻断是清单误用不存在的松散 Runner 参数，以及缺少从全新专用实例创建数据库/角色/Schema并只执行主 V1—V13 的安全准备入口。旧草案 ID `F1FB2_20260803_140506_96C6DFB7` 已废弃且禁止复用。
 - 3A-R3B-F1F-B2-DBPREP 当前状态：四提交链 `d178cde7` → `14b466f5` → `c8342830` → `d3c0ada828c90c772f6bbbb7a787ba2d1ce8b7eb` 已通过实际 Git 复验并经用户批准纯 fast-forward 合入。一次性数据库准备链及单一 `AuthorizationFile` 冻结合同校正已进入集成分支；专用 PostgreSQL 16.13 数据库已按 V1—V13 准备，后续真实受控验收已完成独立治理 V14。
 - 3A-R3B-F1F-B2 真实受控验收：事务修复 `aca9aae7dc7c60b203542a0b7c6d24af549c73fa`、typed fact identity 回读修复 `6ec02ccea24492f6ec4bc83fa954442c1e19819d`、SYSTEM_KNOWLEDGE 回读修复 `4b897b0768957175f1b03b440a9850fe2940c1b3` 与 E2E-CLOSEOUT `a9d928b51ac2b7af3f25af3973e4259a049c22f1` 均已验收合入。悬挂 ID `F1FB2_20260804_SK_POSTFIX_70E8249A333E` 已经正式恢复入口单向终结为 `INTERRUPTED / STRANDED_RUNNING_PROCESS_EXITED`，`recoveryApplied=true`，Java/脚本退出码均为 0，Provider 调用为 0，原 ID 永久不可复用。最终真实 ID `F1FB2_20260804_FINAL_69B5B6AF9814` 的权威回读结果为 `AUTHORIZED → RESERVED → RUNNING → SUCCEEDED_CANDIDATE → PASSED`；`capture_batch_id=4`、Provider 调用 3、重试 0，`outputAudit.clean=true`、`captureComplete=true`，证据摘要、digest 与 `finalized_at` 均非空。因此当前 `CONTROLLED_ACCEPTANCE_STATUS=PASSED`、`REDUCED_RESEARCH_OPERATIONAL_READY=true`，Tushare 累计真实业务请求为 32。该投影只关闭缩减研究受控验收门，不改变完整 F1 十项技术阻断，不授权生产/正常业务库、scheduler、Agent、回测、Shadow、交易或任何后续阶段。
-- 3A-R3B-RR-DAY001 Runner 开发状态：任务分支新增独立 `TushareReducedResearchManualRunner`、
-  一次性非敏感授权模型、脱敏结果模型与 `run-reduced-research-day001.ps1`，等待 ChatGPT 基于
-  实际提交复验。入口直接复用 F1E 专用批处理、显式事务、typed fact/SYSTEM_KNOWLEDGE
-  回读、formula-only QFQ、Console 秘密通道、输出审计和构建证明，不调用 F1F-B2 状态机，
+- 3A-R3B-RR-DAY001 Runner 状态：独立 `TushareReducedResearchManualRunner`、一次性非敏感
+  授权模型、脱敏结果模型与 `run-reduced-research-day001.ps1` 已合入。入口直接复用 F1E
+  专用批处理、显式事务、typed fact/SYSTEM_KNOWLEDGE 回读、formula-only QFQ、输出审计
+  和构建证明，不调用 F1F-B2 状态机，
   不新增 V14/Flyway/治理表/Controller/Bean/scheduler。永久库无交互只读候选检查在认证前
   安全失败，故候选固定为 `600000 / SSE / 2025-01-03`，模式
   `IDEMPOTENCY_VERIFICATION`。本开发轮真实 Provider 调用 0、真实 Token 读取 0、永久库写入
   0、真实授权 0、真实 Day 001 执行 0；七项治理状态不变，F2B/F3/Day 002 仍未启动。
 - 3A-R3B-RR-DAY001 阶段记录：[stage-3ar3b-rr-day001-manual-runner.md](stage-3ar3b-rr-day001-manual-runner.md)。
+- STOCK-QUANT-LOCAL-AUTOMATION：本地正式人工运行默认从 Windows Credential Manager 的
+  `StockQuant/ResearchDbPassword` 与 `StockQuant/TushareToken` 读取秘密；用户只需一次在
+  原生安全 Console 录入。Day001 正式 JAR 必须使用专用 build profile，Start-Class 精确为
+  `TushareReducedResearchManualRunner`。统一入口在秘密读取前完成正式授权解析、构建证明、
+  Git、永久 PostgreSQL 监听与 Credential 存在性检查，并只读收集脱敏结果。TEST/E2E
+  不可访问真实 Windows Credential，继续使用 Fake Provider 与临时 PostgreSQL；正式路径
+  不允许非 Windows、CI、云端或明文源降级。本阶段不调用真实 Provider、不读取真实秘密、
+  不写永久数据库，也不改变 F1F-B2 PASSED、operational 投影或七项治理状态。详细边界见
+  [操作说明](stock-quant-local-automation.md)和
+  [阶段记录](stage-stock-quant-local-automation.md)。
 - 3A-R3B-F2A 任务书 / 阶段记录：[tasks/3ar3b-f2a-research-preview-product.md](tasks/3ar3b-f2a-research-preview-product.md) / [stage-3ar3b-f2a-research-preview-product.md](stage-3ar3b-f2a-research-preview-product.md)。
 - 3A-R3B-F2A-R1 任务书 / 阶段记录：[tasks/3ar3b-f2a-r1-preview-ux-convergence.md](tasks/3ar3b-f2a-r1-preview-ux-convergence.md) / [stage-3ar3b-f2a-r1-preview-ux-convergence.md](stage-3ar3b-f2a-r1-preview-ux-convergence.md)。
 - 3A-R3B-F2A-R1A 任务书 / 阶段记录：[tasks/3ar3b-f2a-r1a-visual-semantics-fix.md](tasks/3ar3b-f2a-r1a-visual-semantics-fix.md) / [stage-3ar3b-f2a-r1a-visual-semantics-fix.md](stage-3ar3b-f2a-r1a-visual-semantics-fix.md)。

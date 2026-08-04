@@ -1,14 +1,28 @@
 param(
     [Parameter(Mandatory = $true)] [string] $ExpectedCommit,
     [ValidateSet('PREPARATION_ONLY', 'CONTROLLED_BUILD_ARTIFACT', 'E2E_DRY_RUN')]
-    [string] $Mode = 'PREPARATION_ONLY'
+    [string] $Mode = 'PREPARATION_ONLY',
+
+    [ValidateSet('F1F_B2', 'REDUCED_RESEARCH_DAY001')]
+    [string] $RunnerProfile = 'F1F_B2'
 )
 
 $ErrorActionPreference = 'Stop'
+$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $requiredBranch = 'feature/1.4.0-agent-team'
-$artifactName = 'quant-server-1.3.1-f1f-b2-runner.jar'
+$artifactName = if ($RunnerProfile -eq 'REDUCED_RESEARCH_DAY001') {
+    'quant-server-1.3.1-reduced-research-day001-runner.jar'
+} else {
+    'quant-server-1.3.1-f1f-b2-runner.jar'
+}
+$runnerStartClass = if ($RunnerProfile -eq 'REDUCED_RESEARCH_DAY001') {
+    'com.stockquant.server.agent.marketfacts.TushareReducedResearchManualRunner'
+} else {
+    'com.stockquant.server.agent.marketfacts.TushareControlledAcceptanceRunner'
+}
 $temporaryPrefix = 'stock-quant-f1f-b2-build-'
-$tempBase = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\', '/')
+$tempBase = [IO.Path]::GetFullPath(
+    (Join-Path $repoRoot 'quant-server\target')).TrimEnd('\', '/')
 $tempRoot = $null
 $tempArtifact = $null
 $tempProof = $null
@@ -46,7 +60,6 @@ function Read-ZipEntryText([string] $Archive, [string] $EntryName) {
 if ($ExpectedCommit -notmatch '^[0-9a-f]{40}$') {
     throw 'TUSHARE_CONTROLLED_ACCEPTANCE_COMMIT_INVALID'
 }
-$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $artifact = Join-Path $repoRoot "quant-server\target\$artifactName"
 $proofPath = "$artifact.f1f-b2-proof.properties"
 $originalArtifact = "$artifact.original"
@@ -135,7 +148,8 @@ try {
             throw 'TUSHARE_CONTROLLED_ACCEPTANCE_BUILD_JAVA_VERSION_UNAVAILABLE'
         }
         $mavenJavaVersion = $mavenJavaVersionMatch.Groups[1].Value
-        & $mavenWrapper -o -pl quant-server -am package -DskipTests
+        & $mavenWrapper -o -pl quant-server -am package -DskipTests `
+            "-Dstart-class=$runnerStartClass"
         if ($LASTEXITCODE -ne 0) {
             throw 'TUSHARE_CONTROLLED_ACCEPTANCE_BUILD_FAILED'
         }
@@ -175,8 +189,6 @@ try {
     $buildTime = [DateTimeOffset]::UtcNow.ToString('o')
     $manifestFragment = Join-Path $tempRoot 'runner-manifest.mf'
     $manifestContent = @(
-        'Main-Class: org.springframework.boot.loader.launch.JarLauncher'
-        'Start-Class: com.stockquant.server.agent.marketfacts.TushareControlledAcceptanceRunner'
         "Stock-Quant-Git-Commit: $actualCommit"
         "Stock-Quant-Git-Remote-Commit: $remoteCommit"
         "Stock-Quant-Git-Branch: $actualBranch"
@@ -199,8 +211,8 @@ try {
     }
 
     $jarEntries = @(& jar --list --file $tempArtifact)
-    $runnerEntry = 'BOOT-INF/classes/com/stockquant/server/agent/marketfacts/' +
-        'TushareControlledAcceptanceRunner.class'
+    $runnerEntry = 'BOOT-INF/classes/' + ($runnerStartClass -replace '\.', '/') +
+        '.class'
     $forbiddenEntries = @($jarEntries | Where-Object {
         $_ -match '(^|/)\.ai(/|$)' -or
         $_ -match '(^|/)(test|tests|test-classes)(/|$)' -or
@@ -214,7 +226,8 @@ try {
     $manifest = (Read-ZipEntryText $tempArtifact 'META-INF/MANIFEST.MF') `
         -replace "`r?`n ", ''
     if ($manifest -notmatch '(?m)^Main-Class: org\.springframework\.boot\.loader\.launch\.JarLauncher\s*$' -or
-        $manifest -notmatch '(?m)^Start-Class: com\.stockquant\.server\.agent\.marketfacts\.TushareControlledAcceptanceRunner\s*$') {
+        $manifest -notmatch ('(?m)^Start-Class: ' +
+            [regex]::Escape($runnerStartClass) + '\s*$')) {
         throw 'TUSHARE_CONTROLLED_ACCEPTANCE_RUNNER_MANIFEST_INVALID'
     }
 
@@ -243,6 +256,8 @@ try {
     $completed = $true
     Write-Output 'F1F_B2_BUILD_PROOF_CREATED=true'
     Write-Output "F1F_B2_BUILD_PROOF_MODE=$Mode"
+    Write-Output "STOCK_QUANT_RUNNER_PROFILE=$RunnerProfile"
+    Write-Output "STOCK_QUANT_RUNNER_START_CLASS=$runnerStartClass"
     Write-Output "ARTIFACT_SHA256=$artifactHash"
 } finally {
     Pop-Location

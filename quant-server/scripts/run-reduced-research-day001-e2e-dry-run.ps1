@@ -7,18 +7,23 @@ param(
 $ErrorActionPreference = 'Stop'
 $pgBin = 'C:\Program Files\PostgreSQL\16\bin'
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
-$tempBase = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\', '/')
+$tempBase = [IO.Path]::GetFullPath(
+    (Join-Path $repoRoot 'quant-server\target')).TrimEnd('\', '/')
 $prefix = 'stock-quant-rr-day001-e2e-'
 $tempRoot = Join-Path $tempBase ($prefix + [Guid]::NewGuid().ToString('N'))
 $dataDir = Join-Path $tempRoot 'data'
 $serverLog = Join-Path $tempRoot 'postgres.log'
 $artifact = Join-Path $repoRoot `
-    'quant-server\target\quant-server-1.3.1-f1f-b2-runner.jar'
+    'quant-server\target\quant-server-1.3.1-reduced-research-day001-runner.jar'
 $proof = "$artifact.f1f-b2-proof.properties"
 $runnerClass = 'com.stockquant.server.agent.marketfacts.' +
     'TushareReducedResearchManualRunner'
 $started = $false
 $port = 0
+
+if (-not (Test-Path -LiteralPath $tempBase)) {
+    New-Item -ItemType Directory -Path $tempBase | Out-Null
+}
 
 function Invoke-PsqlScalar([string] $Sql) {
     $value = & "$pgBin\psql.exe" -X -q -A -t `
@@ -167,7 +172,8 @@ try {
     }
 
     & "$PSScriptRoot\prepare-f1f-b2-build-proof.ps1" `
-        -ExpectedCommit $ExpectedCommit -Mode E2E_DRY_RUN
+        -ExpectedCommit $ExpectedCommit -Mode E2E_DRY_RUN `
+        -RunnerProfile REDUCED_RESEARCH_DAY001
     if ($LASTEXITCODE -ne 0 -or
         -not (Test-Path -LiteralPath $artifact) -or
         -not (Test-Path -LiteralPath $proof)) {

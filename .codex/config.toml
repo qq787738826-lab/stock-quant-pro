@@ -1,0 +1,82 @@
+approval_policy = "never"
+default_permissions = "stock_quant_local"
+web_search = "disabled"
+
+[features.network_proxy]
+enabled = true
+allow_local_binding = false
+allow_upstream_proxy = false
+enable_socks5 = false
+enable_socks5_udp = false
+
+[features.network_proxy.domains]
+"127.0.0.1" = "allow"
+"localhost" = "allow"
+"github.com" = "allow"
+"api.github.com" = "allow"
+"objects.githubusercontent.com" = "allow"
+"raw.githubusercontent.com" = "allow"
+"codeload.github.com" = "allow"
+"repo.maven.apache.org" = "allow"
+"dlcdn.apache.org" = "allow"
+
+[permissions.stock_quant_local]
+description = "Repository-scoped Stock Quant build, test and approved local-run automation"
+extends = ":read-only"
+
+[permissions.stock_quant_local.filesystem]
+glob_scan_max_depth = 32
+"D:/GitHub/stock-quant-pro" = "write"
+"C:/Users/*/.aws/**" = "deny"
+"C:/Users/*/.azure/**" = "deny"
+"C:/Users/*/.codex/**" = "deny"
+"C:/Users/*/.config/gh/**" = "deny"
+"C:/Users/*/.ssh/**" = "deny"
+"C:/Users/*/AppData/Local/Microsoft/Credentials/**" = "deny"
+"C:/Users/*/AppData/Local/Microsoft/Vault/**" = "deny"
+"C:/Users/*/AppData/Roaming/Microsoft/Credentials/**" = "deny"
+"C:/Users/*/AppData/Roaming/Microsoft/Vault/**" = "deny"
+
+[permissions.stock_quant_local.filesystem.":workspace_roots"]
+".ai" = "deny"
+".ai/**" = "deny"
+".env" = "deny"
+".env.*" = "deny"
+"**/.env" = "deny"
+"**/.env.*" = "deny"
+
+[permissions.stock_quant_local.network]
+enabled = true
+mode = "limited"
+allow_local_binding = false
+allow_upstream_proxy = false
+enable_socks5 = false
+enable_socks5_udp = false
+
+[permissions.stock_quant_local.network.domains]
+"127.0.0.1" = "allow"
+"localhost" = "allow"
+"github.com" = "allow"
+"api.github.com" = "allow"
+"objects.githubusercontent.com" = "allow"
+"raw.githubusercontent.com" = "allow"
+"codeload.github.com" = "allow"
+"repo.maven.apache.org" = "allow"
+"dlcdn.apache.org" = "allow"
+
+[permissions.stock_quant_formal_runner]
+description = "Exact formal Day001 Runner network extension"
+extends = "stock_quant_local"
+
+[permissions.stock_quant_formal_runner.network]
+enabled = true
+mode = "limited"
+allow_local_binding = false
+allow_upstream_proxy = false
+enable_socks5 = false
+enable_socks5_udp = false
+
+[permissions.stock_quant_formal_runner.network.domains]
+"127.0.0.1" = "allow"
+"localhost" = "allow"
+"api.tushare.pro" = "allow"

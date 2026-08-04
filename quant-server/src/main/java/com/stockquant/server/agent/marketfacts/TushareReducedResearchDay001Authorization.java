@@ -199,7 +199,10 @@ record TushareReducedResearchDay001Authorization(
         Objects.requireNonNull(proof, "proof").validate();
         boolean eligible = authorizationMode == AuthorizationMode.E2E_DRY_RUN
                 ? proof.e2eDryRunEligible() : proof.governanceEligible();
-        if (!eligible || !gitCommit.equals(proof.gitCommit())
+        if (!eligible
+                || !TushareControlledAcceptanceBuildProof
+                .DAY001_RUNNER_START_CLASS.equals(proof.runnerStartClass())
+                || !gitCommit.equals(proof.gitCommit())
                 || !artifactSha256.equals(proof.actualArtifactSha256())) {
             throw new IllegalArgumentException(
                     "TUSHARE_REDUCED_RESEARCH_BUILD_PROOF_INVALID");

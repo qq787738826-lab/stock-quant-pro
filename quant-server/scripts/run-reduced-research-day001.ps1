@@ -6,14 +6,17 @@ param(
     [Parameter(Mandatory = $true)]
     [string] $ResultFile,
 
-    [string] $ArtifactPath
+    [string] $ArtifactPath,
+
+    [ValidateSet('WINDOWS_CREDENTIAL_MANAGER', 'CONSOLE')]
+    [string] $SecretMode = 'WINDOWS_CREDENTIAL_MANAGER'
 )
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 if ([string]::IsNullOrWhiteSpace($ArtifactPath)) {
     $ArtifactPath = Join-Path $repoRoot `
-        'quant-server\target\quant-server-1.3.1-f1f-b2-runner.jar'
+        'quant-server\target\quant-server-1.3.1-reduced-research-day001-runner.jar'
 }
 
 function Resolve-RequiredFile([string] $Path, [string] $FailureCode) {
@@ -52,7 +55,8 @@ $runnerClass = 'com.stockquant.server.agent.marketfacts.' +
     'TushareReducedResearchManualRunner'
 & java "-Dloader.main=$runnerClass" -cp $artifact `
     'org.springframework.boot.loader.launch.PropertiesLauncher' `
-    "--authorization-file=$authorization" "--result-file=$result"
+    "--authorization-file=$authorization" "--result-file=$result" `
+    "--secret-mode=$SecretMode"
 $runnerExit = $LASTEXITCODE
 if ($runnerExit -ne 0) {
     exit $runnerExit

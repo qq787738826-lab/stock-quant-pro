@@ -1,8 +1,10 @@
 $ErrorActionPreference = 'Stop'
 
 $pgBin = 'C:\Program Files\PostgreSQL\16\bin'
+$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $suffix = [Guid]::NewGuid().ToString('N').Substring(0, 10)
-$tempBase = [IO.Path]::GetFullPath($env:TEMP)
+$tempBase = [IO.Path]::GetFullPath(
+    (Join-Path $repoRoot 'quant-server\target')).TrimEnd('\', '/')
 $tempRoot = Join-Path $tempBase "stock-quant-f1f-b2-tx-$suffix"
 $dataDir = Join-Path $tempRoot 'data'
 $listener = [Net.Sockets.TcpListener]::new(
@@ -14,6 +16,10 @@ $listener.Stop()
 $oldUrl = $env:F1F_B1_POSTGRES_JDBC_URL
 $oldUser = $env:F1F_B1_POSTGRES_USER
 $started = $false
+
+if (-not (Test-Path -LiteralPath $tempBase)) {
+    New-Item -ItemType Directory -Path $tempBase | Out-Null
+}
 
 try {
     $resolved = [IO.Path]::GetFullPath($tempRoot)

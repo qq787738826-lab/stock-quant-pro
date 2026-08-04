@@ -21,6 +21,14 @@ public final class TushareControlledAcceptanceBuildProof {
     static final String MODULE_VERSION = "1.3.1";
     static final String MAVEN_WRAPPER_VERSION = "3.9.16";
     static final String REQUIRED_INTEGRATION_BRANCH = "feature/1.4.0-agent-team";
+    static final String BOOT_MAIN_CLASS =
+            "org.springframework.boot.loader.launch.JarLauncher";
+    static final String F1F_B2_RUNNER_START_CLASS =
+            "com.stockquant.server.agent.marketfacts."
+                    + "TushareControlledAcceptanceRunner";
+    static final String DAY001_RUNNER_START_CLASS =
+            "com.stockquant.server.agent.marketfacts."
+                    + "TushareReducedResearchManualRunner";
     private static final Set<String> REQUIRED_PROPERTIES = Set.of(
             "git.commit", "git.remote.commit", "git.branch", "git.trackedClean",
             "git.untrackedScopeClean",
@@ -133,6 +141,7 @@ public final class TushareControlledAcceptanceBuildProof {
             String artifactSha256
     ) {
         ManifestProof manifest = new ManifestProof(
+                BOOT_MAIN_CLASS, F1F_B2_RUNNER_START_CLASS,
                 gitCommit, gitCommit, REQUIRED_INTEGRATION_BRANCH, true, true,
                 Instant.parse("2026-08-01T00:00:00Z"),
                 currentJavaVersion(), MODULE_VERSION, MAVEN_WRAPPER_VERSION,
@@ -148,6 +157,29 @@ public final class TushareControlledAcceptanceBuildProof {
                 TushareControlledAcceptanceExecution.EXECUTOR_VERSION,
                 TushareControlledAcceptanceExecution.RULE_VERSION,
                 manifest, ProofSource.TEST_ONLY);
+    }
+
+    static VerifiedBuildProof verifiedDay001TestProof(
+            String gitCommit,
+            String artifactSha256
+    ) {
+        ManifestProof manifest = new ManifestProof(
+                BOOT_MAIN_CLASS, DAY001_RUNNER_START_CLASS,
+                gitCommit, gitCommit, REQUIRED_INTEGRATION_BRANCH, true, true,
+                Instant.parse("2026-08-01T00:00:00Z"),
+                currentJavaVersion(), MODULE_VERSION, MAVEN_WRAPPER_VERSION,
+                BuildMode.E2E_DRY_RUN,
+                TushareControlledAcceptanceExecution.EXECUTOR_VERSION,
+                TushareControlledAcceptanceExecution.RULE_VERSION);
+        return new VerifiedBuildProof(
+                gitCommit, gitCommit, REQUIRED_INTEGRATION_BRANCH, true, true,
+                artifactSha256, artifactSha256,
+                Instant.parse("2026-08-01T00:00:00Z"),
+                currentJavaVersion(), MODULE_VERSION, MAVEN_WRAPPER_VERSION,
+                BuildMode.E2E_DRY_RUN,
+                TushareControlledAcceptanceExecution.EXECUTOR_VERSION,
+                TushareControlledAcceptanceExecution.RULE_VERSION,
+                manifest, ProofSource.E2E_DRY_RUN);
     }
 
     public static final class VerifiedBuildProof {
@@ -212,6 +244,9 @@ public final class TushareControlledAcceptanceBuildProof {
         void validate() {
             if (!trackedWorkspaceClean || !untrackedScopeClean
                     || !actualArtifactSha256.equals(declaredArtifactSha256)
+                    || !BOOT_MAIN_CLASS.equals(manifest.mainClass())
+                    || !Set.of(F1F_B2_RUNNER_START_CLASS,
+                    DAY001_RUNNER_START_CLASS).contains(manifest.startClass())
                     || !gitCommit.equals(manifest.gitCommit())
                     || !remoteGitCommit.equals(manifest.remoteGitCommit())
                     || !branchAllowedForMode(branchName, buildMode)
@@ -265,6 +300,7 @@ public final class TushareControlledAcceptanceBuildProof {
         public BuildMode buildMode() { return buildMode; }
         public String executorVersion() { return executorVersion; }
         public String qualificationRuleVersion() { return qualificationRuleVersion; }
+        public String runnerStartClass() { return manifest.startClass(); }
         public ProofSource source() { return source; }
 
         @Override
@@ -278,6 +314,8 @@ public final class TushareControlledAcceptanceBuildProof {
     }
 
     record ManifestProof(
+            String mainClass,
+            String startClass,
             String gitCommit,
             String remoteGitCommit,
             String branchName,
@@ -292,6 +330,8 @@ public final class TushareControlledAcceptanceBuildProof {
             String qualificationRuleVersion
     ) {
         ManifestProof {
+            mainClass = TushareControlledAcceptanceExecution.safeText(mainClass);
+            startClass = TushareControlledAcceptanceExecution.safeText(startClass);
             gitCommit = TushareControlledAcceptanceExecution.commit(gitCommit);
             remoteGitCommit = TushareControlledAcceptanceExecution.commit(remoteGitCommit);
             branchName = Objects.requireNonNull(branchName, "branchName");
@@ -353,6 +393,8 @@ public final class TushareControlledAcceptanceBuildProof {
             }
             Attributes attributes = jar.getManifest().getMainAttributes();
             return new ManifestProof(
+                    attributes.getValue("Main-Class"),
+                    attributes.getValue("Start-Class"),
                     attributes.getValue("Stock-Quant-Git-Commit"),
                     attributes.getValue("Stock-Quant-Git-Remote-Commit"),
                     attributes.getValue("Stock-Quant-Git-Branch"),

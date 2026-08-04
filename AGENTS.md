@@ -170,3 +170,26 @@ Vue 修改后：
 6. 测试结果
 7. 未解决问题
 8. 下一步建议
+
+## STOCK-QUANT-LOCAL-AUTOMATION 本地自动执行边界
+
+- 项目 Codex 必须使用仓库内 `.codex/config.toml` 的 `stock_quant_local` 权限配置；禁止以
+  `danger-full-access` 或 `--dangerously-bypass-approvals-and-sandbox` 绕过该配置。
+- 写权限只限当前仓库；`.ai/`、任意 `.env`、其他用户目录和无关凭据均不得读取、修改、
+  暂存或上传。Maven、Java、PowerShell、Git 与 PostgreSQL 命令只能用于当前仓库任务。
+- 本地数据库访问只允许 `127.0.0.1`。正式缩减研究固定为端口 `38432`；测试只允许由
+  已审查脚本创建并在同次运行清理的随机临时端口，严禁改写永久库。
+- Windows Credential Manager 只允许两个 Target：`StockQuant/ResearchDbPassword` 和
+  `StockQuant/TushareToken`。Codex 不得枚举凭据、读取或回传原文，也不得调用 `cmdkey`
+  或其他凭据导出工具；只能执行存在性检查或由正式 Runner 在进程内读取。
+- 真实 Tushare 网络请求只允许通过
+  `quant-server/scripts/run-stock-quant-local-automation.ps1` 启动已证明 Start-Class 的
+  `TushareReducedResearchManualRunner`，且必须绑定尚未消费、未过期的用户正式授权。
+  只有该命令可使用 `stock_quant_formal_runner` 权限配置；普通构建、测试和诊断固定使用
+  默认 `stock_quant_local`，后者不允许访问 Tushare 域名。
+  任何测试、E2E、诊断、修复、构建或普通 Java/PowerShell 命令均不得访问真实 Provider。
+- 禁止把秘密写入参数、环境变量、文件、日志、证据、聊天或云端任务。正式凭据模式禁止
+  在 Codex Cloud、CI、非 Windows 或无法确认本机上下文的环境运行；失败时必须关闭并
+  保持 fail-closed，不得自动回退 Console、明文文件或环境变量。
+- 自动修复循环可以在任务授权范围内执行定向测试、临时 PostgreSQL、打包 Fake Provider
+  E2E、提交和普通 push；真实运行失败后不得重试、补跑、复用 runId 或自动签发新授权。

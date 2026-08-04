@@ -7,6 +7,7 @@ import com.stockquant.server.agent.marketfacts.TushareControlledAcceptanceBuildP
 import com.stockquant.server.agent.marketfacts.TushareControlledAcceptanceExecution.DatabaseReadbackEvidence;
 import com.stockquant.server.agent.marketfacts.TushareControlledAcceptanceOutputAudit.SensitiveKind;
 import com.stockquant.server.agent.marketfacts.TushareControlledAcceptanceOutputAudit.SensitiveRegistry;
+import com.stockquant.server.agent.marketfacts.CompositeSecretProvider.Mode;
 import com.stockquant.server.agent.marketfacts.TushareReducedResearchDay001Authorization.AuthorizationMode;
 import com.stockquant.server.agent.marketfacts.TushareReducedResearchDay001Authorization.Day001Mode;
 import com.stockquant.server.agent.marketfacts.TushareReducedResearchDay001Result.ResultFile;
@@ -164,6 +165,45 @@ class TushareReducedResearchManualRunnerTest {
     }
 
     @Test
+    void credentialManagerIsDefaultAndConsoleRequiresExplicitMode() {
+        var defaultEnvironment = new FakeEnvironment(
+                authorization(Day001Mode.NEW_CAPTURE),
+                ExecutionBehavior.SUCCESS);
+        var consoleEnvironment = new FakeEnvironment(
+                authorization(Day001Mode.NEW_CAPTURE),
+                ExecutionBehavior.SUCCESS);
+
+        assertEquals(20, TushareReducedResearchManualRunner.run(
+                new String[]{"--authorization-file="
+                        + temporary.resolve("default-auth.properties"),
+                        "--result-file=" + temporary.resolve("default.json")},
+                defaultEnvironment));
+        assertEquals(Mode.WINDOWS_CREDENTIAL_MANAGER,
+                defaultEnvironment.secretMode);
+        assertEquals(20, TushareReducedResearchManualRunner.run(
+                new String[]{"--authorization-file="
+                        + temporary.resolve("console-auth.properties"),
+                        "--result-file=" + temporary.resolve("console.json"),
+                        "--secret-mode=CONSOLE"}, consoleEnvironment));
+        assertEquals(Mode.CONSOLE, consoleEnvironment.secretMode);
+    }
+
+    @Test
+    void invalidSecretModeStopsBeforeAuthorizationRead() {
+        var environment = new FakeEnvironment(
+                authorization(Day001Mode.NEW_CAPTURE),
+                ExecutionBehavior.SUCCESS);
+
+        assertEquals(20, TushareReducedResearchManualRunner.run(
+                new String[]{"--authorization-file="
+                        + temporary.resolve("authorization.properties"),
+                        "--result-file=" + temporary.resolve("result.json"),
+                        "--secret-mode=AUTO"}, environment));
+        assertEquals(0, environment.loadCount);
+        assertEquals(0, environment.executeCount);
+    }
+
+    @Test
     void entryRemainsNonSpringAndCannotReachAcceptanceOrAutomation()
             throws Exception {
         String runner = Files.readString(Path.of(
@@ -224,6 +264,7 @@ class TushareReducedResearchManualRunnerTest {
         private int executeCount;
         private boolean buildMismatch;
         private boolean alreadyConsumed;
+        private Mode secretMode;
 
         private FakeEnvironment(
                 TushareReducedResearchDay001Authorization authorization,
@@ -292,9 +333,11 @@ class TushareReducedResearchManualRunnerTest {
                 VerifiedBuildProof proof,
                 SensitiveRegistry registry,
                 Instant startedAt,
-                TushareReducedResearchManualRunner.ExecutionProgress progress
+                TushareReducedResearchManualRunner.ExecutionProgress progress,
+                Mode secretMode
         ) {
             executeCount++;
+            this.secretMode = secretMode;
             char[] databaseSecret = "TEST_DATABASE_SECRET_123".toCharArray();
             char[] token = "TEST_PROVIDER_TOKEN_456".toCharArray();
             registry.register(SensitiveKind.DATABASE_PASSWORD, databaseSecret);

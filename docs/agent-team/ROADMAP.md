@@ -449,6 +449,11 @@
   治理状态。Day 001 成功也不自动开放下一正式阶段
   `3A-R3B-F2B：选定 Provider 支持的真实产品闭环（未开始）`。
 - 阶段记录：[缩减研究 Day 001 Runner](stage-3ar3b-rr-day001-manual-runner.md)。
+- 本地运行支撑：`STOCK-QUANT-LOCAL-AUTOMATION` 只为已批准的 Day001/后续人工 Runner
+  提供 Windows Credential Manager 两个固定 Target、专用构建 Start-Class 校验与统一
+  本地入口；不扩大 Provider 预算，不自动开放 Day002、F2B 或任何 scheduler/交易阶段。
+  交付：[操作说明](stock-quant-local-automation.md)和
+  [阶段记录](stage-stock-quant-local-automation.md)。
 
 #### 3A-R3B-F1：完整 Provider Adapter 与 V13 闭环（当前仅技术证据阻断）
 

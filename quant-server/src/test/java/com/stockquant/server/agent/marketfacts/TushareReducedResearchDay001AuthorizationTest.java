@@ -123,16 +123,20 @@ class TushareReducedResearchDay001AuthorizationTest {
     }
 
     @Test
-    void buildBindingRejectsAHashOrEligibilityMismatch() {
+    void buildBindingRequiresTheDedicatedDay001StartClass() {
         var authorization = authorization(
                 AuthorizationMode.E2E_DRY_RUN, Day001Mode.NEW_CAPTURE,
                 55_432, NOW.minusSeconds(5), NOW.plusSeconds(600));
-        var testOnlyProof = TushareControlledAcceptanceBuildProof
+        var f1Proof = TushareControlledAcceptanceBuildProof
                 .verifiedTestProof("1".repeat(40), "a".repeat(64));
+        var day001Proof = TushareControlledAcceptanceBuildProof
+                .verifiedDay001TestProof(
+                        "1".repeat(40), "a".repeat(64));
 
+        assertDoesNotThrow(() -> authorization.validateBuildProof(day001Proof));
         assertEquals("TUSHARE_REDUCED_RESEARCH_BUILD_PROOF_INVALID",
                 assertThrows(IllegalArgumentException.class,
-                        () -> authorization.validateBuildProof(testOnlyProof))
+                        () -> authorization.validateBuildProof(f1Proof))
                         .getMessage());
     }
 

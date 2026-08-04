@@ -192,6 +192,9 @@ record TushareControlledAcceptanceLaunchPlan(
                 ? buildProof.e2eDryRunEligible()
                 : buildProof.governanceEligible();
         if (!eligible
+                || !TushareControlledAcceptanceBuildProof
+                .F1F_B2_RUNNER_START_CLASS.equals(
+                        buildProof.runnerStartClass())
                 || !codeBaselineCommit.equals(buildProof.gitCommit())
                 || !artifactSha256.equals(buildProof.actualArtifactSha256())) {
             throw new IllegalArgumentException(

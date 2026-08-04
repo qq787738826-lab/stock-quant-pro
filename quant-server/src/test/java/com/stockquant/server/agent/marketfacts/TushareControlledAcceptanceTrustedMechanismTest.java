@@ -593,6 +593,10 @@ class TushareControlledAcceptanceTrustedMechanismTest {
         Manifest manifest = new Manifest();
         Attributes attributes = manifest.getMainAttributes();
         attributes.put(Attributes.Name.MANIFEST_VERSION, "1.0");
+        attributes.putValue("Main-Class",
+                TushareControlledAcceptanceBuildProof.BOOT_MAIN_CLASS);
+        attributes.putValue("Start-Class",
+                TushareControlledAcceptanceBuildProof.F1F_B2_RUNNER_START_CLASS);
         attributes.putValue("Stock-Quant-Git-Commit", commit);
         attributes.putValue("Stock-Quant-Git-Remote-Commit", remoteCommit);
         attributes.putValue("Stock-Quant-Git-Branch", branch);

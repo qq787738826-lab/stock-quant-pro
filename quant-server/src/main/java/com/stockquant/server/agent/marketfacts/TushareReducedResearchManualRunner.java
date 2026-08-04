@@ -7,7 +7,8 @@ import com.stockquant.server.agent.marketfacts.TushareControlledAcceptanceOutput
 import com.stockquant.server.agent.marketfacts.TushareControlledAcceptanceOutputAudit.Captured;
 import com.stockquant.server.agent.marketfacts.TushareControlledAcceptanceOutputAudit.SensitiveKind;
 import com.stockquant.server.agent.marketfacts.TushareControlledAcceptanceOutputAudit.SensitiveRegistry;
-import com.stockquant.server.agent.marketfacts.TushareControlledAcceptanceSecretChannel.SecretValue;
+import com.stockquant.server.agent.marketfacts.CompositeSecretProvider.Mode;
+import com.stockquant.server.agent.marketfacts.SecretProvider.SecretValue;
 import com.stockquant.server.agent.marketfacts.TushareDedicatedResearchBatchModels.SymbolResearchResult;
 import com.stockquant.server.agent.marketfacts.TushareDedicatedResearchBatchModels.TushareDedicatedResearchBatchResult;
 import com.stockquant.server.agent.marketfacts.TushareReducedResearchDay001Result.CheckResult;
@@ -43,6 +44,7 @@ public final class TushareReducedResearchManualRunner {
     static final int EXIT_REJECTED = 20;
     private static final String AUTHORIZATION_ARGUMENT = "--authorization-file=";
     private static final String RESULT_ARGUMENT = "--result-file=";
+    private static final String SECRET_MODE_ARGUMENT = "--secret-mode=";
 
     private TushareReducedResearchManualRunner() {
     }
@@ -80,7 +82,8 @@ public final class TushareReducedResearchManualRunner {
                             .captureControlledProcess(registry ->
                                     environment.execute(
                                             authorizedRun, proof, registry,
-                                            startedAt, progress));
+                                            startedAt, progress,
+                                            launch.secretMode()));
             OutputAuditSummary audit = OutputAuditSummary.from(
                     captured.auditResult());
             Instant completedAt = environment.clock().instant();
@@ -89,7 +92,7 @@ public final class TushareReducedResearchManualRunner {
                         authorization, FinalStatus.FAILED_OUTPUT_AUDIT,
                         startedAt, completedAt, progress, audit,
                         "TUSHARE_REDUCED_RESEARCH_OUTPUT_AUDIT_FAILED"));
-                writeSafeFailure(
+                writeSafeFailure(FinalStatus.FAILED_OUTPUT_AUDIT,
                         "TUSHARE_REDUCED_RESEARCH_OUTPUT_AUDIT_FAILED");
                 return EXIT_REJECTED;
             }
@@ -113,7 +116,7 @@ public final class TushareReducedResearchManualRunner {
                     : classify(capturedFailure.getCause(), progress);
             writeFailureIfReserved(environment, resultFile, authorization,
                     status, startedAt, progress, audit, code);
-            writeSafeFailure(code);
+            writeSafeFailure(status, code);
             return EXIT_REJECTED;
         } catch (Throwable error) {
             String code = safeCode(error);
@@ -121,7 +124,7 @@ public final class TushareReducedResearchManualRunner {
             writeFailureIfReserved(environment, resultFile, authorization,
                     status, startedAt, progress,
                     OutputAuditSummary.notRun(), code);
-            writeSafeFailure(code);
+            writeSafeFailure(status, code);
             return EXIT_REJECTED;
         }
     }
@@ -144,7 +147,8 @@ public final class TushareReducedResearchManualRunner {
                     authorization, status, startedAt,
                     environment.clock().instant(), progress, audit, code));
         } catch (Throwable resultFailure) {
-            writeSafeFailure("TUSHARE_REDUCED_RESEARCH_RESULT_WRITE_FAILED");
+            writeSafeFailure(FinalStatus.FAILED_OUTPUT_AUDIT,
+                    "TUSHARE_REDUCED_RESEARCH_RESULT_WRITE_FAILED");
         }
     }
 
@@ -243,9 +247,12 @@ public final class TushareReducedResearchManualRunner {
         return "TUSHARE_REDUCED_RESEARCH_EXECUTION_FAILED";
     }
 
-    private static void writeSafeFailure(String code) {
+    private static void writeSafeFailure(FinalStatus status, String code) {
         String safe = code != null && code.matches("[A-Z][A-Z0-9_]{7,127}")
                 ? code : "TUSHARE_REDUCED_RESEARCH_EXECUTION_FAILED";
+        System.err.println("TUSHARE_REDUCED_RESEARCH_FAILURE_STAGE="
+                + Objects.requireNonNull(status, "status").name());
+        System.err.println("TUSHARE_REDUCED_RESEARCH_FAILURE_REASON=" + safe);
         System.err.println("TUSHARE_REDUCED_RESEARCH_SAFE_FAILURE=" + safe);
     }
 
@@ -285,24 +292,20 @@ public final class TushareReducedResearchManualRunner {
                 VerifiedBuildProof proof,
                 SensitiveRegistry registry,
                 Instant startedAt,
-                ExecutionProgress progress
+                ExecutionProgress progress,
+                Mode secretMode
         ) throws Exception;
     }
 
     static final class ProductionEnvironment implements RunnerEnvironment {
         private final Clock clock;
-        private final TushareControlledAcceptanceSecretChannel secrets;
 
         ProductionEnvironment() {
-            this(Clock.systemUTC(), null);
+            this(Clock.systemUTC());
         }
 
-        ProductionEnvironment(
-                Clock clock,
-                TushareControlledAcceptanceSecretChannel secrets
-        ) {
+        ProductionEnvironment(Clock clock) {
             this.clock = Objects.requireNonNull(clock, "clock");
-            this.secrets = secrets;
         }
 
         @Override
@@ -380,7 +383,8 @@ public final class TushareReducedResearchManualRunner {
                 VerifiedBuildProof proof,
                 SensitiveRegistry registry,
                 Instant startedAt,
-                ExecutionProgress progress
+                ExecutionProgress progress,
+                Mode secretMode
         ) {
             Objects.requireNonNull(proof, "proof");
             RuntimeDatabase database = null;
@@ -405,37 +409,41 @@ public final class TushareReducedResearchManualRunner {
                                     new TushareControlledAcceptanceE2eDryRunGateway(
                                             failAtCall));
                 } else {
-                    try (SecretValue password = secretChannel()
-                            .readDatabasePassword()) {
-                        char[] auditCopy = password.copy();
-                        try {
-                            registry.register(
-                                    SensitiveKind.DATABASE_PASSWORD, auditCopy);
-                        } finally {
-                            Arrays.fill(auditCopy, '\0');
+                    try (SecretProvider secrets =
+                                 CompositeSecretProvider.formalLocal(secretMode)) {
+                        try (SecretValue password = secrets
+                                .readResearchDatabasePassword()) {
+                            char[] auditCopy = password.copy();
+                            try {
+                                registry.register(
+                                        SensitiveKind.DATABASE_PASSWORD, auditCopy);
+                            } finally {
+                                Arrays.fill(auditCopy, '\0');
+                            }
+                            char[] dataSourceCopy = password.copy();
+                            try {
+                                database = openDatabase(
+                                        authorization, dataSourceCopy);
+                            } finally {
+                                Arrays.fill(dataSourceCopy, '\0');
+                            }
                         }
-                        char[] dataSourceCopy = password.copy();
-                        try {
-                            database = openDatabase(
-                                    authorization, dataSourceCopy);
-                        } finally {
-                            Arrays.fill(dataSourceCopy, '\0');
-                        }
-                    }
-                    verifyDatabase(database.dataSource());
-                    try (SecretValue token = secretChannel().readTushareToken()) {
-                        char[] auditCopy = token.copy();
-                        try {
-                            registry.register(SensitiveKind.TUSHARE_TOKEN, auditCopy);
-                        } finally {
-                            Arrays.fill(auditCopy, '\0');
-                        }
-                        char[] runtimeCopy = token.copy();
-                        try {
-                            components = TushareDedicatedResearchRuntimeComponents
-                                    .create(database.dataSource(), runtimeCopy, clock);
-                        } finally {
-                            Arrays.fill(runtimeCopy, '\0');
+                        verifyDatabase(database.dataSource());
+                        try (SecretValue token = secrets.readTushareToken()) {
+                            char[] auditCopy = token.copy();
+                            try {
+                                registry.register(
+                                        SensitiveKind.TUSHARE_TOKEN, auditCopy);
+                            } finally {
+                                Arrays.fill(auditCopy, '\0');
+                            }
+                            char[] runtimeCopy = token.copy();
+                            try {
+                                components = TushareDedicatedResearchRuntimeComponents
+                                        .create(database.dataSource(), runtimeCopy, clock);
+                            } finally {
+                                Arrays.fill(runtimeCopy, '\0');
+                            }
                         }
                     }
                 }
@@ -495,12 +503,6 @@ public final class TushareReducedResearchManualRunner {
                     database.close();
                 }
             }
-        }
-
-        private TushareControlledAcceptanceSecretChannel secretChannel() {
-            return secrets == null
-                    ? TushareControlledAcceptanceSecretChannel.consoleOnly()
-                    : secrets;
         }
 
         private static void verifyDatabase(DataSource dataSource) {
@@ -626,14 +628,20 @@ public final class TushareReducedResearchManualRunner {
         }
     }
 
-    private record RunnerArguments(Path authorizationFile, Path resultFile) {
+    private record RunnerArguments(
+            Path authorizationFile,
+            Path resultFile,
+            Mode secretMode
+    ) {
         static RunnerArguments parse(String[] args) {
-            if (args == null || args.length != 2) {
+            if (args == null || args.length < 2 || args.length > 3) {
                 throw new IllegalArgumentException(
                         "TUSHARE_REDUCED_RESEARCH_LAUNCH_ARGUMENTS_INVALID");
             }
             Path authorization = null;
             Path result = null;
+            Mode secretMode = Mode.WINDOWS_CREDENTIAL_MANAGER;
+            boolean secretModeSeen = false;
             for (String argument : args) {
                 if (argument != null && argument.startsWith(AUTHORIZATION_ARGUMENT)
                         && argument.length() > AUTHORIZATION_ARGUMENT.length()
@@ -644,6 +652,13 @@ public final class TushareReducedResearchManualRunner {
                         && argument.length() > RESULT_ARGUMENT.length()
                         && result == null) {
                     result = Path.of(argument.substring(RESULT_ARGUMENT.length()));
+                } else if (argument != null
+                        && argument.startsWith(SECRET_MODE_ARGUMENT)
+                        && argument.length() > SECRET_MODE_ARGUMENT.length()
+                        && !secretModeSeen) {
+                    secretMode = Mode.parse(argument.substring(
+                            SECRET_MODE_ARGUMENT.length()));
+                    secretModeSeen = true;
                 } else {
                     throw new IllegalArgumentException(
                             "TUSHARE_REDUCED_RESEARCH_LAUNCH_ARGUMENTS_INVALID");
@@ -657,7 +672,7 @@ public final class TushareReducedResearchManualRunner {
             }
             return new RunnerArguments(
                     authorization.toAbsolutePath().normalize(),
-                    result.toAbsolutePath().normalize());
+                    result.toAbsolutePath().normalize(), secretMode);
         }
 
         private static boolean containsAiSegment(Path path) {

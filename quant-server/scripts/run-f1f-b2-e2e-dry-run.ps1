@@ -5,7 +5,8 @@ param(
 $ErrorActionPreference = 'Stop'
 $pgBin = 'C:\Program Files\PostgreSQL\16\bin'
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
-$tempBase = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\', '/')
+$tempBase = [IO.Path]::GetFullPath(
+    (Join-Path $repoRoot 'quant-server\target')).TrimEnd('\', '/')
 $prefix = 'stock-quant-f1f-b2-e2e-'
 $tempRoot = Join-Path $tempBase ($prefix + [Guid]::NewGuid().ToString('N'))
 $dataDir = Join-Path $tempRoot 'data'
@@ -16,6 +17,10 @@ $artifact = Join-Path $repoRoot `
 $proof = "$artifact.f1f-b2-proof.properties"
 $started = $false
 $port = 0
+
+if (-not (Test-Path -LiteralPath $tempBase)) {
+    New-Item -ItemType Directory -Path $tempBase | Out-Null
+}
 
 function Invoke-PsqlScalar([string] $Database, [string] $User, [string] $Sql) {
     $value = & "$pgBin\psql.exe" -X -q -A -t `

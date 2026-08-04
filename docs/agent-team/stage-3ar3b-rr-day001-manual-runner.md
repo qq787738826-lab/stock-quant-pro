@@ -2,7 +2,7 @@
 
 ## 阶段定位
 
-本阶段只提供 `TushareReducedResearchManualRunner` 与
+本阶段提供 `TushareReducedResearchManualRunner` 与
 `run-reduced-research-day001.ps1`，用于用户另行签发一次性非敏感授权后，人工执行一个
 单证券、单已结束交易日的缩减研究捕获。它不是 F1F-B2 再验收，不调用或写入 F1F-B2
 状态机，不是 F2B、F3、scheduler、Agent、Shadow、回测或交易入口。
@@ -53,6 +53,11 @@ typed fact/SYSTEM_KNOWLEDGE 回读通过、1 条仅内存 formula-only QFQ 摘�
   -ResultFile <new-redacted-result.json> `
   -ArtifactPath <verified-runner.jar>
 ```
+
+`STOCK-QUANT-LOCAL-AUTOMATION` 合入后，正式本地模式默认从 Windows Credential Manager
+的两个固定 Target 读取秘密，无需重复输入；Console 只允许显式应急选择且不自动降级。
+统一入口、生命周期和仓库权限见
+[Windows 秘密托管与 Codex 全自动执行](stock-quant-local-automation.md)。
 
 脱敏结果只允许
 `SUCCEEDED / FAILED_PRE_PROVIDER / FAILED_PROVIDER / FAILED_VALIDATION /
