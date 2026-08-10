@@ -139,6 +139,7 @@ try {
     Write-StockQuantHostBrokerRequest -Values $values | Out-Null
     $resultPath = Join-Path $paths.Results "$requestId.result.json"
     $deadline = [DateTimeOffset]::UtcNow.AddMinutes(30)
+    $busyHeartbeats = [Collections.Generic.HashSet[string]]::new()
     while (-not (Test-Path -LiteralPath $resultPath -PathType Leaf)) {
         if ([DateTimeOffset]::UtcNow -ge $deadline) {
             throw 'STOCK_QUANT_HOST_BROKER_FAKE_E2E_RESULT_TIMEOUT'
@@ -146,7 +147,21 @@ try {
         if ($resident.Process.HasExited) {
             throw 'STOCK_QUANT_HOST_BROKER_FAKE_E2E_RESIDENT_EXITED'
         }
+        try {
+            $heartbeat = Read-StockQuantHostBrokerHeartbeat `
+                -ExpectedGitCommit $ExpectedCommit
+            if ([string]$heartbeat.state -eq 'BUSY') {
+                [void]$busyHeartbeats.Add([string]$heartbeat.lastHeartbeat)
+            }
+        } catch {
+            if ($_.Exception.Message -cne 'HOST_BROKER_NOT_RUNNING') {
+                throw
+            }
+        }
         Start-Sleep -Milliseconds 250
+    }
+    if ($busyHeartbeats.Count -lt 2) {
+        throw 'STOCK_QUANT_HOST_BROKER_BUSY_HEARTBEAT_NOT_REFRESHED'
     }
     $result = Get-Content -LiteralPath $resultPath -Raw -Encoding UTF8 |
         ConvertFrom-Json

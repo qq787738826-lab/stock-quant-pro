@@ -337,6 +337,49 @@ function Write-BrokerHeartbeat {
         Out-Null
 }
 
+function Start-BusyHeartbeatPump {
+    $timer = [Timers.Timer]::new($pollIntervalMilliseconds)
+    $timer.AutoReset = $true
+    $sourceIdentifier = "StockQuantHostBrokerBusyHeartbeat_$PID"
+    $context = [pscustomobject]@{
+        GitCommit = $brokerGitCommit
+        WindowsUser = $identity
+        ProcessId = $PID
+        StartedAt = $brokerStartedAt
+    }
+    $job = Register-ObjectEvent -InputObject $timer -EventName Elapsed `
+        -SourceIdentifier $sourceIdentifier -MessageData $context -Action {
+            try {
+                Write-StockQuantHostBrokerHeartbeat `
+                    -GitCommit $Event.MessageData.GitCommit `
+                    -WindowsUser $Event.MessageData.WindowsUser `
+                    -ProcessId $Event.MessageData.ProcessId `
+                    -StartedAt $Event.MessageData.StartedAt -State BUSY |
+                    Out-Null
+            } catch {
+                # The foreground result remains fail-closed; stale health is rejected.
+            }
+        }
+    $timer.Start()
+    return [pscustomobject]@{
+        Timer = $timer
+        Job = $job
+        SourceIdentifier = $sourceIdentifier
+    }
+}
+
+function Stop-BusyHeartbeatPump {
+    param(
+        [Parameter(Mandatory = $true)]
+        [object] $Pump
+    )
+    $Pump.Timer.Stop()
+    Unregister-Event -SourceIdentifier $Pump.SourceIdentifier `
+        -ErrorAction SilentlyContinue
+    Remove-Job -Job $Pump.Job -Force -ErrorAction SilentlyContinue
+    $Pump.Timer.Dispose()
+}
+
 function Invoke-ClaimedRequest {
     param(
         [Parameter(Mandatory = $true)]
@@ -462,7 +505,12 @@ try {
             continue
         }
         Write-BrokerHeartbeat -State BUSY
-        Invoke-ClaimedRequest -Candidate $pending[0]
+        $heartbeatPump = Start-BusyHeartbeatPump
+        try {
+            Invoke-ClaimedRequest -Candidate $pending[0]
+        } finally {
+            Stop-BusyHeartbeatPump -Pump $heartbeatPump
+        }
     }
 } catch {
     $reason = ConvertTo-StockQuantSafeCode -ErrorValue $_

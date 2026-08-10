@@ -249,6 +249,9 @@ class StockQuantHostBrokerContractTest {
         assertTrue(script.contains("Write-BrokerHeartbeat -State IDLE"));
         assertTrue(script.contains("Write-BrokerHeartbeat -State BUSY"));
         assertTrue(script.contains("Start-Sleep -Milliseconds"));
+        assertTrue(script.contains("Start-BusyHeartbeatPump"));
+        assertTrue(script.contains("Stop-BusyHeartbeatPump"));
+        assertTrue(script.contains("Register-ObjectEvent"));
         assertTrue(script.contains("RUN_DAY001"));
         assertTrue(script.contains("RUN_FAKE_E2E"));
         assertFalse(script.contains("Invoke-Expression"));
