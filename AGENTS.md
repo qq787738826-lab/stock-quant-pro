@@ -200,7 +200,8 @@ Vue 修改后：
 - 自动修复循环可以在任务授权范围内执行定向测试、临时 PostgreSQL、打包 Fake Provider
   E2E、提交和普通 push；真实运行失败后不得重试、补跑、复用 runId 或自动签发新授权。
 - Broker 安装只能由真实 Windows 用户显式执行一次；任务固定为 `Interactive/Limited`、
-  单一当前用户登录 trigger、固定常驻脚本且不保存账户密码。登录只启动监听进程，
+  单一当前用户登录 trigger、单一无结束 `PT1M` watchdog TimeTrigger、`IgnoreNew`、固定常驻脚本且
+  不保存账户密码。任一 trigger 都只启动监听进程，
   `BROKER_AUTOSTART=true`、`PROVIDER_AUTOSTART=false`；空闲时不得读取凭据、连接数据库或创建
   Provider 客户端。安装器必须要求管理员 PowerShell，但不得
   调用、查找或安装 `codex` CLI；任务以当前真实 Windows 用户为 principal，并保留任务计划程序
@@ -208,6 +209,7 @@ Vue 修改后：
   高权限、开机启动或定时真实 Provider 运行。
 - Task Scheduler 注册后 principal 必须按 Windows SID 校验，允许本地账户从 `计算机名\用户名`
   规范化为裸用户名及 XML SID，但固定 action、Broker 路径、working directory、Interactive/Limited、
-  单一登录 trigger、无限监听时限和有限重启设置仍须逐项 fail-closed；旧零 trigger 定义只能作为
+  单一登录 trigger、单一 `PT1M` watchdog TimeTrigger、`StopAtDurationEnd=false`、`IgnoreNew`、
+  无限监听时限和有限重启设置仍须逐项 fail-closed；旧零 trigger 和旧登录单 trigger 定义只能作为
   一次升级来源。正式任务更新必须先导出并验证旧定义；失败时
   只删除本次精确新任务或恢复旧 XML，不得删除其他任务或留下半安装状态。

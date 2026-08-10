@@ -5,7 +5,7 @@
 Codex 的 Windows restricted-token sandbox 使用独立 `CodexSandbox` 身份，不能访问真实用户的
 Windows Credential Manager。Broker 不再尝试改变该隔离：Codex 只生成非敏感请求并读取脱敏
 结果，不查询、不触发也不修改 Task Scheduler。固定任务以安装它的真实 Windows 用户、
-`Interactive/Limited` 方式在该用户登录时启动常驻 Broker，从而由既有 Java
+`Interactive/Limited` 方式在该用户登录及每分钟 watchdog 边界尝试启动常驻 Broker，从而由既有 Java
 `WindowsCredentialManagerSecretProvider` 仅在合法正式请求中读取两个固定
 Target：
 
@@ -14,10 +14,16 @@ StockQuant/ResearchDbPassword
 StockQuant/TushareToken
 ```
 
-计划任务名称固定为 `StockQuantLocalBroker`，只有一个绑定当前用户的登录 trigger。登录动作只启动
-固定 Broker 监听进程：`BROKER_AUTOSTART=true`，但不创建或运行 Provider 请求，
+计划任务名称固定为 `StockQuantLocalBroker`，包含绑定当前用户的登录 trigger 和一个无结束边界的
+`PT1M` watchdog TimeTrigger。两个 trigger 都只启动固定 Broker 监听进程；
+`MultipleInstancesPolicy=IgnoreNew` 保证健康 Broker 不产生第二实例：`BROKER_AUTOSTART=true`，
+但 trigger 本身不创建或运行 Provider 请求，
 `PROVIDER_AUTOSTART=false`。Broker 无请求时只更新脱敏 heartbeat、检查固定 request 目录并以
 一秒间隔休眠；不会读取 Credential Manager、连接数据库、创建 HTTP 客户端或访问 Tushare。
+
+旧登录单 trigger 正式任务在 Broker 退出后的实际状态为 `Ready`、`LastTaskResult=0xC000013A`、
+`NextRunTime=NONE`。有限 `RestartCount` 不是永久监督器；没有新的登录或时间触发事件时不会再次启动。
+watchdog TimeTrigger 仅补足该生命周期事件，不自动创建 request，因此不等于 Provider 自动运行。
 
 任务 action 只执行仓库中的固定
 `quant-server/scripts/host-broker/stock-quant-host-broker.ps1`，不接受命令文本、动态脚本路径、
@@ -33,8 +39,8 @@ Credential Target、密码或 Token 参数。安装器不调用、不查找也�
 powershell -NoProfile -ExecutionPolicy Bypass -File .\quant-server\scripts\host-broker\install-stock-quant-host-broker.ps1
 ```
 
-脚本显示任务名、固定脚本路径、真实账户、管理员状态、`Interactive/Limited`、当前用户登录
-trigger 数 `1` 和
+脚本显示任务名、固定脚本路径、真实账户、管理员状态、`Interactive/Limited`、当前用户登录与
+每分钟 watchdog trigger 总数 `2` 和
 两个凭据的整体存在状态，然后要求确认。它不读取 CredentialBlob、不保存账户密码、不调用 Provider，
 也不要求 `codex` CLI 位于 PATH。`-WhatIf` 可在不创建或修改计划任务的前提下完成只读预检；真实
 安装或卸载必须通过管理员检查。更新仍需真实用户重新运行该安装命令并确认。
@@ -42,7 +48,8 @@ trigger 数 `1` 和
 Windows Task Scheduler 注册后可能把 `计算机名\用户名` 规范化为裸用户名，并在 XML 中使用 SID；
 安装器因此按 SID 比较 principal，同时把 `Interactive`/`InteractiveToken`、`Limited`/
 `LeastPrivilege` 和路径/参数的安全等价形式归一化。action、固定 Broker 路径、working directory、
-单一登录 trigger、无限监听时限、有限重启、`AllowDemandStart=true`、`StartWhenAvailable=false` 等
+单一登录 trigger、单一 `PT1M` 无限重复 TimeTrigger、`StopAtDurationEnd=false`、`IgnoreNew`、
+无限监听时限、有限重启、`AllowDemandStart=true`、`StartWhenAvailable=false` 等
 边界仍逐项严格验证，
 每项失败返回独立脱敏 reason，不再折叠为 `TASK_DEFINITION_INVALID`。
 
@@ -51,6 +58,15 @@ Windows Task Scheduler 注册后可能把 `计算机名\用户名` 规范化为�
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\quant-server\scripts\host-broker\test-stock-quant-host-broker-install-roundtrip.ps1
+```
+
+升级前的真实生命周期验证使用另一个唯一临时任务及隔离 heartbeat 目录。测试先启动一次临时 Broker，
+跨越周期边界验证 `IgnoreNew`，随后强制终止该唯一进程；强制终止后不再调用启动命令，只等待下一个
+watchdog 边界恢复 `IDLE`。测试不读取 Credential、不连接 38432、不创建 Provider 客户端，并在结束时
+删除精确临时任务、进程和目录：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\quant-server\scripts\host-broker\test-stock-quant-host-broker-watchdog-roundtrip.ps1 -ExpectedCommit <当前完整Git SHA>
 ```
 
 正式安装采用事务式更新：更新前验证并导出已有 `StockQuantLocalBroker`；注册后校验失败时，新建场景

@@ -29,12 +29,22 @@ class StockQuantHostBrokerContractTest {
                 "Assert-StockQuantHostBrokerTaskDefinition"));
         assertTrue(taskDefinition.contains(
                 "New-ScheduledTaskTrigger -AtLogOn -User $UserId"));
+        assertTrue(taskDefinition.contains(
+                "New-ScheduledTaskTrigger -Once"));
+        assertTrue(taskDefinition.contains(
+                "-RepetitionInterval $script:ExpectedWatchdogInterval"));
+        assertTrue(taskDefinition.contains(
+                "$watchdogTrigger.Repetition.StopAtDurationEnd = $false"));
         assertFalse(taskDefinition.contains("-AtStartup"));
         assertFalse(taskDefinition.contains("-LogonType Password"));
         assertFalse(taskDefinition.contains("/RP"));
-        assertTrue(taskDefinition.contains("$triggers.Count -ne 1"));
+        assertTrue(taskDefinition.contains("$triggers.Count -ne 2"));
         assertTrue(taskDefinition.contains("AllowDemandStart"));
-        assertTrue(installer.contains("STOCK_QUANT_HOST_BROKER_TRIGGERS=1"));
+        assertTrue(installer.contains("STOCK_QUANT_HOST_BROKER_TRIGGERS=2"));
+        assertTrue(installer.contains(
+                "WATCHDOG_EVERY_1_MINUTE"));
+        assertTrue(installer.contains(
+                "STOCK_QUANT_HOST_BROKER_MULTIPLE_INSTANCES=IgnoreNew"));
         assertTrue(installer.contains("STOCK_QUANT_HOST_BROKER_AUTOSTART=true"));
         assertTrue(installer.contains(
                 "STOCK_QUANT_HOST_BROKER_PROVIDER_AUTOSTART=false"));
@@ -123,6 +133,13 @@ class StockQuantHostBrokerContractTest {
                 "TASK_TRIGGER_TYPE_MISMATCH",
                 "TASK_TRIGGER_USER_MISMATCH",
                 "TASK_TRIGGER_ENABLED_MISMATCH",
+                "TASK_WATCHDOG_TRIGGER_TYPE_MISMATCH",
+                "TASK_WATCHDOG_TRIGGER_ENABLED_MISMATCH",
+                "TASK_WATCHDOG_START_BOUNDARY_MISMATCH",
+                "TASK_WATCHDOG_END_BOUNDARY_MISMATCH",
+                "TASK_WATCHDOG_INTERVAL_MISMATCH",
+                "TASK_WATCHDOG_DURATION_MISMATCH",
+                "TASK_WATCHDOG_STOP_AT_DURATION_END_MISMATCH",
                 "TASK_EXECUTION_TIME_LIMIT_MISMATCH",
                 "TASK_ALLOW_DEMAND_START_MISMATCH",
                 "TASK_START_WHEN_AVAILABLE_MISMATCH",
@@ -166,6 +183,38 @@ class StockQuantHostBrokerContractTest {
         assertTrue(roundTrip.contains("PROVIDER_CALLS=0"));
         assertTrue(roundTrip.contains("PERMANENT_DATABASE_WRITES=0"));
         assertTrue(roundTrip.contains("CREDENTIAL_READS=0"));
+        assertTrue(roundTrip.contains("MSFT_TaskTimeTrigger"));
+        assertTrue(roundTrip.contains("Repetition.Interval"));
+        assertTrue(roundTrip.contains("PT1M"));
+        assertTrue(roundTrip.contains("Logon-only migration probe"));
+    }
+
+    @Test
+    void watchdogRoundTripProvesPeriodicRecoveryWithoutDemandStart()
+            throws Exception {
+        String watchdog = read("scripts/host-broker/"
+                + "test-stock-quant-host-broker-watchdog-roundtrip.ps1");
+
+        assertTrue(watchdog.contains("StockQuantHostBrokerRoundTrip_"));
+        assertTrue(watchdog.contains("-WatchdogStartAt $watchdogStartAt"));
+        assertTrue(watchdog.contains("Start-ScheduledTask"));
+        assertEquals(1, occurrences(watchdog, "Start-ScheduledTask"));
+        assertTrue(watchdog.contains(
+                "Stop-Process -Id $firstProcessId -Force"));
+        assertTrue(watchdog.indexOf("Start-ScheduledTask")
+                < watchdog.indexOf("Stop-Process -Id $firstProcessId"));
+        assertFalse(watchdog.substring(watchdog.indexOf(
+                "Stop-Process -Id $firstProcessId")).contains(
+                "Start-ScheduledTask"));
+        assertTrue(watchdog.contains("Get-ScheduledTaskInfo"));
+        assertTrue(watchdog.contains("WATCHDOG_AUTO_RECOVERY_TIMEOUT"));
+        assertTrue(watchdog.contains("WATCHDOG_SINGLE_INSTANCE=PASS"));
+        assertTrue(watchdog.contains("IDLE_CREDENTIAL_READS=0"));
+        assertTrue(watchdog.contains("REAL_PROVIDER_CALLS=0"));
+        assertTrue(watchdog.contains("PERMANENT_DATABASE_WRITES=0"));
+        assertTrue(watchdog.contains("WATCHDOG_RESIDUALS=0"));
+        assertFalse(watchdog.contains("StockQuant/ResearchDbPassword"));
+        assertFalse(watchdog.contains("StockQuant/TushareToken"));
     }
 
     @Test
@@ -378,6 +427,16 @@ class StockQuantHostBrokerContractTest {
         int to = source.indexOf(end, from + start.length());
         assertTrue(from >= 0 && to > from, start + " -> " + end);
         return source.substring(from, to);
+    }
+
+    private static int occurrences(String source, String value) {
+        int count = 0;
+        int offset = 0;
+        while ((offset = source.indexOf(value, offset)) >= 0) {
+            count++;
+            offset += value.length();
+        }
+        return count;
     }
 
     private static String read(String path) throws Exception {

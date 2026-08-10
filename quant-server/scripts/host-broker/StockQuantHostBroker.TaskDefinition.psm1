@@ -7,6 +7,7 @@ $script:ResidentExecutionTimeLimit = [TimeSpan]::Zero
 $script:LegacyExecutionTimeLimit = [TimeSpan]::FromMinutes(45)
 $script:ExpectedRestartCount = 3
 $script:ExpectedRestartInterval = [TimeSpan]::FromMinutes(1)
+$script:ExpectedWatchdogInterval = [TimeSpan]::FromMinutes(1)
 
 function Assert-StockQuantAllowedTaskName {
     param(
@@ -157,6 +158,7 @@ function New-StockQuantHostBrokerTaskDefinition {
         [string] $WorkingDirectory,
         [Parameter(Mandatory = $true)]
         [string] $UserId,
+        [DateTime] $WatchdogStartAt = [DateTime]::Now.AddMinutes(1),
         [string] $Description =
             'Fixed resident Stock Quant host broker; request-driven only and no secrets in task arguments.'
     )
@@ -166,14 +168,19 @@ function New-StockQuantHostBrokerTaskDefinition {
         -Argument $arguments -WorkingDirectory $WorkingDirectory
     $principal = New-ScheduledTaskPrincipal -UserId $UserId `
         -LogonType Interactive -RunLevel Limited
-    $trigger = New-ScheduledTaskTrigger -AtLogOn -User $UserId
+    $logonTrigger = New-ScheduledTaskTrigger -AtLogOn -User $UserId
+    $watchdogTrigger = New-ScheduledTaskTrigger -Once `
+        -At $WatchdogStartAt `
+        -RepetitionInterval $script:ExpectedWatchdogInterval
+    $watchdogTrigger.Repetition.StopAtDurationEnd = $false
     $settings = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew `
         -ExecutionTimeLimit $script:ResidentExecutionTimeLimit `
         -RestartCount $script:ExpectedRestartCount `
         -RestartInterval $script:ExpectedRestartInterval `
         -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
     return New-ScheduledTask -Action $action -Principal $principal `
-        -Trigger $trigger -Settings $settings -Description $Description
+        -Trigger @($logonTrigger, $watchdogTrigger) `
+        -Settings $settings -Description $Description
 }
 
 function Assert-StockQuantHostBrokerTaskDefinition {
@@ -255,24 +262,85 @@ function Assert-StockQuantHostBrokerTaskDefinition {
 
     $triggers = @($Task.Triggers | Where-Object { $null -ne $_ })
     $legacyOnDemand = $AllowLegacyOnDemand -and $triggers.Count -eq 0
-    if (-not $legacyOnDemand -and $triggers.Count -ne 1) {
+    $legacyLogonOnly = $AllowLegacyOnDemand -and $triggers.Count -eq 1 -and
+        [string]$triggers[0].CimClass.CimClassName -ceq
+            'MSFT_TaskLogonTrigger'
+    if (-not $legacyOnDemand -and -not $legacyLogonOnly -and
+        $triggers.Count -ne 2) {
         throw 'STOCK_QUANT_HOST_BROKER_TASK_TRIGGER_COUNT_MISMATCH'
     }
     if (-not $legacyOnDemand) {
-        $triggerType = [string]$triggers[0].CimClass.CimClassName
-        if ($triggerType -cne 'MSFT_TaskLogonTrigger') {
+        $logonTriggers = @($triggers | Where-Object {
+            [string]$_.CimClass.CimClassName -ceq
+                'MSFT_TaskLogonTrigger'
+        })
+        if ($logonTriggers.Count -ne 1) {
             throw 'STOCK_QUANT_HOST_BROKER_TASK_TRIGGER_TYPE_MISMATCH'
         }
+        $logonTrigger = $logonTriggers[0]
         $triggerUserSid = ConvertTo-StockQuantPrincipalSid `
-            -Value $triggers[0].UserId
+            -Value $logonTrigger.UserId
         if ($triggerUserSid -cne $ExpectedUserSid) {
             throw 'STOCK_QUANT_HOST_BROKER_TASK_TRIGGER_USER_MISMATCH'
         }
         $triggerEnabled = ConvertTo-StockQuantBoolean `
-            -Value $triggers[0].Enabled `
+            -Value $logonTrigger.Enabled `
             -FailureCode 'STOCK_QUANT_HOST_BROKER_TASK_TRIGGER_ENABLED_MISMATCH'
         if (-not $triggerEnabled) {
             throw 'STOCK_QUANT_HOST_BROKER_TASK_TRIGGER_ENABLED_MISMATCH'
+        }
+
+        if (-not $legacyLogonOnly) {
+            $watchdogTriggers = @($triggers | Where-Object {
+                [string]$_.CimClass.CimClassName -ceq
+                    'MSFT_TaskTimeTrigger'
+            })
+            if ($watchdogTriggers.Count -ne 1) {
+                throw `
+                    'STOCK_QUANT_HOST_BROKER_TASK_WATCHDOG_TRIGGER_TYPE_MISMATCH'
+            }
+            $watchdogTrigger = $watchdogTriggers[0]
+            $watchdogEnabled = ConvertTo-StockQuantBoolean `
+                -Value $watchdogTrigger.Enabled -FailureCode `
+                    'STOCK_QUANT_HOST_BROKER_TASK_WATCHDOG_TRIGGER_ENABLED_MISMATCH'
+            if (-not $watchdogEnabled) {
+                throw `
+                    'STOCK_QUANT_HOST_BROKER_TASK_WATCHDOG_TRIGGER_ENABLED_MISMATCH'
+            }
+            try {
+                [void][DateTimeOffset]::Parse(
+                    ([string]$watchdogTrigger.StartBoundary).Trim(),
+                    [Globalization.CultureInfo]::InvariantCulture,
+                    [Globalization.DateTimeStyles]::RoundtripKind)
+            } catch {
+                throw `
+                    'STOCK_QUANT_HOST_BROKER_TASK_WATCHDOG_START_BOUNDARY_MISMATCH'
+            }
+            if (-not [string]::IsNullOrWhiteSpace(
+                    [string]$watchdogTrigger.EndBoundary)) {
+                throw `
+                    'STOCK_QUANT_HOST_BROKER_TASK_WATCHDOG_END_BOUNDARY_MISMATCH'
+            }
+            $watchdogInterval = ConvertTo-StockQuantDuration `
+                -Value $watchdogTrigger.Repetition.Interval -FailureCode `
+                    'STOCK_QUANT_HOST_BROKER_TASK_WATCHDOG_INTERVAL_MISMATCH'
+            if ($watchdogInterval -ne $script:ExpectedWatchdogInterval) {
+                throw `
+                    'STOCK_QUANT_HOST_BROKER_TASK_WATCHDOG_INTERVAL_MISMATCH'
+            }
+            if (-not [string]::IsNullOrWhiteSpace(
+                    [string]$watchdogTrigger.Repetition.Duration)) {
+                throw `
+                    'STOCK_QUANT_HOST_BROKER_TASK_WATCHDOG_DURATION_MISMATCH'
+            }
+            $stopAtDurationEnd = ConvertTo-StockQuantBoolean `
+                -Value $watchdogTrigger.Repetition.StopAtDurationEnd `
+                -FailureCode `
+                    'STOCK_QUANT_HOST_BROKER_TASK_WATCHDOG_STOP_AT_DURATION_END_MISMATCH'
+            if ($stopAtDurationEnd) {
+                throw `
+                    'STOCK_QUANT_HOST_BROKER_TASK_WATCHDOG_STOP_AT_DURATION_END_MISMATCH'
+            }
         }
     }
 

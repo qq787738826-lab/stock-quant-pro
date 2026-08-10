@@ -184,7 +184,22 @@ try {
     }
     $logonTrigger = $serializedDocument.SelectSingleNode(
         "//*[local-name()='Triggers']/*[local-name()='LogonTrigger']")
-    if ($null -eq $logonTrigger) {
+    $watchdogTrigger = $serializedDocument.SelectSingleNode(
+        "//*[local-name()='Triggers']/*[local-name()='TimeTrigger']")
+    $watchdogInterval = $serializedDocument.SelectSingleNode(
+        "//*[local-name()='TimeTrigger']/*[local-name()='Repetition']/*[local-name()='Interval']")
+    $watchdogDuration = $serializedDocument.SelectSingleNode(
+        "//*[local-name()='TimeTrigger']/*[local-name()='Repetition']/*[local-name()='Duration']")
+    $watchdogEndBoundary = $serializedDocument.SelectSingleNode(
+        "//*[local-name()='TimeTrigger']/*[local-name()='EndBoundary']")
+    $watchdogStopAtDurationEnd = $serializedDocument.SelectSingleNode(
+        "//*[local-name()='TimeTrigger']/*[local-name()='Repetition']/*[local-name()='StopAtDurationEnd']")
+    if ($null -eq $logonTrigger -or $null -eq $watchdogTrigger -or
+        $null -eq $watchdogInterval -or
+        $watchdogInterval.InnerText -cne 'PT1M' -or
+        $null -ne $watchdogDuration -or $null -ne $watchdogEndBoundary -or
+        ($null -ne $watchdogStopAtDurationEnd -and
+            $watchdogStopAtDurationEnd.InnerText -cne 'false')) {
         throw 'STOCK_QUANT_HOST_BROKER_TASK_XML_TRIGGER_MISMATCH'
     }
     $passed++
@@ -206,9 +221,20 @@ try {
 
     $actions = @($deserialized.Actions | Where-Object { $null -ne $_ })
     $triggers = @($deserialized.Triggers | Where-Object { $null -ne $_ })
-    if ($actions.Count -ne 1 -or $triggers.Count -ne 1 -or
-        [string]$triggers[0].CimClass.CimClassName -ne
-            'MSFT_TaskLogonTrigger' -or
+    $logonTriggers = @($triggers | Where-Object {
+        [string]$_.CimClass.CimClassName -eq 'MSFT_TaskLogonTrigger'
+    })
+    $watchdogTriggers = @($triggers | Where-Object {
+        [string]$_.CimClass.CimClassName -eq 'MSFT_TaskTimeTrigger'
+    })
+    if ($actions.Count -ne 1 -or $triggers.Count -ne 2 -or
+        $logonTriggers.Count -ne 1 -or $watchdogTriggers.Count -ne 1 -or
+        [string]$watchdogTriggers[0].Repetition.Interval -ne 'PT1M' -or
+        -not [string]::IsNullOrWhiteSpace(
+            [string]$watchdogTriggers[0].Repetition.Duration) -or
+        -not [string]::IsNullOrWhiteSpace(
+            [string]$watchdogTriggers[0].EndBoundary) -or
+        [bool]$watchdogTriggers[0].Repetition.StopAtDurationEnd -or
         [string]$deserialized.Principal.LogonType -ne 'Interactive' -or
         [string]$deserialized.Principal.RunLevel -ne 'Limited' -or
         -not [bool]$deserialized.Settings.AllowDemandStart -or
@@ -256,6 +282,42 @@ try {
     Assert-ProbeDefinition -Task (Get-ScheduledTask `
         -TaskName $probeTaskName -ErrorAction Stop) -Registered
     $passed++
+
+    Unregister-ScheduledTask -TaskName $probeTaskName `
+        -Confirm:$false -ErrorAction Stop
+    $created = $false
+    $residentLogon = New-ScheduledTaskTrigger -AtLogOn `
+        -User $identity.Name
+    $legacyResidentDefinition = New-ScheduledTask -Action $legacyAction `
+        -Principal $legacyPrincipal -Trigger $residentLogon `
+        -Settings (New-ScheduledTaskSettingsSet `
+            -MultipleInstances IgnoreNew `
+            -ExecutionTimeLimit ([TimeSpan]::Zero) `
+            -RestartCount 3 `
+            -RestartInterval ([TimeSpan]::FromMinutes(1)) `
+            -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries) `
+        -Description 'Logon-only migration probe; never executed.'
+    Register-ScheduledTask -TaskName $probeTaskName `
+        -InputObject $legacyResidentDefinition -Force | Out-Null
+    $created = $true
+    Assert-ProbeDefinition -Task (Get-ScheduledTask `
+        -TaskName $probeTaskName -ErrorAction Stop) -Registered `
+        -LegacyOnDemand
+    $passed++
+
+    $residentMigration =
+        Invoke-StockQuantHostBrokerTaskRegistrationTransaction `
+            -TaskName $probeTaskName -Definition $definition `
+            -ExpectedPowerShellExecutable $powershellExe `
+            -ExpectedBrokerScript $brokerScript `
+            -ExpectedWorkingDirectory $repoRoot `
+            -ExpectedUserSid $identity.User.Value
+    if ($residentMigration.Created -or -not $residentMigration.Updated) {
+        throw 'STOCK_QUANT_HOST_BROKER_LOGON_MIGRATION_INVALID'
+    }
+    Assert-ProbeDefinition -Task (Get-ScheduledTask `
+        -TaskName $probeTaskName -ErrorAction Stop) -Registered
+    $passed++
 } finally {
     if ($created -or $null -ne (Get-ScheduledTask `
             -TaskName $probeTaskName -ErrorAction SilentlyContinue)) {
@@ -295,6 +357,6 @@ Write-Output 'STOCK_QUANT_HOST_BROKER_INSTALL_ROUNDTRIP_PROVIDER_CALLS=0'
 Write-Output 'STOCK_QUANT_HOST_BROKER_INSTALL_ROUNDTRIP_PERMANENT_DATABASE_WRITES=0'
 Write-Output 'STOCK_QUANT_HOST_BROKER_INSTALL_ROUNDTRIP_CREDENTIAL_READS=0'
 Write-Output 'STOCK_QUANT_HOST_BROKER_INSTALL_ROUNDTRIP_RESIDUALS=0'
-if ($passed -ne 12) {
+if ($passed -ne 14) {
     throw 'STOCK_QUANT_HOST_BROKER_INSTALL_ROUNDTRIP_COUNT_INVALID'
 }

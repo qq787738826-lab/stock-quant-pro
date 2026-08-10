@@ -189,7 +189,8 @@
   [阶段记录](stage-stock-quant-local-automation.md)。
 - STOCK-QUANT-HOST-BROKER：Codex restricted-token 身份无法访问真实用户 Credential Manager，
   该隔离不再尝试绕过。固定计划任务 `StockQuantLocalBroker` 由真实 Windows 用户以
-  `Interactive/Limited`、当前用户登录 trigger 方式启动固定常驻 Broker 脚本；
+  `Interactive/Limited`、当前用户登录 trigger 加无结束边界的 `PT1M` watchdog TimeTrigger 启动固定
+  常驻 Broker 脚本，`MultipleInstancesPolicy=IgnoreNew`；
   `BROKER_AUTOSTART=true`、`PROVIDER_AUTOSTART=false`。Codex 只在 target 下写严格非敏感请求并
   读取脱敏结果，不再查询或触发 Task Scheduler。Broker 以一秒低频轮询自动原子领取请求，空闲时
   只写同 Git SHA 的脱敏 heartbeat，不读 Credential、不连数据库、不创建 HTTP 客户端。请求仅允许
@@ -204,8 +205,11 @@
 - Host Broker 安装定义兼容 Windows Task Scheduler 对本地中文账户的裸用户名/SID 规范化；安装前
   可用唯一临时任务完成 PowerShell 5.1 注册/Get/Export/恢复 round-trip。安装更新保留并验证旧 XML，
   校验失败只清理本次精确新任务或恢复旧定义，不触碰其他任务；各安全条件使用独立脱敏 reason。
-  旧的零 trigger 按需定义只允许作为一次升级来源；新定义严格要求单一当前用户登录 trigger、
+  旧的零 trigger 按需定义和旧的登录单 trigger 定义只允许作为一次升级来源；新定义严格要求单一当前
+  用户登录 trigger、单一无结束 `PT1M` watchdog TimeTrigger、`StopAtDurationEnd=false`、`IgnoreNew`、
   `Interactive/Limited`、固定 action、无限监听时限及有限重启，claimed 请求在进程重启后绝不重放。
+  真实临时 Task Scheduler 生命周期测试已证明健康实例跨周期保持单实例，forced-kill 后无需 demand-start
+  在 `41.528s` 恢复 `IDLE`，期间 Credential/Provider/永久库计数均为 0 且临时残留为 0。
 - 3A-R3B-F2A 任务书 / 阶段记录：[tasks/3ar3b-f2a-research-preview-product.md](tasks/3ar3b-f2a-research-preview-product.md) / [stage-3ar3b-f2a-research-preview-product.md](stage-3ar3b-f2a-research-preview-product.md)。
 - 3A-R3B-F2A-R1 任务书 / 阶段记录：[tasks/3ar3b-f2a-r1-preview-ux-convergence.md](tasks/3ar3b-f2a-r1-preview-ux-convergence.md) / [stage-3ar3b-f2a-r1-preview-ux-convergence.md](stage-3ar3b-f2a-r1-preview-ux-convergence.md)。
 - 3A-R3B-F2A-R1A 任务书 / 阶段记录：[tasks/3ar3b-f2a-r1a-visual-semantics-fix.md](tasks/3ar3b-f2a-r1a-visual-semantics-fix.md) / [stage-3ar3b-f2a-r1a-visual-semantics-fix.md](stage-3ar3b-f2a-r1a-visual-semantics-fix.md)。
@@ -222,7 +226,7 @@
 - 3A-R3B-F1F-B2-RUNNER 任务书 / 阶段记录：[tasks/3ar3b-f1f-b2-controlled-runner.md](tasks/3ar3b-f1f-b2-controlled-runner.md) / [stage-3ar3b-f1f-b2-controlled-runner.md](stage-3ar3b-f1f-b2-controlled-runner.md)。
 - 3A-R3B-F1F-B2-DBPREP 任务书 / 阶段记录：[tasks/3ar3b-f1f-b2-database-preparation.md](tasks/3ar3b-f1f-b2-database-preparation.md) / [stage-3ar3b-f1f-b2-database-preparation.md](stage-3ar3b-f1f-b2-database-preparation.md)；首次冻结记录：[stage-3ar3b-f1f-b2-freeze.md](stage-3ar3b-f1f-b2-freeze.md)。
 - 3A-R3B-F1F-B2-E2E-CLOSEOUT 任务书 / 阶段记录：[tasks/3ar3b-f1f-b2-e2e-closeout.md](tasks/3ar3b-f1f-b2-e2e-closeout.md) / [stage-3ar3b-f1f-b2-e2e-closeout.md](stage-3ar3b-f1f-b2-e2e-closeout.md)。
-- 当前正式状态：`F0_AUDIT_RESULT=PARTIAL`、`FREE_IMPLEMENTATION_PATH=RESEARCH_PREVIEW_FIRST`、`FREE_PRODUCT_PREVIEW_GATE=PASS`、`FREE_PROVIDER_VALIDATION_GATE=BLOCKED`、`PAID_PROVIDER_UPGRADE_DECISION=PENDING`、`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`。Track A 的免费研究预览产品形态验证已经完成；该 PASS 不改变 Provider、PIT、效果、Shadow、付费数据或交易资格。F1A—F1E、F1F-A、F1F-B1、F1F-B2-RUNNER、DBPREP、事务、typed fact identity、SYSTEM_KNOWLEDGE 回读修复与 E2E-CLOSEOUT 均已验收合入。F1D 已把当前个人研究书面许可闭环为 PASS；最终真实 F1F-B2 已持久化为 `PASSED`，因此 `CONTROLLED_ACCEPTANCE_STATUS=PASSED`、`REDUCED_RESEARCH_OPERATIONAL_READY=true`。完整技术合同仍有十项阻断，所以 `F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE`、`fullF1EntryReady=false`；缩减研究 operational 不等于生产、正常业务库、scheduler、Agent、回测、Shadow 或交易就绪。Tushare 累计真实业务请求为 32，iFinD 真实调用数为 0；正常业务库 V13 未执行，F2B/F3、3A-R3B-1 均未开始，Day 002 未创建，scheduler 关闭，3B 未开始。
+- 当前正式状态：`F0_AUDIT_RESULT=PARTIAL`、`FREE_IMPLEMENTATION_PATH=RESEARCH_PREVIEW_FIRST`、`FREE_PRODUCT_PREVIEW_GATE=PASS`、`FREE_PROVIDER_VALIDATION_GATE=BLOCKED`、`PAID_PROVIDER_UPGRADE_DECISION=PENDING`、`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`。Track A 的免费研究预览产品形态验证已经完成；该 PASS 不改变 Provider、PIT、效果、Shadow、付费数据或交易资格。F1A—F1E、F1F-A、F1F-B1、F1F-B2-RUNNER、DBPREP、事务、typed fact identity、SYSTEM_KNOWLEDGE 回读修复与 E2E-CLOSEOUT 均已验收合入。F1D 已把当前个人研究书面许可闭环为 PASS；最终真实 F1F-B2 已持久化为 `PASSED`，因此 `CONTROLLED_ACCEPTANCE_STATUS=PASSED`、`REDUCED_RESEARCH_OPERATIONAL_READY=true`。完整技术合同仍有十项阻断，所以 `F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE`、`fullF1EntryReady=false`；缩减研究 operational 不等于生产、正常业务库、scheduler、Agent、回测、Shadow 或交易就绪。Tushare 累计真实业务请求为 33，iFinD 真实调用数为 0；正常业务库 V13 未执行，F2B/F3、3A-R3B-1 均未开始，Day 002 未创建，scheduler 关闭，3B 未开始。
 - `master`：`27d9099 chore: checkpoint Stock Quant Pro 1.3.1 and remove tracked cache`
 - 版本号仍保持 `1.3.1`；尚未发布 `1.4.0`。
 
