@@ -8,8 +8,9 @@ CodexSandbox 身份直接读取 Credential Manager。交付固定安装、触发
 增加宿主身份拒绝，只能由 Broker 以真实用户调用。
 
 任务 `StockQuantLocalBroker` 使用安装用户、`Interactive/Limited`、无 trigger、无密码任务登录，
-action 只执行固定 Broker 脚本。安装时仅给精确 sandbox SID 任务读取/执行权，同时拒绝该 SID 修改
-Broker 脚本目录；不向 Authenticated Users 或 Everyone 扩权。
+action 只执行固定 Broker 脚本。安装器要求管理员 PowerShell，但不调用、不查找或安装 `codex` CLI；
+任务使用当前真实 Windows 用户和任务计划程序的所有者/管理员默认安全边界，不向 Authenticated
+Users、Everyone 或 SYSTEM 扩权。
 
 Broker 对请求执行固定目录、完整字段、过期时间、重复 ID、路径、JAR/hash/sidecar、授权、Git 和
 预算校验，使用同目录原子 rename 领取一次后退出。四个 operation 均映射到仓库内固定函数与固定
@@ -20,7 +21,10 @@ Broker 对请求执行固定目录、完整字段、过期时间、重复 ID、�
 ## 验证与边界
 
 - 协议攻击面覆盖：命令字段、路径逃逸、未知 operation、过期、重复 key、秘密字段和重复 requestId。
-- 真实用户安装 `-WhatIf` 只检查两个 Target 的存在状态，并确认实际用户和 sandbox SID；不创建任务。
+- 真实用户安装 `-WhatIf` 在 PATH 不存在 `codex` 时仍只检查两个 Target 的存在状态，并确认实际
+  用户、管理员要求和固定任务定义；不创建任务。
+- host smoke 在 PATH 不存在 `codex` 时仍可完成固定 Target 存在性与脱敏结果检查，Provider 调用 0、
+  永久数据库写入 0。
 - 打包 Fake Provider、临时 PostgreSQL、typed fact、SYSTEM_KNOWLEDGE、QFQ、输出审计和残留检查
   必须全部通过后才可合入。
 - 本阶段不安装计划任务、不执行真实 Day001、不读取 CredentialBlob、不调用真实 Provider、不写

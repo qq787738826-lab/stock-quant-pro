@@ -12,6 +12,8 @@ Import-Module (Join-Path $PSScriptRoot `
 
 $paths = Initialize-StockQuantHostBrokerDirectories
 $identity = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+$credentialStatusScript = Join-Path $paths.RepositoryRoot `
+    'quant-server\scripts\set-stock-quant-secrets.ps1'
 $testPrefix = 'stock-quant-host-broker-host-smoke-'
 $testRoot = Join-Path $paths.TargetRoot `
     ($testPrefix + [Guid]::NewGuid().ToString('N'))
@@ -78,22 +80,14 @@ try {
     [IO.File]::WriteAllText($authorization,
         $authorizationContent + "`n", [Text.UTF8Encoding]::new($false))
 
-    $oldTemp = $env:TEMP
-    $oldTmp = $env:TMP
-    try {
-        $env:TEMP = $testRoot
-        $env:TMP = $testRoot
-        $sandboxStatus = @(& codex sandbox -P stock_quant_local -C . `
-            powershell -NoProfile -ExecutionPolicy Bypass -File `
-            .\quant-server\scripts\set-stock-quant-secrets.ps1 -Status 2>&1)
-        $sandboxExit = $LASTEXITCODE
-    } finally {
-        $env:TEMP = $oldTemp
-        $env:TMP = $oldTmp
-    }
-    if ($sandboxExit -ne 10 -or
-        $sandboxStatus -notcontains 'STOCK_QUANT_CREDENTIALS_READY=False') {
-        throw 'STOCK_QUANT_HOST_BROKER_SANDBOX_ISOLATION_INVALID'
+    $credentialStatus = @(& $credentialStatusScript -Status 2>&1 |
+        ForEach-Object { [string]$_ })
+    if ($LASTEXITCODE -ne 0 -or $credentialStatus.Count -ne 3 -or
+        $credentialStatus -notcontains `
+            'StockQuant/ResearchDbPassword=PRESENT' -or
+        $credentialStatus -notcontains 'StockQuant/TushareToken=PRESENT' -or
+        $credentialStatus -notcontains 'STOCK_QUANT_CREDENTIALS_READY=True') {
+        throw 'STOCK_QUANT_HOST_BROKER_HOST_CREDENTIAL_STATUS_INVALID'
     }
 
     $requestId = New-StockQuantHostBrokerRequestId
@@ -144,8 +138,10 @@ try {
         throw 'STOCK_QUANT_HOST_BROKER_HOST_SMOKE_RESULT_INVALID'
     }
     Write-Output 'STOCK_QUANT_HOST_BROKER_HOST_CREDENTIAL_STATUS=PASS'
-    Write-Output 'STOCK_QUANT_HOST_BROKER_SANDBOX_CREDENTIAL_STATUS=ISOLATED'
+    Write-Output "STOCK_QUANT_HOST_BROKER_HOST_ACCOUNT=$identity"
+    Write-Output 'STOCK_QUANT_HOST_BROKER_CODEX_CLI_REQUIRED=false'
     Write-Output 'STOCK_QUANT_HOST_BROKER_HOST_SMOKE_PROVIDER_CALLS=0'
+    Write-Output 'STOCK_QUANT_HOST_BROKER_HOST_SMOKE_PERMANENT_DATABASE_WRITES=0'
 } finally {
     Pop-Location
     if ($null -ne $requestId) {

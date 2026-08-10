@@ -200,6 +200,7 @@ Vue 修改后：
 - 自动修复循环可以在任务授权范围内执行定向测试、临时 PostgreSQL、打包 Fake Provider
   E2E、提交和普通 push；真实运行失败后不得重试、补跑、复用 runId 或自动签发新授权。
 - Broker 安装只能由真实 Windows 用户显式执行一次；任务固定为 `Interactive/Limited`、
-  无触发器、按需启动、固定脚本且不保存账户密码。安装时只授予精确 CodexSandbox SID
-  对任务的读取/执行权，并拒绝该 SID 修改 Broker 脚本；不得改为 Authenticated Users、
-  SYSTEM、高权限、开机启动或定时真实 Provider 运行。
+  无触发器、按需启动、固定脚本且不保存账户密码。安装器必须要求管理员 PowerShell，但不得
+  调用、查找或安装 `codex` CLI；任务以当前真实 Windows 用户为 principal，并保留任务计划程序
+  的所有者/管理员默认安全边界，不得扩权给 Authenticated Users、Everyone、SYSTEM，不得使用
+  高权限、开机启动或定时真实 Provider 运行。

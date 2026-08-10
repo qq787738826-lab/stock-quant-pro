@@ -21,27 +21,75 @@ class StockQuantHostBrokerContractTest {
         assertTrue(script.contains("-LogonType Interactive"));
         assertTrue(script.contains("-RunLevel Limited"));
         assertTrue(script.contains("Register-ScheduledTask"));
+        assertTrue(script.contains(
+                "Assert-TaskDefinition -Task $definition"));
         assertFalse(script.contains("New-ScheduledTaskTrigger"));
         assertFalse(script.contains("-LogonType Password"));
         assertFalse(script.contains("/RP"));
-        assertTrue(script.contains("$task.Triggers.Count -ne 0"));
+        assertTrue(script.contains("$triggers.Count -ne 0"));
         assertTrue(script.contains("STOCK_QUANT_HOST_BROKER_TRIGGERS=0"));
         assertTrue(script.contains("[switch] $Uninstall"));
     }
 
     @Test
-    void taskAclAllowsOnlyExactSandboxSidToTriggerNotRunTask() throws Exception {
-        String script = read("scripts/host-broker/"
+    void installerRequiresAdministratorAndNeverInvokesCodexCli()
+            throws Exception {
+        String installer = read("scripts/host-broker/"
                 + "install-stock-quant-host-broker.ps1");
+        String hostSmoke = read("scripts/host-broker/"
+                + "test-stock-quant-host-broker-host-smoke.ps1");
 
-        assertTrue(script.contains("CodexSandbox"));
-        assertTrue(script.contains("(A;;GRGX;;;$SandboxSid)"));
-        assertTrue(script.contains("(A;;GA;;;$OwnerSid)"));
-        assertTrue(script.contains("SetSecurityDescriptor"));
-        assertTrue(script.contains("Set-BrokerScriptSandboxWriteDenied"));
-        assertTrue(script.contains("AccessControlType]::Deny"));
-        assertFalse(script.contains(";;;AU)"));
-        assertFalse(script.contains(";;;WD)"));
+        assertTrue(installer.contains(
+                "WindowsBuiltInRole]::Administrator"));
+        assertTrue(installer.contains(
+                "STOCK_QUANT_HOST_BROKER_ADMINISTRATOR_REQUIRED"));
+        assertTrue(installer.contains(
+                "-not $isAdministrator -and -not $WhatIfPreference"));
+        assertTrue(installer.contains("$hostIdentity.Name"));
+        assertTrue(installer.contains("$credentialStatusScript -Status"));
+        assertTrue(installer.contains(
+                "StockQuant/ResearchDbPassword=PRESENT"));
+        assertTrue(installer.contains("StockQuant/TushareToken=PRESENT"));
+        assertTrue(installer.contains(
+                "STOCK_QUANT_HOST_BROKER_CODEX_CLI_REQUIRED=false"));
+        for (String script : List.of(installer, hostSmoke)) {
+            assertFalse(script.contains("& codex"));
+            assertFalse(script.contains("codex sandbox"));
+            assertFalse(script.contains("codex exec"));
+            assertFalse(script.contains("Get-StockQuantSandboxIdentity"));
+        }
+        assertFalse(installer.contains("Set-TaskRunAcl"));
+        assertFalse(installer.contains("SetSecurityDescriptor"));
+        assertFalse(installer.contains("Set-Acl"));
+    }
+
+    @Test
+    void noCodexHarnessChecksCredentialsWithoutProviderOrDatabaseWrites()
+            throws Exception {
+        String harness = read("scripts/host-broker/"
+                + "test-stock-quant-host-broker-installer-no-codex.ps1");
+        String hostSmoke = read("scripts/host-broker/"
+                + "test-stock-quant-host-broker-host-smoke.ps1");
+        String secretSetup = read("scripts/set-stock-quant-secrets.ps1");
+        String presenceCheck = section(secretSetup,
+                "function Test-CredentialExists",
+                "function Write-SecureCredential");
+
+        assertTrue(harness.contains("$env:PATH = $minimalPath -join ';'"));
+        assertTrue(harness.contains("Get-Command codex"));
+        assertTrue(harness.contains("$installer -WhatIf"));
+        assertTrue(harness.contains("$hostSmoke -ExpectedCommit"));
+        assertTrue(hostSmoke.contains(
+                "StockQuant/ResearchDbPassword=PRESENT"));
+        assertTrue(hostSmoke.contains("StockQuant/TushareToken=PRESENT"));
+        assertTrue(hostSmoke.contains(
+                "HOST_SMOKE_PROVIDER_CALLS=0"));
+        assertTrue(hostSmoke.contains(
+                "HOST_SMOKE_PERMANENT_DATABASE_WRITES=0"));
+        assertTrue(presenceCheck.contains("CredRead"));
+        assertTrue(presenceCheck.contains("CredFree"));
+        assertFalse(presenceCheck.contains("CredentialBlob"));
+        assertFalse(presenceCheck.contains("PtrToString"));
     }
 
     @Test

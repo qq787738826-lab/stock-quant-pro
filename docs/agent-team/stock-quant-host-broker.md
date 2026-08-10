@@ -22,21 +22,28 @@ schtasks.exe /Run /TN "StockQuantLocalBroker"
 
 任务 action 只执行仓库中的固定
 `quant-server/scripts/host-broker/stock-quant-host-broker.ps1`，不接受命令文本、动态脚本路径、
-Credential Target、密码或 Token 参数。安装脚本检测精确 Codex sandbox SID，仅授予该 SID 对任务
-的读取/执行权；任务仍以真实用户为 principal。Broker 脚本目录同时对该 sandbox SID 加拒写 ACL，
-避免请求方修改宿主代码后再触发。
+Credential Target、密码或 Token 参数。安装器不调用、不查找也不安装 `codex` CLI；任务以执行安装
+的当前真实 Windows 用户为唯一 principal，并使用 Windows 任务计划程序的所有者/管理员默认安全
+边界，不向 Authenticated Users、Everyone 或 SYSTEM 扩权。
 
 ## 一次安装与卸载
 
-必须在真实用户的原生 Windows PowerShell 中执行一次：
+必须在真实用户的管理员 Windows PowerShell 中执行一次：
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\quant-server\scripts\host-broker\install-stock-quant-host-broker.ps1
 ```
 
-脚本显示任务名、固定脚本路径、真实账户、`Interactive/Limited`、trigger 数 `0`、检测到的 sandbox
-SID 和两个凭据的整体存在状态，然后要求确认。它不读取 CredentialBlob、不保存账户密码，也不修改
-Codex 全局配置。更新仍需真实用户重新运行该安装命令并确认。
+脚本显示任务名、固定脚本路径、真实账户、管理员状态、`Interactive/Limited`、trigger 数 `0` 和
+两个凭据的整体存在状态，然后要求确认。它不读取 CredentialBlob、不保存账户密码、不调用 Provider，
+也不要求 `codex` CLI 位于 PATH。`-WhatIf` 可在不创建或修改计划任务的前提下完成只读预检；真实
+安装或卸载必须通过管理员检查。更新仍需真实用户重新运行该安装命令并确认。
+
+安装后的无 Provider 自检命令：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\quant-server\scripts\host-broker\test-stock-quant-host-broker-host-smoke.ps1 -ExpectedCommit <当前完整Git SHA>
+```
 
 卸载命令：
 
@@ -44,7 +51,7 @@ Codex 全局配置。更新仍需真实用户重新运行该安装命令并确�
 powershell -NoProfile -ExecutionPolicy Bypass -File .\quant-server\scripts\host-broker\install-stock-quant-host-broker.ps1 -Uninstall
 ```
 
-卸载仅删除固定任务并移除安装脚本加到 Broker 目录上的精确 sandbox 拒写 ACE，不删除 Credential。
+卸载仅删除固定任务，不删除 Credential。
 
 ## 严格请求与结果协议
 

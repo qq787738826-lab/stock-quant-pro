@@ -185,7 +185,8 @@
   严格非敏感请求、执行固定 `schtasks /Run` 并读取脱敏结果。请求仅允许四个 operation，拒绝
   重复/未知/过期字段、动态命令、路径逃逸、秘密和重复 requestId；正式 `RUN_DAY001` 必须先通过
   USER_APPROVED 授权/JAR/sidecar/Git/预算 preflight。`stock_quant_formal_runner` 已移除 Tushare
-  直连权限，原统一入口只允许宿主真实用户调用。本阶段真实 Provider 调用 0、永久库写入 0、
+  直连权限，原统一入口只允许宿主真实用户调用。一次性安装器和 host smoke 不调用或依赖 `codex`
+  CLI，真实安装仍要求当前真实用户的管理员 PowerShell。本阶段真实 Provider 调用 0、永久库写入 0、
   正式授权/Day001 执行 0，七项治理状态不变。操作与阶段证据见
   [宿主 Broker 说明](stock-quant-host-broker.md)和
   [阶段记录](stage-stock-quant-host-broker.md)。
