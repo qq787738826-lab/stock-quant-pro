@@ -9,6 +9,8 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 Import-Module (Join-Path $PSScriptRoot `
     'StockQuantHostBroker.Protocol.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot `
+    'StockQuantHostBroker.TestSupport.psm1') -Force
 
 $paths = Initialize-StockQuantHostBrokerDirectories
 $identity = [Security.Principal.WindowsIdentity]::GetCurrent().Name
@@ -21,6 +23,7 @@ $jar = Join-Path $testRoot 'host-smoke.jar'
 $proof = "$jar.f1f-b2-proof.properties"
 $authorization = Join-Path $testRoot 'host-smoke-authorization.properties'
 $requestId = $null
+$resident = $null
 
 if ($identity -match '(?i)CodexSandbox') {
     throw 'STOCK_QUANT_HOST_BROKER_REAL_USER_REQUIRED'
@@ -80,6 +83,21 @@ try {
     [IO.File]::WriteAllText($authorization,
         $authorizationContent + "`n", [Text.UTF8Encoding]::new($false))
 
+    $resultsBeforeIdle = @(Get-ChildItem -LiteralPath $paths.Results -File |
+        ForEach-Object { $_.Name } | Sort-Object)
+    $resident = Start-StockQuantTestResidentBroker `
+        -ExpectedCommit $ExpectedCommit -LogDirectory $testRoot
+    Start-Sleep -Milliseconds 2200
+    $idleHeartbeat = Read-StockQuantHostBrokerHeartbeat `
+        -ExpectedGitCommit $ExpectedCommit
+    if ([int]$idleHeartbeat.processId -ne $resident.ProcessId -or
+        [string]$idleHeartbeat.state -ne 'IDLE' -or
+        @(Compare-Object -ReferenceObject $resultsBeforeIdle `
+            -DifferenceObject @(Get-ChildItem -LiteralPath $paths.Results `
+                -File | ForEach-Object { $_.Name } | Sort-Object)).Count -ne 0) {
+        throw 'STOCK_QUANT_HOST_BROKER_IDLE_INVARIANT_FAILED'
+    }
+
     $credentialStatus = @(& $credentialStatusScript -Status 2>&1 |
         ForEach-Object { [string]$_ })
     if ($LASTEXITCODE -ne 0 -or $credentialStatus.Count -ne 3 -or
@@ -125,11 +143,14 @@ try {
         'source.request.id' = 'NONE'
     }
     Write-StockQuantHostBrokerRequest -Values $values | Out-Null
-    & $paths.BrokerScript | Out-Host
-    if ($LASTEXITCODE -ne 0) {
-        throw 'STOCK_QUANT_HOST_BROKER_HOST_SMOKE_EXECUTION_FAILED'
-    }
     $resultPath = Join-Path $paths.Results "$requestId.result.json"
+    $deadline = [DateTimeOffset]::UtcNow.AddSeconds(15)
+    while (-not (Test-Path -LiteralPath $resultPath -PathType Leaf)) {
+        if ([DateTimeOffset]::UtcNow -ge $deadline) {
+            throw 'STOCK_QUANT_HOST_BROKER_HOST_SMOKE_RESULT_TIMEOUT'
+        }
+        Start-Sleep -Milliseconds 100
+    }
     $result = Get-Content -LiteralPath $resultPath -Raw -Encoding UTF8 |
         ConvertFrom-Json
     if ($result.status -ne 'SUCCEEDED' -or
@@ -138,12 +159,19 @@ try {
         throw 'STOCK_QUANT_HOST_BROKER_HOST_SMOKE_RESULT_INVALID'
     }
     Write-Output 'STOCK_QUANT_HOST_BROKER_HOST_CREDENTIAL_STATUS=PASS'
+    Write-Output 'STOCK_QUANT_HOST_BROKER_RESIDENT_AUTO_CLAIM=PASS'
+    Write-Output 'STOCK_QUANT_HOST_BROKER_IDLE_CREDENTIAL_READS=0'
+    Write-Output 'STOCK_QUANT_HOST_BROKER_IDLE_PROVIDER_CALLS=0'
     Write-Output "STOCK_QUANT_HOST_BROKER_HOST_ACCOUNT=$identity"
     Write-Output 'STOCK_QUANT_HOST_BROKER_CODEX_CLI_REQUIRED=false'
     Write-Output 'STOCK_QUANT_HOST_BROKER_HOST_SMOKE_PROVIDER_CALLS=0'
     Write-Output 'STOCK_QUANT_HOST_BROKER_HOST_SMOKE_PERMANENT_DATABASE_WRITES=0'
 } finally {
     Pop-Location
+    if ($null -ne $resident) {
+        Stop-StockQuantTestResidentBroker -Resident $resident
+        $resident = $null
+    }
     if ($null -ne $requestId) {
         foreach ($directory in @($paths.Requests, $paths.Results)) {
             foreach ($generated in @(Get-ChildItem -LiteralPath $directory `

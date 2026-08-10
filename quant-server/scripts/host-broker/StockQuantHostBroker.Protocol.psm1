@@ -2,6 +2,8 @@ Set-StrictMode -Version Latest
 
 $script:ProtocolVersion = 'STOCK_QUANT_HOST_BROKER_REQUEST_V1'
 $script:ResultVersion = 'STOCK_QUANT_HOST_BROKER_RESULT_V1'
+$script:HeartbeatVersion = 'STOCK_QUANT_HOST_BROKER_HEARTBEAT_V1'
+$script:BrokerVersion = 'STOCK_QUANT_HOST_BROKER_RESIDENT_V1'
 $script:TaskName = 'StockQuantLocalBroker'
 $script:AllowedOperations = @(
     'CHECK_CREDENTIAL_STATUS'
@@ -83,6 +85,7 @@ function Get-StockQuantHostBrokerPaths {
         Base = $base
         Requests = Join-Path $base 'requests'
         Results = Join-Path $base 'results'
+        Heartbeat = Join-Path $base 'heartbeat.json'
         TaskName = $script:TaskName
         BrokerScript = Join-Path $PSScriptRoot 'stock-quant-host-broker.ps1'
     }
@@ -526,6 +529,126 @@ function Write-StockQuantHostBrokerResult {
     return $destination
 }
 
+function Write-StockQuantHostBrokerHeartbeat {
+    param(
+        [Parameter(Mandatory = $true)]
+        [ValidatePattern('^[0-9a-f]{40}$')]
+        [string] $GitCommit,
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [string] $WindowsUser,
+        [Parameter(Mandatory = $true)]
+        [ValidateRange(1, 2147483647)]
+        [int] $ProcessId,
+        [Parameter(Mandatory = $true)]
+        [DateTimeOffset] $StartedAt,
+        [Parameter(Mandatory = $true)]
+        [ValidateSet('IDLE', 'BUSY')]
+        [string] $State,
+        [DateTimeOffset] $Now = [DateTimeOffset]::UtcNow
+    )
+    if ($StartedAt.Offset -ne [TimeSpan]::Zero -or
+        $Now.Offset -ne [TimeSpan]::Zero -or $Now -lt $StartedAt -or
+        $WindowsUser -match '[\x00-\x1F\x7F]' -or
+        $WindowsUser -match '(?i)(password|token|credentialblob|jdbc)') {
+        throw 'STOCK_QUANT_HOST_BROKER_HEARTBEAT_FIELDS_INVALID'
+    }
+    $paths = Initialize-StockQuantHostBrokerDirectories
+    $heartbeat = [ordered]@{
+        schemaVersion = $script:HeartbeatVersion
+        brokerVersion = $script:BrokerVersion
+        gitCommit = $GitCommit
+        windowsUser = $WindowsUser
+        processId = $ProcessId
+        startedAt = $StartedAt.ToString('o')
+        lastHeartbeat = $Now.ToString('o')
+        state = $State
+    }
+    $json = $heartbeat | ConvertTo-Json -Compress
+    if ($json -match '(?i)(password|token|credentialblob|jdbc)') {
+        throw 'STOCK_QUANT_HOST_BROKER_HEARTBEAT_FIELDS_INVALID'
+    }
+    $temporary = Join-Path $paths.Base `
+        ('.heartbeat.' + [Guid]::NewGuid().ToString('N') + '.tmp')
+    $backup = Join-Path $paths.Base `
+        ('.heartbeat.backup.' + [Guid]::NewGuid().ToString('N') + '.tmp')
+    try {
+        [IO.File]::WriteAllText(
+            $temporary, $json + "`n", [Text.UTF8Encoding]::new($false))
+        if (Test-Path -LiteralPath $paths.Heartbeat -PathType Leaf) {
+            [IO.File]::Replace($temporary, $paths.Heartbeat, $backup)
+            Remove-Item -LiteralPath $backup -Force
+        } else {
+            [IO.File]::Move($temporary, $paths.Heartbeat)
+        }
+    } finally {
+        if (Test-Path -LiteralPath $temporary) {
+            Remove-Item -LiteralPath $temporary -Force
+        }
+        if (Test-Path -LiteralPath $backup) {
+            Remove-Item -LiteralPath $backup -Force
+        }
+    }
+    return $paths.Heartbeat
+}
+
+function Read-StockQuantHostBrokerHeartbeat {
+    param(
+        [Parameter(Mandatory = $true)]
+        [ValidatePattern('^[0-9a-f]{40}$')]
+        [string] $ExpectedGitCommit,
+        [ValidateRange(2, 60)]
+        [int] $MaximumAgeSeconds = 6,
+        [DateTimeOffset] $Now = [DateTimeOffset]::UtcNow
+    )
+    $paths = Get-StockQuantHostBrokerPaths
+    if (-not (Test-Path -LiteralPath $paths.Heartbeat -PathType Leaf)) {
+        throw 'HOST_BROKER_NOT_RUNNING'
+    }
+    try {
+        $bytes = [IO.File]::ReadAllBytes($paths.Heartbeat)
+        if ($bytes.Length -lt 2 -or $bytes.Length -gt 4096 -or
+            ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and
+                $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF)) {
+            throw 'INVALID'
+        }
+        $json = [Text.UTF8Encoding]::new($false, $true).GetString($bytes)
+        if ($json -match '(?i)(password|token|credentialblob|jdbc)') {
+            throw 'INVALID'
+        }
+        $heartbeat = $json | ConvertFrom-Json
+        $expectedFields = @(
+            'schemaVersion', 'brokerVersion', 'gitCommit', 'windowsUser',
+            'processId', 'startedAt', 'lastHeartbeat', 'state')
+        $actualFields = @($heartbeat.PSObject.Properties.Name)
+        if ($actualFields.Count -ne $expectedFields.Count) { throw 'INVALID' }
+        foreach ($field in $expectedFields) {
+            if ($field -notin $actualFields) { throw 'INVALID' }
+        }
+        $startedAt = ConvertTo-StockQuantTimestamp `
+            ([string]$heartbeat.startedAt)
+        $lastHeartbeat = ConvertTo-StockQuantTimestamp `
+            ([string]$heartbeat.lastHeartbeat)
+        if ($heartbeat.schemaVersion -cne $script:HeartbeatVersion -or
+            $heartbeat.brokerVersion -cne $script:BrokerVersion -or
+            $heartbeat.gitCommit -cne $ExpectedGitCommit -or
+            [string]::IsNullOrWhiteSpace([string]$heartbeat.windowsUser) -or
+            [string]$heartbeat.windowsUser -match '[\x00-\x1F\x7F]' -or
+            [int64]$heartbeat.processId -lt 1 -or
+            [int64]$heartbeat.processId -gt 2147483647 -or
+            [string]$heartbeat.state -notin @('IDLE', 'BUSY') -or
+            $lastHeartbeat -lt $startedAt -or
+            $lastHeartbeat -gt $Now.AddSeconds(1) -or
+            $Now - $lastHeartbeat -gt
+                [TimeSpan]::FromSeconds($MaximumAgeSeconds)) {
+            throw 'INVALID'
+        }
+        return $heartbeat
+    } catch {
+        throw 'HOST_BROKER_NOT_RUNNING'
+    }
+}
+
 function New-StockQuantHostBrokerRequestId {
     $timestamp = [DateTimeOffset]::UtcNow.ToString(
         'yyyyMMddTHHmmssZ', [Globalization.CultureInfo]::InvariantCulture)
@@ -542,5 +665,7 @@ Export-ModuleMember -Function @(
     'Assert-StockQuantHostBrokerRequestIdAvailable'
     'Write-StockQuantHostBrokerRequest'
     'Write-StockQuantHostBrokerResult'
+    'Write-StockQuantHostBrokerHeartbeat'
+    'Read-StockQuantHostBrokerHeartbeat'
     'New-StockQuantHostBrokerRequestId'
 )

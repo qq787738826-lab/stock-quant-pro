@@ -32,9 +32,10 @@ codex sandbox -P stock_quant_formal_runner -C . powershell -NoProfile -Execution
   -ArtifactPath <verified-day001-runner.jar>
 ```
 
-CodexSandbox 使用独立 Windows 身份，不能直接访问真实用户 Credential Manager。它只写严格
-非敏感请求并执行固定 `schtasks.exe /Run /TN "StockQuantLocalBroker"`；计划任务以安装它的
-真实用户身份调用下述统一入口。用户无需切换权限或手工执行运行命令。
+CodexSandbox 使用独立 Windows 身份，不能直接访问真实用户 Credential Manager。它只验证常驻
+Broker 的同 SHA fresh heartbeat、原子写严格非敏感请求并轮询对应脱敏结果；不再查询或执行
+Task Scheduler。计划任务以安装它的真实用户身份在登录时只启动固定监听进程，监听进程在请求到达后
+调用下述统一入口。用户无需切换权限或手工执行运行命令。
 
 宿主任务内部的 `run-stock-quant-local-automation.ps1` 依次校验 Day001
 MANIFEST/Start-Class、正式授权与相邻 build proof、完整 Git SHA、
@@ -71,6 +72,6 @@ PowerShell AST 和 `git diff --check`。Fake E2E 必须证明调用精确 `3`、
 
 `.codex/config.toml` 使用项目级 `stock_quant_local` 权限配置，不关闭沙箱；仓库外不可写，
 `.ai/` 和 `.env*` 拒绝访问。默认网络只列出 loopback 与当前 Git/Maven 构建所需官方
-域名。`stock_quant_formal_runner` 也不允许直连 Tushare，只能写 Broker 请求并触发固定任务；
+域名。`stock_quant_formal_runner` 也不允许直连 Tushare，只能写 Broker 请求和读取 heartbeat/result；
 真实 Provider 网络仅属于真实用户宿主进程。正式秘密和运行不得上传到云端任务。完整合同见
 [宿主 Broker 操作说明](stock-quant-host-broker.md)。

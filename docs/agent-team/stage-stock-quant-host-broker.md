@@ -7,13 +7,19 @@ CodexSandbox 身份直接读取 Credential Manager。交付固定安装、触发
 严格非敏感 request/result 协议。Codex formal profile 已移除 Tushare 直连域名；原统一正式入口
 增加宿主身份拒绝，只能由 Broker 以真实用户调用。
 
-任务 `StockQuantLocalBroker` 使用安装用户、`Interactive/Limited`、无 trigger、无密码任务登录，
-action 只执行固定 Broker 脚本。安装器要求管理员 PowerShell，但不调用、不查找或安装 `codex` CLI；
+任务 `StockQuantLocalBroker` 使用安装用户、`Interactive/Limited`、单一当前用户登录 trigger、无密码
+任务登录，action 只启动固定常驻 Broker 脚本。登录不生成 Provider 请求；Broker 空闲时只维护脱敏
+heartbeat 和检查固定 request 目录。安装器要求管理员 PowerShell，但不调用、不查找或安装 `codex` CLI；
 任务使用当前真实 Windows 用户和任务计划程序的所有者/管理员默认安全边界，不向 Authenticated
 Users、Everyone 或 SYSTEM 扩权。
 
+Codex formal profile 不再查询任务定义或调用 `schtasks /Run`；它只在 fresh、同 Git SHA heartbeat
+存在时原子写 request 并等待对应 result。Broker 以
+`.request → .processing → .processed` 原子领取，崩溃后遗留的 claimed 文件不会在有限任务重启中重放。
+
 Broker 对请求执行固定目录、完整字段、过期时间、重复 ID、路径、JAR/hash/sidecar、授权、Git 和
-预算校验，使用同目录原子 rename 领取一次后退出。四个 operation 均映射到仓库内固定函数与固定
+预算校验，使用同目录原子 rename 领取一次并写 terminal 结果，随后回到空闲监听。四个 operation
+均映射到仓库内固定函数与固定
 脚本，不存在 `Invoke-Expression`、动态命令或动态脚本路径。Fake E2E 不检查或读取 Credential；
 正式 Day001 必须先通过 USER_APPROVED preflight，再复用既有输出审计、秘密清零、专用数据库与
 三请求/零重试 Runner。
@@ -23,11 +29,11 @@ Broker 对请求执行固定目录、完整字段、过期时间、重复 ID、�
 - 协议攻击面覆盖：命令字段、路径逃逸、未知 operation、过期、重复 key、秘密字段和重复 requestId。
 - 真实用户安装 `-WhatIf` 在 PATH 不存在 `codex` 时仍只检查两个 Target 的存在状态，并确认实际
   用户、管理员要求和固定任务定义；不创建任务。
-- host smoke 在 PATH 不存在 `codex` 时仍可完成固定 Target 存在性与脱敏结果检查，Provider 调用 0、
-  永久数据库写入 0。
+- host smoke 在 PATH 不存在 `codex` 时仍可验证空闲 heartbeat、自动领取、固定 Target 存在性与
+  脱敏结果，空闲 Credential 读取 0、Provider 调用 0、永久数据库写入 0。
 - 实际 Task Scheduler round-trip 覆盖 Windows PowerShell 5.1、中文本地用户名的裸名/SID 规范化、
-  Actions 单元素、Triggers 空集合、Interactive/Limited、固定路径与设置，并验证新建失败无残留、
-  更新失败恢复原定义；临时任务从不执行且残留 0。
+  Actions 单元素、单一当前用户 LogonTrigger、Interactive/Limited、固定路径、无限监听与有限重启，
+  并验证旧零 trigger 定义可安全升级、新建失败无残留、更新失败恢复原定义；临时任务从不执行且残留 0。
 - 安装校验按条件返回独立脱敏 reason；正常路径、参数和 principal 规范化不再误报统一
   `TASK_DEFINITION_INVALID`。
 - 打包 Fake Provider、临时 PostgreSQL、typed fact、SYSTEM_KNOWLEDGE、QFQ、输出审计和残留检查

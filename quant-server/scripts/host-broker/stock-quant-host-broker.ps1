@@ -19,12 +19,15 @@ $fakeE2eScript = Join-Path $paths.RepositoryRoot `
     'quant-server\scripts\run-reduced-research-day001-e2e-dry-run.ps1'
 $mutex = [Threading.Mutex]::new($false, 'Local\StockQuantLocalBroker')
 $mutexHeld = $false
+$brokerStartedAt = [DateTimeOffset]::UtcNow
+$brokerGitCommit = $null
+$pollIntervalMilliseconds = 1000
 $processingPath = $null
 $processedPath = $null
 $request = $null
 $requestId = $null
 $operation = 'UNKNOWN'
-$startedAt = [DateTimeOffset]::UtcNow
+$startedAt = $brokerStartedAt
 $stage = 'INITIALIZATION'
 $failureSummary = $null
 
@@ -322,6 +325,115 @@ function Write-Outcome {
     Write-StockQuantHostBrokerResult -Result $result | Out-Null
 }
 
+function Write-BrokerHeartbeat {
+    param(
+        [Parameter(Mandatory = $true)]
+        [ValidateSet('IDLE', 'BUSY')]
+        [string] $State
+    )
+    Write-StockQuantHostBrokerHeartbeat `
+        -GitCommit $brokerGitCommit -WindowsUser $identity `
+        -ProcessId $PID -StartedAt $brokerStartedAt -State $State |
+        Out-Null
+}
+
+function Invoke-ClaimedRequest {
+    param(
+        [Parameter(Mandatory = $true)]
+        [IO.FileInfo] $Candidate
+    )
+    $script:processingPath = $null
+    $script:processedPath = $null
+    $script:request = $null
+    $script:requestId = $null
+    $script:operation = 'UNKNOWN'
+    $script:startedAt = [DateTimeOffset]::UtcNow
+    $script:stage = 'REQUEST_CLAIM'
+    $script:failureSummary = $null
+    try {
+        if ($Candidate.Name -notmatch
+                '^(SQHB_[0-9]{8}T[0-9]{6}Z_[A-F0-9]{12})\.request\.properties$') {
+            $invalidPath = $Candidate.FullName + '.rejected'
+            [IO.File]::Move($Candidate.FullName, $invalidPath)
+            return
+        }
+        $script:requestId = $Matches[1]
+        $priorRequestFiles = @(Get-ChildItem -LiteralPath $paths.Requests `
+            -File -Filter "$requestId.*" | Where-Object {
+                $_.FullName -ne $Candidate.FullName
+            })
+        $priorResultFiles = @(Get-ChildItem -LiteralPath $paths.Results `
+            -File -Filter "$requestId.*")
+        if ($priorRequestFiles.Count -gt 0 -or $priorResultFiles.Count -gt 0) {
+            $duplicatePath = Join-Path $paths.Requests `
+                "$requestId.rejected.properties"
+            if (-not (Test-Path -LiteralPath $duplicatePath)) {
+                [IO.File]::Move($Candidate.FullName, $duplicatePath)
+            }
+            throw 'STOCK_QUANT_HOST_BROKER_REQUEST_ID_ALREADY_USED'
+        }
+        $script:processingPath = Join-Path $paths.Requests `
+            "$requestId.processing.properties"
+        $script:processedPath = Join-Path $paths.Requests `
+            "$requestId.processed.properties"
+        [IO.File]::Move($Candidate.FullName, $processingPath)
+
+        $script:stage = 'REQUEST_VALIDATION'
+        $script:request = Read-StockQuantHostBrokerRequest `
+            -Path $processingPath
+        $script:operation = $request.Operation
+        Assert-GitBinding -BrokerRequest $request
+
+        $script:stage = $operation
+        $summary = switch ($operation) {
+            'CHECK_CREDENTIAL_STATUS' { Invoke-CredentialStatus; break }
+            'RUN_FAKE_E2E' { Invoke-FakeE2e -BrokerRequest $request; break }
+            'RUN_DAY001' { Invoke-Day001 -BrokerRequest $request; break }
+            'READ_SANITIZED_RESULT' {
+                Read-SanitizedBrokerResult -BrokerRequest $request
+                break
+            }
+            default { throw 'STOCK_QUANT_HOST_BROKER_OPERATION_NOT_ALLOWED' }
+        }
+        Write-Outcome -Status 'SUCCEEDED' -Stage 'COMPLETED' `
+            -Reason 'STOCK_QUANT_HOST_BROKER_SUCCEEDED' -Summary $summary
+        [IO.File]::Move($processingPath, $processedPath)
+        $script:processingPath = $null
+        Write-Output "STOCK_QUANT_HOST_BROKER_REQUEST_ID=$requestId"
+        Write-Output 'STOCK_QUANT_HOST_BROKER_STATUS=SUCCEEDED'
+    } catch {
+        $rawCode = ConvertTo-StockQuantSafeCode -ErrorValue $_
+        $reason = $rawCode
+        if ($rawCode -match '^([A-Z][A-Z0-9_]{7,127})__STAGE__([A-Z][A-Z0-9_]{2,127})$') {
+            $reason = $Matches[1]
+            $script:stage = $Matches[2]
+        }
+        if ($null -ne $requestId -and
+            -not (Test-Path -LiteralPath (
+                Join-Path $paths.Results "$requestId.result.json"))) {
+            try {
+                Write-Outcome -Status $(if ($stage -in @(
+                        'REQUEST_CLAIM', 'REQUEST_VALIDATION')) {
+                        'REJECTED'
+                    } else { 'FAILED' }) `
+                    -Stage $stage -Reason $reason -Summary $failureSummary
+            } catch {
+                # Fail closed without writing unsafe fallback output.
+            }
+        }
+        if ($null -ne $processingPath -and
+            (Test-Path -LiteralPath $processingPath) -and
+            $null -ne $processedPath -and
+            -not (Test-Path -LiteralPath $processedPath)) {
+            [IO.File]::Move($processingPath, $processedPath)
+            $script:processingPath = $null
+        }
+        Write-Output "STOCK_QUANT_HOST_BROKER_FAILURE_STAGE=$stage"
+        Write-Output "STOCK_QUANT_HOST_BROKER_FAILURE_REASON=$reason"
+        Write-Output 'STOCK_QUANT_HOST_BROKER_STATUS=FAILED'
+    }
+}
+
 try {
     if ($identity -match '(?i)CodexSandbox') {
         throw 'STOCK_QUANT_HOST_BROKER_REAL_USER_REQUIRED'
@@ -330,91 +442,31 @@ try {
     if (-not $mutexHeld) {
         throw 'STOCK_QUANT_HOST_BROKER_ALREADY_RUNNING'
     }
-    $stage = 'REQUEST_CLAIM'
-    $pending = @(Get-ChildItem -LiteralPath $paths.Requests -File `
-        -Filter 'SQHB_*.request.properties' |
-        Sort-Object LastWriteTimeUtc, Name)
-    if ($pending.Count -eq 0) {
-        Write-Output 'STOCK_QUANT_HOST_BROKER_QUEUE=EMPTY'
-        exit 0
+    Push-Location $paths.RepositoryRoot
+    try {
+        $brokerGitCommit = (git rev-parse HEAD).Trim()
+    } finally {
+        Pop-Location
     }
-    $candidate = $pending[0]
-    if ($candidate.Name -notmatch
-            '^(SQHB_[0-9]{8}T[0-9]{6}Z_[A-F0-9]{12})\.request\.properties$') {
-        throw 'STOCK_QUANT_HOST_BROKER_REQUEST_PATH_INVALID'
+    if ($brokerGitCommit -notmatch '^[0-9a-f]{40}$') {
+        throw 'STOCK_QUANT_HOST_BROKER_GIT_BINDING_INVALID'
     }
-    $requestId = $Matches[1]
-    $priorRequestFiles = @(Get-ChildItem -LiteralPath $paths.Requests `
-        -File -Filter "$requestId.*" | Where-Object {
-            $_.FullName -ne $candidate.FullName
-        })
-    $priorResultFiles = @(Get-ChildItem -LiteralPath $paths.Results `
-        -File -Filter "$requestId.*")
-    if ($priorRequestFiles.Count -gt 0 -or $priorResultFiles.Count -gt 0) {
-        $duplicatePath = Join-Path $paths.Requests `
-            "$requestId.rejected.properties"
-        if (-not (Test-Path -LiteralPath $duplicatePath)) {
-            [IO.File]::Move($candidate.FullName, $duplicatePath)
-        }
-        throw 'STOCK_QUANT_HOST_BROKER_REQUEST_ID_ALREADY_USED'
-    }
-    $processingPath = Join-Path $paths.Requests `
-        "$requestId.processing.properties"
-    $processedPath = Join-Path $paths.Requests `
-        "$requestId.processed.properties"
-    [IO.File]::Move($candidate.FullName, $processingPath)
 
-    $stage = 'REQUEST_VALIDATION'
-    $request = Read-StockQuantHostBrokerRequest -Path $processingPath
-    $operation = $request.Operation
-    Assert-GitBinding -BrokerRequest $request
-
-    $stage = $operation
-    $summary = switch ($operation) {
-        'CHECK_CREDENTIAL_STATUS' { Invoke-CredentialStatus; break }
-        'RUN_FAKE_E2E' { Invoke-FakeE2e -BrokerRequest $request; break }
-        'RUN_DAY001' { Invoke-Day001 -BrokerRequest $request; break }
-        'READ_SANITIZED_RESULT' {
-            Read-SanitizedBrokerResult -BrokerRequest $request
-            break
+    while ($true) {
+        Write-BrokerHeartbeat -State IDLE
+        $pending = @(Get-ChildItem -LiteralPath $paths.Requests -File `
+            -Filter 'SQHB_*.request.properties' |
+            Sort-Object LastWriteTimeUtc, Name)
+        if ($pending.Count -eq 0) {
+            Start-Sleep -Milliseconds $pollIntervalMilliseconds
+            continue
         }
-        default { throw 'STOCK_QUANT_HOST_BROKER_OPERATION_NOT_ALLOWED' }
+        Write-BrokerHeartbeat -State BUSY
+        Invoke-ClaimedRequest -Candidate $pending[0]
     }
-    Write-Outcome -Status 'SUCCEEDED' -Stage 'COMPLETED' `
-        -Reason 'STOCK_QUANT_HOST_BROKER_SUCCEEDED' -Summary $summary
-    [IO.File]::Move($processingPath, $processedPath)
-    $processingPath = $null
-    Write-Output "STOCK_QUANT_HOST_BROKER_REQUEST_ID=$requestId"
-    Write-Output 'STOCK_QUANT_HOST_BROKER_STATUS=SUCCEEDED'
-    exit 0
 } catch {
-    $rawCode = ConvertTo-StockQuantSafeCode -ErrorValue $_
-    $reason = $rawCode
-    if ($rawCode -match '^([A-Z][A-Z0-9_]{7,127})__STAGE__([A-Z][A-Z0-9_]{2,127})$') {
-        $reason = $Matches[1]
-        $stage = $Matches[2]
-    }
-    if ($null -ne $requestId -and
-        -not (Test-Path -LiteralPath (
-            Join-Path $paths.Results "$requestId.result.json"))) {
-        try {
-            Write-Outcome -Status $(if ($stage -in @(
-                    'REQUEST_CLAIM', 'REQUEST_VALIDATION')) {
-                    'REJECTED'
-                } else { 'FAILED' }) `
-                -Stage $stage -Reason $reason -Summary $failureSummary
-        } catch {
-            # Fail closed without writing unsafe fallback output.
-        }
-    }
-    if ($null -ne $processingPath -and
-        (Test-Path -LiteralPath $processingPath) -and
-        $null -ne $processedPath -and
-        -not (Test-Path -LiteralPath $processedPath)) {
-        [IO.File]::Move($processingPath, $processedPath)
-        $processingPath = $null
-    }
-    Write-Output "STOCK_QUANT_HOST_BROKER_FAILURE_STAGE=$stage"
+    $reason = ConvertTo-StockQuantSafeCode -ErrorValue $_
+    Write-Output 'STOCK_QUANT_HOST_BROKER_FAILURE_STAGE=RESIDENT_LOOP'
     Write-Output "STOCK_QUANT_HOST_BROKER_FAILURE_REASON=$reason"
     Write-Output 'STOCK_QUANT_HOST_BROKER_STATUS=FAILED'
     exit 20

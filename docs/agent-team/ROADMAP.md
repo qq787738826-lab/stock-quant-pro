@@ -455,8 +455,9 @@
   交付：[操作说明](stock-quant-local-automation.md)和
   [阶段记录](stage-stock-quant-local-automation.md)。
 - 宿主执行边界：`STOCK-QUANT-HOST-BROKER` 保持 CodexSandbox 与真实用户 Credential Manager
-  隔离，使用无 trigger 的固定 `StockQuantLocalBroker` 计划任务承载宿主 Runner。Codex formal
-  profile 不具备 Tushare 直连权限，只能提交严格非敏感、短期、一次性请求并触发固定任务；
+  隔离，使用当前用户登录时启动的固定常驻 `StockQuantLocalBroker` 承载宿主 Runner；登录动作本身
+  不运行 Provider。Codex formal profile 不具备 Tushare 直连或 Task Scheduler 触发权限，只能在
+  fresh heartbeat 下提交严格非敏感、短期、一次性请求并等待脱敏结果；
   Broker 仍受 USER_APPROVED 授权、三请求、零重试、固定数据库和失败不补跑约束。交付：
   [操作说明](stock-quant-host-broker.md)和[阶段记录](stage-stock-quant-host-broker.md)。
 

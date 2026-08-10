@@ -11,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class StockQuantHostBrokerContractTest {
 
     @Test
-    void installerRegistersOneFixedInteractiveDemandOnlyTask() throws Exception {
+    void installerRegistersOneFixedInteractiveResidentTask() throws Exception {
         String installer = read("scripts/host-broker/"
                 + "install-stock-quant-host-broker.ps1");
         String taskDefinition = read("scripts/host-broker/"
@@ -27,12 +27,19 @@ class StockQuantHostBrokerContractTest {
         assertTrue(taskDefinition.contains("Register-ScheduledTask"));
         assertTrue(taskDefinition.contains(
                 "Assert-StockQuantHostBrokerTaskDefinition"));
-        assertFalse(taskDefinition.contains("New-ScheduledTaskTrigger"));
+        assertTrue(taskDefinition.contains(
+                "New-ScheduledTaskTrigger -AtLogOn -User $UserId"));
+        assertFalse(taskDefinition.contains("-AtStartup"));
         assertFalse(taskDefinition.contains("-LogonType Password"));
         assertFalse(taskDefinition.contains("/RP"));
-        assertTrue(taskDefinition.contains("$triggers.Count -ne 0"));
+        assertTrue(taskDefinition.contains("$triggers.Count -ne 1"));
         assertTrue(taskDefinition.contains("AllowDemandStart"));
-        assertTrue(installer.contains("STOCK_QUANT_HOST_BROKER_TRIGGERS=0"));
+        assertTrue(installer.contains("STOCK_QUANT_HOST_BROKER_TRIGGERS=1"));
+        assertTrue(installer.contains("STOCK_QUANT_HOST_BROKER_AUTOSTART=true"));
+        assertTrue(installer.contains(
+                "STOCK_QUANT_HOST_BROKER_PROVIDER_AUTOSTART=false"));
+        assertTrue(taskDefinition.contains("-RestartCount"));
+        assertTrue(taskDefinition.contains("-RestartInterval"));
         assertTrue(installer.contains("[switch] $Uninstall"));
     }
 
@@ -113,9 +120,13 @@ class StockQuantHostBrokerContractTest {
                 "TASK_LOGON_TYPE_MISMATCH",
                 "TASK_RUN_LEVEL_MISMATCH",
                 "TASK_TRIGGER_COUNT_MISMATCH",
+                "TASK_TRIGGER_TYPE_MISMATCH",
+                "TASK_TRIGGER_USER_MISMATCH",
+                "TASK_TRIGGER_ENABLED_MISMATCH",
                 "TASK_EXECUTION_TIME_LIMIT_MISMATCH",
                 "TASK_ALLOW_DEMAND_START_MISMATCH",
                 "TASK_START_WHEN_AVAILABLE_MISMATCH",
+                "TASK_RESTART_SETTINGS_MISMATCH",
                 "TASK_SETTINGS_MISMATCH")) {
             assertTrue(taskDefinition.contains(
                     "STOCK_QUANT_HOST_BROKER_" + reason), reason);
@@ -158,7 +169,7 @@ class StockQuantHostBrokerContractTest {
     }
 
     @Test
-    void sandboxInvokerCanOnlyTriggerFixedTaskWithNonSecretRequest()
+    void sandboxInvokerOnlyWritesRequestAndWaitsForResidentBroker()
             throws Exception {
         String script = read("scripts/host-broker/"
                 + "invoke-stock-quant-host-broker.ps1");
@@ -176,8 +187,13 @@ class StockQuantHostBrokerContractTest {
                 "STOCK_QUANT_HOST_BROKER_GIT_REMOTE_QUERY_FAILED"));
         assertFalse(script.contains("git fetch"));
         assertTrue(script.contains("$tracking -ne $remote"));
-        assertTrue(script.contains(
-                "& schtasks.exe /Run /TN 'StockQuantLocalBroker'"));
+        assertTrue(script.contains("Read-StockQuantHostBrokerHeartbeat"));
+        assertTrue(script.contains("HOST_BROKER_NOT_RUNNING")
+                || read("scripts/host-broker/StockQuantHostBroker.Protocol.psm1")
+                .contains("HOST_BROKER_NOT_RUNNING"));
+        assertFalse(script.contains("schtasks"));
+        assertFalse(script.contains("Get-ScheduledTask"));
+        assertFalse(script.contains("Start-ScheduledTask"));
         assertFalse(script.contains("Invoke-Expression"));
         assertFalse(script.contains("ScriptBlock]::Create"));
         assertTrue(script.contains("Write-StockQuantHostBrokerRequest"));
@@ -206,6 +222,9 @@ class StockQuantHostBrokerContractTest {
         assertTrue(protocol.contains("stock-quant-host-broker"));
         assertTrue(protocol.contains("'requests'"));
         assertTrue(protocol.contains("'results'"));
+        assertTrue(protocol.contains("'heartbeat.json'"));
+        assertTrue(protocol.contains("STOCK_QUANT_HOST_BROKER_RESIDENT_V1"));
+        assertTrue(protocol.contains("Read-StockQuantHostBrokerHeartbeat"));
         assertTrue(protocol.contains("[IO.File]::Move"));
         assertTrue(protocol.contains("REQUEST_ID_ALREADY_USED"));
         assertTrue(protocol.contains("REQUEST_EXPIRED"));
@@ -215,7 +234,8 @@ class StockQuantHostBrokerContractTest {
     }
 
     @Test
-    void brokerClaimsOneRequestAndNeverAcceptsDynamicExecution() throws Exception {
+    void residentBrokerClaimsRequestsAndNeverAcceptsDynamicExecution()
+            throws Exception {
         String script = read("scripts/host-broker/"
                 + "stock-quant-host-broker.ps1");
 
@@ -225,12 +245,36 @@ class StockQuantHostBrokerContractTest {
         assertTrue(script.contains(".processing.properties"));
         assertTrue(script.contains(".processed.properties"));
         assertTrue(script.contains("[IO.File]::Move"));
+        assertTrue(script.contains("while ($true)"));
+        assertTrue(script.contains("Write-BrokerHeartbeat -State IDLE"));
+        assertTrue(script.contains("Write-BrokerHeartbeat -State BUSY"));
+        assertTrue(script.contains("Start-Sleep -Milliseconds"));
         assertTrue(script.contains("RUN_DAY001"));
         assertTrue(script.contains("RUN_FAKE_E2E"));
         assertFalse(script.contains("Invoke-Expression"));
         assertFalse(script.contains("Start-Process"));
         assertFalse(script.contains("ScriptBlock]::Create"));
         assertFalse(script.contains("-Command"));
+    }
+
+    @Test
+    void residentLifecycleTestsAutoClaimAndNeverReplayClaimedRequests()
+            throws Exception {
+        String lifecycle = read("scripts/host-broker/"
+                + "test-stock-quant-host-broker-resident.ps1");
+        String support = read("scripts/host-broker/"
+                + "StockQuantHostBroker.TestSupport.psm1");
+
+        assertTrue(lifecycle.contains("RESIDENT_AUTO_CLAIM=PASS"));
+        assertTrue(lifecycle.contains("CLAIMED_REPLAY_COUNT=0"));
+        assertTrue(lifecycle.contains("REQUEST_EXPIRED"));
+        assertTrue(lifecycle.contains("command.text=forbidden"));
+        assertTrue(lifecycle.contains("README.md"));
+        assertTrue(lifecycle.contains("IDLE_CREDENTIAL_READS=0"));
+        assertTrue(lifecycle.contains("REAL_PROVIDER_CALLS=0"));
+        assertTrue(support.contains("Start-Process"));
+        assertTrue(support.contains("Stop-Process -Id $processId"));
+        assertFalse(support.contains("schtasks"));
     }
 
     @Test

@@ -16,6 +16,7 @@ $authorization = Join-Path $testRoot 'authorization.properties'
 $createdFiles = [Collections.Generic.List[string]]::new()
 $createdRequestIds = [Collections.Generic.List[string]]::new()
 $passed = 0
+$heartbeatCreated = $false
 
 function Assert-ThrowsCode {
     param(
@@ -255,9 +256,71 @@ try {
         })
     } 'STOCK_QUANT_HOST_BROKER_RESULT_SECRET_FIELD_FORBIDDEN'
 
+    if (Test-Path -LiteralPath $paths.Heartbeat -PathType Leaf) {
+        throw 'BROKER_PROTOCOL_HEARTBEAT_ALREADY_EXISTS'
+    }
+    $heartbeatNow = [DateTimeOffset]::UtcNow
+    Write-StockQuantHostBrokerHeartbeat -GitCommit ('a' * 40) `
+        -WindowsUser ([Security.Principal.WindowsIdentity]::GetCurrent().Name) `
+        -ProcessId $PID -StartedAt $heartbeatNow.AddSeconds(-1) `
+        -State IDLE -Now $heartbeatNow | Out-Null
+    $heartbeatCreated = $true
+    $heartbeatNow = $heartbeatNow.AddMilliseconds(10)
+    Write-StockQuantHostBrokerHeartbeat -GitCommit ('a' * 40) `
+        -WindowsUser ([Security.Principal.WindowsIdentity]::GetCurrent().Name) `
+        -ProcessId $PID -StartedAt $heartbeatNow.AddSeconds(-1) `
+        -State BUSY -Now $heartbeatNow | Out-Null
+    $heartbeat = Read-StockQuantHostBrokerHeartbeat `
+        -ExpectedGitCommit ('a' * 40) -Now $heartbeatNow
+    if ($heartbeat.state -ne 'BUSY' -or [int]$heartbeat.processId -ne $PID -or
+        @(Get-ChildItem -LiteralPath $paths.Base -File `
+            -Filter '.heartbeat.*.tmp').Count -ne 0) {
+        throw 'BROKER_PROTOCOL_HEARTBEAT_ROUND_TRIP_FAILED'
+    }
+    $passed++
+
+    Assert-ThrowsCode {
+        Read-StockQuantHostBrokerHeartbeat -ExpectedGitCommit ('b' * 40) `
+            -Now $heartbeatNow
+    } 'HOST_BROKER_NOT_RUNNING'
+
+    Assert-ThrowsCode {
+        Read-StockQuantHostBrokerHeartbeat -ExpectedGitCommit ('a' * 40) `
+            -Now $heartbeatNow.AddSeconds(10)
+    } 'HOST_BROKER_NOT_RUNNING'
+
+    $invalidHeartbeat = [ordered]@{
+        schemaVersion = 'STOCK_QUANT_HOST_BROKER_HEARTBEAT_V1'
+        brokerVersion = 'STOCK_QUANT_HOST_BROKER_RESIDENT_V1'
+        gitCommit = ('a' * 40)
+        windowsUser = 'SAFE_TEST_USER'
+        processId = $PID
+        startedAt = $heartbeatNow.AddSeconds(-1).ToString('o')
+        lastHeartbeat = $heartbeatNow.ToString('o')
+        state = 'IDLE'
+        unexpectedField = 'FORBIDDEN'
+    } | ConvertTo-Json -Compress
+    [IO.File]::WriteAllText($paths.Heartbeat, $invalidHeartbeat + "`n",
+        [Text.UTF8Encoding]::new($false))
+    Assert-ThrowsCode {
+        Read-StockQuantHostBrokerHeartbeat -ExpectedGitCommit ('a' * 40) `
+            -Now $heartbeatNow
+    } 'HOST_BROKER_NOT_RUNNING'
+
+    Remove-Item -LiteralPath $paths.Heartbeat -Force
+    $heartbeatCreated = $false
+    Assert-ThrowsCode {
+        Read-StockQuantHostBrokerHeartbeat -ExpectedGitCommit ('a' * 40) `
+            -Now $heartbeatNow
+    } 'HOST_BROKER_NOT_RUNNING'
+
     Write-Output "STOCK_QUANT_HOST_BROKER_PROTOCOL_TESTS=$passed/0/0/0"
-    if ($passed -ne 14) { throw 'BROKER_PROTOCOL_TEST_COUNT_INVALID' }
+    if ($passed -ne 19) { throw 'BROKER_PROTOCOL_TEST_COUNT_INVALID' }
 } finally {
+    if ($heartbeatCreated -and
+        (Test-Path -LiteralPath $paths.Heartbeat -PathType Leaf)) {
+        Remove-Item -LiteralPath $paths.Heartbeat -Force
+    }
     foreach ($id in $createdRequestIds) {
         foreach ($directory in @($paths.Requests, $paths.Results)) {
             foreach ($generated in @(Get-ChildItem -LiteralPath $directory `

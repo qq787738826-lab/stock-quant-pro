@@ -21,6 +21,8 @@ $powershellExe = Join-Path $env:SystemRoot `
 $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
 $created = $false
 $passed = 0
+$formalTaskBefore = $null
+$formalTaskWasPresent = $false
 
 function Get-CanonicalXml {
     param(
@@ -56,7 +58,8 @@ function Assert-ProbeDefinition {
     param(
         [Parameter(Mandatory = $true)]
         [object] $Task,
-        [switch] $Registered
+        [switch] $Registered,
+        [switch] $LegacyOnDemand
     )
     $arguments = @{
         Task = $Task
@@ -66,6 +69,7 @@ function Assert-ProbeDefinition {
         ExpectedUserSid = $identity.User.Value
     }
     if ($Registered) { $arguments['ExpectedTaskName'] = $probeTaskName }
+    if ($LegacyOnDemand) { $arguments['AllowLegacyOnDemand'] = $true }
     Assert-StockQuantHostBrokerTaskDefinition @arguments
 }
 
@@ -76,9 +80,12 @@ if ($PSVersionTable.PSVersion.Major -ne 5 -or
     $PSVersionTable.PSVersion.Minor -ne 1) {
     throw 'STOCK_QUANT_HOST_BROKER_POWERSHELL_51_REQUIRED'
 }
-if ($null -ne (Get-ScheduledTask -TaskName $formalTaskName `
-        -ErrorAction SilentlyContinue)) {
-    throw 'STOCK_QUANT_HOST_BROKER_FORMAL_TASK_MUST_BE_ABSENT'
+$formalTask = Get-ScheduledTask -TaskName $formalTaskName `
+    -ErrorAction SilentlyContinue
+if ($null -ne $formalTask) {
+    $formalTaskWasPresent = $true
+    $formalTaskBefore = [string](Export-ScheduledTask `
+        -TaskName $formalTaskName)
 }
 if ($null -ne (Get-ScheduledTask -TaskName $probeTaskName `
         -ErrorAction SilentlyContinue)) {
@@ -175,6 +182,11 @@ try {
         $logonNode.InnerText -cne 'InteractiveToken') {
         throw 'STOCK_QUANT_HOST_BROKER_TASK_XML_LOGON_TYPE_MISMATCH'
     }
+    $logonTrigger = $serializedDocument.SelectSingleNode(
+        "//*[local-name()='Triggers']/*[local-name()='LogonTrigger']")
+    if ($null -eq $logonTrigger) {
+        throw 'STOCK_QUANT_HOST_BROKER_TASK_XML_TRIGGER_MISMATCH'
+    }
     $passed++
 
     Unregister-ScheduledTask -TaskName $probeTaskName `
@@ -194,13 +206,55 @@ try {
 
     $actions = @($deserialized.Actions | Where-Object { $null -ne $_ })
     $triggers = @($deserialized.Triggers | Where-Object { $null -ne $_ })
-    if ($actions.Count -ne 1 -or $triggers.Count -ne 0 -or
+    if ($actions.Count -ne 1 -or $triggers.Count -ne 1 -or
+        [string]$triggers[0].CimClass.CimClassName -ne
+            'MSFT_TaskLogonTrigger' -or
         [string]$deserialized.Principal.LogonType -ne 'Interactive' -or
         [string]$deserialized.Principal.RunLevel -ne 'Limited' -or
         -not [bool]$deserialized.Settings.AllowDemandStart -or
-        [bool]$deserialized.Settings.StartWhenAvailable) {
+        [bool]$deserialized.Settings.StartWhenAvailable -or
+        [int]$deserialized.Settings.RestartCount -ne 3 -or
+        [string]$deserialized.Settings.RestartInterval -ne 'PT1M' -or
+        [string]$deserialized.Settings.ExecutionTimeLimit -ne 'PT0S') {
         throw 'STOCK_QUANT_HOST_BROKER_NORMALIZED_DEFINITION_INVALID'
     }
+    $passed++
+
+    Unregister-ScheduledTask -TaskName $probeTaskName `
+        -Confirm:$false -ErrorAction Stop
+    $created = $false
+    $legacyAction = New-ScheduledTaskAction -Execute $powershellExe `
+        -Argument ('-NoProfile -NonInteractive -ExecutionPolicy Bypass ' +
+            '-File "' + $brokerScript + '"') -WorkingDirectory $repoRoot
+    $legacyPrincipal = New-ScheduledTaskPrincipal -UserId $identity.Name `
+        -LogonType Interactive -RunLevel Limited
+    $legacySettings = New-ScheduledTaskSettingsSet `
+        -MultipleInstances IgnoreNew `
+        -ExecutionTimeLimit ([TimeSpan]::FromMinutes(45)) `
+        -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+    $legacyDefinition = New-ScheduledTask -Action $legacyAction `
+        -Principal $legacyPrincipal -Settings $legacySettings `
+        -Description 'Legacy migration probe; never executed.'
+    Register-ScheduledTask -TaskName $probeTaskName `
+        -InputObject $legacyDefinition -Force | Out-Null
+    $created = $true
+    $legacyRegistered = Get-ScheduledTask -TaskName $probeTaskName `
+        -ErrorAction Stop
+    Assert-ProbeDefinition -Task $legacyRegistered -Registered `
+        -LegacyOnDemand
+    $passed++
+
+    $migration = Invoke-StockQuantHostBrokerTaskRegistrationTransaction `
+        -TaskName $probeTaskName -Definition $definition `
+        -ExpectedPowerShellExecutable $powershellExe `
+        -ExpectedBrokerScript $brokerScript `
+        -ExpectedWorkingDirectory $repoRoot `
+        -ExpectedUserSid $identity.User.Value
+    if ($migration.Created -or -not $migration.Updated) {
+        throw 'STOCK_QUANT_HOST_BROKER_LEGACY_MIGRATION_INVALID'
+    }
+    Assert-ProbeDefinition -Task (Get-ScheduledTask `
+        -TaskName $probeTaskName -ErrorAction Stop) -Registered
     $passed++
 } finally {
     if ($created -or $null -ne (Get-ScheduledTask `
@@ -216,9 +270,19 @@ try {
             -ErrorAction SilentlyContinue)) {
         throw 'STOCK_QUANT_HOST_BROKER_ROUNDTRIP_RESIDUAL'
     }
-    if ($null -ne (Get-ScheduledTask -TaskName $formalTaskName `
-            -ErrorAction SilentlyContinue)) {
+    $formalTaskAfter = Get-ScheduledTask -TaskName $formalTaskName `
+        -ErrorAction SilentlyContinue
+    if (($formalTaskWasPresent -and $null -eq $formalTaskAfter) -or
+        (-not $formalTaskWasPresent -and $null -ne $formalTaskAfter)) {
         throw 'STOCK_QUANT_HOST_BROKER_FORMAL_TASK_TOUCHED'
+    }
+    if ($formalTaskWasPresent) {
+        $formalTaskAfterXml = [string](Export-ScheduledTask `
+            -TaskName $formalTaskName)
+        if ((Get-CanonicalXml -Xml $formalTaskBefore) -cne
+            (Get-CanonicalXml -Xml $formalTaskAfterXml)) {
+            throw 'STOCK_QUANT_HOST_BROKER_FORMAL_TASK_TOUCHED'
+        }
     }
 }
 
@@ -231,6 +295,6 @@ Write-Output 'STOCK_QUANT_HOST_BROKER_INSTALL_ROUNDTRIP_PROVIDER_CALLS=0'
 Write-Output 'STOCK_QUANT_HOST_BROKER_INSTALL_ROUNDTRIP_PERMANENT_DATABASE_WRITES=0'
 Write-Output 'STOCK_QUANT_HOST_BROKER_INSTALL_ROUNDTRIP_CREDENTIAL_READS=0'
 Write-Output 'STOCK_QUANT_HOST_BROKER_INSTALL_ROUNDTRIP_RESIDUALS=0'
-if ($passed -ne 10) {
+if ($passed -ne 12) {
     throw 'STOCK_QUANT_HOST_BROKER_INSTALL_ROUNDTRIP_COUNT_INVALID'
 }

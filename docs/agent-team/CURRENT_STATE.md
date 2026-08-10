@@ -189,8 +189,11 @@
   [阶段记录](stage-stock-quant-local-automation.md)。
 - STOCK-QUANT-HOST-BROKER：Codex restricted-token 身份无法访问真实用户 Credential Manager，
   该隔离不再尝试绕过。固定计划任务 `StockQuantLocalBroker` 由真实 Windows 用户以
-  `Interactive/Limited`、无 trigger、按需方式运行固定 Broker 脚本；Codex 只在 target 下写
-  严格非敏感请求、执行固定 `schtasks /Run` 并读取脱敏结果。请求仅允许四个 operation，拒绝
+  `Interactive/Limited`、当前用户登录 trigger 方式启动固定常驻 Broker 脚本；
+  `BROKER_AUTOSTART=true`、`PROVIDER_AUTOSTART=false`。Codex 只在 target 下写严格非敏感请求并
+  读取脱敏结果，不再查询或触发 Task Scheduler。Broker 以一秒低频轮询自动原子领取请求，空闲时
+  只写同 Git SHA 的脱敏 heartbeat，不读 Credential、不连数据库、不创建 HTTP 客户端。请求仅允许
+  四个 operation，拒绝
   重复/未知/过期字段、动态命令、路径逃逸、秘密和重复 requestId；正式 `RUN_DAY001` 必须先通过
   USER_APPROVED 授权/JAR/sidecar/Git/预算 preflight。`stock_quant_formal_runner` 已移除 Tushare
   直连权限，原统一入口只允许宿主真实用户调用。一次性安装器和 host smoke 不调用或依赖 `codex`
@@ -201,6 +204,8 @@
 - Host Broker 安装定义兼容 Windows Task Scheduler 对本地中文账户的裸用户名/SID 规范化；安装前
   可用唯一临时任务完成 PowerShell 5.1 注册/Get/Export/恢复 round-trip。安装更新保留并验证旧 XML，
   校验失败只清理本次精确新任务或恢复旧定义，不触碰其他任务；各安全条件使用独立脱敏 reason。
+  旧的零 trigger 按需定义只允许作为一次升级来源；新定义严格要求单一当前用户登录 trigger、
+  `Interactive/Limited`、固定 action、无限监听时限及有限重启，claimed 请求在进程重启后绝不重放。
 - 3A-R3B-F2A 任务书 / 阶段记录：[tasks/3ar3b-f2a-research-preview-product.md](tasks/3ar3b-f2a-research-preview-product.md) / [stage-3ar3b-f2a-research-preview-product.md](stage-3ar3b-f2a-research-preview-product.md)。
 - 3A-R3B-F2A-R1 任务书 / 阶段记录：[tasks/3ar3b-f2a-r1-preview-ux-convergence.md](tasks/3ar3b-f2a-r1-preview-ux-convergence.md) / [stage-3ar3b-f2a-r1-preview-ux-convergence.md](stage-3ar3b-f2a-r1-preview-ux-convergence.md)。
 - 3A-R3B-F2A-R1A 任务书 / 阶段记录：[tasks/3ar3b-f2a-r1a-visual-semantics-fix.md](tasks/3ar3b-f2a-r1a-visual-semantics-fix.md) / [stage-3ar3b-f2a-r1a-visual-semantics-fix.md](stage-3ar3b-f2a-r1a-visual-semantics-fix.md)。

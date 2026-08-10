@@ -3,9 +3,10 @@
 ## 目的与身份边界
 
 Codex 的 Windows restricted-token sandbox 使用独立 `CodexSandbox` 身份，不能访问真实用户的
-Windows Credential Manager。Broker 不再尝试改变该隔离：Codex 只生成非敏感请求、触发固定
-计划任务并读取脱敏结果；固定任务以安装它的真实 Windows 用户、`Interactive/Limited` 方式按需
-运行，从而由既有 Java `WindowsCredentialManagerSecretProvider` 在正式 Runner 内读取两个固定
+Windows Credential Manager。Broker 不再尝试改变该隔离：Codex 只生成非敏感请求并读取脱敏
+结果，不查询、不触发也不修改 Task Scheduler。固定任务以安装它的真实 Windows 用户、
+`Interactive/Limited` 方式在该用户登录时启动常驻 Broker，从而由既有 Java
+`WindowsCredentialManagerSecretProvider` 仅在合法正式请求中读取两个固定
 Target：
 
 ```text
@@ -13,12 +14,10 @@ StockQuant/ResearchDbPassword
 StockQuant/TushareToken
 ```
 
-计划任务名称固定为 `StockQuantLocalBroker`。任务没有 trigger，不在开机、登录或定时条件下自动
-运行；唯一触发命令为：
-
-```powershell
-schtasks.exe /Run /TN "StockQuantLocalBroker"
-```
+计划任务名称固定为 `StockQuantLocalBroker`，只有一个绑定当前用户的登录 trigger。登录动作只启动
+固定 Broker 监听进程：`BROKER_AUTOSTART=true`，但不创建或运行 Provider 请求，
+`PROVIDER_AUTOSTART=false`。Broker 无请求时只更新脱敏 heartbeat、检查固定 request 目录并以
+一秒间隔休眠；不会读取 Credential Manager、连接数据库、创建 HTTP 客户端或访问 Tushare。
 
 任务 action 只执行仓库中的固定
 `quant-server/scripts/host-broker/stock-quant-host-broker.ps1`，不接受命令文本、动态脚本路径、
@@ -34,7 +33,8 @@ Credential Target、密码或 Token 参数。安装器不调用、不查找也�
 powershell -NoProfile -ExecutionPolicy Bypass -File .\quant-server\scripts\host-broker\install-stock-quant-host-broker.ps1
 ```
 
-脚本显示任务名、固定脚本路径、真实账户、管理员状态、`Interactive/Limited`、trigger 数 `0` 和
+脚本显示任务名、固定脚本路径、真实账户、管理员状态、`Interactive/Limited`、当前用户登录
+trigger 数 `1` 和
 两个凭据的整体存在状态，然后要求确认。它不读取 CredentialBlob、不保存账户密码、不调用 Provider，
 也不要求 `codex` CLI 位于 PATH。`-WhatIf` 可在不创建或修改计划任务的前提下完成只读预检；真实
 安装或卸载必须通过管理员检查。更新仍需真实用户重新运行该安装命令并确认。
@@ -42,7 +42,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\quant-server\scripts\host-
 Windows Task Scheduler 注册后可能把 `计算机名\用户名` 规范化为裸用户名，并在 XML 中使用 SID；
 安装器因此按 SID 比较 principal，同时把 `Interactive`/`InteractiveToken`、`Limited`/
 `LeastPrivilege` 和路径/参数的安全等价形式归一化。action、固定 Broker 路径、working directory、
-零 trigger、45 分钟上限、`AllowDemandStart=true`、`StartWhenAvailable=false` 等边界仍逐项严格验证，
+单一登录 trigger、无限监听时限、有限重启、`AllowDemandStart=true`、`StartWhenAvailable=false` 等
+边界仍逐项严格验证，
 每项失败返回独立脱敏 reason，不再折叠为 `TASK_DEFINITION_INVALID`。
 
 安装前可运行真实 Task Scheduler round-trip。它只注册一个唯一临时任务，绝不执行该任务，并在同次
@@ -55,10 +56,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\quant-server\scripts\host-
 正式安装采用事务式更新：更新前验证并导出已有 `StockQuantLocalBroker`；注册后校验失败时，新建场景
 只删除本次精确任务，更新场景则恢复并复验原 XML，其他计划任务不受影响。
 
+安装/升级会在确认待领取队列为空后启动一次监听进程并验证 fresh heartbeat；它不会生成 request。
 安装后的无 Provider 自检命令：
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\quant-server\scripts\host-broker\test-stock-quant-host-broker-host-smoke.ps1 -ExpectedCommit <当前完整Git SHA>
+powershell -NoProfile -ExecutionPolicy Bypass -File .\quant-server\scripts\host-broker\test-stock-quant-host-broker-resident-health.ps1 -ExpectedCommit <当前完整Git SHA>
 ```
 
 卸载命令：
@@ -67,7 +69,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\quant-server\scripts\host-
 powershell -NoProfile -ExecutionPolicy Bypass -File .\quant-server\scripts\host-broker\install-stock-quant-host-broker.ps1 -Uninstall
 ```
 
-卸载仅删除固定任务，不删除 Credential。
+卸载仅停止并删除固定任务及其 heartbeat，不删除 request/result 或 Credential。
 
 ## 严格请求与结果协议
 
@@ -82,6 +84,11 @@ quant-server/target/stock-quant-host-broker/requests
 ```text
 quant-server/target/stock-quant-host-broker/results
 ```
+
+常驻进程以原子 JSON 写入
+`quant-server/target/stock-quant-host-broker/heartbeat.json`，仅包含 Broker 版本、Git SHA、Windows
+用户、进程 ID、启动时间、最近心跳和 `IDLE/BUSY` 状态。Codex 只把 fresh、同 SHA 的 heartbeat
+视为健康；缺失、过期或构建不匹配统一返回 `HOST_BROKER_NOT_RUNNING`，不会尝试提升权限或安装任务。
 
 请求采用 UTF-8、无 BOM、严格逐行 `key=value` 的
 `STOCK_QUANT_HOST_BROKER_REQUEST_V1`。重复、未知、缺失、空字段及注释行全部拒绝。固定字段包含
@@ -115,8 +122,9 @@ codex sandbox -P stock_quant_formal_runner -C . powershell -NoProfile -Execution
   -ArtifactPath <verified-day001-runner.jar>
 ```
 
-invoke 脚本自行生成全新 requestId 和十分钟请求窗口、验证本地/远程集成 SHA 与固定任务定义、写入
-请求、执行唯一固定 `schtasks /Run` 并轮询结果。真实失败不触发第二次任务、不生成第二个 requestId、
+invoke 脚本自行生成全新 requestId 和十分钟请求窗口、验证本地/远程集成 SHA、正式资产以及两次
+fresh heartbeat，然后原子写入请求并轮询对应结果。常驻 Broker 自动发现并领取请求，Codex 无需
+Task Scheduler 访问权。真实失败不触发第二次任务、不生成第二个 requestId、
 不补跑、不重试、不重新签发授权。
 
 ## 不变边界

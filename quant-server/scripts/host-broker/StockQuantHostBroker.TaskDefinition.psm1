@@ -3,7 +3,10 @@ Set-StrictMode -Version Latest
 $script:FormalTaskName = 'StockQuantLocalBroker'
 $script:RoundTripTaskPattern =
     '^StockQuantHostBrokerRoundTrip_[A-F0-9]{32}$'
-$script:ExpectedExecutionTimeLimit = [TimeSpan]::FromMinutes(45)
+$script:ResidentExecutionTimeLimit = [TimeSpan]::Zero
+$script:LegacyExecutionTimeLimit = [TimeSpan]::FromMinutes(45)
+$script:ExpectedRestartCount = 3
+$script:ExpectedRestartInterval = [TimeSpan]::FromMinutes(1)
 
 function Assert-StockQuantAllowedTaskName {
     param(
@@ -77,7 +80,9 @@ function ConvertTo-StockQuantPrincipalSid {
 function ConvertTo-StockQuantDuration {
     param(
         [AllowNull()]
-        [object] $Value
+        [object] $Value,
+        [string] $FailureCode =
+            'STOCK_QUANT_HOST_BROKER_TASK_EXECUTION_TIME_LIMIT_MISMATCH'
     )
     try {
         if ($Value -is [TimeSpan]) { return [TimeSpan]$Value }
@@ -88,7 +93,7 @@ function ConvertTo-StockQuantDuration {
         }
         return [TimeSpan]::Parse($text)
     } catch {
-        throw 'STOCK_QUANT_HOST_BROKER_TASK_EXECUTION_TIME_LIMIT_MISMATCH'
+        throw $FailureCode
     }
 }
 
@@ -153,7 +158,7 @@ function New-StockQuantHostBrokerTaskDefinition {
         [Parameter(Mandatory = $true)]
         [string] $UserId,
         [string] $Description =
-            'Fixed on-demand Stock Quant host broker; no schedule and no secrets in task arguments.'
+            'Fixed resident Stock Quant host broker; request-driven only and no secrets in task arguments.'
     )
     $arguments = '-NoProfile -NonInteractive -ExecutionPolicy Bypass ' +
         '-File "' + $BrokerScript + '"'
@@ -161,11 +166,14 @@ function New-StockQuantHostBrokerTaskDefinition {
         -Argument $arguments -WorkingDirectory $WorkingDirectory
     $principal = New-ScheduledTaskPrincipal -UserId $UserId `
         -LogonType Interactive -RunLevel Limited
+    $trigger = New-ScheduledTaskTrigger -AtLogOn -User $UserId
     $settings = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew `
-        -ExecutionTimeLimit $script:ExpectedExecutionTimeLimit `
+        -ExecutionTimeLimit $script:ResidentExecutionTimeLimit `
+        -RestartCount $script:ExpectedRestartCount `
+        -RestartInterval $script:ExpectedRestartInterval `
         -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
     return New-ScheduledTask -Action $action -Principal $principal `
-        -Settings $settings -Description $Description
+        -Trigger $trigger -Settings $settings -Description $Description
 }
 
 function Assert-StockQuantHostBrokerTaskDefinition {
@@ -182,7 +190,8 @@ function Assert-StockQuantHostBrokerTaskDefinition {
         [Parameter(Mandatory = $true)]
         [ValidatePattern('^S-1-5-[0-9-]+$')]
         [string] $ExpectedUserSid,
-        [string] $ExpectedTaskName = ''
+        [string] $ExpectedTaskName = '',
+        [switch] $AllowLegacyOnDemand
     )
     if (-not [string]::IsNullOrWhiteSpace($ExpectedTaskName)) {
         Assert-StockQuantAllowedTaskName -TaskName $ExpectedTaskName
@@ -245,13 +254,34 @@ function Assert-StockQuantHostBrokerTaskDefinition {
     }
 
     $triggers = @($Task.Triggers | Where-Object { $null -ne $_ })
-    if ($triggers.Count -ne 0) {
+    $legacyOnDemand = $AllowLegacyOnDemand -and $triggers.Count -eq 0
+    if (-not $legacyOnDemand -and $triggers.Count -ne 1) {
         throw 'STOCK_QUANT_HOST_BROKER_TASK_TRIGGER_COUNT_MISMATCH'
+    }
+    if (-not $legacyOnDemand) {
+        $triggerType = [string]$triggers[0].CimClass.CimClassName
+        if ($triggerType -cne 'MSFT_TaskLogonTrigger') {
+            throw 'STOCK_QUANT_HOST_BROKER_TASK_TRIGGER_TYPE_MISMATCH'
+        }
+        $triggerUserSid = ConvertTo-StockQuantPrincipalSid `
+            -Value $triggers[0].UserId
+        if ($triggerUserSid -cne $ExpectedUserSid) {
+            throw 'STOCK_QUANT_HOST_BROKER_TASK_TRIGGER_USER_MISMATCH'
+        }
+        $triggerEnabled = ConvertTo-StockQuantBoolean `
+            -Value $triggers[0].Enabled `
+            -FailureCode 'STOCK_QUANT_HOST_BROKER_TASK_TRIGGER_ENABLED_MISMATCH'
+        if (-not $triggerEnabled) {
+            throw 'STOCK_QUANT_HOST_BROKER_TASK_TRIGGER_ENABLED_MISMATCH'
+        }
     }
 
     $duration = ConvertTo-StockQuantDuration `
         -Value $Task.Settings.ExecutionTimeLimit
-    if ($duration -ne $script:ExpectedExecutionTimeLimit) {
+    $expectedDuration = $(if ($legacyOnDemand) {
+        $script:LegacyExecutionTimeLimit
+    } else { $script:ResidentExecutionTimeLimit })
+    if ($duration -ne $expectedDuration) {
         throw `
             'STOCK_QUANT_HOST_BROKER_TASK_EXECUTION_TIME_LIMIT_MISMATCH'
     }
@@ -280,6 +310,16 @@ function Assert-StockQuantHostBrokerTaskDefinition {
     if ([string]$Task.Settings.MultipleInstances -ne 'IgnoreNew' -or
         $startOnBattery -or $stopOnBattery -or -not $enabled -or $hidden) {
         throw 'STOCK_QUANT_HOST_BROKER_TASK_SETTINGS_MISMATCH'
+    }
+    if (-not $legacyOnDemand) {
+        $restartCount = [int]$Task.Settings.RestartCount
+        $restartInterval = ConvertTo-StockQuantDuration `
+            -Value $Task.Settings.RestartInterval -FailureCode `
+                'STOCK_QUANT_HOST_BROKER_TASK_RESTART_SETTINGS_MISMATCH'
+        if ($restartCount -ne $script:ExpectedRestartCount -or
+            $restartInterval -ne $script:ExpectedRestartInterval) {
+            throw 'STOCK_QUANT_HOST_BROKER_TASK_RESTART_SETTINGS_MISMATCH'
+        }
     }
 }
 
@@ -310,7 +350,7 @@ function Invoke-StockQuantHostBrokerTaskRegistrationTransaction {
             -ExpectedBrokerScript $ExpectedBrokerScript `
             -ExpectedWorkingDirectory $ExpectedWorkingDirectory `
             -ExpectedUserSid $ExpectedUserSid `
-            -ExpectedTaskName $TaskName
+            -ExpectedTaskName $TaskName -AllowLegacyOnDemand
         $existingXml = [string](Export-ScheduledTask -TaskName $TaskName)
     }
 
@@ -359,7 +399,7 @@ function Invoke-StockQuantHostBrokerTaskRegistrationTransaction {
                         -ExpectedBrokerScript $ExpectedBrokerScript `
                         -ExpectedWorkingDirectory $ExpectedWorkingDirectory `
                         -ExpectedUserSid $ExpectedUserSid `
-                        -ExpectedTaskName $TaskName
+                        -ExpectedTaskName $TaskName -AllowLegacyOnDemand
                     $restoredXml = [string](Export-ScheduledTask `
                         -TaskName $TaskName)
                     if ((Get-StockQuantCanonicalXml -Xml $restoredXml) -cne

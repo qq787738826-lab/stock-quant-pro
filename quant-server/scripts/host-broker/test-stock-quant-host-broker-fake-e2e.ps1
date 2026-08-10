@@ -9,6 +9,8 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 Import-Module (Join-Path $PSScriptRoot `
     'StockQuantHostBroker.Protocol.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot `
+    'StockQuantHostBroker.TestSupport.psm1') -Force
 
 $paths = Initialize-StockQuantHostBrokerDirectories
 $testPrefix = 'stock-quant-host-broker-fake-e2e-'
@@ -19,6 +21,7 @@ $artifact = Join-Path $paths.TargetRoot `
 $proof = "$artifact.f1f-b2-proof.properties"
 $authorization = Join-Path $testRoot 'broker-fake-e2e-authorization.properties'
 $requestId = $null
+$resident = $null
 
 function Write-E2eAuthorization {
     param(
@@ -98,6 +101,8 @@ try {
     Write-E2eAuthorization -ArtifactHash $artifactHash `
         -DatabasePort $fakePort
 
+    $resident = Start-StockQuantTestResidentBroker `
+        -ExpectedCommit $ExpectedCommit -LogDirectory $testRoot
     $requestId = New-StockQuantHostBrokerRequestId
     $created = [DateTimeOffset]::UtcNow
     $values = [ordered]@{
@@ -132,11 +137,17 @@ try {
         'source.request.id' = 'NONE'
     }
     Write-StockQuantHostBrokerRequest -Values $values | Out-Null
-    & $paths.BrokerScript | Out-Host
-    if ($LASTEXITCODE -ne 0) {
-        throw 'STOCK_QUANT_HOST_BROKER_FAKE_E2E_EXECUTION_FAILED'
-    }
     $resultPath = Join-Path $paths.Results "$requestId.result.json"
+    $deadline = [DateTimeOffset]::UtcNow.AddMinutes(30)
+    while (-not (Test-Path -LiteralPath $resultPath -PathType Leaf)) {
+        if ([DateTimeOffset]::UtcNow -ge $deadline) {
+            throw 'STOCK_QUANT_HOST_BROKER_FAKE_E2E_RESULT_TIMEOUT'
+        }
+        if ($resident.Process.HasExited) {
+            throw 'STOCK_QUANT_HOST_BROKER_FAKE_E2E_RESIDENT_EXITED'
+        }
+        Start-Sleep -Milliseconds 250
+    }
     $result = Get-Content -LiteralPath $resultPath -Raw -Encoding UTF8 |
         ConvertFrom-Json
     if ($result.status -ne 'SUCCEEDED' -or
@@ -153,6 +164,10 @@ try {
     Write-Output 'STOCK_QUANT_HOST_BROKER_FAKE_E2E_RESIDUALS=0'
 } finally {
     Pop-Location
+    if ($null -ne $resident) {
+        Stop-StockQuantTestResidentBroker -Resident $resident
+        $resident = $null
+    }
     if ($null -ne $requestId) {
         foreach ($directory in @($paths.Requests, $paths.Results)) {
             foreach ($generated in @(Get-ChildItem -LiteralPath $directory `

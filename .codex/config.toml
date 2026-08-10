@@ -65,5 +65,5 @@ enable_socks5_udp = false
 "dlcdn.apache.org" = "allow"
 
 [permissions.stock_quant_formal_runner]
-description = "Host-broker request creation and fixed scheduled-task trigger only"
+description = "Resident host-broker heartbeat, request creation, and sanitized-result polling only"
 extends = "stock_quant_local"

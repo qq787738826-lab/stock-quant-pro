@@ -190,9 +190,9 @@ Vue 修改后：
 - 真实 Tushare 网络请求只允许固定宿主 Broker 以真实用户身份调用
   `quant-server/scripts/run-stock-quant-local-automation.ps1`，再启动已证明 Start-Class 的
   `TushareReducedResearchManualRunner`。Codex 只能通过
-  `quant-server/scripts/host-broker/invoke-stock-quant-host-broker.ps1` 写请求并执行固定
-  `schtasks.exe /Run /TN "StockQuantLocalBroker"`；不得直接启动正式 Runner。
-  `stock_quant_formal_runner` 只用于请求和触发，不允许访问 Tushare 域名。任何测试、E2E、
+  `quant-server/scripts/host-broker/invoke-stock-quant-host-broker.ps1` 校验 fresh heartbeat、写请求并
+  等待脱敏结果；不得查询或触发 Task Scheduler，也不得直接启动正式 Runner。
+  `stock_quant_formal_runner` 只用于请求和结果轮询，不允许访问 Tushare 域名。任何测试、E2E、
   诊断、修复、构建或普通 Java/PowerShell 命令均不得访问真实 Provider。
 - 禁止把秘密写入参数、环境变量、文件、日志、证据、聊天或云端任务。正式凭据模式禁止
   在 Codex Cloud、CI、非 Windows 或无法确认本机上下文的环境运行；失败时必须关闭并
@@ -200,11 +200,14 @@ Vue 修改后：
 - 自动修复循环可以在任务授权范围内执行定向测试、临时 PostgreSQL、打包 Fake Provider
   E2E、提交和普通 push；真实运行失败后不得重试、补跑、复用 runId 或自动签发新授权。
 - Broker 安装只能由真实 Windows 用户显式执行一次；任务固定为 `Interactive/Limited`、
-  无触发器、按需启动、固定脚本且不保存账户密码。安装器必须要求管理员 PowerShell，但不得
+  单一当前用户登录 trigger、固定常驻脚本且不保存账户密码。登录只启动监听进程，
+  `BROKER_AUTOSTART=true`、`PROVIDER_AUTOSTART=false`；空闲时不得读取凭据、连接数据库或创建
+  Provider 客户端。安装器必须要求管理员 PowerShell，但不得
   调用、查找或安装 `codex` CLI；任务以当前真实 Windows 用户为 principal，并保留任务计划程序
   的所有者/管理员默认安全边界，不得扩权给 Authenticated Users、Everyone、SYSTEM，不得使用
   高权限、开机启动或定时真实 Provider 运行。
 - Task Scheduler 注册后 principal 必须按 Windows SID 校验，允许本地账户从 `计算机名\用户名`
   规范化为裸用户名及 XML SID，但固定 action、Broker 路径、working directory、Interactive/Limited、
-  零 trigger 和 demand-only 设置仍须逐项 fail-closed。正式任务更新必须先导出并验证旧定义；失败时
+  单一登录 trigger、无限监听时限和有限重启设置仍须逐项 fail-closed；旧零 trigger 定义只能作为
+  一次升级来源。正式任务更新必须先导出并验证旧定义；失败时
   只删除本次精确新任务或恢复旧 XML，不得删除其他任务或留下半安装状态。
