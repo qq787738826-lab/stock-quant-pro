@@ -25,6 +25,11 @@ Broker 对请求执行固定目录、完整字段、过期时间、重复 ID、�
   用户、管理员要求和固定任务定义；不创建任务。
 - host smoke 在 PATH 不存在 `codex` 时仍可完成固定 Target 存在性与脱敏结果检查，Provider 调用 0、
   永久数据库写入 0。
+- 实际 Task Scheduler round-trip 覆盖 Windows PowerShell 5.1、中文本地用户名的裸名/SID 规范化、
+  Actions 单元素、Triggers 空集合、Interactive/Limited、固定路径与设置，并验证新建失败无残留、
+  更新失败恢复原定义；临时任务从不执行且残留 0。
+- 安装校验按条件返回独立脱敏 reason；正常路径、参数和 principal 规范化不再误报统一
+  `TASK_DEFINITION_INVALID`。
 - 打包 Fake Provider、临时 PostgreSQL、typed fact、SYSTEM_KNOWLEDGE、QFQ、输出审计和残留检查
   必须全部通过后才可合入。
 - 本阶段不安装计划任务、不执行真实 Day001、不读取 CredentialBlob、不调用真实 Provider、不写

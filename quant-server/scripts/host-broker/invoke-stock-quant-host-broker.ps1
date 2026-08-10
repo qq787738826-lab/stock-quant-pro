@@ -24,14 +24,14 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 Import-Module (Join-Path $PSScriptRoot `
     'StockQuantHostBroker.Protocol.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot `
+    'StockQuantHostBroker.TaskDefinition.psm1') -Force
 
 $paths = Initialize-StockQuantHostBrokerDirectories
 $identity = [Security.Principal.WindowsIdentity]::GetCurrent().Name
 $integrationBranch = 'feature/1.4.0-agent-team'
 $expectedPowerShell = Join-Path $env:SystemRoot `
     'System32\WindowsPowerShell\v1.0\powershell.exe'
-$expectedArguments = '-NoProfile -NonInteractive -ExecutionPolicy Bypass ' +
-    '-File "' + $paths.BrokerScript + '"'
 
 if ($identity -notmatch '(?i)CodexSandbox') {
     throw 'STOCK_QUANT_HOST_BROKER_CODEX_SANDBOX_REQUIRED'
@@ -116,15 +116,24 @@ try {
     $requestFile = Write-StockQuantHostBrokerRequest -Values $requestValues
 
     $task = Get-ScheduledTask -TaskName $paths.TaskName -ErrorAction Stop
-    if ($task.Actions.Count -ne 1 -or
-        -not ([string]$task.Actions[0].Execute).Equals(
-            $expectedPowerShell, [StringComparison]::OrdinalIgnoreCase) -or
-        [string]$task.Actions[0].Arguments -cne $expectedArguments -or
-        $task.Triggers.Count -ne 0 -or
-        [string]$task.Principal.LogonType -ne 'Interactive' -or
-        [string]$task.Principal.UserId -match '(?i)CodexSandbox') {
-        throw 'STOCK_QUANT_HOST_BROKER_TASK_DEFINITION_INVALID'
+    if ([string]$task.Principal.UserId -match '(?i)CodexSandbox') {
+        throw 'STOCK_QUANT_HOST_BROKER_TASK_PRINCIPAL_USER_MISMATCH'
     }
+    $taskXml = [Xml.XmlDocument]::new()
+    $taskXml.LoadXml([string](Export-ScheduledTask `
+        -TaskName $paths.TaskName))
+    $principalNode = $taskXml.SelectSingleNode(
+        "//*[local-name()='Principal']/*[local-name()='UserId']")
+    if ($null -eq $principalNode -or
+        $principalNode.InnerText -notmatch '^S-1-5-[0-9-]+$') {
+        throw 'STOCK_QUANT_HOST_BROKER_TASK_PRINCIPAL_USER_MISMATCH'
+    }
+    Assert-StockQuantHostBrokerTaskDefinition -Task $task `
+        -ExpectedPowerShellExecutable $expectedPowerShell `
+        -ExpectedBrokerScript $paths.BrokerScript `
+        -ExpectedWorkingDirectory $paths.RepositoryRoot `
+        -ExpectedUserSid $principalNode.InnerText `
+        -ExpectedTaskName $paths.TaskName
 
     & schtasks.exe /Run /TN 'StockQuantLocalBroker' | Out-Null
     if ($LASTEXITCODE -ne 0) {

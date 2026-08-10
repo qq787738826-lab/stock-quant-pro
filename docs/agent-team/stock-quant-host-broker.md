@@ -39,6 +39,22 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\quant-server\scripts\host-
 也不要求 `codex` CLI 位于 PATH。`-WhatIf` 可在不创建或修改计划任务的前提下完成只读预检；真实
 安装或卸载必须通过管理员检查。更新仍需真实用户重新运行该安装命令并确认。
 
+Windows Task Scheduler 注册后可能把 `计算机名\用户名` 规范化为裸用户名，并在 XML 中使用 SID；
+安装器因此按 SID 比较 principal，同时把 `Interactive`/`InteractiveToken`、`Limited`/
+`LeastPrivilege` 和路径/参数的安全等价形式归一化。action、固定 Broker 路径、working directory、
+零 trigger、45 分钟上限、`AllowDemandStart=true`、`StartWhenAvailable=false` 等边界仍逐项严格验证，
+每项失败返回独立脱敏 reason，不再折叠为 `TASK_DEFINITION_INVALID`。
+
+安装前可运行真实 Task Scheduler round-trip。它只注册一个唯一临时任务，绝不执行该任务，并在同次
+运行精确删除；测试覆盖注册/Get/Export/XML 恢复、中文用户名规范化、新建失败清理和已有定义恢复：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\quant-server\scripts\host-broker\test-stock-quant-host-broker-install-roundtrip.ps1
+```
+
+正式安装采用事务式更新：更新前验证并导出已有 `StockQuantLocalBroker`；注册后校验失败时，新建场景
+只删除本次精确任务，更新场景则恢复并复验原 XML，其他计划任务不受影响。
+
 安装后的无 Provider 自检命令：
 
 ```powershell

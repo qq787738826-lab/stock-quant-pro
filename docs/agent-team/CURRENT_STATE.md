@@ -190,6 +190,9 @@
   正式授权/Day001 执行 0，七项治理状态不变。操作与阶段证据见
   [宿主 Broker 说明](stock-quant-host-broker.md)和
   [阶段记录](stage-stock-quant-host-broker.md)。
+- Host Broker 安装定义兼容 Windows Task Scheduler 对本地中文账户的裸用户名/SID 规范化；安装前
+  可用唯一临时任务完成 PowerShell 5.1 注册/Get/Export/恢复 round-trip。安装更新保留并验证旧 XML，
+  校验失败只清理本次精确新任务或恢复旧定义，不触碰其他任务；各安全条件使用独立脱敏 reason。
 - 3A-R3B-F2A 任务书 / 阶段记录：[tasks/3ar3b-f2a-research-preview-product.md](tasks/3ar3b-f2a-research-preview-product.md) / [stage-3ar3b-f2a-research-preview-product.md](stage-3ar3b-f2a-research-preview-product.md)。
 - 3A-R3B-F2A-R1 任务书 / 阶段记录：[tasks/3ar3b-f2a-r1-preview-ux-convergence.md](tasks/3ar3b-f2a-r1-preview-ux-convergence.md) / [stage-3ar3b-f2a-r1-preview-ux-convergence.md](stage-3ar3b-f2a-r1-preview-ux-convergence.md)。
 - 3A-R3B-F2A-R1A 任务书 / 阶段记录：[tasks/3ar3b-f2a-r1a-visual-semantics-fix.md](tasks/3ar3b-f2a-r1a-visual-semantics-fix.md) / [stage-3ar3b-f2a-r1a-visual-semantics-fix.md](stage-3ar3b-f2a-r1a-visual-semantics-fix.md)。

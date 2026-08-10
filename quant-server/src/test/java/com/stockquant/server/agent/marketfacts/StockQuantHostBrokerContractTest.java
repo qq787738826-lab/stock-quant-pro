@@ -12,23 +12,28 @@ class StockQuantHostBrokerContractTest {
 
     @Test
     void installerRegistersOneFixedInteractiveDemandOnlyTask() throws Exception {
-        String script = read("scripts/host-broker/"
+        String installer = read("scripts/host-broker/"
                 + "install-stock-quant-host-broker.ps1");
+        String taskDefinition = read("scripts/host-broker/"
+                + "StockQuantHostBroker.TaskDefinition.psm1");
 
-        assertTrue(script.contains("$taskName = 'StockQuantLocalBroker'"));
-        assertTrue(script.contains("stock-quant-host-broker.ps1"));
-        assertTrue(script.contains("New-ScheduledTaskPrincipal"));
-        assertTrue(script.contains("-LogonType Interactive"));
-        assertTrue(script.contains("-RunLevel Limited"));
-        assertTrue(script.contains("Register-ScheduledTask"));
-        assertTrue(script.contains(
-                "Assert-TaskDefinition -Task $definition"));
-        assertFalse(script.contains("New-ScheduledTaskTrigger"));
-        assertFalse(script.contains("-LogonType Password"));
-        assertFalse(script.contains("/RP"));
-        assertTrue(script.contains("$triggers.Count -ne 0"));
-        assertTrue(script.contains("STOCK_QUANT_HOST_BROKER_TRIGGERS=0"));
-        assertTrue(script.contains("[switch] $Uninstall"));
+        assertTrue(installer.contains("$taskName = 'StockQuantLocalBroker'"));
+        assertTrue(installer.contains("stock-quant-host-broker.ps1"));
+        assertTrue(installer.contains(
+                "Invoke-StockQuantHostBrokerTaskRegistrationTransaction"));
+        assertTrue(taskDefinition.contains("New-ScheduledTaskPrincipal"));
+        assertTrue(taskDefinition.contains("-LogonType Interactive"));
+        assertTrue(taskDefinition.contains("-RunLevel Limited"));
+        assertTrue(taskDefinition.contains("Register-ScheduledTask"));
+        assertTrue(taskDefinition.contains(
+                "Assert-StockQuantHostBrokerTaskDefinition"));
+        assertFalse(taskDefinition.contains("New-ScheduledTaskTrigger"));
+        assertFalse(taskDefinition.contains("-LogonType Password"));
+        assertFalse(taskDefinition.contains("/RP"));
+        assertTrue(taskDefinition.contains("$triggers.Count -ne 0"));
+        assertTrue(taskDefinition.contains("AllowDemandStart"));
+        assertTrue(installer.contains("STOCK_QUANT_HOST_BROKER_TRIGGERS=0"));
+        assertTrue(installer.contains("[switch] $Uninstall"));
     }
 
     @Test
@@ -90,6 +95,66 @@ class StockQuantHostBrokerContractTest {
         assertTrue(presenceCheck.contains("CredFree"));
         assertFalse(presenceCheck.contains("CredentialBlob"));
         assertFalse(presenceCheck.contains("PtrToString"));
+    }
+
+    @Test
+    void taskDefinitionUsesIndependentReasonsAndSidNormalization()
+            throws Exception {
+        String taskDefinition = read("scripts/host-broker/"
+                + "StockQuantHostBroker.TaskDefinition.psm1");
+
+        for (String reason : List.of(
+                "TASK_NAME_MISMATCH",
+                "TASK_ACTION_COUNT_MISMATCH",
+                "TASK_ACTION_EXECUTE_MISMATCH",
+                "TASK_ACTION_ARGUMENTS_MISMATCH",
+                "TASK_ACTION_WORKING_DIRECTORY_MISMATCH",
+                "TASK_PRINCIPAL_USER_MISMATCH",
+                "TASK_LOGON_TYPE_MISMATCH",
+                "TASK_RUN_LEVEL_MISMATCH",
+                "TASK_TRIGGER_COUNT_MISMATCH",
+                "TASK_EXECUTION_TIME_LIMIT_MISMATCH",
+                "TASK_ALLOW_DEMAND_START_MISMATCH",
+                "TASK_START_WHEN_AVAILABLE_MISMATCH",
+                "TASK_SETTINGS_MISMATCH")) {
+            assertTrue(taskDefinition.contains(
+                    "STOCK_QUANT_HOST_BROKER_" + reason), reason);
+        }
+        assertFalse(taskDefinition.contains("TASK_DEFINITION_INVALID"));
+        assertTrue(taskDefinition.contains("ConvertTo-StockQuantPrincipalSid"));
+        assertTrue(taskDefinition.contains("SecurityIdentifier"));
+        assertTrue(taskDefinition.contains("$env:COMPUTERNAME"));
+        assertTrue(taskDefinition.contains("'InteractiveToken'"));
+        assertTrue(taskDefinition.contains("'LeastPrivilege'"));
+        assertTrue(taskDefinition.contains("ExpandEnvironmentVariables"));
+        assertTrue(taskDefinition.contains("GetFullPath"));
+    }
+
+    @Test
+    void registrationTransactionRestoresExistingAndRemovesOnlyExactTask()
+            throws Exception {
+        String taskDefinition = read("scripts/host-broker/"
+                + "StockQuantHostBroker.TaskDefinition.psm1");
+        String roundTrip = read("scripts/host-broker/"
+                + "test-stock-quant-host-broker-install-roundtrip.ps1");
+
+        assertTrue(taskDefinition.contains(
+                "'^StockQuantHostBrokerRoundTrip_[A-F0-9]{32}$'"));
+        assertTrue(taskDefinition.contains("Export-ScheduledTask"));
+        assertTrue(taskDefinition.contains("$existingXml"));
+        assertTrue(taskDefinition.contains("-Xml $existingXml -Force"));
+        assertTrue(taskDefinition.contains("Get-StockQuantCanonicalXml"));
+        assertTrue(taskDefinition.contains(
+                "STOCK_QUANT_HOST_BROKER_TASK_ROLLBACK_FAILED"));
+        assertFalse(taskDefinition.contains("Unregister-ScheduledTask *"));
+        assertFalse(taskDefinition.contains("-TaskName *"));
+        assertTrue(roundTrip.contains("Register-ScheduledTask"));
+        assertTrue(roundTrip.contains("Export-ScheduledTask"));
+        assertTrue(roundTrip.contains("Unregister-ScheduledTask"));
+        assertTrue(roundTrip.contains("never executed"));
+        assertTrue(roundTrip.contains("PROVIDER_CALLS=0"));
+        assertTrue(roundTrip.contains("PERMANENT_DATABASE_WRITES=0"));
+        assertTrue(roundTrip.contains("CREDENTIAL_READS=0"));
     }
 
     @Test

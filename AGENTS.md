@@ -204,3 +204,7 @@ Vue 修改后：
   调用、查找或安装 `codex` CLI；任务以当前真实 Windows 用户为 principal，并保留任务计划程序
   的所有者/管理员默认安全边界，不得扩权给 Authenticated Users、Everyone、SYSTEM，不得使用
   高权限、开机启动或定时真实 Provider 运行。
+- Task Scheduler 注册后 principal 必须按 Windows SID 校验，允许本地账户从 `计算机名\用户名`
+  规范化为裸用户名及 XML SID，但固定 action、Broker 路径、working directory、Interactive/Limited、
+  零 trigger 和 demand-only 设置仍须逐项 fail-closed。正式任务更新必须先导出并验证旧定义；失败时
+  只删除本次精确新任务或恢复旧 XML，不得删除其他任务或留下半安装状态。

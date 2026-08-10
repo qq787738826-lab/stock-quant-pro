@@ -15,6 +15,8 @@ $repoRoot = (Resolve-Path -LiteralPath (
     Join-Path $PSScriptRoot '..\..\..')).Path
 $brokerScriptCandidate = Join-Path $PSScriptRoot `
     'stock-quant-host-broker.ps1'
+$taskDefinitionModule = Join-Path $PSScriptRoot `
+    'StockQuantHostBroker.TaskDefinition.psm1'
 $credentialStatusScript = Join-Path $repoRoot `
     'quant-server\scripts\set-stock-quant-secrets.ps1'
 $powershellExe = Join-Path $env:SystemRoot `
@@ -24,48 +26,16 @@ $hostPrincipal = [Security.Principal.WindowsPrincipal]::new($hostIdentity)
 $isAdministrator = $hostPrincipal.IsInRole(
     [Security.Principal.WindowsBuiltInRole]::Administrator)
 
-function Assert-TaskDefinition {
-    param(
-        [Parameter(Mandatory = $true)]
-        [object] $Task,
-        [Parameter(Mandatory = $true)]
-        [string] $ExpectedUser
-    )
-    $actions = @($Task.Actions)
-    $triggers = @($Task.Triggers | Where-Object { $null -ne $_ })
-    if ($actions.Count -ne 1 -or
-        -not ([string]$actions[0].Execute).Equals(
-            $powershellExe, [StringComparison]::OrdinalIgnoreCase) -or
-        [string]$actions[0].Arguments -cne $taskArguments -or
-        $triggers.Count -ne 0 -or
-        -not ([string]$Task.Principal.UserId).Equals(
-            $ExpectedUser, [StringComparison]::OrdinalIgnoreCase) -or
-        [string]$Task.Principal.LogonType -ne 'Interactive' -or
-        [string]$Task.Principal.RunLevel -ne 'Limited') {
-        throw 'STOCK_QUANT_HOST_BROKER_TASK_DEFINITION_INVALID'
-    }
-}
-
-function Assert-InstalledTask {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string] $ExpectedUser
-    )
-    $task = Get-ScheduledTask -TaskName $taskName -ErrorAction Stop
-    Assert-TaskDefinition -Task $task -ExpectedUser $ExpectedUser
-}
-
 if ($hostIdentity.Name -match '(?i)CodexSandbox') {
     throw 'STOCK_QUANT_HOST_BROKER_REAL_USER_REQUIRED'
 }
 if (-not (Test-Path -LiteralPath $brokerScriptCandidate -PathType Leaf) -or
+    -not (Test-Path -LiteralPath $taskDefinitionModule -PathType Leaf) -or
     -not (Test-Path -LiteralPath $credentialStatusScript -PathType Leaf) -or
     -not (Test-Path -LiteralPath $powershellExe -PathType Leaf)) {
     throw 'STOCK_QUANT_HOST_BROKER_INSTALL_PREREQUISITE_MISSING'
 }
 $brokerScript = (Resolve-Path -LiteralPath $brokerScriptCandidate).Path
-$taskArguments = '-NoProfile -NonInteractive -ExecutionPolicy Bypass ' +
-    '-File "' + $brokerScript + '"'
 if (-not $isAdministrator -and -not $WhatIfPreference) {
     throw 'STOCK_QUANT_HOST_BROKER_ADMINISTRATOR_REQUIRED'
 }
@@ -113,35 +83,40 @@ Write-Output 'STOCK_QUANT_HOST_BROKER_CREDENTIALS_READY=true'
 Write-Output 'STOCK_QUANT_HOST_BROKER_CODEX_CLI_REQUIRED=false'
 
 Import-Module ScheduledTasks -ErrorAction Stop
-$action = New-ScheduledTaskAction -Execute $powershellExe `
-    -Argument $taskArguments -WorkingDirectory $repoRoot
-$principal = New-ScheduledTaskPrincipal -UserId $hostIdentity.Name `
-    -LogonType Interactive -RunLevel Limited
-$settings = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew `
-    -ExecutionTimeLimit (New-TimeSpan -Minutes 45) `
-    -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
-$definition = New-ScheduledTask -Action $action -Principal $principal `
-    -Settings $settings -Description `
-    'Fixed on-demand Stock Quant host broker; no schedule and no secrets in task arguments.'
-Assert-TaskDefinition -Task $definition -ExpectedUser $hostIdentity.Name
+Import-Module $taskDefinitionModule -Force -ErrorAction Stop
+$definition = New-StockQuantHostBrokerTaskDefinition `
+    -PowerShellExecutable $powershellExe -BrokerScript $brokerScript `
+    -WorkingDirectory $repoRoot -UserId $hostIdentity.Name
+Assert-StockQuantHostBrokerTaskDefinition -Task $definition `
+    -ExpectedPowerShellExecutable $powershellExe `
+    -ExpectedBrokerScript $brokerScript `
+    -ExpectedWorkingDirectory $repoRoot `
+    -ExpectedUserSid $hostIdentity.User.Value
+$existingBeforeInstall = Get-ScheduledTask -TaskName $taskName `
+    -ErrorAction SilentlyContinue
+if ($null -ne $existingBeforeInstall) {
+    Assert-StockQuantHostBrokerTaskDefinition -Task $existingBeforeInstall `
+        -ExpectedPowerShellExecutable $powershellExe `
+        -ExpectedBrokerScript $brokerScript `
+        -ExpectedWorkingDirectory $repoRoot `
+        -ExpectedUserSid $hostIdentity.User.Value `
+        -ExpectedTaskName $taskName
+}
+Write-Output ("STOCK_QUANT_HOST_BROKER_EXISTING_TASK=" +
+    $(if ($null -ne $existingBeforeInstall) { 'VALID' } else { 'ABSENT' }))
 
 if ($PSCmdlet.ShouldProcess($taskName, 'Install or update fixed host broker')) {
-    $registered = $false
-    try {
-        Register-ScheduledTask -TaskName $taskName -InputObject $definition `
-            -Force | Out-Null
-        $registered = $true
-        Assert-InstalledTask -ExpectedUser $hostIdentity.Name
-        Write-Output 'STOCK_QUANT_HOST_BROKER_INSTALLED=true'
-        Write-Output 'STOCK_QUANT_HOST_BROKER_PASSWORD_STORED_IN_TASK=false'
-        Write-Output 'STOCK_QUANT_HOST_BROKER_PROVIDER_AUTOSTART=false'
-    } catch {
-        if ($registered) {
-            Unregister-ScheduledTask -TaskName $taskName `
-                -Confirm:$false -ErrorAction SilentlyContinue
-        }
-        throw
-    }
+    $transaction = Invoke-StockQuantHostBrokerTaskRegistrationTransaction `
+        -TaskName $taskName -Definition $definition `
+        -ExpectedPowerShellExecutable $powershellExe `
+        -ExpectedBrokerScript $brokerScript `
+        -ExpectedWorkingDirectory $repoRoot `
+        -ExpectedUserSid $hostIdentity.User.Value
+    Write-Output 'STOCK_QUANT_HOST_BROKER_INSTALLED=true'
+    Write-Output "STOCK_QUANT_HOST_BROKER_CREATED=$($transaction.Created)"
+    Write-Output "STOCK_QUANT_HOST_BROKER_UPDATED=$($transaction.Updated)"
+    Write-Output 'STOCK_QUANT_HOST_BROKER_PASSWORD_STORED_IN_TASK=false'
+    Write-Output 'STOCK_QUANT_HOST_BROKER_PROVIDER_AUTOSTART=false'
 } else {
     Write-Output 'STOCK_QUANT_HOST_BROKER_INSTALL_PREFLIGHT=PASS'
     Write-Output 'STOCK_QUANT_HOST_BROKER_INSTALLED=false'
