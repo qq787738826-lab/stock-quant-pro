@@ -681,7 +681,7 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
             } catch (RuntimeException error) {
                 errors.add(new ProviderError(
                         ProviderErrorType.STRUCTURE_CHANGED,
-                        "TUSHARE_MAPPING_REJECTED",
+                        mappingFailureCode(type),
                         "Tushare response could not be mapped safely",
                         false,
                         null));
@@ -928,10 +928,16 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
         List<RowView> rows = rows(table, DAILY_FIELDS);
         List<RawDailyBar> values = new ArrayList<>();
         Set<LocalDate> dates = new HashSet<>();
+        String expectedTsCode = tsCode(
+                request.symbol(), request.exchange());
         for (RowView row : rows) {
-            requireTsCode(request, row.text("ts_code"));
+            if (!expectedTsCode.equals(row.text("ts_code"))) {
+                continue;
+            }
             LocalDate tradeDate = row.date("trade_date");
-            requireDate(request, tradeDate);
+            if (!insideRequestedRange(request, tradeDate)) {
+                continue;
+            }
             if (!dates.add(tradeDate)) {
                 throw new IllegalArgumentException(
                         "duplicate Tushare daily row");
@@ -978,10 +984,16 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
         List<RowView> rows = rows(table, FACTOR_FIELDS);
         List<AdjustmentFactor> values = new ArrayList<>();
         Set<LocalDate> dates = new HashSet<>();
+        String expectedTsCode = tsCode(
+                request.symbol(), request.exchange());
         for (RowView row : rows) {
-            requireTsCode(request, row.text("ts_code"));
+            if (!expectedTsCode.equals(row.text("ts_code"))) {
+                continue;
+            }
             LocalDate tradeDate = row.date("trade_date");
-            requireDate(request, tradeDate);
+            if (!insideRequestedRange(request, tradeDate)) {
+                continue;
+            }
             if (!dates.add(tradeDate)) {
                 throw new IllegalArgumentException(
                         "duplicate Tushare factor row");
@@ -1009,11 +1021,12 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
         Set<LocalDate> dates = new HashSet<>();
         for (RowView row : rows) {
             if (!request.exchange().equals(row.text("exchange"))) {
-                throw new IllegalArgumentException(
-                        "Tushare calendar exchange mismatch");
+                continue;
             }
             LocalDate calendarDate = row.date("cal_date");
-            requireDate(request, calendarDate);
+            if (!insideRequestedRange(request, calendarDate)) {
+                continue;
+            }
             if (!dates.add(calendarDate)) {
                 throw new IllegalArgumentException(
                         "duplicate Tushare calendar row");
@@ -1147,6 +1160,19 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
                 null);
     }
 
+    private static String mappingFailureCode(FactType type) {
+        return switch (type) {
+            case RAW_DAILY_BAR ->
+                    "TUSHARE_DAILY_RESPONSE_MAPPING_INVALID";
+            case ADJUSTMENT_FACTOR ->
+                    "TUSHARE_ADJ_FACTOR_RESPONSE_MAPPING_INVALID";
+            case TRADING_CALENDAR ->
+                    "TUSHARE_TRADE_CAL_RESPONSE_MAPPING_INVALID";
+            case CORPORATE_ACTION ->
+                    "TUSHARE_CORPORATE_ACTION_RESPONSE_MAPPING_INVALID";
+        };
+    }
+
     private void validateRequest(MarketFactRequest request) {
         if (request == null) {
             throw new IllegalArgumentException(
@@ -1182,25 +1208,12 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
         }
     }
 
-    private static void requireTsCode(
-            MarketFactRequest request,
-            String actual
-    ) {
-        if (!tsCode(request.symbol(), request.exchange()).equals(actual)) {
-            throw new IllegalArgumentException(
-                    "Tushare response instrument mismatch");
-        }
-    }
-
-    private static void requireDate(
+    private static boolean insideRequestedRange(
             MarketFactRequest request,
             LocalDate date
     ) {
-        if (date.isBefore(request.rangeStart())
-                || date.isAfter(request.rangeEnd())) {
-            throw new IllegalArgumentException(
-                    "Tushare response date outside request");
-        }
+        return !date.isBefore(request.rangeStart())
+                && !date.isAfter(request.rangeEnd());
     }
 
     public static String sourceInstrumentId(

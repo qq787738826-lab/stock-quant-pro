@@ -47,23 +47,26 @@ final class TushareControlledAcceptanceE2eDryRunGateway
         if (current == failAtCall) {
             throw new GatewayException(
                     ErrorKind.NETWORK_ERROR,
-                    "TUSHARE_E2E_DRY_RUN_PROVIDER_FAILURE",
-                    "TUSHARE_E2E_DRY_RUN_PROVIDER_FAILURE",
+                    "TUSHARE_SYNTHETIC_PROVIDER_FAILURE",
+                    "TUSHARE_SYNTHETIC_PROVIDER_FAILURE",
                     1, 0, null);
         }
         String date = parameters.path("start_date").asText("20250103");
         String tsCode = parameters.path("ts_code").asText("600000.SH");
         String exchange = parameters.path("exchange").asText("SSE");
         List<List<JsonNode>> rows = switch (endpoint) {
-            case "daily" -> List.of(List.of(
-                    text(tsCode), text(date), decimal("10.00"),
-                    decimal("10.80"), decimal("9.80"), decimal("10.50"),
-                    decimal("1000"), decimal("10500")));
-            case "adj_factor" -> List.of(List.of(
-                    text(tsCode), text(date), decimal("2.0000")));
-            case "trade_cal" -> List.of(List.of(
-                    text(exchange), text(date), decimal("1"),
-                    text(previousDate(date))));
+            case "daily" -> List.of(
+                    daily("000001.SZ", date),
+                    daily(tsCode, previousDate(date)),
+                    daily(tsCode, date));
+            case "adj_factor" -> List.of(
+                    factor("000001.SZ", date),
+                    factor(tsCode, previousDate(date)),
+                    factor(tsCode, date));
+            case "trade_cal" -> List.of(
+                    calendar("SZSE", date),
+                    calendar(exchange, previousDate(date)),
+                    calendar(exchange, date));
             default -> throw new IllegalArgumentException(
                     "TUSHARE_ENDPOINT_NOT_ALLOWED");
         };
@@ -77,6 +80,23 @@ final class TushareControlledAcceptanceE2eDryRunGateway
 
     int calls() {
         return calls.get();
+    }
+
+    private static List<JsonNode> daily(String tsCode, String date) {
+        return List.of(
+                text(tsCode), text(date), decimal("10.00"),
+                decimal("10.80"), decimal("9.80"), decimal("10.50"),
+                decimal("1000"), decimal("10500"));
+    }
+
+    private static List<JsonNode> factor(String tsCode, String date) {
+        return List.of(text(tsCode), text(date), decimal("2.0000"));
+    }
+
+    private static List<JsonNode> calendar(String exchange, String date) {
+        return List.of(
+                text(exchange), text(date), decimal("1"),
+                text(previousDate(date)));
     }
 
     private static String previousDate(String value) {

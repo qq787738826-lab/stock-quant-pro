@@ -241,6 +241,14 @@ public final class TushareDedicatedResearchBatchService {
             SecuritySelection security,
             TushareDedicatedResearchBatchCommand command
     ) {
+        if (!response.complete()) {
+            String safeCode = response.errors().size() == 1
+                    && response.errors().get(0).code()
+                    .matches("[A-Z][A-Z0-9_]{7,127}")
+                    ? response.errors().get(0).code()
+                    : "TUSHARE_DEDICATED_RESEARCH_PROVIDER_RESPONSE_INCOMPLETE";
+            throw blocked(safeCode);
+        }
         ValidatedSymbolFacts facts;
         try {
             facts = TushareDedicatedResearchFactValidator.validate(

@@ -11,6 +11,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class TushareControlledAcceptanceE2eCloseoutTest {
     private static final LocalDate TRADE_DATE = LocalDate.of(2025, 1, 3);
@@ -39,10 +40,22 @@ class TushareControlledAcceptanceE2eCloseoutTest {
         var session = TushareManualBoundedSession.f1eDedicatedLocalManual(
                 List.of(new SecuritySelection("600000", "SSE")), TRADE_DATE);
 
-        assertThrows(TushareApiGateway.GatewayException.class,
+        TushareApiGateway.GatewayException failure = assertThrows(
+                TushareApiGateway.GatewayException.class,
                 () -> query(gateway, session, "daily", List.of(
                         "ts_code", "trade_date", "open", "high", "low", "close",
                         "vol", "amount")));
+        assertEquals("TUSHARE_SYNTHETIC_PROVIDER_FAILURE", failure.safeCode());
+        var audit = TushareControlledAcceptanceOutputAudit.audit(
+                List.of(new TushareControlledAcceptanceOutputAudit.CapturedText(
+                        "EXCEPTION", failure.getMessage())),
+                List.of(
+                        TushareControlledAcceptanceOutputAudit.SensitiveMaterial
+                                .register("E2E_DRY_RUN_DATABASE_PASSWORD"),
+                        TushareControlledAcceptanceOutputAudit.SensitiveMaterial
+                                .register("E2E_DRY_RUN_FAKE_TOKEN")),
+                true);
+        assertTrue(audit.clean());
         assertEquals(1, gateway.calls());
         assertEquals(1, session.consumedBusinessRequests());
     }

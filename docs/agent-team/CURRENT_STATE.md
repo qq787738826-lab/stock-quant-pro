@@ -169,6 +169,14 @@
   `IDEMPOTENCY_VERIFICATION`。本开发轮真实 Provider 调用 0、真实 Token 读取 0、永久库写入
   0、真实授权 0、真实 Day 001 执行 0；七项治理状态不变，F2B/F3/Day 002 仍未启动。
 - 3A-R3B-RR-DAY001 阶段记录：[stage-3ar3b-rr-day001-manual-runner.md](stage-3ar3b-rr-day001-manual-runner.md)。
+- 3A-R3B-RR-DAY001 首次正式运行 `RRDAY001_20260810T053245Z_405497967D16` 已一次性消费：
+  `daily=1 / adj_factor=0 / trade_cal=0`、重试 `0`，在 capture 前以
+  `TUSHARE_DEDICATED_RESEARCH_FACT_WINDOW_INCOMPLETE` 停止，未生成 batch/observation/readback/QFQ，
+  输出审计 clean。历史结果未保存 HTTP/table 结构，不能事后补造；源码确定首个短路条件为
+  `response.complete=false`，旧批服务错误地把部分 Provider 响应折叠成 FACT_WINDOW。最小修复改为
+  合法超集先严格过滤目标 identity+日期，并保留 Provider/Endpoint 脱敏首因；完整目标缺失仍拒绝。
+  本修复没有真实 Provider 调用、runId、授权或永久库访问，Tushare 累计真实请求保持 `33`。
+  诊断证据见 [FACT_WINDOW 修复记录](reduced-research-day001-fact-window-fix.md)。
 - STOCK-QUANT-LOCAL-AUTOMATION：本地正式人工运行默认从 Windows Credential Manager 的
   `StockQuant/ResearchDbPassword` 与 `StockQuant/TushareToken` 读取秘密；用户只需一次在
   原生安全 Console 录入。Day001 正式 JAR 必须使用专用 build profile，Start-Class 精确为

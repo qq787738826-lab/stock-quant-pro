@@ -167,12 +167,13 @@ class TushareDedicatedResearchBatchServiceTest {
                 mock(PitMarketFactCaptureService.class);
         var service = service(gateway, validGuard(), capture);
 
-        assertThrows(
+        var error = assertThrows(
                 TushareDedicatedResearchBatchService
                         .RuntimeBlockedException.class,
                 () -> service.run(
                         authorization(), command(securities(2))));
 
+        assertEquals("SYNTHETIC_PROVIDER_FAILURE", error.safeCode());
         assertEquals(4, gateway.calls());
         verify(capture, never())
                 .captureAuthorizedDedicatedResearchBatch(
