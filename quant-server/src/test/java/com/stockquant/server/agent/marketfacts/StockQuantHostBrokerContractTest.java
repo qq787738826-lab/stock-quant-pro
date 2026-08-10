@@ -225,6 +225,10 @@ class StockQuantHostBrokerContractTest {
         assertTrue(protocol.contains("'heartbeat.json'"));
         assertTrue(protocol.contains("STOCK_QUANT_HOST_BROKER_RESIDENT_V1"));
         assertTrue(protocol.contains("Read-StockQuantHostBrokerHeartbeat"));
+        assertTrue(protocol.contains("[IO.FileShare]::Delete"));
+        assertTrue(protocol.contains(
+                "Local\\StockQuantHostBrokerHeartbeatWriter"));
+        assertTrue(protocol.contains("HEARTBEAT_WRITE_FAILED"));
         assertTrue(protocol.contains("[IO.File]::Move"));
         assertTrue(protocol.contains("REQUEST_ID_ALREADY_USED"));
         assertTrue(protocol.contains("REQUEST_EXPIRED"));
@@ -269,6 +273,7 @@ class StockQuantHostBrokerContractTest {
                 + "StockQuantHostBroker.TestSupport.psm1");
 
         assertTrue(lifecycle.contains("RESIDENT_AUTO_CLAIM=PASS"));
+        assertTrue(lifecycle.contains("HEARTBEAT_CONTENTION=PASS"));
         assertTrue(lifecycle.contains("CLAIMED_REPLAY_COUNT=0"));
         assertTrue(lifecycle.contains("REQUEST_EXPIRED"));
         assertTrue(lifecycle.contains("command.text=forbidden"));

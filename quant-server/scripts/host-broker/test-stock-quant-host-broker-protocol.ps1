@@ -270,9 +270,22 @@ try {
         -WindowsUser ([Security.Principal.WindowsIdentity]::GetCurrent().Name) `
         -ProcessId $PID -StartedAt $heartbeatNow.AddSeconds(-1) `
         -State BUSY -Now $heartbeatNow | Out-Null
+    $sharedRead = [IO.FileStream]::new(
+        $paths.Heartbeat, [IO.FileMode]::Open, [IO.FileAccess]::Read,
+        ([IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete))
+    try {
+        $heartbeatNow = $heartbeatNow.AddMilliseconds(10)
+        Write-StockQuantHostBrokerHeartbeat -GitCommit ('a' * 40) `
+            -WindowsUser `
+                ([Security.Principal.WindowsIdentity]::GetCurrent().Name) `
+            -ProcessId $PID -StartedAt $heartbeatNow.AddSeconds(-1) `
+            -State IDLE -Now $heartbeatNow | Out-Null
+    } finally {
+        $sharedRead.Dispose()
+    }
     $heartbeat = Read-StockQuantHostBrokerHeartbeat `
         -ExpectedGitCommit ('a' * 40) -Now $heartbeatNow
-    if ($heartbeat.state -ne 'BUSY' -or [int]$heartbeat.processId -ne $PID -or
+    if ($heartbeat.state -ne 'IDLE' -or [int]$heartbeat.processId -ne $PID -or
         @(Get-ChildItem -LiteralPath $paths.Base -File `
             -Filter '.heartbeat.*.tmp').Count -ne 0) {
         throw 'BROKER_PROTOCOL_HEARTBEAT_ROUND_TRIP_FAILED'

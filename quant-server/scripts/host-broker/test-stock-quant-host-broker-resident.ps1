@@ -190,6 +190,22 @@ try {
 
     $resident = Start-StockQuantTestResidentBroker `
         -ExpectedCommit $ExpectedCommit -LogDirectory $testRoot
+    $heartbeatSamples = [Collections.Generic.HashSet[string]]::new()
+    $heartbeatDeadline = [DateTimeOffset]::UtcNow.AddSeconds(5)
+    while ([DateTimeOffset]::UtcNow -lt $heartbeatDeadline) {
+        $sample = Read-StockQuantHostBrokerHeartbeat `
+            -ExpectedGitCommit $ExpectedCommit
+        [void]$heartbeatSamples.Add([string]$sample.lastHeartbeat)
+        if ($resident.Process.HasExited) {
+            throw 'STOCK_QUANT_HOST_BROKER_HEARTBEAT_CONTENTION_EXIT'
+        }
+        Start-Sleep -Milliseconds 5
+    }
+    if ($heartbeatSamples.Count -lt 3) {
+        throw 'STOCK_QUANT_HOST_BROKER_HEARTBEAT_CONTENTION_INVALID'
+    }
+    $passed++
+
     Start-Sleep -Milliseconds 2200
     $heartbeat = Read-StockQuantHostBrokerHeartbeat `
         -ExpectedGitCommit $ExpectedCommit
@@ -289,13 +305,14 @@ try {
     $passed++
 
     Write-Output "STOCK_QUANT_HOST_BROKER_RESIDENT_TESTS=$passed/0/0/0"
+    Write-Output 'STOCK_QUANT_HOST_BROKER_HEARTBEAT_CONTENTION=PASS'
     Write-Output 'STOCK_QUANT_HOST_BROKER_RESIDENT_AUTO_CLAIM=PASS'
     Write-Output 'STOCK_QUANT_HOST_BROKER_CLAIMED_REPLAY_COUNT=0'
     Write-Output 'STOCK_QUANT_HOST_BROKER_IDLE_CREDENTIAL_READS=0'
     Write-Output 'STOCK_QUANT_HOST_BROKER_IDLE_PROVIDER_CALLS=0'
     Write-Output 'STOCK_QUANT_HOST_BROKER_REAL_PROVIDER_CALLS=0'
     Write-Output 'STOCK_QUANT_HOST_BROKER_PERMANENT_DATABASE_WRITES=0'
-    if ($passed -ne 10) {
+    if ($passed -ne 11) {
         throw 'STOCK_QUANT_HOST_BROKER_RESIDENT_TEST_COUNT_INVALID'
     }
 } finally {

@@ -568,26 +568,60 @@ function Write-StockQuantHostBrokerHeartbeat {
     if ($json -match '(?i)(password|token|credentialblob|jdbc)') {
         throw 'STOCK_QUANT_HOST_BROKER_HEARTBEAT_FIELDS_INVALID'
     }
+    $writerMutex = [Threading.Mutex]::new(
+        $false, 'Local\StockQuantHostBrokerHeartbeatWriter')
+    $writerMutexHeld = $false
     $temporary = Join-Path $paths.Base `
         ('.heartbeat.' + [Guid]::NewGuid().ToString('N') + '.tmp')
-    $backup = Join-Path $paths.Base `
-        ('.heartbeat.backup.' + [Guid]::NewGuid().ToString('N') + '.tmp')
+    $backups = [Collections.Generic.List[string]]::new()
     try {
+        $writerMutexHeld = $writerMutex.WaitOne(2000)
+        if (-not $writerMutexHeld) {
+            throw 'STOCK_QUANT_HOST_BROKER_HEARTBEAT_WRITE_FAILED'
+        }
         [IO.File]::WriteAllText(
             $temporary, $json + "`n", [Text.UTF8Encoding]::new($false))
-        if (Test-Path -LiteralPath $paths.Heartbeat -PathType Leaf) {
-            [IO.File]::Replace($temporary, $paths.Heartbeat, $backup)
-            Remove-Item -LiteralPath $backup -Force
-        } else {
-            [IO.File]::Move($temporary, $paths.Heartbeat)
+        $written = $false
+        foreach ($attempt in 1..20) {
+            $backup = Join-Path $paths.Base `
+                ('.heartbeat.backup.' +
+                    [Guid]::NewGuid().ToString('N') + '.tmp')
+            $backups.Add($backup)
+            try {
+                if (Test-Path -LiteralPath $paths.Heartbeat -PathType Leaf) {
+                    [IO.File]::Replace($temporary, $paths.Heartbeat, $backup)
+                } else {
+                    [IO.File]::Move($temporary, $paths.Heartbeat)
+                }
+                $written = $true
+                break
+            } catch [IO.IOException] {
+                if ($attempt -eq 20) {
+                    throw 'STOCK_QUANT_HOST_BROKER_HEARTBEAT_WRITE_FAILED'
+                }
+                Start-Sleep -Milliseconds 25
+            } catch [UnauthorizedAccessException] {
+                if ($attempt -eq 20) {
+                    throw 'STOCK_QUANT_HOST_BROKER_HEARTBEAT_WRITE_FAILED'
+                }
+                Start-Sleep -Milliseconds 25
+            }
+        }
+        if (-not $written) {
+            throw 'STOCK_QUANT_HOST_BROKER_HEARTBEAT_WRITE_FAILED'
         }
     } finally {
         if (Test-Path -LiteralPath $temporary) {
             Remove-Item -LiteralPath $temporary -Force
         }
-        if (Test-Path -LiteralPath $backup) {
-            Remove-Item -LiteralPath $backup -Force
+        foreach ($backup in $backups) {
+            if (Test-Path -LiteralPath $backup) {
+                Remove-Item -LiteralPath $backup -Force `
+                    -ErrorAction SilentlyContinue
+            }
         }
+        if ($writerMutexHeld) { $writerMutex.ReleaseMutex() }
+        $writerMutex.Dispose()
     }
     return $paths.Heartbeat
 }
@@ -606,7 +640,24 @@ function Read-StockQuantHostBrokerHeartbeat {
         throw 'HOST_BROKER_NOT_RUNNING'
     }
     try {
-        $bytes = [IO.File]::ReadAllBytes($paths.Heartbeat)
+        $share = [IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete
+        $stream = [IO.FileStream]::new(
+            $paths.Heartbeat, [IO.FileMode]::Open, [IO.FileAccess]::Read,
+            $share)
+        try {
+            if ($stream.Length -lt 2 -or $stream.Length -gt 4096) {
+                throw 'INVALID'
+            }
+            $memory = [IO.MemoryStream]::new()
+            try {
+                $stream.CopyTo($memory)
+                $bytes = $memory.ToArray()
+            } finally {
+                $memory.Dispose()
+            }
+        } finally {
+            $stream.Dispose()
+        }
         if ($bytes.Length -lt 2 -or $bytes.Length -gt 4096 -or
             ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and
                 $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF)) {
