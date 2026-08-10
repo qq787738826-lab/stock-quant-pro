@@ -1,7 +1,7 @@
 Set-StrictMode -Version Latest
 
 Import-Module (Join-Path $PSScriptRoot `
-    'StockQuantHostBroker.Protocol.psm1') -Force
+    'StockQuantHostBroker.Protocol.psm1')
 
 function Start-StockQuantTestResidentBroker {
     [CmdletBinding()]
