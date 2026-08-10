@@ -171,6 +171,12 @@ class StockQuantHostBrokerContractTest {
         assertFalse(parameters.contains("ScriptPath"));
         assertTrue(script.contains("CODEX_SANDBOX_REQUIRED"));
         assertTrue(script.contains(
+                "git ls-remote --exit-code origin $remoteRef"));
+        assertTrue(script.contains(
+                "STOCK_QUANT_HOST_BROKER_GIT_REMOTE_QUERY_FAILED"));
+        assertFalse(script.contains("git fetch"));
+        assertTrue(script.contains("$tracking -ne $remote"));
+        assertTrue(script.contains(
                 "& schtasks.exe /Run /TN 'StockQuantLocalBroker'"));
         assertFalse(script.contains("Invoke-Expression"));
         assertFalse(script.contains("ScriptBlock]::Create"));

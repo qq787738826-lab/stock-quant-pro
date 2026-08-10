@@ -51,18 +51,27 @@ if ($Operation -eq 'READ_SANITIZED_RESULT') {
 
 Push-Location $paths.RepositoryRoot
 try {
-    git fetch --quiet origin $integrationBranch
-    if ($LASTEXITCODE -ne 0) {
-        throw 'STOCK_QUANT_HOST_BROKER_GIT_FETCH_FAILED'
+    $remoteRef = "refs/heads/$integrationBranch"
+    $remoteQuery = @(& git ls-remote --exit-code origin $remoteRef 2>&1 |
+        ForEach-Object { [string]$_ })
+    $remoteQueryExit = $LASTEXITCODE
+    $remoteMatch = @($remoteQuery | Where-Object {
+        $_ -match "^([0-9a-f]{40})\s+$([regex]::Escape($remoteRef))$"
+    })
+    if ($remoteQueryExit -ne 0 -or $remoteMatch.Count -ne 1) {
+        throw 'STOCK_QUANT_HOST_BROKER_GIT_REMOTE_QUERY_FAILED'
     }
     $branch = (git branch --show-current).Trim()
     $head = (git rev-parse HEAD).Trim()
-    $remote = (git rev-parse "refs/remotes/origin/$integrationBranch").Trim()
+    $remote = ($remoteMatch[0] -split '\s+', 2)[0]
+    $tracking = (git rev-parse `
+        "refs/remotes/origin/$integrationBranch").Trim()
     $divergence = (git rev-list --left-right --count `
         "$integrationBranch...origin/$integrationBranch").Trim() -split '\s+'
     $unexpected = @(git status --porcelain=v1 --untracked-files=normal |
         Where-Object { $_ -and $_ -notmatch '^\?\? \.ai(?:/|$)' })
     if ($branch -ne $integrationBranch -or $head -ne $remote -or
+        $tracking -ne $remote -or
         $divergence.Count -ne 2 -or $divergence[0] -ne '0' -or
         $divergence[1] -ne '0' -or $unexpected.Count -ne 0 -or
         @(git diff --cached --name-only).Count -ne 0) {
