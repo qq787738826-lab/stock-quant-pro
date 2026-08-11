@@ -86,6 +86,7 @@ function Invoke-M3Compatibility(
             "--report-directory=$m3ReportDirectory" `
             "--execution-id=$m3ExecutionId" `
             "--database-port=$M3DatabasePort" `
+            '--maximum-cost-cny=5.00' `
             "--execution-mode=$M3ExecutionMode" 2>&1 |
             ForEach-Object { [string]$_ })
         $exitCode = $LASTEXITCODE

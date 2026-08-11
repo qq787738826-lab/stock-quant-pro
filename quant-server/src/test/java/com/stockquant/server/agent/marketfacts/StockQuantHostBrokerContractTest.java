@@ -319,8 +319,10 @@ class StockQuantHostBrokerContractTest {
         assertTrue(script.contains("RUN_M3_AGENT_RESEARCH_SMOKE"));
         assertTrue(script.contains("BailianCredentialHealthProbe"));
         assertTrue(script.contains("qwen3.7-plus"));
-        assertTrue(script.contains("Assert-M3BailianSmokeBudgetUnused"));
-        assertTrue(script.contains("M3_BAILIAN_SMOKE_BUDGET_ALREADY_CONSUMED"));
+        assertTrue(script.contains("Get-M3BailianStageBudget"));
+        assertTrue(script.contains("M3_BAILIAN_STAGE_BUDGET_EXHAUSTED"));
+        assertTrue(script.contains("legacyFailureReserve"));
+        assertTrue(script.contains("modelProviderMessageCategory"));
         assertFalse(script.contains("Invoke-Expression"));
         assertFalse(script.contains("Start-Process"));
         assertFalse(script.contains("ScriptBlock]::Create"));

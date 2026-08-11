@@ -162,7 +162,8 @@ function Run-M3(
             "--result-file=$Result" `
             "--report-directory=$ReportDirectory" `
             "--execution-id=$ExecutionId" `
-            "--database-port=$port" '--execution-mode=E2E_DRY_RUN' `
+            "--database-port=$port" '--maximum-cost-cny=5.00' `
+            '--execution-mode=E2E_DRY_RUN' `
             2>&1 | ForEach-Object { [string]$_ } | Out-Host
         return $LASTEXITCODE
     } finally { $ErrorActionPreference = $old }

@@ -14,7 +14,10 @@ param(
     [string] $ExecutionId,
 
     [ValidateSet('FAKE', 'BAILIAN')]
-    [string] $ModelMode = 'FAKE'
+    [string] $ModelMode = 'FAKE',
+
+    [ValidateScript({ $_ -gt [decimal]0.00 -and $_ -le [decimal]5.00 })]
+    [decimal] $MaximumCostCny = [decimal]5.00
 )
 
 $ErrorActionPreference = 'Stop'
@@ -62,6 +65,8 @@ try {
         'org.springframework.boot.loader.launch.PropertiesLauncher' `
         "--result-file=$result" "--report-directory=$reports" `
         "--execution-id=$ExecutionId" '--database-port=38432' `
+        ("--maximum-cost-cny=" + $MaximumCostCny.ToString(
+            [Globalization.CultureInfo]::InvariantCulture)) `
         "--execution-mode=$(if ($ModelMode -eq 'BAILIAN') {
             'FORMAL_LOCAL_BAILIAN'
         } else { 'FORMAL_LOCAL' })" 2>&1 |
@@ -86,7 +91,7 @@ try {
         [int]$sanitized.research.modelCallCount -eq 13 -and
         [int]$usage.inputTokens -gt 0 -and
         [int]$usage.outputTokens -gt 0 -and
-        $estimatedCost -gt 0 -and $estimatedCost -le [decimal]5.00 -and
+        $estimatedCost -gt 0 -and $estimatedCost -le $MaximumCostCny -and
         [string]$usage.costCurrency -eq 'CNY' -and
         @($agentRuns | Where-Object {
             $_.modelProvider -ne 'BAILIAN' -or

@@ -23,6 +23,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Fixed OpenAI-compatible adapter core for M3. The original OpenAI Responses
@@ -118,6 +119,22 @@ public final class OpenAiResponsesModelAdapter implements ModelAdapter {
                 new JdkTransport(timeout), BAILIAN_PROFILE);
     }
 
+    public static OpenAiResponsesModelAdapter bailian(
+            char[] apiKey,
+            Duration timeout,
+            BigDecimal hardCostLimitCny
+    ) {
+        if (hardCostLimitCny == null || hardCostLimitCny.signum() <= 0
+                || hardCostLimitCny.compareTo(
+                M3_BAILIAN_HARD_COST_LIMIT_CNY) > 0) {
+            throw AgentResearchModels.invalid(
+                    "M3_BAILIAN_COST_LIMIT_INVALID");
+        }
+        return new OpenAiResponsesModelAdapter(apiKey, timeout,
+                new JdkTransport(timeout), BAILIAN_PROFILE.withHardCostLimit(
+                hardCostLimitCny));
+    }
+
     static OpenAiResponsesModelAdapter bailian(
             char[] apiKey,
             Duration timeout,
@@ -194,10 +211,14 @@ public final class OpenAiResponsesModelAdapter implements ModelAdapter {
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             accountUnknownCall(reservation);
-            throw new IllegalStateException(reason("REQUEST_INTERRUPTED"));
+            throw failure("REQUEST_INTERRUPTED", FailureSource.TRANSPORT,
+                    0, "NONE", "NOT_EVALUATED", "NONE", "NONE",
+                    "NONE");
         } catch (IOException exception) {
             accountUnknownCall(reservation);
-            throw new IllegalStateException(reason("TRANSPORT_FAILED"));
+            throw failure("TRANSPORT_FAILED", FailureSource.TRANSPORT,
+                    0, "NONE", "NOT_EVALUATED", "NONE", "NONE",
+                    "NONE");
         }
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
             accountUnknownCall(reservation);
@@ -206,17 +227,31 @@ public final class OpenAiResponsesModelAdapter implements ModelAdapter {
         if (response.body().getBytes(StandardCharsets.UTF_8).length
                 > MAX_RESPONSE_BYTES
                 || response.contentType() == null
-                || !response.contentType().toLowerCase(Locale.ROOT)
-                .startsWith("application/json")) {
+                 || !response.contentType().toLowerCase(Locale.ROOT)
+                 .startsWith("application/json")) {
             accountUnknownCall(reservation);
-            throw new IllegalStateException(reason("RESPONSE_REJECTED"));
+            throw failure("RESPONSE_REJECTED",
+                    FailureSource.RESPONSE_ENVELOPE,
+                    response.statusCode(), contentTypeCategory(
+                            response.contentType()), "NOT_EVALUATED", "NONE",
+                    "NONE", "NONE");
         }
         ModelResponse parsed;
         try {
             parsed = parseResponse(response.body());
+        } catch (ResponseFailure error) {
+            accountUnknownCall(reservation);
+            throw failure(error.reasonSuffix(), error.source(),
+                    response.statusCode(), contentTypeCategory(
+                            response.contentType()), "VALID_JSON",
+                    error.providerCode(), error.providerCategory(),
+                    error.messageCategory());
         } catch (RuntimeException error) {
             accountUnknownCall(reservation);
-            throw error;
+            throw failure("RESPONSE_PARSE_FAILED",
+                    FailureSource.RESPONSE_PARSE, response.statusCode(),
+                    contentTypeCategory(response.contentType()),
+                    "INVALID_JSON", "NONE", "NONE", "NONE");
         }
         ModelUsage usage = parsed.usage();
         if (usage.inputTokens() > requestBytes
@@ -225,8 +260,10 @@ public final class OpenAiResponsesModelAdapter implements ModelAdapter {
                 || accountedCost.add(usage.estimatedCost())
                 .compareTo(profile.hardCostLimit()) > 0) {
             accountUnknownCall(reservation);
-            throw new IllegalStateException(reason(
-                    "USAGE_BUDGET_INVALID"));
+            throw failure("USAGE_BUDGET_INVALID",
+                    FailureSource.USAGE_VALIDATION, response.statusCode(),
+                    contentTypeCategory(response.contentType()), "VALID_JSON",
+                    "NONE", "NONE", "NONE");
         }
         accountedCost = accountedCost.add(usage.estimatedCost());
         completedCallCount++;
@@ -247,6 +284,26 @@ public final class OpenAiResponsesModelAdapter implements ModelAdapter {
                 completedCallCount, inputTokenCount, outputTokenCount,
                 accountedCost, profile.hardCostLimit(),
                 profile.costCurrency(), terminated, closed);
+    }
+
+    public synchronized FailureDiagnostics diagnostics() {
+        return new FailureDiagnostics(FailureSource.NONE.name(),
+                attemptedCallCount, networkCallCount, completedCallCount,
+                inputTokenCount, outputTokenCount, accountedCost,
+                profile.hardCostLimit(), profile.costCurrency(), 0, "NONE",
+                "NOT_EVALUATED", "NONE", "NONE", "NONE");
+    }
+
+    public static Optional<FailureDiagnostics> failureDiagnostics(
+            Throwable error
+    ) {
+        for (Throwable value = error; value != null;
+                value = value.getCause()) {
+            if (value instanceof ProviderCallException failure) {
+                return Optional.of(failure.diagnostics());
+            }
+        }
+        return Optional.empty();
     }
 
     private String requestBody(ModelRequest request) {
@@ -384,16 +441,21 @@ public final class OpenAiResponsesModelAdapter implements ModelAdapter {
             if (root.path("error").isObject()) {
                 throw providerBodyFailure(root.path("error"));
             }
+            if (root.path("code").isTextual()
+                    && !root.path("code").asText().isBlank()) {
+                throw providerBodyFailure(root);
+            }
             if (!profile.model().equals(root.path("model").asText())) {
-                throw new IllegalStateException(reason("MODEL_MISMATCH"));
+                throw responseFailure("MODEL_MISMATCH",
+                        FailureSource.RESPONSE_VALIDATION);
             }
             String outputText = profile.apiShape() == ApiShape.RESPONSES
                     ? responsesOutputText(root) : chatOutputText(root);
             return parseStructured(outputText, usage(root.path("usage")));
-        } catch (IllegalStateException exception) {
+        } catch (ResponseFailure exception) {
             throw exception;
         } catch (RuntimeException | IOException exception) {
-            throw new IllegalStateException(reason("RESPONSE_PARSE_FAILED"));
+            throw parseFailure();
         }
     }
 
@@ -464,7 +526,8 @@ public final class OpenAiResponsesModelAdapter implements ModelAdapter {
         }
         JsonNode choice = choices.get(0);
         if (!"stop".equals(choice.path("finish_reason").asText())) {
-            throw new IllegalStateException(reason("FINISH_REASON_INVALID"));
+            throw responseFailure("FINISH_REASON_INVALID",
+                    FailureSource.RESPONSE_VALIDATION);
         }
         return requiredText(choice.path("message").path("content"));
     }
@@ -569,52 +632,157 @@ public final class OpenAiResponsesModelAdapter implements ModelAdapter {
         terminated = true;
     }
 
-    private IllegalStateException httpFailure(TransportResponse response) {
+    private ProviderCallException httpFailure(TransportResponse response) {
+        ErrorEnvelope envelope = inspectErrorEnvelope(response.body());
+        String suffix;
         if (profile.apiShape() == ApiShape.RESPONSES) {
-            return new IllegalStateException(reason("HTTP_STATUS_"
-                    + response.statusCode()));
+            suffix = "HTTP_STATUS_" + response.statusCode();
+        } else {
+            suffix = switch (response.statusCode()) {
+                case 401 -> "AUTHENTICATION_FAILED";
+                case 402 -> "QUOTA_EXHAUSTED";
+                case 403 -> "PERMISSION_DENIED";
+                case 429 -> "RATE_LIMITED";
+                default -> response.statusCode() >= 500
+                        ? "SERVICE_UNAVAILABLE" : "REQUEST_REJECTED";
+            };
         }
-        return switch (response.statusCode()) {
-            case 401 -> new IllegalStateException(reason(
-                    "AUTHENTICATION_FAILED"));
-            case 402 -> new IllegalStateException(reason("QUOTA_EXHAUSTED"));
-            case 403 -> new IllegalStateException(reason(
-                    "PERMISSION_DENIED"));
-            case 429 -> new IllegalStateException(reason("RATE_LIMITED"));
-            default -> response.statusCode() >= 500
-                    ? new IllegalStateException(reason(
-                    "SERVICE_UNAVAILABLE"))
-                    : new IllegalStateException(reason("REQUEST_REJECTED"));
-        };
+        return failure(suffix, FailureSource.HTTP_STATUS,
+                response.statusCode(), contentTypeCategory(
+                        response.contentType()), envelope.jsonCategory(),
+                envelope.providerCode(), envelope.providerCategory(),
+                envelope.messageCategory());
     }
 
-    private IllegalStateException providerBodyFailure(JsonNode error) {
-        String code = error.path("code").asText("")
-                .toUpperCase(Locale.ROOT)
-                .replaceAll("[^A-Z0-9]+", "_");
-        String category;
+    private ResponseFailure providerBodyFailure(JsonNode error) {
+        String code = normalizedProviderCode(error.path("code").asText(""));
+        String category = providerCategory(code);
+        String suffix = switch (category) {
+            case "AUTHENTICATION" -> "AUTHENTICATION_FAILED";
+            case "PERMISSION" -> "PERMISSION_DENIED";
+            case "RATE_LIMIT" -> "RATE_LIMITED";
+            case "QUOTA" -> "QUOTA_EXHAUSTED";
+            default -> "API_ERROR";
+        };
+        return new ResponseFailure(suffix, FailureSource.PROVIDER_BODY,
+                code, category, messageCategory(error.path("message")
+                .asText("")));
+    }
+
+    private String providerCategory(String code) {
+        if ("NONE".equals(code)) {
+            return "NONE";
+        }
         if (code.contains("API_KEY") || code.contains("APIKEY")
                 || code.contains("AUTH") || code.contains("SIGNATURE")) {
-            category = "AUTHENTICATION_FAILED";
+            return "AUTHENTICATION";
         } else if (code.contains("PERMISSION") || code.contains("ACCESS")) {
-            category = "PERMISSION_DENIED";
+            return "PERMISSION";
         } else if (code.contains("RATE") || code.contains("THROTTL")) {
-            category = "RATE_LIMITED";
+            return "RATE_LIMIT";
         } else if (code.contains("QUOTA") || code.contains("BALANCE")
                 || code.contains("ARREAR") || code.contains("CREDIT")) {
-            category = "QUOTA_EXHAUSTED";
-        } else {
-            category = "API_ERROR";
+            return "QUOTA";
         }
-        return new IllegalStateException(reason(category));
+        return "OTHER";
+    }
+
+    private String normalizedProviderCode(String value) {
+        String normalized = value == null ? "" : value.strip()
+                .replaceAll("([a-z0-9])([A-Z])", "$1_$2")
+                .toUpperCase(Locale.ROOT)
+                .replaceAll("[^A-Z0-9]+", "_")
+                .replaceAll("^_+|_+$", "");
+        if (normalized.isBlank()) {
+            return "NONE";
+        }
+        return normalized.substring(0, Math.min(64, normalized.length()));
+    }
+
+    private String messageCategory(String value) {
+        String normalized = value == null ? "" : value.toUpperCase(
+                Locale.ROOT);
+        if (normalized.contains("WORKSPACE")) {
+            return "WORKSPACE_BINDING";
+        }
+        if (normalized.contains("REGION") || normalized.contains("ENDPOINT")) {
+            return "REGION_OR_ENDPOINT";
+        }
+        if (normalized.contains("API KEY") || normalized.contains("API_KEY")
+                || normalized.contains("APIKEY")
+                || normalized.contains("AUTHENTICATION")) {
+            return "INVALID_OR_UNBOUND_API_KEY";
+        }
+        if (normalized.contains("MODEL") && (normalized.contains("ACCESS")
+                || normalized.contains("PERMISSION")
+                || normalized.contains("AVAILABLE"))) {
+            return "MODEL_ACCESS";
+        }
+        if (normalized.contains("BALANCE") || normalized.contains("ARREAR")
+                || normalized.contains("QUOTA")
+                || normalized.contains("CREDIT")) {
+            return "QUOTA_OR_BALANCE";
+        }
+        return normalized.isBlank() ? "NONE" : "OTHER";
+    }
+
+    private ErrorEnvelope inspectErrorEnvelope(String body) {
+        try {
+            JsonNode root = mapper.readTree(body);
+            JsonNode error = root.path("error").isObject()
+                    ? root.path("error") : root;
+            String code = normalizedProviderCode(error.path("code")
+                    .asText(""));
+            return new ErrorEnvelope("VALID_JSON", code,
+                    providerCategory(code), messageCategory(
+                    error.path("message").asText("")));
+        } catch (RuntimeException | IOException error) {
+            return new ErrorEnvelope("INVALID_JSON", "NONE", "NONE",
+                    "NONE");
+        }
+    }
+
+    private String contentTypeCategory(String value) {
+        if (value == null || value.isBlank()) {
+            return "MISSING";
+        }
+        return value.toLowerCase(Locale.ROOT).startsWith("application/json")
+                ? "APPLICATION_JSON" : "NON_JSON";
+    }
+
+    private ProviderCallException failure(
+            String suffix,
+            FailureSource source,
+            int httpStatus,
+            String contentTypeCategory,
+            String jsonCategory,
+            String providerCode,
+            String providerCategory,
+            String messageCategory
+    ) {
+        FailureDiagnostics diagnostics = new FailureDiagnostics(source.name(),
+                attemptedCallCount, networkCallCount, completedCallCount,
+                inputTokenCount, outputTokenCount, accountedCost,
+                profile.hardCostLimit(), profile.costCurrency(), httpStatus,
+                contentTypeCategory, jsonCategory, providerCode,
+                providerCategory, messageCategory);
+        return new ProviderCallException(reason(suffix), diagnostics);
     }
 
     private String reason(String suffix) {
         return "M3_" + profile.provider() + "_" + suffix;
     }
 
-    private IllegalStateException parseFailure() {
-        return new IllegalStateException(reason("RESPONSE_PARSE_FAILED"));
+    private ResponseFailure parseFailure() {
+        return responseFailure("RESPONSE_PARSE_FAILED",
+                FailureSource.RESPONSE_PARSE);
+    }
+
+    private ResponseFailure responseFailure(
+            String suffix,
+            FailureSource source
+    ) {
+        return new ResponseFailure(suffix, source, "NONE", "NONE", "NONE");
     }
 
     interface Transport {
@@ -661,6 +829,150 @@ public final class OpenAiResponsesModelAdapter implements ModelAdapter {
                         "M3_LLM_TELEMETRY_INVALID");
             }
         }
+    }
+
+    public enum FailureSource {
+        NONE,
+        TRANSPORT,
+        HTTP_STATUS,
+        PROVIDER_BODY,
+        RESPONSE_ENVELOPE,
+        RESPONSE_PARSE,
+        RESPONSE_VALIDATION,
+        USAGE_VALIDATION
+    }
+
+    public record FailureDiagnostics(
+            String failureSource,
+            int attemptedCallCount,
+            int networkCallCount,
+            int completedCallCount,
+            int inputTokenCount,
+            int outputTokenCount,
+            BigDecimal accountedCost,
+            BigDecimal hardCostLimit,
+            String costCurrency,
+            int httpStatus,
+            String responseContentTypeCategory,
+            String responseJsonCategory,
+            String providerCode,
+            String providerCategory,
+            String providerMessageCategory
+    ) {
+        public FailureDiagnostics {
+            Objects.requireNonNull(failureSource, "failureSource");
+            Objects.requireNonNull(accountedCost, "accountedCost");
+            Objects.requireNonNull(hardCostLimit, "hardCostLimit");
+            Objects.requireNonNull(costCurrency, "costCurrency");
+            Objects.requireNonNull(responseContentTypeCategory,
+                    "responseContentTypeCategory");
+            Objects.requireNonNull(responseJsonCategory,
+                    "responseJsonCategory");
+            Objects.requireNonNull(providerCode, "providerCode");
+            Objects.requireNonNull(providerCategory, "providerCategory");
+            Objects.requireNonNull(providerMessageCategory,
+                    "providerMessageCategory");
+            if (!failureSource.matches("NONE|TRANSPORT|HTTP_STATUS|"
+                    + "PROVIDER_BODY|RESPONSE_ENVELOPE|RESPONSE_PARSE|"
+                    + "RESPONSE_VALIDATION|USAGE_VALIDATION")
+                    || attemptedCallCount < 0 || networkCallCount < 0
+                    || completedCallCount < 0 || inputTokenCount < 0
+                    || outputTokenCount < 0
+                    || completedCallCount > networkCallCount
+                    || networkCallCount > attemptedCallCount
+                    || attemptedCallCount > MAXIMUM_MODEL_CALLS
+                    || accountedCost.signum() < 0
+                    || accountedCost.compareTo(hardCostLimit) > 0
+                    || !costCurrency.matches("USD|CNY")
+                    || httpStatus < 0 || httpStatus > 599
+                    || !responseContentTypeCategory.matches(
+                    "NONE|MISSING|APPLICATION_JSON|NON_JSON")
+                    || !responseJsonCategory.matches(
+                    "NOT_EVALUATED|VALID_JSON|INVALID_JSON")
+                    || !providerCode.matches("NONE|[A-Z0-9_]{1,64}")
+                    || !providerCategory.matches(
+                    "NONE|AUTHENTICATION|PERMISSION|RATE_LIMIT|QUOTA|OTHER")
+                    || !providerMessageCategory.matches(
+                    "NONE|WORKSPACE_BINDING|REGION_OR_ENDPOINT|"
+                            + "INVALID_OR_UNBOUND_API_KEY|MODEL_ACCESS|"
+                            + "QUOTA_OR_BALANCE|OTHER")) {
+                throw AgentResearchModels.invalid(
+                        "M3_LLM_FAILURE_DIAGNOSTICS_INVALID");
+            }
+        }
+    }
+
+    public static final class ProviderCallException
+            extends IllegalStateException {
+        private final FailureDiagnostics diagnostics;
+
+        private ProviderCallException(
+                String reason,
+                FailureDiagnostics diagnostics
+        ) {
+            super(reason);
+            this.diagnostics = Objects.requireNonNull(diagnostics,
+                    "diagnostics");
+        }
+
+        public FailureDiagnostics diagnostics() {
+            return diagnostics;
+        }
+    }
+
+    private static final class ResponseFailure extends RuntimeException {
+        private final String reasonSuffix;
+        private final FailureSource source;
+        private final String providerCode;
+        private final String providerCategory;
+        private final String messageCategory;
+
+        private ResponseFailure(
+                String reasonSuffix,
+                FailureSource source,
+                String providerCode,
+                String providerCategory,
+                String messageCategory
+        ) {
+            super(null, null, false, false);
+            this.reasonSuffix = Objects.requireNonNull(reasonSuffix,
+                    "reasonSuffix");
+            this.source = Objects.requireNonNull(source, "source");
+            this.providerCode = Objects.requireNonNull(providerCode,
+                    "providerCode");
+            this.providerCategory = Objects.requireNonNull(providerCategory,
+                    "providerCategory");
+            this.messageCategory = Objects.requireNonNull(messageCategory,
+                    "messageCategory");
+        }
+
+        private String reasonSuffix() {
+            return reasonSuffix;
+        }
+
+        private FailureSource source() {
+            return source;
+        }
+
+        private String providerCode() {
+            return providerCode;
+        }
+
+        private String providerCategory() {
+            return providerCategory;
+        }
+
+        private String messageCategory() {
+            return messageCategory;
+        }
+    }
+
+    private record ErrorEnvelope(
+            String jsonCategory,
+            String providerCode,
+            String providerCategory,
+            String messageCategory
+    ) {
     }
 
     private static final class JdkTransport implements Transport {

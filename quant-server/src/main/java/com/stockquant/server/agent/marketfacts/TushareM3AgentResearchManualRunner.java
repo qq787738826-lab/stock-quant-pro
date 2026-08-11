@@ -27,6 +27,8 @@ import com.stockquant.server.agent.research.DeterministicFakeModelAdapter;
 import com.stockquant.server.agent.research.M1AgentResearchDatasetSource;
 import com.stockquant.server.agent.research.ModelAdapter;
 import com.stockquant.server.agent.research.OpenAiResponsesModelAdapter;
+import com.stockquant.server.agent.research.OpenAiResponsesModelAdapter
+        .FailureDiagnostics;
 import org.springframework.jdbc.core.ConnectionCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -61,6 +63,7 @@ public final class TushareM3AgentResearchManualRunner {
     private static final String EXECUTION_ARG = "--execution-id=";
     private static final String PORT_ARG = "--database-port=";
     private static final String MODE_ARG = "--execution-mode=";
+    private static final String COST_ARG = "--maximum-cost-cny=";
 
     private TushareM3AgentResearchManualRunner() {
     }
@@ -91,7 +94,7 @@ public final class TushareM3AgentResearchManualRunner {
             resultFile = ResultFile.reserve(launch.resultFile(),
                     artifact.getParent(), result("RUNNING", launch, proof,
                             startedAt, startedAt, null, null, Audit.notRun(),
-                            "M3_RUNNING"));
+                            null, "M3_RUNNING"));
 
             Arguments boundLaunch = launch;
             Captured<Execution> captured = boundLaunch.executionMode()
@@ -109,7 +112,7 @@ public final class TushareM3AgentResearchManualRunner {
                     .write(execution.report());
             resultFile.write(result("SUCCEEDED", launch, proof, startedAt,
                     clock.instant(), execution, reportPath, audit,
-                    "M3_SUCCEEDED"));
+                    execution.modelDiagnostics(), "M3_SUCCEEDED"));
             System.out.println("M3_AGENT_RESEARCH_STATUS=SUCCEEDED");
             return EXIT_SUCCESS;
         } catch (TushareControlledAcceptanceOutputAudit
@@ -117,14 +120,17 @@ public final class TushareM3AgentResearchManualRunner {
             audit = capturedFailure.auditResult() == null
                     ? Audit.notRun() : audit(capturedFailure.auditResult());
             String reason = safeCode(capturedFailure.getCause());
+            FailureDiagnostics diagnostics = modelDiagnostics(
+                    capturedFailure.getCause());
             writeFailure(resultFile, launch, proof, startedAt, clock,
-                    execution, reportPath, audit, reason);
+                    execution, reportPath, audit, diagnostics, reason);
             safeFailure(reason);
             return EXIT_REJECTED;
         } catch (Throwable error) {
             String reason = safeCode(error);
+            FailureDiagnostics diagnostics = modelDiagnostics(error);
             writeFailure(resultFile, launch, proof, startedAt, clock,
-                    execution, reportPath, audit, reason);
+                    execution, reportPath, audit, diagnostics, reason);
             safeFailure(reason);
             return EXIT_REJECTED;
         }
@@ -219,23 +225,30 @@ public final class TushareM3AgentResearchManualRunner {
                     source, new DefaultStrategyResearchApi(),
                     BacktestConfig.standard(), clock);
             ResearchReport report;
-            ModelAdapter adapter = launch.executionMode().usesBailian()
-                    ? OpenAiResponsesModelAdapter.bailian(
-                    Objects.requireNonNull(bailianApiKey, "bailianApiKey"),
-                    Duration.ofSeconds(45))
-                    : new DeterministicFakeModelAdapter();
+            OpenAiResponsesModelAdapter bailianAdapter =
+                    launch.executionMode().usesBailian()
+                            ? OpenAiResponsesModelAdapter.bailian(
+                            Objects.requireNonNull(bailianApiKey,
+                                    "bailianApiKey"), Duration.ofSeconds(45),
+                            launch.maximumCostCny())
+                            : null;
+            ModelAdapter adapter = bailianAdapter == null
+                    ? new DeterministicFakeModelAdapter() : bailianAdapter;
             try (AgentResearchRuntime runtime = new AgentResearchRuntime(
                     gateway, adapter,
                     new AgentPromptCatalog(), clock)) {
                 report = runtime.run(task(launch.executionId(),
                         clock.instant(), launch.executionMode()));
             }
-            validateReport(report, launch.executionMode());
+            validateReport(report, launch.executionMode(),
+                    launch.maximumCostCny());
             DatabaseSnapshot after = snapshot(jdbc);
             if (!before.equals(after)) {
                 throw invalid("M3_PERMANENT_DATABASE_MUTATION_DETECTED");
             }
-            return new Execution(report, before, after);
+            return new Execution(report, before, after,
+                    bailianAdapter == null ? null
+                            : bailianAdapter.diagnostics());
         }
     }
 
@@ -280,7 +293,8 @@ public final class TushareM3AgentResearchManualRunner {
 
     private static void validateReport(
             ResearchReport report,
-            ExecutionMode executionMode
+            ExecutionMode executionMode,
+            BigDecimal maximumCostCny
     ) {
         Set<AgentRole> roles = report.agentRuns().stream()
                 .map(value -> value.agentRole()).collect(Collectors.toSet());
@@ -307,7 +321,7 @@ public final class TushareM3AgentResearchManualRunner {
                 || report.totalModelUsage().outputTokens() <= 0
                 || report.totalModelUsage().estimatedCost().signum() <= 0
                 || report.totalModelUsage().estimatedCost().compareTo(
-                OpenAiResponsesModelAdapter.M3_BAILIAN_HARD_COST_LIMIT_CNY) > 0
+                maximumCostCny) > 0
                 || !"CNY".equals(report.totalModelUsage().costCurrency())
                 || report.agentRuns().stream().anyMatch(value ->
                 !"BAILIAN".equals(value.modelProvider())
@@ -374,6 +388,7 @@ public final class TushareM3AgentResearchManualRunner {
             Execution execution,
             Path reportPath,
             Audit audit,
+            FailureDiagnostics modelDiagnostics,
             String reason
     ) {
         return new Result(RESULT_VERSION, status, launch.executionId(),
@@ -386,7 +401,7 @@ public final class TushareM3AgentResearchManualRunner {
                         execution.after()),
                 execution == null ? null : execution.before(),
                 execution == null ? null : execution.after(), audit,
-                0, 0, reason);
+                0, 0, modelDiagnostics, reason);
     }
 
     private static Audit audit(
@@ -405,6 +420,7 @@ public final class TushareM3AgentResearchManualRunner {
             Execution execution,
             Path reportPath,
             Audit audit,
+            FailureDiagnostics modelDiagnostics,
             String reason
     ) {
         if (file == null || launch == null || proof == null) {
@@ -412,7 +428,8 @@ public final class TushareM3AgentResearchManualRunner {
         }
         try {
             file.write(result("FAILED", launch, proof, startedAt,
-                    clock.instant(), execution, reportPath, audit, reason));
+                    clock.instant(), execution, reportPath, audit,
+                    modelDiagnostics, reason));
         } catch (Throwable ignored) {
             // Reserved RUNNING evidence remains fail-closed.
         }
@@ -428,6 +445,11 @@ public final class TushareM3AgentResearchManualRunner {
             }
         }
         return "M3_AGENT_RESEARCH_EXECUTION_FAILED";
+    }
+
+    private static FailureDiagnostics modelDiagnostics(Throwable error) {
+        return OpenAiResponsesModelAdapter.failureDiagnostics(error)
+                .orElse(null);
     }
 
     private static void safeFailure(String reason) {
@@ -454,7 +476,8 @@ public final class TushareM3AgentResearchManualRunner {
     private record Execution(
             ResearchReport report,
             DatabaseSnapshot before,
-            DatabaseSnapshot after
+            DatabaseSnapshot after,
+            FailureDiagnostics modelDiagnostics
     ) {
     }
 
@@ -463,10 +486,11 @@ public final class TushareM3AgentResearchManualRunner {
             Path reportDirectory,
             String executionId,
             int databasePort,
-            ExecutionMode executionMode
+            ExecutionMode executionMode,
+            BigDecimal maximumCostCny
     ) {
         static Arguments parse(String[] args) {
-            if (args == null || args.length != 5) {
+            if (args == null || args.length != 6) {
                 throw invalid("M3_ARGUMENTS_INVALID");
             }
             Path result = null;
@@ -474,6 +498,7 @@ public final class TushareM3AgentResearchManualRunner {
             String executionId = null;
             Integer port = null;
             ExecutionMode mode = null;
+            BigDecimal maximumCost = null;
             for (String value : args) {
                 if (value != null && value.startsWith(RESULT_ARG)
                         && result == null) {
@@ -502,6 +527,14 @@ public final class TushareM3AgentResearchManualRunner {
                     } catch (IllegalArgumentException error) {
                         throw invalid("M3_ARGUMENTS_INVALID");
                     }
+                } else if (value != null && value.startsWith(COST_ARG)
+                        && maximumCost == null) {
+                    try {
+                        maximumCost = new BigDecimal(value.substring(
+                                COST_ARG.length()));
+                    } catch (NumberFormatException error) {
+                        throw invalid("M3_ARGUMENTS_INVALID");
+                    }
                 } else {
                     throw invalid("M3_ARGUMENTS_INVALID");
                 }
@@ -510,12 +543,16 @@ public final class TushareM3AgentResearchManualRunner {
                     || executionId == null || !executionId.matches(
                     "M3SMOKE_[0-9]{8}T[0-9]{6}Z_[A-F0-9]{12}")
                     || port == null || port <= 0 || port > 65_535
-                    || mode == null || containsAi(result)
+                    || mode == null || maximumCost == null
+                    || maximumCost.signum() <= 0
+                    || maximumCost.compareTo(OpenAiResponsesModelAdapter
+                    .M3_BAILIAN_HARD_COST_LIMIT_CNY) > 0
+                    || containsAi(result)
                     || containsAi(reportDirectory)) {
                 throw invalid("M3_ARGUMENTS_INVALID");
             }
             return new Arguments(result, reportDirectory, executionId, port,
-                    mode);
+                    mode, maximumCost);
         }
     }
 

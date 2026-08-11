@@ -12,13 +12,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class TushareM3AgentResearchManualRunnerTest {
     @Test
-    void parsesOnlyFixedFiveArgumentContract() {
+    void parsesOnlyFixedSixArgumentContract() {
         var parsed = TushareM3AgentResearchManualRunner.Arguments.parse(
                 arguments("E2E_DRY_RUN", "15432"));
 
         assertEquals("M3SMOKE_20260811T010203Z_A1B2C3D4E5F6",
                 parsed.executionId());
         assertEquals(15432, parsed.databasePort());
+        assertEquals("5.00", parsed.maximumCostCny().toPlainString());
         assertEquals(TushareM3AgentResearchManualRunner.ExecutionMode
                 .E2E_DRY_RUN, parsed.executionMode());
         assertEquals(TushareM3AgentResearchManualRunner.ExecutionMode
@@ -35,7 +36,13 @@ class TushareM3AgentResearchManualRunnerTest {
                         "--report-directory=target/reports",
                         "--execution-id=M3SMOKE_20260811T010203Z_A1B2C3D4E5F6",
                         "--database-port=15432",
+                        "--maximum-cost-cny=5.00",
                         "--execution-mode=E2E_DRY_RUN"}));
+        String[] excessiveCost = arguments("FORMAL_LOCAL_BAILIAN", "38432");
+        excessiveCost[4] = "--maximum-cost-cny=5.01";
+        assertThrows(IllegalStateException.class, () ->
+                TushareM3AgentResearchManualRunner.Arguments.parse(
+                        excessiveCost));
     }
 
     @Test
@@ -71,6 +78,7 @@ class TushareM3AgentResearchManualRunnerTest {
                 "--report-directory=target/agent-research/reports",
                 "--execution-id=M3SMOKE_20260811T010203Z_A1B2C3D4E5F6",
                 "--database-port=" + port,
+                "--maximum-cost-cny=5.00",
                 "--execution-mode=" + mode};
     }
 }

@@ -81,6 +81,7 @@ class BailianOpenAiCompatibleModelAdapterTest {
         assertEquals(1, adapter.telemetry().completedCallCount());
         assertEquals("CNY", adapter.telemetry().costCurrency());
         assertTrue(adapter.telemetry().closed());
+        assertEquals("NONE", adapter.diagnostics().failureSource());
     }
 
     @Test
@@ -107,6 +108,15 @@ class BailianOpenAiCompatibleModelAdapterTest {
             assertFalse(failure.toString().contains("provider-sensitive"));
             assertEquals(1, adapter.telemetry().networkCallCount());
             assertTrue(adapter.telemetry().terminated());
+            var diagnostics = diagnostics(failure);
+            assertEquals("HTTP_STATUS", diagnostics.failureSource());
+            assertEquals(status, diagnostics.httpStatus());
+            assertEquals("INVALID_JSON",
+                    diagnostics.responseJsonCategory());
+            assertEquals("NONE", diagnostics.providerCode());
+            assertEquals(1, diagnostics.networkCallCount());
+            assertEquals(0, diagnostics.completedCallCount());
+            assertTrue(diagnostics.accountedCost().signum() > 0);
             adapter.close();
         });
     }
@@ -136,8 +146,54 @@ class BailianOpenAiCompatibleModelAdapterTest {
                     () -> adapter.complete(request()));
             assertEquals(reason, failure.getMessage());
             assertFalse(failure.toString().contains("provider-sensitive"));
+            var diagnostics = diagnostics(failure);
+            assertEquals("PROVIDER_BODY", diagnostics.failureSource());
+            assertEquals(200, diagnostics.httpStatus());
+            assertEquals(code.replaceAll("([a-z0-9])([A-Z])", "$1_$2")
+                            .toUpperCase().replaceAll("[^A-Z0-9]+", "_"),
+                    diagnostics.providerCode());
+            assertEquals("OTHER".equals(diagnostics.providerCategory()),
+                    "InvalidParameter".equals(code));
+            assertEquals("OTHER", diagnostics.providerMessageCategory());
             adapter.close();
         });
+    }
+
+    @Test
+    void separatesHttpAuthenticationFromProviderBodyAuthentication() {
+        String httpBody = "{\"error\":{\"code\":\"InvalidApiKey\","
+                + "\"message\":\"API key is invalid for this endpoint\"}}";
+        var httpAdapter = OpenAiResponsesModelAdapter.bailian(
+                TEST_KEY.toCharArray(), Duration.ofSeconds(10),
+                (uri, key, body, timeout) -> json(401, httpBody));
+        var httpFailure = assertThrows(IllegalStateException.class,
+                () -> httpAdapter.complete(request()));
+        var http = diagnostics(httpFailure);
+        assertEquals("M3_BAILIAN_AUTHENTICATION_FAILED",
+                httpFailure.getMessage());
+        assertEquals("HTTP_STATUS", http.failureSource());
+        assertEquals(401, http.httpStatus());
+        assertEquals("INVALID_API_KEY", http.providerCode());
+        assertEquals("AUTHENTICATION", http.providerCategory());
+        assertEquals("REGION_OR_ENDPOINT", http.providerMessageCategory());
+        assertFalse(httpFailure.toString().contains("endpoint"));
+        httpAdapter.close();
+
+        String bodyError = "{\"error\":{\"code\":\"InvalidApiKey\","
+                + "\"message\":\"API key authentication failed\"}}";
+        var bodyAdapter = OpenAiResponsesModelAdapter.bailian(
+                TEST_KEY.toCharArray(), Duration.ofSeconds(10),
+                (uri, key, body, timeout) -> json(200, bodyError));
+        var bodyFailure = assertThrows(IllegalStateException.class,
+                () -> bodyAdapter.complete(request()));
+        var provider = diagnostics(bodyFailure);
+        assertEquals("PROVIDER_BODY", provider.failureSource());
+        assertEquals(200, provider.httpStatus());
+        assertEquals("INVALID_API_KEY", provider.providerCode());
+        assertEquals("INVALID_OR_UNBOUND_API_KEY",
+                provider.providerMessageCategory());
+        assertFalse(bodyFailure.toString().contains("authentication"));
+        bodyAdapter.close();
     }
 
     @Test
@@ -205,6 +261,8 @@ class BailianOpenAiCompatibleModelAdapterTest {
                 () -> adapter.complete(request()));
         assertEquals("M3_BAILIAN_TRANSPORT_FAILED", first.getMessage());
         assertFalse(first.toString().contains("provider-sensitive"));
+        assertEquals("TRANSPORT", diagnostics(first).failureSource());
+        assertEquals(0, diagnostics(first).httpStatus());
         assertEquals("M3_BAILIAN_ADAPTER_TERMINATED",
                 assertThrows(IllegalArgumentException.class,
                         () -> adapter.complete(request())).getMessage());
@@ -233,6 +291,13 @@ class BailianOpenAiCompatibleModelAdapterTest {
     ) {
         return new OpenAiResponsesModelAdapter.TransportResponse(status,
                 "application/json; charset=utf-8", body);
+    }
+
+    private static OpenAiResponsesModelAdapter.FailureDiagnostics diagnostics(
+            Throwable error
+    ) {
+        return OpenAiResponsesModelAdapter.failureDiagnostics(error)
+                .orElseThrow();
     }
 
     private static ModelAdapter.ModelRequest request() {

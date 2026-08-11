@@ -2,6 +2,8 @@ package com.stockquant.server.agent.marketfacts;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stockquant.server.agent.research.AgentResearchModels.ResearchReport;
+import com.stockquant.server.agent.research.OpenAiResponsesModelAdapter
+        .FailureDiagnostics;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -67,6 +69,7 @@ final class TushareM3AgentResearchSmokeResult {
             Audit outputAudit,
             int providerCallCount,
             int databaseWriteCount,
+            FailureDiagnostics modelDiagnostics,
             String reason
     ) {
         Result {
@@ -82,6 +85,8 @@ final class TushareM3AgentResearchSmokeResult {
             Objects.requireNonNull(reason, "reason");
             if (!VERSION.equals(schemaVersion) || providerCallCount != 0
                     || databaseWriteCount != 0
+                    || modelDiagnostics != null
+                    && !"CNY".equals(modelDiagnostics.costCurrency())
                     || "SUCCEEDED".equals(status)
                     && (research == null || reportFile == null
                     || !databaseReadOnly || !databaseSnapshotUnchanged

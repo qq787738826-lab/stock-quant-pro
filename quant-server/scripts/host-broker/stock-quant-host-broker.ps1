@@ -743,7 +743,7 @@ function Invoke-M3AgentResearchSmoke {
         $null -ne $BrokerRequest.AuthorizationFile) {
         throw 'STOCK_QUANT_HOST_BROKER_M3_SCOPE_INVALID'
     }
-    Assert-M3BailianSmokeBudgetUnused -BrokerRequest $BrokerRequest
+    $stageBudget = Get-M3BailianStageBudget -BrokerRequest $BrokerRequest
     $runnerResult = Join-Path $paths.Results `
         "$($BrokerRequest.RequestId).m3-bailian.json"
     if (Test-Path -LiteralPath $runnerResult) {
@@ -754,7 +754,9 @@ function Invoke-M3AgentResearchSmoke {
     $output = @(& $m3RunnerScript `
         -ResultFile $runnerResult -ReportDirectory $reportDirectory `
         -ArtifactPath $BrokerRequest.JarPath -ExecutionId $executionId `
-        -ModelMode BAILIAN 2>&1 | ForEach-Object { [string]$_ })
+        -ModelMode BAILIAN `
+        -MaximumCostCny $stageBudget.RemainingCostCny 2>&1 |
+        ForEach-Object { [string]$_ })
     if ($LASTEXITCODE -ne 0) {
         if (Test-Path -LiteralPath $runnerResult -PathType Leaf) {
             try {
@@ -768,9 +770,51 @@ function Invoke-M3AgentResearchSmoke {
                         retryCount = 0
                         databaseWriteCount = 0
                         externalModelCallCount = $(if ($null -ne
-                                $failed.research) {
+                                $failed.modelDiagnostics) {
+                            [int]$failed.modelDiagnostics.networkCallCount
+                        } elseif ($null -ne $failed.research) {
                             [int]$failed.research.modelCallCount
                         } else { 0 })
+                        externalModelCompletedCallCount = $(if ($null -ne
+                                $failed.modelDiagnostics) {
+                            [int]$failed.modelDiagnostics.completedCallCount
+                        } else { 0 })
+                        modelFailureSource = $(if ($null -ne
+                                $failed.modelDiagnostics) {
+                            [string]$failed.modelDiagnostics.failureSource
+                        } else { 'LEGACY_UNAVAILABLE' })
+                        modelHttpStatus = $(if ($null -ne
+                                $failed.modelDiagnostics) {
+                            [int]$failed.modelDiagnostics.httpStatus
+                        } else { 0 })
+                        modelProviderCode = $(if ($null -ne
+                                $failed.modelDiagnostics) {
+                            [string]$failed.modelDiagnostics.providerCode
+                        } else { 'NONE' })
+                        modelProviderCategory = $(if ($null -ne
+                                $failed.modelDiagnostics) {
+                            [string]$failed.modelDiagnostics.providerCategory
+                        } else { 'NONE' })
+                        modelProviderMessageCategory = $(if ($null -ne
+                                $failed.modelDiagnostics) {
+                            [string]$failed.modelDiagnostics.providerMessageCategory
+                        } else { 'NONE' })
+                        modelResponseContentTypeCategory = $(if ($null -ne
+                                $failed.modelDiagnostics) {
+                            [string]$failed.modelDiagnostics.responseContentTypeCategory
+                        } else { 'NONE' })
+                        modelResponseJsonCategory = $(if ($null -ne
+                                $failed.modelDiagnostics) {
+                            [string]$failed.modelDiagnostics.responseJsonCategory
+                        } else { 'NOT_EVALUATED' })
+                        modelAccountedCostCny = $(if ($null -ne
+                                $failed.modelDiagnostics) {
+                            [string]$failed.modelDiagnostics.accountedCost
+                        } else { '0.50' })
+                        stagePriorAccountedCostCny =
+                            [string]$stageBudget.PriorCostCny
+                        stageRemainingCostBeforeRunCny =
+                            [string]$stageBudget.RemainingCostCny
                         outputAudit = $(if ($failed.outputAudit.clean) {
                             'PASSED'
                         } else { 'FAILED' })
@@ -790,10 +834,16 @@ function Invoke-M3AgentResearchSmoke {
     $runs = @($m3.research.agentRuns)
     $roles = @($runs | Select-Object -ExpandProperty agentRole -Unique)
     $usage = $m3.research.totalModelUsage
+    $modelDiagnostics = $m3.modelDiagnostics
     [decimal]$estimatedCost = [decimal]::Parse(
         [string]$usage.estimatedCost,
         [Globalization.NumberStyles]::Number,
         [Globalization.CultureInfo]::InvariantCulture)
+    [decimal]$diagnosticCost = $(if ($null -ne $modelDiagnostics) {
+        [decimal]::Parse([string]$modelDiagnostics.accountedCost,
+            [Globalization.NumberStyles]::Number,
+            [Globalization.CultureInfo]::InvariantCulture)
+    } else { [decimal]-1.00 })
     if ($m3.schemaVersion -ne 'M3_AGENT_RESEARCH_SMOKE_RESULT_V1' -or
         $m3.status -ne 'SUCCEEDED' -or
         [int]$m3.providerCallCount -ne 0 -or
@@ -805,6 +855,13 @@ function Invoke-M3AgentResearchSmoke {
         $m3.research.providerCalled -or $m3.research.shadowStarted -or
         $m3.research.tradingStarted -or $m3.research.deterministic -or
         [int]$m3.research.modelCallCount -ne 13 -or
+        $null -eq $modelDiagnostics -or
+        [string]$modelDiagnostics.failureSource -ne 'NONE' -or
+        [int]$modelDiagnostics.networkCallCount -ne 13 -or
+        [int]$modelDiagnostics.completedCallCount -ne 13 -or
+        [string]$modelDiagnostics.costCurrency -ne 'CNY' -or
+        $diagnosticCost -ne $estimatedCost -or
+        $diagnosticCost -gt [decimal]$stageBudget.RemainingCostCny -or
         [int]$m3.research.toolCallCount -ne 4 -or
         [int]$usage.inputTokens -le 0 -or
         [int]$usage.outputTokens -le 0 -or
@@ -840,6 +897,10 @@ function Invoke-M3AgentResearchSmoke {
         hardCostLimitCny = '5.00'
         costCurrency = 'CNY'
         model = 'qwen3.7-plus'
+        stageAttempt = [int]$stageBudget.AttemptNumber
+        stagePriorAccountedCostCny = [string]$stageBudget.PriorCostCny
+        stageRemainingCostBeforeRunCny =
+            [string]$stageBudget.RemainingCostCny
         agentRoleCount = 7
         toolCallCount = 4
         researchStatus = [string]$m3.research.status
@@ -857,11 +918,14 @@ function Invoke-M3AgentResearchSmoke {
     }
 }
 
-function Assert-M3BailianSmokeBudgetUnused {
+function Get-M3BailianStageBudget {
     param([Parameter(Mandatory = $true)] [object] $BrokerRequest)
     $operationMarker = 'RUN_M3_AGENT_RESEARCH_SMOKE'
-    $prior = @()
-    $prior += @(Get-ChildItem -LiteralPath $paths.Requests -File |
+    [decimal]$hardLimit = [decimal]5.00
+    [decimal]$legacyFailureReserve = [decimal]0.50
+    [decimal]$used = [decimal]0.00
+    $seen = @{}
+    $prior = @(Get-ChildItem -LiteralPath $paths.Requests -File |
         Where-Object { $_.FullName -ne $processingPath } |
         Where-Object {
             if ($_.Length -le 0 -or $_.Length -gt 65536) { return $false }
@@ -869,16 +933,54 @@ function Assert-M3BailianSmokeBudgetUnused {
             return $content -match "(?m)^operation=$operationMarker$" -and
                 $content -match '(?m)^provider=BAILIAN$'
         })
-    $prior += @(Get-ChildItem -LiteralPath $paths.Results -File `
-        -Filter '*.result.json' | Where-Object {
-            if ($_.Name -eq "$($BrokerRequest.RequestId).result.json" -or
-                $_.Length -le 0 -or $_.Length -gt 1048576) { return $false }
-            $content = Get-Content -LiteralPath $_.FullName -Raw -Encoding UTF8
-            return $content -match ('"operation"\s*:\s*"' + $operationMarker + '"') -and
-                $content -match '"model"\s*:\s*"qwen3\.7-plus"'
-        })
-    if ($prior.Count -ne 0) {
-        throw 'M3_BAILIAN_SMOKE_BUDGET_ALREADY_CONSUMED'
+    foreach ($file in $prior) {
+        $content = Get-Content -LiteralPath $file.FullName -Raw -Encoding UTF8
+        $idMatch = [regex]::Match($content,
+            '(?m)^request\.id=(SQHB_[0-9]{8}T[0-9]{6}Z_[A-F0-9]{12})$')
+        if (-not $idMatch.Success -or $seen.ContainsKey($idMatch.Groups[1].Value)) {
+            throw 'M3_BAILIAN_STAGE_BUDGET_LEDGER_INVALID'
+        }
+        $requestId = $idMatch.Groups[1].Value
+        $seen[$requestId] = $true
+        $runnerResult = Join-Path $paths.Results "$requestId.m3-bailian.json"
+        if (-not (Test-Path -LiteralPath $runnerResult -PathType Leaf)) {
+            throw 'M3_BAILIAN_STAGE_BUDGET_LEDGER_INCOMPLETE'
+        }
+        $priorResult = Get-Content -LiteralPath $runnerResult -Raw `
+            -Encoding UTF8 | ConvertFrom-Json
+        if ($priorResult.schemaVersion -ne
+                'M3_AGENT_RESEARCH_SMOKE_RESULT_V1' -or
+            $priorResult.status -notin @('SUCCEEDED', 'FAILED') -or
+            [int]$priorResult.providerCallCount -ne 0 -or
+            [int]$priorResult.databaseWriteCount -ne 0) {
+            throw 'M3_BAILIAN_STAGE_BUDGET_LEDGER_INVALID'
+        }
+        [decimal]$cost = $legacyFailureReserve
+        if ($null -ne $priorResult.modelDiagnostics) {
+            $cost = [decimal]::Parse(
+                [string]$priorResult.modelDiagnostics.accountedCost,
+                [Globalization.NumberStyles]::Number,
+                [Globalization.CultureInfo]::InvariantCulture)
+            if ($cost -lt 0 -or $cost -gt $hardLimit -or
+                [string]$priorResult.modelDiagnostics.costCurrency -ne 'CNY' -or
+                [int]$priorResult.modelDiagnostics.networkCallCount -lt 0 -or
+                [int]$priorResult.modelDiagnostics.networkCallCount -gt 13) {
+                throw 'M3_BAILIAN_STAGE_BUDGET_LEDGER_INVALID'
+            }
+        }
+        $used += $cost
+    }
+    if ($prior.Count -ge 3 -or $used -ge $hardLimit) {
+        throw 'M3_BAILIAN_STAGE_BUDGET_EXHAUSTED'
+    }
+    [decimal]$remaining = $hardLimit - $used
+    return [pscustomobject]@{
+        AttemptNumber = $prior.Count + 1
+        PriorCostCny = $used.ToString(
+            [Globalization.CultureInfo]::InvariantCulture)
+        RemainingCostCny = $remaining.ToString(
+            [Globalization.CultureInfo]::InvariantCulture)
+        HardLimitCny = '5.00'
     }
 }
 
