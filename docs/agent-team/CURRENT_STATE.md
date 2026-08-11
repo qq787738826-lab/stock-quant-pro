@@ -9,7 +9,8 @@
 - 当前稳定版本：`1.3.1`
 - 当前目标版本：`1.4.0`
 - 当前集成分支：`feature/1.4.0-agent-team`
-- 当前集成分支 HEAD（本阶段冻结基线）：`e2a6fa9da30dc9d96c72b25a366f020e2ff40960`
+- M1 阶段冻结集成基线：`c9303713cfe3e0aabd05d7e526b4223f844aedeb`
+- M1 长期任务分支：`codex/1.4.0-m1-research-data-ready`
 - 1D-4 验收来源分支：`codex/1.4.0-1d4-acceptance`
 - 1D-4 验收基线：`5bc492a feat(agent): add safe local team runtime scripts`
 - 阶段 2A 验收来源分支：`codex/1.4.0-2a-readonly-context`
@@ -210,6 +211,17 @@
   `Interactive/Limited`、固定 action、无限监听时限及有限重启，claimed 请求在进程重启后绝不重放。
   真实临时 Task Scheduler 生命周期测试已证明健康实例跨周期保持单实例，forced-kill 后无需 demand-start
   在 `41.528s` 恢复 `IDLE`，期间 Credential/Provider/永久库计数均为 0 且临时残留为 0。
+- `M1_RESEARCH_DATA_READY=PASS`：M1 在固定专用研究库中完成 Tushare `daily`、`adj_factor`、
+  `trade_cal` 的真实多证券、多日期、增量与幂等闭环。代表样本为 `600000/SSE`、`000001/SZSE`，
+  覆盖 `2025-01-02` 至 `2025-01-10`：14 条日线、14 条复权因子、18 条交易日历事实，包含
+  14 个开市证券日和 4 个休市证券日。首次窗口新增 19、命中既有链尾 3；增量窗口新增 24；
+  全窗口重复采集新增 0、合法命中链尾 46。三次成功运行均为每证券每 Endpoint 精确 1 次、
+  重试 0，typed fact、SYSTEM_KNOWLEDGE、formula-only QFQ、基础数据质量、无未来数据泄漏、
+  Research Dataset 读取和输出审计全部通过。M1 阶段真实调用共 21 次（两次历史 40101 拒绝、
+  一次最小 Token 验证、18 次成功采集），累计真实调用为 55，低于累计上限 64；剩余预算未使用。
+  详细证据见 [M1 阶段记录](stage-m1-research-data-ready.md)。M1 只满足缩减研究数据层进入 M2 的
+  技术前置条件，不自动启动或批准 M2，也不改变完整 F1、Provider PIT、公司行动 lineage、
+  scheduler、Agent、Shadow、回测或交易门禁。
 - 3A-R3B-F2A 任务书 / 阶段记录：[tasks/3ar3b-f2a-research-preview-product.md](tasks/3ar3b-f2a-research-preview-product.md) / [stage-3ar3b-f2a-research-preview-product.md](stage-3ar3b-f2a-research-preview-product.md)。
 - 3A-R3B-F2A-R1 任务书 / 阶段记录：[tasks/3ar3b-f2a-r1-preview-ux-convergence.md](tasks/3ar3b-f2a-r1-preview-ux-convergence.md) / [stage-3ar3b-f2a-r1-preview-ux-convergence.md](stage-3ar3b-f2a-r1-preview-ux-convergence.md)。
 - 3A-R3B-F2A-R1A 任务书 / 阶段记录：[tasks/3ar3b-f2a-r1a-visual-semantics-fix.md](tasks/3ar3b-f2a-r1a-visual-semantics-fix.md) / [stage-3ar3b-f2a-r1a-visual-semantics-fix.md](stage-3ar3b-f2a-r1a-visual-semantics-fix.md)。
@@ -226,7 +238,7 @@
 - 3A-R3B-F1F-B2-RUNNER 任务书 / 阶段记录：[tasks/3ar3b-f1f-b2-controlled-runner.md](tasks/3ar3b-f1f-b2-controlled-runner.md) / [stage-3ar3b-f1f-b2-controlled-runner.md](stage-3ar3b-f1f-b2-controlled-runner.md)。
 - 3A-R3B-F1F-B2-DBPREP 任务书 / 阶段记录：[tasks/3ar3b-f1f-b2-database-preparation.md](tasks/3ar3b-f1f-b2-database-preparation.md) / [stage-3ar3b-f1f-b2-database-preparation.md](stage-3ar3b-f1f-b2-database-preparation.md)；首次冻结记录：[stage-3ar3b-f1f-b2-freeze.md](stage-3ar3b-f1f-b2-freeze.md)。
 - 3A-R3B-F1F-B2-E2E-CLOSEOUT 任务书 / 阶段记录：[tasks/3ar3b-f1f-b2-e2e-closeout.md](tasks/3ar3b-f1f-b2-e2e-closeout.md) / [stage-3ar3b-f1f-b2-e2e-closeout.md](stage-3ar3b-f1f-b2-e2e-closeout.md)。
-- 当前正式状态：`F0_AUDIT_RESULT=PARTIAL`、`FREE_IMPLEMENTATION_PATH=RESEARCH_PREVIEW_FIRST`、`FREE_PRODUCT_PREVIEW_GATE=PASS`、`FREE_PROVIDER_VALIDATION_GATE=BLOCKED`、`PAID_PROVIDER_UPGRADE_DECISION=PENDING`、`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`。Track A 的免费研究预览产品形态验证已经完成；该 PASS 不改变 Provider、PIT、效果、Shadow、付费数据或交易资格。F1A—F1E、F1F-A、F1F-B1、F1F-B2-RUNNER、DBPREP、事务、typed fact identity、SYSTEM_KNOWLEDGE 回读修复与 E2E-CLOSEOUT 均已验收合入。F1D 已把当前个人研究书面许可闭环为 PASS；最终真实 F1F-B2 已持久化为 `PASSED`，因此 `CONTROLLED_ACCEPTANCE_STATUS=PASSED`、`REDUCED_RESEARCH_OPERATIONAL_READY=true`。完整技术合同仍有十项阻断，所以 `F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE`、`fullF1EntryReady=false`；缩减研究 operational 不等于生产、正常业务库、scheduler、Agent、回测、Shadow 或交易就绪。Tushare 累计真实业务请求为 33，iFinD 真实调用数为 0；正常业务库 V13 未执行，F2B/F3、3A-R3B-1 均未开始，Day 002 未创建，scheduler 关闭，3B 未开始。
+- 当前正式状态：`F0_AUDIT_RESULT=PARTIAL`、`FREE_IMPLEMENTATION_PATH=RESEARCH_PREVIEW_FIRST`、`FREE_PRODUCT_PREVIEW_GATE=PASS`、`FREE_PROVIDER_VALIDATION_GATE=BLOCKED`、`PAID_PROVIDER_UPGRADE_DECISION=PENDING`、`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`。Track A 的免费研究预览产品形态验证已经完成；该 PASS 不改变 Provider、PIT、效果、Shadow、付费数据或交易资格。F1A—F1E、F1F-A、F1F-B1、F1F-B2-RUNNER、DBPREP、事务、typed fact identity、SYSTEM_KNOWLEDGE 回读修复与 E2E-CLOSEOUT 均已验收合入。F1D 已把当前个人研究书面许可闭环为 PASS；最终真实 F1F-B2 已持久化为 `PASSED`，因此 `CONTROLLED_ACCEPTANCE_STATUS=PASSED`、`REDUCED_RESEARCH_OPERATIONAL_READY=true`。M1 缩减研究数据层已经通过真实多证券、多日期、增量和幂等验证。完整技术合同仍有十项阻断，所以 `F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE`、`fullF1EntryReady=false`；缩减研究 operational 与 M1 PASS 均不等于生产、正常业务库、scheduler、Agent、回测、Shadow 或交易就绪。Tushare 累计真实业务请求为 55，iFinD 真实调用数为 0；正常业务库 V13 未执行，M2/F2B/F3、3A-R3B-1 均未开始，scheduler 关闭，3B 未开始。
 - `master`：`27d9099 chore: checkpoint Stock Quant Pro 1.3.1 and remove tracked cache`
 - 版本号仍保持 `1.3.1`；尚未发布 `1.4.0`。
 
@@ -522,6 +534,6 @@ DATA_QUALITY 只作门禁和 confidence 上限，MARKET_REGIME V1 权重为 0 �
 
 完整阶段 2D、完整阶段 2D-2 和完整阶段 2D-2B 仍处于进行中。阶段 2D-2A、2D-2B-1A、文档阶段 2D-2B-1B-0 与 TEST/DEMO 实现阶段 2D-2B-1B-1 已完成；该工作线的唯一入口只是解决 2D-2B-1B-2 的外部前置决策，不是立即开始 adapter、2D-2B-2 或 Universe 实现。阶段 2E-1 已完成独立复审并合入，但没有自动批准或开始任何 2E 后续任务。
 
-**在智能体规则能力工作线上，3A-R3B-0、免费优先治理规划、F0 审计、F0.5 双轨治理、F2A/R1/R1A/R1B、产品门治理、Track B0、Track B1、F1A—F1E、F1F-A、F1F-B1、F1F-B2-RUNNER、DBPREP、事务、typed fact identity、SYSTEM_KNOWLEDGE 回读修复、E2E-CLOSEOUT 与成功退出码投影均已验收并合入；当前集成 HEAD 为 `120673dc26c510b945e26269d77b1f313b2ba9fb`。F0 最终结论为 `F0_AUDIT_RESULT=PARTIAL`。Track A 已完成，当前 `FREE_PRODUCT_PREVIEW_GATE=PASS`。Track B 主要路线为 Tushare Pro，备用为 iFinD。B1 十项受控业务请求均 PASS；完整证据探针仍为 `PARTIAL_NOT_COMPLETE`。F1D 已把当前个人研究书面门闭环为 PASS，再分发、商业数据服务和 Token 共享仍为 `NOT_GRANTED`。悬挂 ID 已正式恢复为 `INTERRUPTED`；最终真实 F1F-B2 已持久化为 `PASSED`，因此 `CONTROLLED_ACCEPTANCE_STATUS=PASSED`、`REDUCED_RESEARCH_OPERATIONAL_READY=true`。完整 F1 仍为 `F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE`，十项技术阻断不变。** Day 001 仍只有 1 个有效观察日和 3 个 item。Tushare 保持 `V13_LINEAGE_PARTIAL/PIT_PARTIAL`、稳定证券 ID `PARTIAL`，不声明完整公司行动、Provider PIT 或永久身份资格。四项正式门禁仍为 `PASS/BLOCKED/PENDING/BLOCKED`。Tushare 累计真实业务请求为 32（B1 10、F1A 10、四次进入 Provider 的真实验收各 3），iFinD 为 0，scheduler 关闭，Day 002 未创建。缩减研究受控验收 PASSED 不授权生产/正常业务库、scheduler、Agent、回测、Shadow、交易、F2B/F3、3A-R3B-1、3B 或其他阶段。
+**在智能体规则能力工作线上，缩减研究受控验收已经 `PASSED`，M1 研究数据层已经以两只沪深主板证券、七个开市日和两个休市日完成真实多日采集、增量、全窗口幂等、typed fact、SYSTEM_KNOWLEDGE、formula-only QFQ、数据质量、无未来数据泄漏与 Research Dataset 读取验证。当前 `CONTROLLED_ACCEPTANCE_STATUS=PASSED`、`REDUCED_RESEARCH_OPERATIONAL_READY=true`、`M1_RESEARCH_DATA_READY=PASS`；完整 F1 仍为 `F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE`，十项技术阻断不变。** Tushare 保持 `V13_LINEAGE_PARTIAL/PIT_PARTIAL`、稳定证券 ID `PARTIAL`，不声明完整公司行动、Provider PIT 或永久身份资格。四项正式门禁仍为 `PASS/BLOCKED/PENDING/BLOCKED`。Tushare 累计真实业务请求为 55，iFinD 为 0，scheduler 关闭。M1 已满足进入 M2 策略引擎阶段的缩减研究数据技术前置条件，但 M2 尚未开始，必须由后续独立阶段授权；M1 不授权生产/正常业务库、业务 scheduler、Agent、回测、Shadow、交易、F2B/F3、3A-R3B-1、3B 或其他阶段。
 
-阻断项包括稳定 source instrument ID、完整公司行动、revision 语义以及 published/effective 时间语义。当前免费聚合源和 `securities` 当前态投影均不得被视为正式来源；2G 的研究级 AKShare/CNINFO 公告来源同样不得用于解除这些门禁。当前仍未实现 `PROVIDER_PIT_VERIFIED`、`SECURITY_STATUS_EVENT_V2`、`security_status_history` 正式投影、Universe snapshot、`MARKET_BREADTH_V2`、完整 MARKET_REGIME、公告 PDF 语义分析或生产扫描切换。F1A 只通过类型化专用入口增加 `PROVIDER_CAPTURE/RESEARCH_ONLY/formalEligible=false` 的 Tushare raw/factor/calendar 有限个人用途路径；F1B 固定 `REDUCED_RESEARCH_ONLY`；F1C 只增加随机隔离 Schema 的公式级手工入口；F1D 只关闭个人研究书面许可门。上述阶段都不等于完整 FORMAL、生产运行或正常业务库资格。正常业务库尚未执行 V13；完整 F1 当前只受 `BLOCKED_TECHNICAL_EVIDENCE` 阻断，生产摄取、F2B、F3、3A-R3B-1 至 R3B-3 均未开始。当前只有 1 个有效观察日和 3 个 shadow item，尚未达到 20 个有效观察日、200 个 item、主要原因人工复核和正式观察报告门槛，因此完整 3A 未完成，3B 未开始。阶段 2D-2B 禁止外部行情补数、LLM 权威决策、投资建议和交易写操作。
+阻断项包括稳定 source instrument ID、完整公司行动、revision 语义以及 published/effective 时间语义。当前免费聚合源和 `securities` 当前态投影均不得被视为正式来源；2G 的研究级 AKShare/CNINFO 公告来源同样不得用于解除这些门禁。当前仍未实现 `PROVIDER_PIT_VERIFIED`、`SECURITY_STATUS_EVENT_V2`、`security_status_history` 正式投影、Universe snapshot、`MARKET_BREADTH_V2`、完整 MARKET_REGIME、公告 PDF 语义分析或生产扫描切换。M1 只扩展 `PROVIDER_CAPTURE/RESEARCH_ONLY/formalEligible=false` 的 Tushare raw/factor/calendar 有限个人研究路径及其只读数据集，不等于完整 FORMAL、生产运行或正常业务库资格。正常业务库尚未执行 V13；完整 F1 当前只受 `BLOCKED_TECHNICAL_EVIDENCE` 阻断，生产摄取、M2/F2B、F3、3A-R3B-1 至 R3B-3 均未开始。既有 Shadow 观察规模门槛也未因 M1 行情事实增加而改变，因此完整 3A 未完成，3B 未开始。阶段 2D-2B 禁止外部行情补数、LLM 权威决策、投资建议和交易写操作。
