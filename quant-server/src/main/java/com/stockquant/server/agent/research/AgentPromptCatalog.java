@@ -1,0 +1,80 @@
+package com.stockquant.server.agent.research;
+
+import com.stockquant.server.agent.research.AgentResearchModels.AgentRole;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.EnumMap;
+import java.util.Map;
+
+/** Classpath-backed, immutable prompt catalog; no dynamic prompt platform. */
+public final class AgentPromptCatalog {
+    private static final Map<AgentRole, String> RESOURCES = Map.of(
+            AgentRole.RESEARCH_COORDINATOR,
+            "agent-research/prompts/research-coordinator-v1.txt",
+            AgentRole.DATA_ANALYST,
+            "agent-research/prompts/data-analyst-v1.txt",
+            AgentRole.MARKET_TECHNICAL,
+            "agent-research/prompts/market-technical-v1.txt",
+            AgentRole.STRATEGY_RESEARCH,
+            "agent-research/prompts/strategy-research-v1.txt",
+            AgentRole.RISK,
+            "agent-research/prompts/risk-v1.txt",
+            AgentRole.PORTFOLIO,
+            "agent-research/prompts/portfolio-v1.txt",
+            AgentRole.CRITIC_REVIEW,
+            "agent-research/prompts/critic-review-v1.txt");
+
+    private final Map<AgentRole, PromptDefinition> prompts;
+
+    public AgentPromptCatalog() {
+        EnumMap<AgentRole, PromptDefinition> loaded = new EnumMap<>(
+                AgentRole.class);
+        RESOURCES.forEach((role, resource) -> loaded.put(role,
+                load(role, resource)));
+        if (loaded.size() != AgentRole.values().length) {
+            throw new IllegalStateException("M3_PROMPT_CATALOG_INCOMPLETE");
+        }
+        prompts = Map.copyOf(loaded);
+    }
+
+    public PromptDefinition prompt(AgentRole role) {
+        PromptDefinition value = prompts.get(role);
+        if (value == null) {
+            throw new IllegalArgumentException("M3_PROMPT_ROLE_UNKNOWN");
+        }
+        return value;
+    }
+
+    private static PromptDefinition load(AgentRole role, String resource) {
+        try (InputStream stream = AgentPromptCatalog.class.getClassLoader()
+                .getResourceAsStream(resource)) {
+            if (stream == null) {
+                throw new IllegalStateException("M3_PROMPT_RESOURCE_MISSING");
+            }
+            String text = new String(stream.readAllBytes(),
+                    StandardCharsets.UTF_8).replace("\r\n", "\n").trim();
+            String version = text.lines().findFirst().orElse("");
+            if (!version.matches("PROMPT_VERSION=M3_[A-Z_]+_V1")
+                    || text.length() < 120 || text.length() > 4_000) {
+                throw new IllegalStateException("M3_PROMPT_RESOURCE_INVALID");
+            }
+            return new PromptDefinition(role,
+                    version.substring("PROMPT_VERSION=".length()), resource,
+                    text, AgentResearchCanonical.sha256Text(text));
+        } catch (IOException exception) {
+            throw new IllegalStateException("M3_PROMPT_RESOURCE_READ_FAILED",
+                    exception);
+        }
+    }
+
+    public record PromptDefinition(
+            AgentRole role,
+            String version,
+            String resource,
+            String text,
+            String fingerprint
+    ) {
+    }
+}

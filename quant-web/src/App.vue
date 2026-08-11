@@ -6,5 +6,6 @@ const aiMenuIndex=menus.findIndex(menu=>menu[0]==='/ai')
 menus.splice(aiMenuIndex+1,0,['/research-preview','研究预览'])
 menus.splice(aiMenuIndex+2,0,['/agent-team','智能体团队'])
 menus.splice(aiMenuIndex+3,0,['/agent-shadow','影子观测'])
+menus.splice(aiMenuIndex+4,0,['/agent-research','Agent 研究'])
 </script>
 <template><div class="terminal"><aside><div class="brand"><b>SQ</b><span>Stock Quant Pro<small>A股短线量化终端</small></span></div><nav><router-link v-for="m in menus" :key="m[0]" :to="m[0]" :class="{active:route.path===m[0]}">{{m[1]}}</router-link></nav><div class="status"><i></i>本地服务模式</div></aside><main><header><div class="search">输入股票代码 / 名称快速搜索</div><div class="clock">沪深主板 · 人工确认交易</div></header><section class="content"><router-view/></section></main></div></template>

@@ -48,6 +48,11 @@ if ([string]::IsNullOrWhiteSpace($ArtifactPath)) {
     }
     $ArtifactPath = Join-Path $paths.TargetRoot $artifactName
 }
+$expectedM3Artifact = Join-Path $paths.TargetRoot `
+    'quant-server-1.3.1-m3-agent-research-runner.jar'
+$isM3Compatibility = $Operation -eq 'RUN_M2_STRATEGY_RESEARCH_SMOKE' -and
+    [IO.Path]::GetFullPath($ArtifactPath).Equals($expectedM3Artifact,
+        [StringComparison]::OrdinalIgnoreCase)
 if ($Operation -in @(
         'READ_SANITIZED_RESULT',
         'DIAGNOSE_TUSHARE_CREDENTIAL')) {
@@ -69,6 +74,9 @@ try {
     } elseif ($Operation -eq 'RUN_M2_STRATEGY_RESEARCH_SMOKE' -and
         $branch -eq 'codex/1.4.0-m2-strategy-engine-ready') {
         'codex/1.4.0-m2-strategy-engine-ready'
+    } elseif ($isM3Compatibility -and
+        $branch -eq 'codex/1.4.0-m3-agent-research-ready') {
+        'codex/1.4.0-m3-agent-research-ready'
     } else { $integrationBranch }
     $remoteRef = "refs/heads/$requiredBranch"
     $remoteQuery = @(& git ls-remote --exit-code origin $remoteRef 2>&1 |
@@ -96,8 +104,8 @@ try {
         throw 'STOCK_QUANT_HOST_BROKER_GIT_BASELINE_INVALID'
     }
 
-    Read-StockQuantHostBrokerHeartbeat -ExpectedGitCommit $head |
-        Out-Null
+    Read-StockQuantHostBrokerHeartbeat -ExpectedGitCommit $head `
+        -AllowAncestorGitCommit | Out-Null
 
     $artifact = Assert-StockQuantPathInside -Path $ArtifactPath `
         -Root $paths.TargetRoot `
@@ -261,8 +269,8 @@ try {
         'source.request.id' = $SourceRequestId
         }
     }
-    Read-StockQuantHostBrokerHeartbeat -ExpectedGitCommit $head |
-        Out-Null
+    Read-StockQuantHostBrokerHeartbeat -ExpectedGitCommit $head `
+        -AllowAncestorGitCommit | Out-Null
     $requestFile = Write-StockQuantHostBrokerRequest -Values $requestValues
 
     $resultPath = Join-Path $paths.Results "$requestId.result.json"

@@ -14,6 +14,7 @@ export default createRouter({
     { path: '/ai', component: () => import('./views/Ai.vue') },
     { path: '/research-preview', component: () => import('./views/ResearchPreviewWorkbench.vue') },
     { path: '/agent-team', component: () => import('./views/AgentTeamWorkbench.vue') },
+    { path: '/agent-research', component: () => import('./views/AgentResearchWorkbench.vue') },
     { path: '/agent-shadow', component: () => import('./views/AgentShadowWorkbench.vue') },
     { path: '/market', component: () => import('./views/Market.vue') },
     { path: '/data', component: () => import('./views/DataCenter.vue') },

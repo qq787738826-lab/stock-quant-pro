@@ -2,7 +2,9 @@
 param(
     [Parameter(Mandatory = $true)]
     [ValidatePattern('^[0-9a-f]{40}$')]
-    [string] $ExpectedCommit
+    [string] $ExpectedCommit,
+
+    [switch] $IncludeM3
 )
 
 $ErrorActionPreference = 'Stop'
@@ -20,10 +22,15 @@ $m1Proof = "$m1Artifact.f1f-b2-proof.properties"
 $m2Artifact = Join-Path $target `
     'quant-server-1.3.1-m2-strategy-research-runner.jar'
 $m2Proof = "$m2Artifact.f1f-b2-proof.properties"
+$m3Artifact = Join-Path $target `
+    'quant-server-1.3.1-m3-agent-research-runner.jar'
+$m3Proof = "$m3Artifact.f1f-b2-proof.properties"
 $m1Runner = 'com.stockquant.server.agent.marketfacts.' +
     'TushareM1ResearchDataManualRunner'
 $m2Runner = 'com.stockquant.server.agent.marketfacts.' +
     'TushareM2StrategyResearchManualRunner'
+$m3Runner = 'com.stockquant.server.agent.marketfacts.' +
+    'TushareM3AgentResearchManualRunner'
 $port = 0
 $started = $false
 
@@ -136,6 +143,25 @@ function Run-M2([string] $Result, [string] $ExecutionId) {
         & java "-Dloader.main=$m2Runner" -cp $m2Artifact `
             'org.springframework.boot.loader.launch.PropertiesLauncher' `
             "--result-file=$Result" "--execution-id=$ExecutionId" `
+            "--database-port=$port" '--execution-mode=E2E_DRY_RUN' `
+            2>&1 | ForEach-Object { [string]$_ } | Out-Host
+        return $LASTEXITCODE
+    } finally { $ErrorActionPreference = $old }
+}
+
+function Run-M3(
+    [string] $Result,
+    [string] $ReportDirectory,
+    [string] $ExecutionId
+) {
+    $old = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        & java "-Dloader.main=$m3Runner" -cp $m3Artifact `
+            'org.springframework.boot.loader.launch.PropertiesLauncher' `
+            "--result-file=$Result" `
+            "--report-directory=$ReportDirectory" `
+            "--execution-id=$ExecutionId" `
             "--database-port=$port" '--execution-mode=E2E_DRY_RUN' `
             2>&1 | ForEach-Object { [string]$_ } | Out-Host
         return $LASTEXITCODE
@@ -276,6 +302,112 @@ try {
     Exact (Scalar `
         'SELECT count(*) FROM tushare_research.pit_market_fact_observations') `
         $before 'M2_E2E_DATABASE_MUTATED'
+    if ($IncludeM3) {
+        & "$PSScriptRoot\prepare-m3-agent-research-build-proof.ps1" `
+            -ExpectedCommit $ExpectedCommit -Mode E2E_DRY_RUN
+        if ($LASTEXITCODE -ne 0) { throw 'M3_E2E_BUILD_FAILED' }
+        $m3Hash = ((Get-FileHash -LiteralPath $m3Artifact `
+            -Algorithm SHA256).Hash).ToLowerInvariant()
+        if ($m3Hash -notmatch '^[0-9a-f]{64}$') {
+            throw 'M3_E2E_ARTIFACT_HASH_INVALID'
+        }
+        $m3Result = Join-Path $root 'm3-agent-research.json'
+        $m3Reports = Join-Path $root 'agent-research-reports'
+        $m3ExecutionId = 'M3SMOKE_20260811T010203Z_A1B2C3D4E5F6'
+        Exact (Run-M3 $m3Result $m3Reports $m3ExecutionId) 0 `
+            'M3_E2E_RUNNER_FAILED'
+        $m3 = Get-Content -LiteralPath $m3Result -Raw -Encoding UTF8 |
+            ConvertFrom-Json
+        Exact $m3.schemaVersion 'M3_AGENT_RESEARCH_SMOKE_RESULT_V1' `
+            'M3_E2E_RESULT_VERSION_INVALID'
+        Exact $m3.status 'SUCCEEDED' 'M3_E2E_RESULT_STATUS_INVALID'
+        Exact $m3.executionId $m3ExecutionId `
+            'M3_E2E_EXECUTION_ID_INVALID'
+        Exact $m3.gitCommit $ExpectedCommit 'M3_E2E_GIT_BINDING_INVALID'
+        Exact $m3.artifactSha256 $m3Hash 'M3_E2E_HASH_BINDING_INVALID'
+        Exact $m3.providerCallCount 0 'M3_E2E_PROVIDER_CALLS_INVALID'
+        Exact $m3.databaseWriteCount 0 'M3_E2E_DATABASE_WRITES_INVALID'
+        Exact $m3.research.status 'INSUFFICIENT_EVIDENCE' `
+            'M3_E2E_RESEARCH_STATUS_INVALID'
+        Exact $m3.research.dataset.securityCount 2 `
+            'M3_E2E_SECURITIES_INVALID'
+        Exact $m3.research.dataset.openSessionCount 7 `
+            'M3_E2E_SESSIONS_INVALID'
+        Exact $m3.research.strategyExperiments.experiments.Count 4 `
+            'M3_E2E_EXPERIMENTS_INVALID'
+        Exact $m3.research.toolCallCount 4 'M3_E2E_TOOL_CALLS_INVALID'
+        Exact $m3.research.modelCallCount 9 'M3_E2E_MODEL_CALLS_INVALID'
+        Exact @($m3.research.agentRuns.agentRole | Sort-Object -Unique).Count 7 `
+            'M3_E2E_AGENT_ROLES_INVALID'
+        if (-not $m3.databaseReadOnly -or
+            -not $m3.databaseSnapshotUnchanged -or
+            -not $m3.outputAudit.clean -or
+            -not $m3.research.dataset.typedFactReadback -or
+            -not $m3.research.dataset.systemKnowledgeReadback -or
+            -not $m3.research.dataset.dataQualityPassed -or
+            -not $m3.research.dataset.noFutureDataLeakage -or
+            -not $m3.research.criticReview.correctionApplied -or
+            -not $m3.research.deterministic -or
+            -not $m3.research.researchOnly -or
+            $m3.research.providerCalled -or $m3.research.shadowStarted -or
+            $m3.research.tradingStarted -or
+            -not (Test-Path -LiteralPath $m3.reportFile -PathType Leaf)) {
+            throw 'M3_E2E_RESEARCH_RESULT_INVALID'
+        }
+        $directReport = Get-Content -LiteralPath $m3.reportFile -Raw `
+            -Encoding UTF8 | ConvertFrom-Json
+        Exact $directReport.researchFingerprint `
+            $m3.research.researchFingerprint `
+            'M3_E2E_REPORT_FILE_MISMATCH'
+        $compatibilityResult = Join-Path $root `
+            'm3-agent-research-compatibility.json'
+        $compatibilityExecutionId =
+            'M2SMOKE_20260811T010204Z_B2C3D4E5F607'
+        $oldErrorAction = $ErrorActionPreference
+        try {
+            $ErrorActionPreference = 'Continue'
+            & "$PSScriptRoot\run-m2-strategy-research.ps1" `
+                -ResultFile $compatibilityResult `
+                -ArtifactPath $m3Artifact `
+                -ExecutionId $compatibilityExecutionId `
+                -M3ExecutionMode E2E_DRY_RUN `
+                -M3DatabasePort $port 2>&1 |
+                ForEach-Object { [string]$_ } | Out-Host
+            $compatibilityExitCode = $LASTEXITCODE
+        } finally { $ErrorActionPreference = $oldErrorAction }
+        Exact $compatibilityExitCode 0 `
+            'M3_E2E_BROKER_COMPATIBILITY_FAILED'
+        $compatibility = Get-Content -LiteralPath $compatibilityResult `
+            -Raw -Encoding UTF8 | ConvertFrom-Json
+        Exact $compatibility.schemaVersion `
+            'M2_STRATEGY_RESEARCH_SMOKE_RESULT_V1' `
+            'M3_E2E_COMPATIBILITY_VERSION_INVALID'
+        Exact $compatibility.status 'SUCCEEDED' `
+            'M3_E2E_COMPATIBILITY_STATUS_INVALID'
+        Exact $compatibility.executionId $compatibilityExecutionId `
+            'M3_E2E_COMPATIBILITY_EXECUTION_INVALID'
+        Exact $compatibility.research.contractVersion `
+            'M2_M3_COMPATIBILITY_V1' `
+            'M3_E2E_COMPATIBILITY_CONTRACT_INVALID'
+        if (-not $compatibility.databaseReadOnly -or
+            -not $compatibility.databaseSnapshotUnchanged -or
+            -not $compatibility.outputAudit.clean -or
+            [int]$compatibility.providerCallCount -ne 0 -or
+            [int]$compatibility.databaseWriteCount -ne 0 -or
+            -not (Test-Path -LiteralPath `
+                "$compatibilityResult.m3.json" -PathType Leaf)) {
+            throw 'M3_E2E_BROKER_COMPATIBILITY_INVALID'
+        }
+        Exact (Scalar `
+            'SELECT count(*) FROM tushare_research.pit_market_fact_observations') `
+            $before 'M3_E2E_DATABASE_MUTATED'
+        Write-Output 'M3_AGENT_TEAM_PACKAGED_FAKE_E2E=PASS'
+        Write-Output 'M3_M1_M2_TOOL_CHAIN=PASS'
+        Write-Output 'M3_RESIDENT_BROKER_COMPATIBILITY=PASS'
+        Write-Output 'M3_TEMP_POSTGRES=PASS'
+        Write-Output 'M3_PROVIDER_CALLS=0'
+        Write-Output 'M3_PERMANENT_DATABASE_WRITES=0'
+    }
     Write-Output 'M2_PACKAGED_FAKE_E2E=PASS'
     Write-Output 'M2_TEMP_POSTGRES=PASS'
     Write-Output 'M2_M1_FAKE_PROVIDER_CALLS=18'
@@ -291,7 +423,8 @@ try {
     Remove-Root
     foreach ($file in @(
             $m1Artifact, $m1Proof, "$m1Artifact.original",
-            $m2Artifact, $m2Proof, "$m2Artifact.original")) {
+            $m2Artifact, $m2Proof, "$m2Artifact.original",
+            $m3Artifact, $m3Proof, "$m3Artifact.original")) {
         if (Test-Path -LiteralPath $file) {
             Remove-Item -LiteralPath $file -Force
         }

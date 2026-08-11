@@ -1195,6 +1195,7 @@ function Read-StockQuantHostBrokerHeartbeat {
         [Parameter(Mandatory = $true)]
         [ValidatePattern('^[0-9a-f]{40}$')]
         [string] $ExpectedGitCommit,
+        [switch] $AllowAncestorGitCommit,
         [ValidateRange(2, 60)]
         [int] $MaximumAgeSeconds = 6,
         [DateTimeOffset] $Now = [DateTimeOffset]::UtcNow
@@ -1244,9 +1245,17 @@ function Read-StockQuantHostBrokerHeartbeat {
             ([string]$heartbeat.startedAt)
         $lastHeartbeat = ConvertTo-StockQuantTimestamp `
             ([string]$heartbeat.lastHeartbeat)
+        $heartbeatGitCommit = [string]$heartbeat.gitCommit
+        $gitCommitCompatible = $heartbeatGitCommit -ceq $ExpectedGitCommit
+        if (-not $gitCommitCompatible -and $AllowAncestorGitCommit -and
+            $heartbeatGitCommit -match '^[0-9a-f]{40}$') {
+            & git -C $paths.RepositoryRoot merge-base --is-ancestor `
+                $heartbeatGitCommit $ExpectedGitCommit 2>$null | Out-Null
+            $gitCommitCompatible = $LASTEXITCODE -eq 0
+        }
         if ($heartbeat.schemaVersion -cne $script:HeartbeatVersion -or
             $heartbeat.brokerVersion -cne $script:BrokerVersion -or
-            $heartbeat.gitCommit -cne $ExpectedGitCommit -or
+            -not $gitCommitCompatible -or
             [string]::IsNullOrWhiteSpace([string]$heartbeat.windowsUser) -or
             [string]$heartbeat.windowsUser -match '[\x00-\x1F\x7F]' -or
             [int64]$heartbeat.processId -lt 1 -or
