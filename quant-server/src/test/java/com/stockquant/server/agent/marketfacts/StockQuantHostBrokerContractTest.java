@@ -321,6 +321,8 @@ class StockQuantHostBrokerContractTest {
         assertTrue(script.contains("qwen3.7-plus"));
         assertTrue(script.contains("Get-M3BailianStageBudget"));
         assertTrue(script.contains("M3_BAILIAN_STAGE_BUDGET_EXHAUSTED"));
+        assertTrue(script.contains("M3_BAILIAN_TRANCHE_2"));
+        assertTrue(script.contains("approvalMarker"));
         assertTrue(script.contains("legacyFailureReserve"));
         assertTrue(script.contains("modelProviderMessageCategory"));
         assertFalse(script.contains("Invoke-Expression"));

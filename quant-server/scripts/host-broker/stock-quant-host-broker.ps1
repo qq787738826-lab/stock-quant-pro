@@ -739,7 +739,7 @@ function Invoke-M2StrategyResearchSmoke {
 function Invoke-M3AgentResearchSmoke {
     param([Parameter(Mandatory = $true)] [object] $BrokerRequest)
     if ($BrokerRequest.AuthorizationStatus -ne
-            'M3_USER_APPROVED_BAILIAN_SMOKE_CNY_5_00' -or
+            'M3_USER_APPROVED_BAILIAN_SMOKE_TRANCHE_2_CNY_5_00' -or
         $null -ne $BrokerRequest.AuthorizationFile) {
         throw 'STOCK_QUANT_HOST_BROKER_M3_SCOPE_INVALID'
     }
@@ -775,10 +775,36 @@ function Invoke-M3AgentResearchSmoke {
                         } elseif ($null -ne $failed.research) {
                             [int]$failed.research.modelCallCount
                         } else { 0 })
+                        providerRequestCount = $(if ($null -ne
+                                $failed.modelDiagnostics) {
+                            [int]$failed.modelDiagnostics.networkCallCount
+                        } else { 0 })
                         externalModelCompletedCallCount = $(if ($null -ne
                                 $failed.modelDiagnostics) {
                             [int]$failed.modelDiagnostics.completedCallCount
                         } else { 0 })
+                        modelInputTokens = $(if ($null -ne
+                                $failed.modelDiagnostics) {
+                            [int]$failed.modelDiagnostics.inputTokenCount
+                        } else { 0 })
+                        modelOutputTokens = $(if ($null -ne
+                                $failed.modelDiagnostics) {
+                            [int]$failed.modelDiagnostics.outputTokenCount
+                        } else { 0 })
+                        modelReasoningTokens = $(if ($null -ne
+                                $failed.modelDiagnostics) {
+                            [int]$failed.modelDiagnostics.reasoningTokenCount
+                        } else { 0 })
+                        modelTotalTokens = $(if ($null -ne
+                                $failed.modelDiagnostics) {
+                            [int]$failed.modelDiagnostics.totalTokenCount
+                        } else { 0 })
+                        modelCallTelemetry = $(if ($null -ne
+                                $failed.modelDiagnostics) {
+                            @($failed.modelDiagnostics.callTelemetry)
+                        } else { @() })
+                        providerReportedActualCostCny = $null
+                        actualCostStatus = 'NOT_PROVIDED_BY_API'
                         modelFailureSource = $(if ($null -ne
                                 $failed.modelDiagnostics) {
                             [string]$failed.modelDiagnostics.failureSource
@@ -817,6 +843,7 @@ function Invoke-M3AgentResearchSmoke {
                             [int]$stageBudget.PriorModelAttemptCount
                         stageRemainingCostBeforeRunCny =
                             [string]$stageBudget.RemainingCostCny
+                        budgetTranche = [string]$stageBudget.BudgetTranche
                         outputAudit = $(if ($failed.outputAudit.clean) {
                             'PASSED'
                         } else { 'FAILED' })
@@ -861,12 +888,28 @@ function Invoke-M3AgentResearchSmoke {
         [string]$modelDiagnostics.failureSource -ne 'NONE' -or
         [int]$modelDiagnostics.networkCallCount -ne 13 -or
         [int]$modelDiagnostics.completedCallCount -ne 13 -or
+        [int]$modelDiagnostics.inputTokenCount -ne
+            [int]$usage.inputTokens -or
+        [int]$modelDiagnostics.outputTokenCount -ne
+            [int]$usage.outputTokens -or
+        [int]$modelDiagnostics.reasoningTokenCount -ne
+            [int]$usage.reasoningTokens -or
+        [int]$modelDiagnostics.totalTokenCount -ne
+            [int]$usage.totalTokens -or
+        @($modelDiagnostics.callTelemetry).Count -ne 13 -or
+        @($modelDiagnostics.callTelemetry | Where-Object {
+            $_.status -ne 'COMPLETED' -or
+            $_.actualCostStatus -ne 'NOT_PROVIDED_BY_API'
+        }).Count -ne 0 -or
         [string]$modelDiagnostics.costCurrency -ne 'CNY' -or
         $diagnosticCost -ne $estimatedCost -or
         $diagnosticCost -gt [decimal]$stageBudget.RemainingCostCny -or
         [int]$m3.research.toolCallCount -ne 4 -or
         [int]$usage.inputTokens -le 0 -or
         [int]$usage.outputTokens -le 0 -or
+        [int]$usage.reasoningTokens -lt 0 -or
+        [int]$usage.totalTokens -ne
+            ([int]$usage.inputTokens + [int]$usage.outputTokens) -or
         $estimatedCost -le 0 -or $estimatedCost -gt [decimal]5.00 -or
         [string]$usage.costCurrency -ne 'CNY' -or
         $runs.Count -ne 13 -or $roles.Count -ne 7 -or
@@ -892,10 +935,19 @@ function Invoke-M3AgentResearchSmoke {
         retryCount = 0
         databaseWriteCount = 0
         externalModelCallCount = 13
+        externalModelCompletedCallCount = 13
+        providerRequestCount = 13
         modelInputUnits = [int]$usage.inputTokens
         modelOutputUnits = [int]$usage.outputTokens
+        modelReasoningUnits = [int]$usage.reasoningTokens
+        modelTotalUnits = [int]$usage.totalTokens
+        modelCallTelemetry = @($modelDiagnostics.callTelemetry)
         estimatedCostCny = $estimatedCost.ToString(
             [Globalization.CultureInfo]::InvariantCulture)
+        accountedCostCny = $diagnosticCost.ToString(
+            [Globalization.CultureInfo]::InvariantCulture)
+        providerReportedActualCostCny = $null
+        actualCostStatus = 'NOT_PROVIDED_BY_API'
         hardCostLimitCny = '5.00'
         costCurrency = 'CNY'
         model = 'qwen3.7-plus'
@@ -905,6 +957,7 @@ function Invoke-M3AgentResearchSmoke {
             [int]$stageBudget.PriorModelAttemptCount
         stageRemainingCostBeforeRunCny =
             [string]$stageBudget.RemainingCostCny
+        budgetTranche = [string]$stageBudget.BudgetTranche
         agentRoleCount = 7
         toolCallCount = 4
         researchStatus = [string]$m3.research.status
@@ -925,6 +978,8 @@ function Invoke-M3AgentResearchSmoke {
 function Get-M3BailianStageBudget {
     param([Parameter(Mandatory = $true)] [object] $BrokerRequest)
     $operationMarker = 'RUN_M3_AGENT_RESEARCH_SMOKE'
+    $approvalMarker =
+        'USER_APPROVED_M3_BAILIAN_SMOKE_TRANCHE_2_CNY_5_00'
     [decimal]$hardLimit = [decimal]5.00
     [decimal]$legacyFailureReserve = [decimal]0.50
     $maximumModelAttempts = 4
@@ -937,7 +992,9 @@ function Get-M3BailianStageBudget {
             if ($_.Length -le 0 -or $_.Length -gt 65536) { return $false }
             $content = Get-Content -LiteralPath $_.FullName -Raw -Encoding UTF8
             return $content -match "(?m)^operation=$operationMarker$" -and
-                $content -match '(?m)^provider=BAILIAN$'
+                $content -match '(?m)^provider=BAILIAN$' -and
+                $content -match ("(?m)^user\.approval\.reference=" +
+                    [regex]::Escape($approvalMarker) + '$')
         })
     foreach ($file in $prior) {
         $content = Get-Content -LiteralPath $file.FullName -Raw -Encoding UTF8
@@ -1031,6 +1088,7 @@ function Get-M3BailianStageBudget {
         RemainingCostCny = $remaining.ToString(
             [Globalization.CultureInfo]::InvariantCulture)
         HardLimitCny = '5.00'
+        BudgetTranche = 'M3_BAILIAN_TRANCHE_2'
     }
 }
 

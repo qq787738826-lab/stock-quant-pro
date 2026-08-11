@@ -2,6 +2,8 @@ package com.stockquant.server.agent.marketfacts;
 
 import com.stockquant.server.agent.research.AgentResearchModels;
 import com.stockquant.server.agent.research.OpenAiResponsesModelAdapter
+        .CallTelemetry;
+import com.stockquant.server.agent.research.OpenAiResponsesModelAdapter
         .FailureDiagnostics;
 import org.junit.jupiter.api.Test;
 
@@ -78,8 +80,13 @@ class TushareM3AgentResearchManualRunnerTest {
     @Test
     void preservesSanitizedUsageWhenRuntimeGuardRejectsModelOutput() {
         var diagnostics = new FailureDiagnostics("RUNTIME_VALIDATION",
-                1, 1, 1, 100, 40, new BigDecimal("0.006000000000"),
-                new BigDecimal("4.25"), "CNY", 0, "NONE",
+                1, 1, 1, 100, 40, 0, 140,
+                new BigDecimal("0.006000000000"),
+                new BigDecimal("4.25"), "CNY", java.util.List.of(
+                new CallTelemetry(1, "COMPLETED", 100, 40, 0, 140,
+                        new BigDecimal("0.006000000000"),
+                        new BigDecimal("0.006000000000"), null,
+                        "NOT_PROVIDED_BY_API")), 0, "NONE",
                 "NOT_EVALUATED", "NONE", "NONE", "NONE");
         var failure = new TushareM3AgentResearchManualRunner
                 .ModelExecutionFailure(new IllegalStateException(

@@ -1,6 +1,8 @@
 package com.stockquant.server.agent.marketfacts;
 
 import com.stockquant.server.agent.research.OpenAiResponsesModelAdapter
+        .CallTelemetry;
+import com.stockquant.server.agent.research.OpenAiResponsesModelAdapter
         .FailureDiagnostics;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -20,9 +22,13 @@ class TushareM3AgentResearchSmokeResultTest {
     @Test
     void serializesOnlySanitizedFailedModelDiagnostics() throws Exception {
         FailureDiagnostics diagnostics = new FailureDiagnostics(
-                "HTTP_STATUS", 1, 1, 0, 0, 0,
+                "HTTP_STATUS", 1, 1, 0, 0, 0, 0, 0,
                 new BigDecimal("0.071000000000"),
-                new BigDecimal("4.50"), "CNY", 401,
+                new BigDecimal("4.50"), "CNY", java.util.List.of(
+                new CallTelemetry(1, "USAGE_UNAVAILABLE", 0, 0, 0, 0,
+                        new BigDecimal("0.071000000000"),
+                        new BigDecimal("0.071000000000"), null,
+                        "NOT_PROVIDED_BY_API")), 401,
                 "APPLICATION_JSON", "VALID_JSON", "INVALID_API_KEY",
                 "AUTHENTICATION", "REGION_OR_ENDPOINT");
         Instant now = Instant.parse("2026-08-11T10:33:01Z");
@@ -45,6 +51,8 @@ class TushareM3AgentResearchSmokeResultTest {
         assertTrue(json.contains("\"httpStatus\":401"));
         assertTrue(json.contains("\"providerCode\":\"INVALID_API_KEY\""));
         assertTrue(json.contains("\"networkCallCount\":1"));
+        assertTrue(json.contains("\"actualCostStatus\":"
+                + "\"NOT_PROVIDED_BY_API\""));
         assertFalse(json.toLowerCase().contains("bearer"));
         assertFalse(json.toLowerCase().contains("provider-sensitive"));
     }

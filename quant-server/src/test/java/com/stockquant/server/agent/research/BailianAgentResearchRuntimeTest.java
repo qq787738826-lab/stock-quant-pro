@@ -63,6 +63,8 @@ class BailianAgentResearchRuntimeTest {
         assertEquals(13, adapter.telemetry().completedCallCount());
         assertEquals(1_300, adapter.telemetry().inputTokenCount());
         assertEquals(520, adapter.telemetry().outputTokenCount());
+        assertEquals(0, adapter.telemetry().reasoningTokenCount());
+        assertEquals(1_820, adapter.telemetry().totalTokenCount());
         assertEquals("CNY", adapter.telemetry().costCurrency());
         assertTrue(adapter.telemetry().closed());
     }

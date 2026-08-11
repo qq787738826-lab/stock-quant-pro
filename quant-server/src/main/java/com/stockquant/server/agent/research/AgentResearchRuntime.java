@@ -342,6 +342,10 @@ public final class AgentResearchRuntime implements AutoCloseable {
                     value.usage().inputTokens()).sum();
             int output = runs.stream().mapToInt(value ->
                     value.usage().outputTokens()).sum();
+            int reasoning = runs.stream().mapToInt(value ->
+                    value.usage().reasoningTokens()).sum();
+            int total = runs.stream().mapToInt(value ->
+                    value.usage().totalTokens()).sum();
             BigDecimal cost = runs.stream().map(value ->
                             value.usage().estimatedCost())
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -352,7 +356,7 @@ public final class AgentResearchRuntime implements AutoCloseable {
                 throw AgentResearchModels.invalid(
                         "M3_MODEL_USAGE_CURRENCY_MISMATCH");
             }
-            return new ModelUsage(input, output, cost,
+            return new ModelUsage(input, output, reasoning, total, cost,
                     currencies.iterator().next());
         }
     }

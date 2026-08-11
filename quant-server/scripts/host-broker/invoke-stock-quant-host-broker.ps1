@@ -208,7 +208,7 @@ try {
             'retry.budget' = '0'
             'redirects' = 'NEVER'
             'user.approval.reference' =
-                'USER_APPROVED_M3_BAILIAN_SMOKE_CNY_5_00'
+                'USER_APPROVED_M3_BAILIAN_SMOKE_TRANCHE_2_CNY_5_00'
             'created.at' = $createdAt.ToString('o')
             'expires.at' = $expiresAt.ToString('o')
             'execution.source' = 'M3_AGENT_RESEARCH_REAL_LLM_SMOKE'

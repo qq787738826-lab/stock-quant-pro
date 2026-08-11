@@ -63,6 +63,8 @@ class OpenAiResponsesModelAdapterTest {
             assertEquals(1, telemetry.completedCallCount());
             assertEquals(1_000, telemetry.inputTokenCount());
             assertEquals(200, telemetry.outputTokenCount());
+            assertEquals(0, telemetry.reasoningTokenCount());
+            assertEquals(1_200, telemetry.totalTokenCount());
             assertEquals(new BigDecimal("0.000560000000"),
                     telemetry.accountedCost());
             assertEquals(new BigDecimal("0.10"),

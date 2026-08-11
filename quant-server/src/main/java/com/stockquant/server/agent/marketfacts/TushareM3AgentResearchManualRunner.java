@@ -330,6 +330,10 @@ public final class TushareM3AgentResearchManualRunner {
                 || report.deterministic() == bailian
                 || bailian && (report.totalModelUsage().inputTokens() <= 0
                 || report.totalModelUsage().outputTokens() <= 0
+                || report.totalModelUsage().reasoningTokens() < 0
+                || report.totalModelUsage().totalTokens()
+                != report.totalModelUsage().inputTokens()
+                + report.totalModelUsage().outputTokens()
                 || report.totalModelUsage().estimatedCost().signum() <= 0
                 || report.totalModelUsage().estimatedCost().compareTo(
                 maximumCostCny) > 0

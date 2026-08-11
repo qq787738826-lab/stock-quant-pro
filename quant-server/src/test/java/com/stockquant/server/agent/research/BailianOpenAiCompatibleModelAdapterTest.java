@@ -74,6 +74,8 @@ class BailianOpenAiCompatibleModelAdapterTest {
             assertFalse(body.get().contains(TEST_KEY));
             assertEquals(100, response.usage().inputTokens());
             assertEquals(40, response.usage().outputTokens());
+            assertEquals(0, response.usage().reasoningTokens());
+            assertEquals(140, response.usage().totalTokens());
             assertEquals(new BigDecimal("0.006000000000"),
                     response.usage().estimatedCost());
             assertEquals("CNY", response.usage().costCurrency());
@@ -84,6 +86,16 @@ class BailianOpenAiCompatibleModelAdapterTest {
             assertEquals(1, runtimeFailure.completedCallCount());
             assertEquals(100, runtimeFailure.inputTokenCount());
             assertEquals(40, runtimeFailure.outputTokenCount());
+            assertEquals(0, runtimeFailure.reasoningTokenCount());
+            assertEquals(140, runtimeFailure.totalTokenCount());
+            assertEquals(1, runtimeFailure.callTelemetry().size());
+            assertEquals("COMPLETED",
+                    runtimeFailure.callTelemetry().get(0).status());
+            assertEquals("NOT_PROVIDED_BY_API",
+                    runtimeFailure.callTelemetry().get(0)
+                            .actualCostStatus());
+            assertTrue(runtimeFailure.callTelemetry().get(0)
+                    .providerReportedActualCostCny() == null);
             assertEquals(new BigDecimal("0.006000000000"),
                     runtimeFailure.accountedCost());
         }
@@ -310,6 +322,11 @@ class BailianOpenAiCompatibleModelAdapterTest {
                 diagnostics(failure).failureSource());
         assertEquals(1, diagnostics(failure).networkCallCount());
         assertEquals(0, diagnostics(failure).completedCallCount());
+        assertEquals(1, diagnostics(failure).callTelemetry().size());
+        assertEquals(610, diagnostics(failure).callTelemetry().get(0)
+                .reasoningTokenCount());
+        assertEquals(740, diagnostics(failure).callTelemetry().get(0)
+                .totalTokenCount());
         adapter.close();
     }
 

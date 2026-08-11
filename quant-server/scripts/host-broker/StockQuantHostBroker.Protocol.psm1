@@ -858,7 +858,7 @@ function Read-StockQuantHostBrokerRequest {
             $values['retry.budget'] -ne '0' -or
             $values['redirects'] -ne 'NEVER' -or
             $values['user.approval.reference'] -ne
-                'USER_APPROVED_M3_BAILIAN_SMOKE_CNY_5_00' -or
+                'USER_APPROVED_M3_BAILIAN_SMOKE_TRANCHE_2_CNY_5_00' -or
             $values['execution.source'] -ne
                 'M3_AGENT_RESEARCH_REAL_LLM_SMOKE' -or
             $values['no.retry'] -ne 'true') {
@@ -1035,7 +1035,7 @@ function Read-StockQuantHostBrokerRequest {
             throw 'STOCK_QUANT_HOST_BROKER_M3_CREDENTIAL_SOURCE_INVALID'
         }
         $authorizationStatus =
-            'M3_USER_APPROVED_BAILIAN_SMOKE_CNY_5_00'
+            'M3_USER_APPROVED_BAILIAN_SMOKE_TRANCHE_2_CNY_5_00'
     } elseif ($values['operation'] -eq 'DIAGNOSE_TUSHARE_CREDENTIAL') {
         if ($values['authorization.file'] -ne 'NONE') {
             throw 'STOCK_QUANT_HOST_BROKER_AUTHORIZATION_MODE_INVALID'

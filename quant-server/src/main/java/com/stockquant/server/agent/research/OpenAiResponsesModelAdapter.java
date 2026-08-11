@@ -85,6 +85,9 @@ public final class OpenAiResponsesModelAdapter implements ModelAdapter {
     private int completedCallCount;
     private int inputTokenCount;
     private int outputTokenCount;
+    private int reasoningTokenCount;
+    private int totalTokenCount;
+    private final List<CallTelemetry> callTelemetry = new ArrayList<>();
     private boolean terminated;
     private boolean closed;
 
@@ -255,21 +258,21 @@ public final class OpenAiResponsesModelAdapter implements ModelAdapter {
         }
         ModelUsage usage = parsed.usage();
         if (usage.inputTokens() > requestBytes) {
-            accountUnknownCall(reservation);
+            accountRejectedUsage(usage, reservation);
             throw failure("INPUT_USAGE_LIMIT_EXCEEDED",
                     FailureSource.USAGE_VALIDATION, response.statusCode(),
                     contentTypeCategory(response.contentType()), "VALID_JSON",
                     "NONE", "NONE", "NONE");
         }
         if (usage.outputTokens() > profile.maximumOutputTokens()) {
-            accountUnknownCall(reservation);
+            accountRejectedUsage(usage, reservation);
             throw failure("OUTPUT_USAGE_LIMIT_EXCEEDED",
                     FailureSource.USAGE_VALIDATION, response.statusCode(),
                     contentTypeCategory(response.contentType()), "VALID_JSON",
                     "NONE", "NONE", "NONE");
         }
         if (!profile.costCurrency().equals(usage.costCurrency())) {
-            accountUnknownCall(reservation);
+            accountRejectedUsage(usage, reservation);
             throw failure("USAGE_CURRENCY_MISMATCH",
                     FailureSource.USAGE_VALIDATION, response.statusCode(),
                     contentTypeCategory(response.contentType()), "VALID_JSON",
@@ -277,16 +280,13 @@ public final class OpenAiResponsesModelAdapter implements ModelAdapter {
         }
         if (accountedCost.add(usage.estimatedCost())
                 .compareTo(profile.hardCostLimit()) > 0) {
-            accountUnknownCall(reservation);
+            accountRejectedUsage(usage, reservation);
             throw failure("COST_BUDGET_POSTCALL_EXCEEDED",
                     FailureSource.USAGE_VALIDATION, response.statusCode(),
                     contentTypeCategory(response.contentType()), "VALID_JSON",
                     "NONE", "NONE", "NONE");
         }
-        accountedCost = accountedCost.add(usage.estimatedCost());
-        completedCallCount++;
-        inputTokenCount += usage.inputTokens();
-        outputTokenCount += usage.outputTokens();
+        accountCompletedUsage(usage);
         return parsed;
     }
 
@@ -300,16 +300,18 @@ public final class OpenAiResponsesModelAdapter implements ModelAdapter {
     public synchronized Telemetry telemetry() {
         return new Telemetry(attemptedCallCount, networkCallCount,
                 completedCallCount, inputTokenCount, outputTokenCount,
-                accountedCost, profile.hardCostLimit(),
+                reasoningTokenCount, totalTokenCount, accountedCost,
+                profile.hardCostLimit(),
                 profile.costCurrency(), terminated, closed);
     }
 
     public synchronized FailureDiagnostics diagnostics() {
         return new FailureDiagnostics(FailureSource.NONE.name(),
                 attemptedCallCount, networkCallCount, completedCallCount,
-                inputTokenCount, outputTokenCount, accountedCost,
-                profile.hardCostLimit(), profile.costCurrency(), 0, "NONE",
-                "NOT_EVALUATED", "NONE", "NONE", "NONE");
+                inputTokenCount, outputTokenCount, reasoningTokenCount,
+                totalTokenCount, accountedCost, profile.hardCostLimit(),
+                profile.costCurrency(), List.copyOf(callTelemetry), 0,
+                "NONE", "NOT_EVALUATED", "NONE", "NONE", "NONE");
     }
 
     /**
@@ -321,9 +323,10 @@ public final class OpenAiResponsesModelAdapter implements ModelAdapter {
         return new FailureDiagnostics(
                 FailureSource.RUNTIME_VALIDATION.name(), attemptedCallCount,
                 networkCallCount, completedCallCount, inputTokenCount,
-                outputTokenCount, accountedCost, profile.hardCostLimit(),
-                profile.costCurrency(), 0, "NONE", "NOT_EVALUATED",
-                "NONE", "NONE", "NONE");
+                outputTokenCount, reasoningTokenCount, totalTokenCount,
+                accountedCost, profile.hardCostLimit(),
+                profile.costCurrency(), List.copyOf(callTelemetry), 0,
+                "NONE", "NOT_EVALUATED", "NONE", "NONE", "NONE");
     }
 
     public static Optional<FailureDiagnostics> failureDiagnostics(
@@ -621,6 +624,8 @@ public final class OpenAiResponsesModelAdapter implements ModelAdapter {
                 ? "output_tokens" : "completion_tokens";
         String detailsField = profile.apiShape() == ApiShape.RESPONSES
                 ? "input_tokens_details" : "prompt_tokens_details";
+        String outputDetailsField = profile.apiShape() == ApiShape.RESPONSES
+                ? "output_tokens_details" : "completion_tokens_details";
         int input = nonNegativeInt(usage.path(inputField));
         int output = nonNegativeInt(usage.path(outputField));
         int cached = 0;
@@ -631,6 +636,25 @@ public final class OpenAiResponsesModelAdapter implements ModelAdapter {
         if (cached > input) {
             throw parseFailure();
         }
+        int reasoning = 0;
+        JsonNode outputDetails = usage.path(outputDetailsField);
+        if (outputDetails.isObject()
+                && outputDetails.has("reasoning_tokens")) {
+            reasoning = nonNegativeInt(outputDetails.path(
+                    "reasoning_tokens"));
+        }
+        int calculatedTotal;
+        try {
+            calculatedTotal = Math.addExact(input, output);
+        } catch (ArithmeticException error) {
+            throw parseFailure();
+        }
+        int total = usage.has("total_tokens")
+                ? nonNegativeInt(usage.path("total_tokens"))
+                : calculatedTotal;
+        if (reasoning > output || total != calculatedTotal) {
+            throw parseFailure();
+        }
         BigDecimal cost = BigDecimal.valueOf(input - cached)
                 .multiply(profile.inputPerMillion())
                 .add(BigDecimal.valueOf(cached)
@@ -638,7 +662,7 @@ public final class OpenAiResponsesModelAdapter implements ModelAdapter {
                 .add(BigDecimal.valueOf(output)
                         .multiply(profile.outputPerMillion()))
                 .divide(MILLION, 12, RoundingMode.HALF_EVEN);
-        return new ModelUsage(input, output, cost,
+        return new ModelUsage(input, output, reasoning, total, cost,
                 profile.costCurrency());
     }
 
@@ -694,8 +718,47 @@ public final class OpenAiResponsesModelAdapter implements ModelAdapter {
     }
 
     private void accountUnknownCall(BigDecimal reservation) {
+        if (callTelemetry.stream().noneMatch(value ->
+                value.callNumber() == attemptedCallCount)) {
+            callTelemetry.add(new CallTelemetry(attemptedCallCount,
+                    "USAGE_UNAVAILABLE", 0, 0, 0, 0, reservation,
+                    reservation, null, "NOT_PROVIDED_BY_API"));
+        }
         accountedCost = accountedCost.add(reservation);
         terminated = true;
+    }
+
+    private void accountRejectedUsage(
+            ModelUsage usage,
+            BigDecimal reservation
+    ) {
+        callTelemetry.add(callTelemetry(attemptedCallCount,
+                "USAGE_REJECTED", usage, reservation));
+        accountedCost = accountedCost.add(reservation);
+        terminated = true;
+    }
+
+    private void accountCompletedUsage(ModelUsage usage) {
+        callTelemetry.add(callTelemetry(attemptedCallCount, "COMPLETED",
+                usage, usage.estimatedCost()));
+        accountedCost = accountedCost.add(usage.estimatedCost());
+        completedCallCount++;
+        inputTokenCount += usage.inputTokens();
+        outputTokenCount += usage.outputTokens();
+        reasoningTokenCount += usage.reasoningTokens();
+        totalTokenCount += usage.totalTokens();
+    }
+
+    private CallTelemetry callTelemetry(
+            int callNumber,
+            String status,
+            ModelUsage usage,
+            BigDecimal callAccountedCost
+    ) {
+        return new CallTelemetry(callNumber, status, usage.inputTokens(),
+                usage.outputTokens(), usage.reasoningTokens(),
+                usage.totalTokens(), usage.estimatedCost(),
+                callAccountedCost, null, "NOT_PROVIDED_BY_API");
     }
 
     private ProviderCallException httpFailure(TransportResponse response) {
@@ -828,9 +891,10 @@ public final class OpenAiResponsesModelAdapter implements ModelAdapter {
     ) {
         FailureDiagnostics diagnostics = new FailureDiagnostics(source.name(),
                 attemptedCallCount, networkCallCount, completedCallCount,
-                inputTokenCount, outputTokenCount, accountedCost,
-                profile.hardCostLimit(), profile.costCurrency(), httpStatus,
-                contentTypeCategory, jsonCategory, providerCode,
+                inputTokenCount, outputTokenCount, reasoningTokenCount,
+                totalTokenCount, accountedCost, profile.hardCostLimit(),
+                profile.costCurrency(), List.copyOf(callTelemetry),
+                httpStatus, contentTypeCategory, jsonCategory, providerCode,
                 providerCategory, messageCategory);
         return new ProviderCallException(reason(suffix), diagnostics);
     }
@@ -872,6 +936,8 @@ public final class OpenAiResponsesModelAdapter implements ModelAdapter {
             int completedCallCount,
             int inputTokenCount,
             int outputTokenCount,
+            int reasoningTokenCount,
+            int totalTokenCount,
             BigDecimal accountedCost,
             BigDecimal hardCostLimit,
             String costCurrency,
@@ -884,7 +950,11 @@ public final class OpenAiResponsesModelAdapter implements ModelAdapter {
             Objects.requireNonNull(costCurrency, "costCurrency");
             if (attemptedCallCount < 0 || networkCallCount < 0
                     || completedCallCount < 0 || inputTokenCount < 0
-                    || outputTokenCount < 0
+                    || outputTokenCount < 0 || reasoningTokenCount < 0
+                    || reasoningTokenCount > outputTokenCount
+                    || totalTokenCount < 0
+                    || (long) inputTokenCount + outputTokenCount
+                    != totalTokenCount
                     || completedCallCount > networkCallCount
                     || networkCallCount > attemptedCallCount
                     || attemptedCallCount > MAXIMUM_MODEL_CALLS
@@ -893,6 +963,49 @@ public final class OpenAiResponsesModelAdapter implements ModelAdapter {
                     || !costCurrency.matches("USD|CNY")) {
                 throw AgentResearchModels.invalid(
                         "M3_LLM_TELEMETRY_INVALID");
+            }
+        }
+    }
+
+    public record CallTelemetry(
+            int callNumber,
+            String status,
+            int inputTokenCount,
+            int outputTokenCount,
+            int reasoningTokenCount,
+            int totalTokenCount,
+            BigDecimal estimatedCost,
+            BigDecimal accountedCost,
+            BigDecimal providerReportedActualCostCny,
+            String actualCostStatus
+    ) {
+        public CallTelemetry {
+            Objects.requireNonNull(status, "status");
+            Objects.requireNonNull(estimatedCost, "estimatedCost");
+            Objects.requireNonNull(accountedCost, "accountedCost");
+            Objects.requireNonNull(actualCostStatus, "actualCostStatus");
+            if (callNumber < 1 || callNumber > MAXIMUM_MODEL_CALLS
+                    || !status.matches(
+                    "COMPLETED|USAGE_REJECTED|USAGE_UNAVAILABLE")
+                    || inputTokenCount < 0 || outputTokenCount < 0
+                    || reasoningTokenCount < 0
+                    || reasoningTokenCount > outputTokenCount
+                    || totalTokenCount < 0
+                    || (long) inputTokenCount + outputTokenCount
+                    != totalTokenCount
+                    || estimatedCost.signum() < 0
+                    || accountedCost.signum() < 0
+                    || !actualCostStatus.matches(
+                    "PROVIDED|NOT_PROVIDED_BY_API")
+                    || ("PROVIDED".equals(actualCostStatus)
+                    != (providerReportedActualCostCny != null))
+                    || providerReportedActualCostCny != null
+                    && providerReportedActualCostCny.signum() < 0
+                    || "USAGE_UNAVAILABLE".equals(status)
+                    && (inputTokenCount != 0 || outputTokenCount != 0
+                    || reasoningTokenCount != 0 || totalTokenCount != 0)) {
+                throw AgentResearchModels.invalid(
+                        "M3_LLM_CALL_TELEMETRY_INVALID");
             }
         }
     }
@@ -916,9 +1029,12 @@ public final class OpenAiResponsesModelAdapter implements ModelAdapter {
             int completedCallCount,
             int inputTokenCount,
             int outputTokenCount,
+            int reasoningTokenCount,
+            int totalTokenCount,
             BigDecimal accountedCost,
             BigDecimal hardCostLimit,
             String costCurrency,
+            List<CallTelemetry> callTelemetry,
             int httpStatus,
             String responseContentTypeCategory,
             String responseJsonCategory,
@@ -931,6 +1047,7 @@ public final class OpenAiResponsesModelAdapter implements ModelAdapter {
             Objects.requireNonNull(accountedCost, "accountedCost");
             Objects.requireNonNull(hardCostLimit, "hardCostLimit");
             Objects.requireNonNull(costCurrency, "costCurrency");
+            callTelemetry = List.copyOf(callTelemetry);
             Objects.requireNonNull(responseContentTypeCategory,
                     "responseContentTypeCategory");
             Objects.requireNonNull(responseJsonCategory,
@@ -945,10 +1062,17 @@ public final class OpenAiResponsesModelAdapter implements ModelAdapter {
                     + "RUNTIME_VALIDATION")
                     || attemptedCallCount < 0 || networkCallCount < 0
                     || completedCallCount < 0 || inputTokenCount < 0
-                    || outputTokenCount < 0
+                    || outputTokenCount < 0 || reasoningTokenCount < 0
+                    || reasoningTokenCount > outputTokenCount
+                    || totalTokenCount < 0
+                    || (long) inputTokenCount + outputTokenCount
+                    != totalTokenCount
                     || completedCallCount > networkCallCount
                     || networkCallCount > attemptedCallCount
                     || attemptedCallCount > MAXIMUM_MODEL_CALLS
+                    || callTelemetry.size() > networkCallCount
+                    || callTelemetry.stream().map(CallTelemetry::callNumber)
+                    .distinct().count() != callTelemetry.size()
                     || accountedCost.signum() < 0
                     || accountedCost.compareTo(hardCostLimit) > 0
                     || !costCurrency.matches("USD|CNY")

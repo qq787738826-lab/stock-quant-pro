@@ -164,7 +164,7 @@ try {
         'retry.budget' = '0'
         'redirects' = 'NEVER'
         'user.approval.reference' =
-            'USER_APPROVED_M3_BAILIAN_SMOKE_CNY_5_00'
+            'USER_APPROVED_M3_BAILIAN_SMOKE_TRANCHE_2_CNY_5_00'
         'created.at' = $created.ToString('o')
         'expires.at' = $created.AddMinutes(10).ToString('o')
         'execution.source' = 'M3_AGENT_RESEARCH_REAL_LLM_SMOKE'
@@ -174,7 +174,7 @@ try {
     $parsedSmoke = Read-Valid $smoke
     if ($parsedSmoke.Operation -ne 'RUN_M3_AGENT_RESEARCH_SMOKE' -or
         $parsedSmoke.AuthorizationStatus -ne
-            'M3_USER_APPROVED_BAILIAN_SMOKE_CNY_5_00' -or
+            'M3_USER_APPROVED_BAILIAN_SMOKE_TRANCHE_2_CNY_5_00' -or
         $null -ne $parsedSmoke.AuthorizationFile) {
         throw 'M3_PROTOCOL_VALID_SMOKE_REQUEST_REJECTED'
     }
@@ -204,6 +204,13 @@ try {
     $higherCost['request.id'] = New-StockQuantHostBrokerRequestId
     $higherCost['maximum.cost.cny'] = '5.01'
     Expect-Rejection $higherCost `
+        'STOCK_QUANT_HOST_BROKER_REQUEST_SCOPE_INVALID'
+
+    $oldBudgetTranche = Copy-Values $smoke
+    $oldBudgetTranche['request.id'] = New-StockQuantHostBrokerRequestId
+    $oldBudgetTranche['user.approval.reference'] =
+        'USER_APPROVED_M3_BAILIAN_SMOKE_CNY_5_00'
+    Expect-Rejection $oldBudgetTranche `
         'STOCK_QUANT_HOST_BROKER_REQUEST_SCOPE_INVALID'
 
     $retry = Copy-Values $smoke

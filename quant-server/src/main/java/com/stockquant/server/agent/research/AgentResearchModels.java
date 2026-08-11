@@ -420,13 +420,29 @@ public final class AgentResearchModels {
     public record ModelUsage(
             int inputTokens,
             int outputTokens,
+            int reasoningTokens,
+            int totalTokens,
             BigDecimal estimatedCost,
             String costCurrency
     ) {
+        public ModelUsage(
+                int inputTokens,
+                int outputTokens,
+                BigDecimal estimatedCost,
+                String costCurrency
+        ) {
+            this(inputTokens, outputTokens, 0,
+                    Math.addExact(inputTokens, outputTokens), estimatedCost,
+                    costCurrency);
+        }
+
         public ModelUsage {
             Objects.requireNonNull(estimatedCost, "estimatedCost");
             costCurrency = required(costCurrency, "costCurrency");
-            if (inputTokens < 0 || outputTokens < 0
+            if (inputTokens < 0 || outputTokens < 0 || reasoningTokens < 0
+                    || reasoningTokens > outputTokens
+                    || totalTokens < 0
+                    || (long) inputTokens + outputTokens != totalTokens
                     || estimatedCost.signum() < 0
                     || !costCurrency.matches("NONE|USD|CNY")
                     || ("NONE".equals(costCurrency)
@@ -436,7 +452,7 @@ public final class AgentResearchModels {
         }
 
         public static ModelUsage zero() {
-            return new ModelUsage(0, 0, BigDecimal.ZERO, "NONE");
+            return new ModelUsage(0, 0, 0, 0, BigDecimal.ZERO, "NONE");
         }
     }
 
