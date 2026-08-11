@@ -62,8 +62,11 @@ public final class StrategyResearchModels {
         public Security {
             symbol = required(symbol, "symbol");
             exchange = required(exchange, "exchange");
-            if (!symbol.matches("[0-9]{6}")
-                    || !Set.of("SSE", "SZSE").contains(exchange)) {
+            boolean mainBoardIdentity = "SSE".equals(exchange)
+                    && symbol.matches("60[0135][0-9]{3}")
+                    || "SZSE".equals(exchange)
+                    && symbol.matches("00[0123][0-9]{3}");
+            if (!mainBoardIdentity) {
                 throw invalid("M2_SECURITY_INVALID");
             }
         }
@@ -87,6 +90,10 @@ public final class StrategyResearchModels {
             if (normalized.stream().anyMatch(value ->
                     !Set.of("SSE", "SZSE").contains(value))) {
                 throw invalid("M2_TRADING_SESSION_EXCHANGE_INVALID");
+            }
+            if (!normalized.isEmpty()
+                    && tradeDate.getDayOfWeek().getValue() > 5) {
+                throw invalid("M2_TRADING_SESSION_WEEKEND_OPEN");
             }
             openExchanges = Collections.unmodifiableSet(normalized);
         }

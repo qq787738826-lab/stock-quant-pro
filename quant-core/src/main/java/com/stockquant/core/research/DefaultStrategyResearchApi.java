@@ -19,9 +19,12 @@ import com.stockquant.core.research.StrategyResearchModels.WalkForwardPlan;
 import com.stockquant.core.research.StrategyResearchModels.WalkForwardResult;
 
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.LocalDate;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -118,10 +121,14 @@ public final class DefaultStrategyResearchApi implements StrategyResearchApi {
         requireDateInDataset(dataset, split.trainEnd());
         requireDateInDataset(dataset, split.testStart());
         requireDateInDataset(dataset, split.testEnd());
-        ResearchResult train = backtest(new BacktestRequest(dataset, strategy,
-                config, split.trainStart(), split.trainEnd()), benchmark);
-        ResearchResult test = backtest(new BacktestRequest(dataset, strategy,
-                config, split.testStart(), split.testEnd()), benchmark);
+        ResearchDataset trainDataset = sliceThrough(dataset, split.trainEnd());
+        ResearchDataset testDataset = sliceThrough(dataset, split.testEnd());
+        ResearchResult train = backtest(new BacktestRequest(trainDataset,
+                strategy, config, split.trainStart(), split.trainEnd()),
+                benchmark);
+        ResearchResult test = backtest(new BacktestRequest(testDataset,
+                strategy, config, split.testStart(), split.testEnd()),
+                benchmark);
         if (!train.strategyResult().executionEnd().isBefore(
                 test.strategyResult().executionStart())) {
             throw invalid("M2_TRAIN_TEST_DATA_CROSSING");
@@ -166,6 +173,44 @@ public final class DefaultStrategyResearchApi implements StrategyResearchApi {
                 BigDecimal.ZERO, BigDecimal.ZERO, 0,
                 source.boardLotSize(), BigDecimal.ONE, BigDecimal.ONE, 1,
                 BigDecimal.ONE, source.annualRiskFreeRate(), source.tPlusOne());
+    }
+
+    private static ResearchDataset sliceThrough(
+            ResearchDataset source,
+            LocalDate inclusiveEnd
+    ) {
+        List<TradingSession> sessions = source.sessions().stream()
+                .filter(value -> !value.tradeDate().isAfter(inclusiveEnd))
+                .toList();
+        var bars = source.bars().stream()
+                .filter(value -> !value.tradeDate().isAfter(inclusiveEnd))
+                .toList();
+        StringBuilder canonical = new StringBuilder();
+        canonical.append(source.contractVersion()).append('|')
+                .append(source.knowledgeMode()).append('|')
+                .append(source.knowledgeCutoff()).append('\n');
+        sessions.forEach(value -> canonical.append(value.tradeDate())
+                .append('|').append(value.openExchanges()).append('\n'));
+        bars.forEach(value -> canonical.append(value.security().canonicalCode())
+                .append('|').append(value.tradeDate()).append('|')
+                .append(value.open()).append('|').append(value.high()).append('|')
+                .append(value.low()).append('|').append(value.close()).append('|')
+                .append(value.volume()).append('|').append(value.tradable())
+                .append('|').append(value.marketCloseAvailableAt()).append('|')
+                .append(value.sourceKnownAt()).append('\n'));
+        return new ResearchDataset(source.contractVersion(),
+                "M2_TIME_SLICE_" + sha256(canonical.toString()),
+                source.knowledgeMode(), source.knowledgeCutoff(),
+                sessions, bars);
+    }
+
+    private static String sha256(String value) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(value.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("M2_SHA256_UNAVAILABLE", exception);
+        }
     }
 
     private static void requireDateInDataset(

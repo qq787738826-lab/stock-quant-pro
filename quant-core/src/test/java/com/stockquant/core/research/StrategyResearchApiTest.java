@@ -13,6 +13,7 @@ import com.stockquant.core.research.StrategyResearchModels.WalkForwardResult;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.ArrayList;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -85,6 +86,44 @@ class StrategyResearchApiTest {
         assertTrue(walkForward.outOfSampleOnly());
         assertTrue(walkForward.folds().stream().allMatch(fold ->
                 fold.split().trainEnd().isBefore(fold.split().testStart())));
+    }
+
+    @Test
+    void trainAndTestFingerprintsExcludeFactsBeyondTheirTimeCutoff() {
+        ResearchDataset dataset = StrategyResearchTestFixtures.dataset(4, 360);
+        List<StrategyResearchModels.TradingSession> sessions = dataset.sessions();
+        TemporalSplit split = new TemporalSplit(
+                sessions.get(0).tradeDate(), sessions.get(199).tradeDate(),
+                sessions.get(200).tradeDate(), sessions.get(299).tradeDate());
+        StrategySpec strategy = new StrategySpec(
+                StrategyRegistry.MOVING_AVERAGE_MOMENTUM, Map.of(
+                "shortWindow", "5", "longWindow", "20",
+                "targetWeight", "0.2"));
+        TrainTestResult original = api.trainTest(dataset, strategy,
+                BacktestConfig.standard(), split, dataset.securities().get(0));
+
+        List<StrategyResearchModels.DailyBar> changed = new ArrayList<>(
+                dataset.bars());
+        int futureIndex = changed.size() - 1;
+        var future = changed.get(futureIndex);
+        changed.set(futureIndex, new StrategyResearchModels.DailyBar(
+                future.security(), future.tradeDate(), future.open(),
+                future.high().add(java.math.BigDecimal.ONE), future.low(),
+                future.close().add(new java.math.BigDecimal("0.5")),
+                future.volume(), future.tradable(),
+                future.marketCloseAvailableAt(), future.sourceKnownAt()));
+        ResearchDataset futureRevised = StrategyResearchTestFixtures.replaceBars(
+                dataset, changed, "_AFTER_TEST");
+        TrainTestResult revised = api.trainTest(futureRevised, strategy,
+                BacktestConfig.standard(), split,
+                futureRevised.securities().get(0));
+
+        assertEquals(original.train().strategyResult()
+                        .deterministicFingerprint(),
+                revised.train().strategyResult().deterministicFingerprint());
+        assertEquals(original.test().strategyResult()
+                        .deterministicFingerprint(),
+                revised.test().strategyResult().deterministicFingerprint());
     }
 
     @Test

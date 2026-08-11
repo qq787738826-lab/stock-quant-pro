@@ -220,6 +220,20 @@ public final class PortfolioBacktestEngine {
                 continue;
             }
             int quantity = desired - current;
+            if (current == 0
+                    && state.positions.size() >= config.maxPositions()) {
+                reject(state, security, Side.BUY, intent.signalDate(),
+                        session.tradeDate(), RejectionReason.POSITION_LIMIT);
+                continue;
+            }
+            int riskCapacity = riskCapacityQuantity(state, today,
+                    preTradeEquity, access.bar().open(), config);
+            quantity = Math.min(quantity, riskCapacity);
+            if (quantity < config.boardLotSize()) {
+                reject(state, security, Side.BUY, intent.signalDate(),
+                        session.tradeDate(), RejectionReason.POSITION_LIMIT);
+                continue;
+            }
             quantity = affordableQuantity(state.cash, quantity,
                     access.bar().open(), config);
             if (quantity < config.boardLotSize()) {
@@ -233,6 +247,25 @@ public final class PortfolioBacktestEngine {
                     intent, session.tradeDate());
         }
         requireCashInvariant(state.cash);
+    }
+
+    private static int riskCapacityQuantity(
+            State state,
+            Map<Security, DailyBar> today,
+            BigDecimal equity,
+            BigDecimal referencePrice,
+            BacktestConfig config
+    ) {
+        BigDecimal exposureLimit = equity.multiply(config.maxGrossExposure());
+        BigDecimal remaining = exposureLimit.subtract(
+                openMarketValue(state, today));
+        if (remaining.signum() <= 0) {
+            return 0;
+        }
+        int lot = config.boardLotSize();
+        return remaining.divide(referencePrice.multiply(
+                        BigDecimal.valueOf(lot)), 0, RoundingMode.DOWN)
+                .intValueExact() * lot;
     }
 
     private static Map<Security, BigDecimal> normalizeTargets(
@@ -621,6 +654,13 @@ public final class PortfolioBacktestEngine {
             State state,
             Map<Security, DailyBar> today
     ) {
+        return money(state.cash.add(openMarketValue(state, today)));
+    }
+
+    private static BigDecimal openMarketValue(
+            State state,
+            Map<Security, DailyBar> today
+    ) {
         BigDecimal value = ZERO;
         for (Map.Entry<Security, MutablePosition> entry
                 : state.positions.entrySet()) {
@@ -630,7 +670,7 @@ public final class PortfolioBacktestEngine {
             value = value.add(price.multiply(
                     BigDecimal.valueOf(entry.getValue().quantity)));
         }
-        return money(state.cash.add(value));
+        return money(value);
     }
 
     private static BigDecimal portfolioEquity(

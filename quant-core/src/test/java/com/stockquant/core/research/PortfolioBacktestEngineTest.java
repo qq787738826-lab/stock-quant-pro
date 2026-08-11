@@ -12,9 +12,11 @@ import com.stockquant.core.research.StrategyResearchModels.StrategySpec;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -204,6 +206,84 @@ class PortfolioBacktestEngineTest {
                 BacktestConfig.standard()));
         assertNotEquals(original.deterministicFingerprint(),
                 revisedResult.deterministicFingerprint());
+    }
+
+    @Test
+    void rejectsWeekendOpenSessionsAndNonMainBoardIdentities() {
+        assertThrows(IllegalArgumentException.class, () ->
+                new StrategyResearchModels.TradingSession(
+                        LocalDate.of(2024, 1, 6), Set.of("SSE")));
+        assertThrows(IllegalArgumentException.class, () ->
+                new Security("688001", "SSE"));
+        assertThrows(IllegalArgumentException.class, () ->
+                new Security("300001", "SZSE"));
+        assertThrows(IllegalArgumentException.class, () ->
+                new Security("600001", "SZSE"));
+    }
+
+    @Test
+    void trappedSuspendedPositionCannotCreateExcessGrossExposure() {
+        ResearchDataset original = StrategyResearchTestFixtures.dataset(2, 120);
+        BacktestConfig config = new BacktestConfig(
+                new BigDecimal("500000"), BigDecimal.ZERO, BigDecimal.ZERO,
+                BigDecimal.ZERO, 0, 100, new BigDecimal("0.50"),
+                new BigDecimal("0.50"), 2, BigDecimal.ONE,
+                BigDecimal.ZERO, true);
+        StrategySpec rotation = new StrategySpec(
+                StrategyRegistry.CROSS_SECTIONAL_MOMENTUM, Map.of(
+                "lookback", "5", "topN", "1", "rebalanceEvery", "1",
+                "targetGrossExposure", "0.50"));
+        BacktestResult baseline = engine.run(request(original, rotation, config));
+        var switchSell = baseline.tradeLedger().stream()
+                .filter(value -> value.side() == Side.SELL)
+                .filter(value -> baseline.tradeLedger().stream().anyMatch(other ->
+                        other.executionDate().equals(value.executionDate())
+                                && other.side() == Side.BUY
+                                && !other.security().equals(value.security())))
+                .findFirst().orElseThrow();
+
+        List<DailyBar> bars = new ArrayList<>();
+        for (DailyBar bar : original.bars()) {
+            bars.add(bar.security().equals(switchSell.security())
+                    && bar.tradeDate().equals(switchSell.executionDate())
+                    ? new DailyBar(bar.security(), bar.tradeDate(), bar.open(),
+                    bar.high(), bar.low(), bar.close(), bar.volume(), false,
+                    bar.marketCloseAvailableAt(), bar.sourceKnownAt()) : bar);
+        }
+        ResearchDataset suspended = StrategyResearchTestFixtures.replaceBars(
+                original, bars, "_TRAPPED_POSITION");
+        BacktestResult result = engine.run(request(suspended, rotation, config));
+
+        assertTrue(result.rejectedOrders().stream().anyMatch(value ->
+                value.executionDate().equals(switchSell.executionDate())
+                        && value.security().equals(switchSell.security())
+                        && value.reason() == RejectionReason.SUSPENDED));
+        Map<Security, Integer> quantities = new java.util.TreeMap<>();
+        BigDecimal cash = config.initialCash();
+        for (var fill : result.tradeLedger()) {
+            if (fill.executionDate().isAfter(switchSell.executionDate())) {
+                break;
+            }
+            quantities.merge(fill.security(), fill.side() == Side.BUY
+                    ? fill.quantity() : -fill.quantity(), Integer::sum);
+            cash = fill.cashAfter();
+        }
+        BigDecimal openValue = BigDecimal.ZERO;
+        for (var position : quantities.entrySet()) {
+            if (position.getValue() <= 0) {
+                continue;
+            }
+            BigDecimal open = suspended.bars().stream()
+                    .filter(value -> value.security().equals(position.getKey())
+                            && value.tradeDate().equals(
+                            switchSell.executionDate()))
+                    .findFirst().orElseThrow().open();
+            openValue = openValue.add(open.multiply(
+                    BigDecimal.valueOf(position.getValue())));
+        }
+        BigDecimal gross = openValue.divide(openValue.add(cash), 12,
+                java.math.RoundingMode.HALF_EVEN);
+        assertTrue(gross.compareTo(config.maxGrossExposure()) <= 0);
     }
 
     private static BacktestRequest request(

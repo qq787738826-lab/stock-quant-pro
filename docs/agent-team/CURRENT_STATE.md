@@ -10,7 +10,9 @@
 - 当前目标版本：`1.4.0`
 - 当前集成分支：`feature/1.4.0-agent-team`
 - M1 阶段冻结集成基线：`c9303713cfe3e0aabd05d7e526b4223f844aedeb`
+- M1 最终集成 HEAD / M2 冻结集成基线：`3c73df6e38aa4e7d934dbf7a805ab7ec78eb9cbc`
 - M1 长期任务分支：`codex/1.4.0-m1-research-data-ready`
+- M2 长期任务分支：`codex/1.4.0-m2-strategy-engine-ready`
 - 1D-4 验收来源分支：`codex/1.4.0-1d4-acceptance`
 - 1D-4 验收基线：`5bc492a feat(agent): add safe local team runtime scripts`
 - 阶段 2A 验收来源分支：`codex/1.4.0-2a-readonly-context`
@@ -222,6 +224,15 @@
   详细证据见 [M1 阶段记录](stage-m1-research-data-ready.md)。M1 只满足缩减研究数据层进入 M2 的
   技术前置条件，不自动启动或批准 M2，也不改变完整 F1、Provider PIT、公司行动 lineage、
   scheduler、Agent、Shadow、回测或交易门禁。
+- `M2_STRATEGY_ENGINE_READY=PASS`：新增 `STRATEGY_ENGINE_V1`、`BACKTEST_ENGINE_V1` 和
+  `STRATEGY_RESEARCH_API_V1`。统一接口与固定注册表提供 Buy & Hold、均线动量、均值回归、
+  横截面动量四个代表策略；long-only 引擎覆盖次日开盘成交、现金/持仓/百股/T+1、佣金、
+  最低佣金、印花税、滑点、停牌/无价格/休市、仓位限制、基础风控、benchmark、equity curve、
+  ledger、PnL 与标准绩效指标，并提供严格时间切分和 walk-forward。M1 两证券七开市日只读 smoke、
+  20 证券 × 1000 交易日确定性 fixture、打包 Fake Provider + 临时 PostgreSQL E2E、会计守恒、
+  deterministic replay 和未来数据注入拒绝均通过；M2 Provider 调用与永久库写入均为 0。
+  详细证据见 [M2 阶段记录](stage-m2-strategy-engine-ready.md)。M2 只交付个人研究级 Java API，
+  不开放 Controller、业务 scheduler、Agent、Shadow、订单或交易。
 - 3A-R3B-F2A 任务书 / 阶段记录：[tasks/3ar3b-f2a-research-preview-product.md](tasks/3ar3b-f2a-research-preview-product.md) / [stage-3ar3b-f2a-research-preview-product.md](stage-3ar3b-f2a-research-preview-product.md)。
 - 3A-R3B-F2A-R1 任务书 / 阶段记录：[tasks/3ar3b-f2a-r1-preview-ux-convergence.md](tasks/3ar3b-f2a-r1-preview-ux-convergence.md) / [stage-3ar3b-f2a-r1-preview-ux-convergence.md](stage-3ar3b-f2a-r1-preview-ux-convergence.md)。
 - 3A-R3B-F2A-R1A 任务书 / 阶段记录：[tasks/3ar3b-f2a-r1a-visual-semantics-fix.md](tasks/3ar3b-f2a-r1a-visual-semantics-fix.md) / [stage-3ar3b-f2a-r1a-visual-semantics-fix.md](stage-3ar3b-f2a-r1a-visual-semantics-fix.md)。
@@ -238,7 +249,7 @@
 - 3A-R3B-F1F-B2-RUNNER 任务书 / 阶段记录：[tasks/3ar3b-f1f-b2-controlled-runner.md](tasks/3ar3b-f1f-b2-controlled-runner.md) / [stage-3ar3b-f1f-b2-controlled-runner.md](stage-3ar3b-f1f-b2-controlled-runner.md)。
 - 3A-R3B-F1F-B2-DBPREP 任务书 / 阶段记录：[tasks/3ar3b-f1f-b2-database-preparation.md](tasks/3ar3b-f1f-b2-database-preparation.md) / [stage-3ar3b-f1f-b2-database-preparation.md](stage-3ar3b-f1f-b2-database-preparation.md)；首次冻结记录：[stage-3ar3b-f1f-b2-freeze.md](stage-3ar3b-f1f-b2-freeze.md)。
 - 3A-R3B-F1F-B2-E2E-CLOSEOUT 任务书 / 阶段记录：[tasks/3ar3b-f1f-b2-e2e-closeout.md](tasks/3ar3b-f1f-b2-e2e-closeout.md) / [stage-3ar3b-f1f-b2-e2e-closeout.md](stage-3ar3b-f1f-b2-e2e-closeout.md)。
-- 当前正式状态：`F0_AUDIT_RESULT=PARTIAL`、`FREE_IMPLEMENTATION_PATH=RESEARCH_PREVIEW_FIRST`、`FREE_PRODUCT_PREVIEW_GATE=PASS`、`FREE_PROVIDER_VALIDATION_GATE=BLOCKED`、`PAID_PROVIDER_UPGRADE_DECISION=PENDING`、`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`。Track A 的免费研究预览产品形态验证已经完成；该 PASS 不改变 Provider、PIT、效果、Shadow、付费数据或交易资格。F1A—F1E、F1F-A、F1F-B1、F1F-B2-RUNNER、DBPREP、事务、typed fact identity、SYSTEM_KNOWLEDGE 回读修复与 E2E-CLOSEOUT 均已验收合入。F1D 已把当前个人研究书面许可闭环为 PASS；最终真实 F1F-B2 已持久化为 `PASSED`，因此 `CONTROLLED_ACCEPTANCE_STATUS=PASSED`、`REDUCED_RESEARCH_OPERATIONAL_READY=true`。M1 缩减研究数据层已经通过真实多证券、多日期、增量和幂等验证。完整技术合同仍有十项阻断，所以 `F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE`、`fullF1EntryReady=false`；缩减研究 operational 与 M1 PASS 均不等于生产、正常业务库、scheduler、Agent、回测、Shadow 或交易就绪。Tushare 累计真实业务请求为 55，iFinD 真实调用数为 0；正常业务库 V13 未执行，M2/F2B/F3、3A-R3B-1 均未开始，scheduler 关闭，3B 未开始。
+- 当前正式状态：`F0_AUDIT_RESULT=PARTIAL`、`FREE_IMPLEMENTATION_PATH=RESEARCH_PREVIEW_FIRST`、`FREE_PRODUCT_PREVIEW_GATE=PASS`、`FREE_PROVIDER_VALIDATION_GATE=BLOCKED`、`PAID_PROVIDER_UPGRADE_DECISION=PENDING`、`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`。Track A 的免费研究预览产品形态验证已经完成；该 PASS 不改变 Provider、PIT、效果、Shadow、付费数据或交易资格。F1A—F1E、F1F-A、F1F-B1、F1F-B2-RUNNER、DBPREP、事务、typed fact identity、SYSTEM_KNOWLEDGE 回读修复与 E2E-CLOSEOUT 均已验收合入。F1D 已把当前个人研究书面许可闭环为 PASS；最终真实 F1F-B2 已持久化为 `PASSED`，因此 `CONTROLLED_ACCEPTANCE_STATUS=PASSED`、`REDUCED_RESEARCH_OPERATIONAL_READY=true`。M1 缩减研究数据层已经通过真实多证券、多日期、增量和幂等验证，M2 个人研究策略与回测引擎已通过真实 M1 数据只读 smoke 和离线规模验收。完整技术合同仍有十项阻断，所以 `F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE`、`fullF1EntryReady=false`；M1/M2 PASS 不等于生产、正常业务库、业务 scheduler、Agent、Shadow 或交易就绪。Tushare 累计真实业务请求为 55，iFinD 真实调用数为 0；正常业务库 V13 未执行，M3/F2B/F3、3A-R3B-1 均未开始，scheduler 关闭，3B 未开始。
 - `master`：`27d9099 chore: checkpoint Stock Quant Pro 1.3.1 and remove tracked cache`
 - 版本号仍保持 `1.3.1`；尚未发布 `1.4.0`。
 
@@ -525,6 +536,7 @@ DATA_QUALITY 只作门禁和 confidence 上限，MARKET_REGIME V1 权重为 0 �
 - F1B 的结果均为 Codex 本地离线证据，不是 GitHub Actions CI：Java 编译通过；类型化资格与 capability 定向 `21/0/0/0`；F1A/F1B、Provider V2 与 QFQ 联合回归 `62/0/0/0`，其中 Provider V2 `10/0/0/0`、18 个 QFQ 黄金向量 `18/0/0/0`；`quant-core` 全量 `4/0/0/0`；显式排除 Tushare Live、清空外部数据库和 Python 服务门变量后的 `quant-server` 安全全量 `466/0/0/93`。93 项是外部 PostgreSQL/Python/AKShare 环境门禁跳过，不能冒充真实集成测试；F1B 未修改持久化代码，按阶段边界未运行 PostgreSQL，本阶段没有检查 Token、没有新增 Provider 请求，也没有访问正常业务数据库。
 - F1C 的结果均为 Codex 本地执行证据，不是 GitHub Actions CI：171 个生产源码完成干净 Java 编译；F1A/F1B/F1C 运行、实际 Gateway 合同、隔离守卫、Endpoint 限流、资格与 QFQ 定向组 `87/0/0/0`；加入 Provider V2 的扩展离线联合回归 `97/0/0/0`，其中 18 个既有 QFQ 黄金向量及显式完整 lineage 门禁均不回退；`quant-core` 全量 `4/0/0/0`；命令级排除全部 `*IntegrationTest`、`*Postgres*`、`*CrossLanguage*` 与 `*Live*` 的 `quant-server` 安全全量 `388/0/0/0`，没有读取 Token 或连接外部环境。PostgreSQL 16.13 临时实例中，F1A FORMAL 授权绕过回归 `4/0/0/0`、F1C 随机 Schema V1→V13 闭环 `3/0/0/0`，均 `Skipped=0`；F1C 覆盖正常公式运行、事务绑定同一 backend PID 以及数据库触发 `search_path` 变化后的全事务回滚。临时 public 只到 V12，且结构、数据、Flyway 指纹前后相同，随机 Schema、55432 监听和临时集群目录残留均为 0。所有 Provider 数据由经过冻结 Endpoint policy 与实际 limiter 的合成 Gateway 提供；F1C 新增 Provider 请求为 0，Tushare 累计仍为 20，iFinD 为 0，正常业务数据库未访问。
 - F1E 的结果均为 Codex 本地执行证据，不是 GitHub Actions CI：8 个 core、181 个 server 生产源码完成干净 Java 编译；F1E 共享事实验证、捕获合同、全响应写前零写边界、准入、授权、命令、守卫与编排定向 `40/0/0/0`；F1A—F1E、Provider V2 与 QFQ 联合回归 `146/0/0/0`，其中 Provider V2 10 项、QFQ 权威引擎 19 项及 18 个黄金向量不变；`quant-core` 全量 `4/0/0/0`；命令级排除全部 `*IntegrationTest/*Postgres*/*CrossLanguage*/*Live*` 的 `quant-server` 安全全量 `437/0/0/0`。全新的 PostgreSQL 16.13 临时实例中，F1A `4/0/0/0`、F1C `3/0/0/0`、F1E `10/0/0/0`，均 `Skipped=0`；F1E 覆盖 1/2/3 证券精确请求、合同绕过和后续响应深层事实异常零写、直接休市日捕获零写、第二证券休市整批零写、Provider 或捕获失败全事务回滚、search path TOCTOU、幂等和 append-only。测试后 F1A/F1C 随机 Schema、F1E 专用 Schema、55432 监听和临时目录残留均为 0，F1E 临时 public 表数仍为 0，测试内 public 指纹前后相同。全部数据来自合成 Gateway，F1E 新增 Provider 请求为 0，Tushare 累计仍为 20，iFinD 为 0；未读取 Token，也未访问既有或正常业务数据库。
+- M2 的结果均为 Codex 本地执行证据，不是 GitHub Actions CI：strategy/backtest 核心定向 `16/0/0/0`；20 证券 × 1000 交易日 × 4 策略确定性规模比较约 3.6 秒；打包 Fake Provider + PostgreSQL 16 临时实例完整 E2E 为 PASS，覆盖 V1 至 V13、M1 增量/幂等、typed fact、SYSTEM_KNOWLEDGE、formula-only QFQ、M2 只读适配、会计守恒、时序防未来、正式 Start-Class/build proof 和脱敏输出，Fake M1 Provider 调用 18、M2 Provider 调用 0、临时残留 0。固定 Broker 的真实 M1 数据只读 smoke 覆盖两证券、7 个开市日、14 条日线/因子和 18 条日历，deterministic replay、数据库只读快照及 output audit 均通过；永久数据库写入 0，Tushare 累计仍为 55。
 
 ## 当前后续入口与阻断
 
@@ -534,6 +546,6 @@ DATA_QUALITY 只作门禁和 confidence 上限，MARKET_REGIME V1 权重为 0 �
 
 完整阶段 2D、完整阶段 2D-2 和完整阶段 2D-2B 仍处于进行中。阶段 2D-2A、2D-2B-1A、文档阶段 2D-2B-1B-0 与 TEST/DEMO 实现阶段 2D-2B-1B-1 已完成；该工作线的唯一入口只是解决 2D-2B-1B-2 的外部前置决策，不是立即开始 adapter、2D-2B-2 或 Universe 实现。阶段 2E-1 已完成独立复审并合入，但没有自动批准或开始任何 2E 后续任务。
 
-**在智能体规则能力工作线上，缩减研究受控验收已经 `PASSED`，M1 研究数据层已经以两只沪深主板证券、七个开市日和两个休市日完成真实多日采集、增量、全窗口幂等、typed fact、SYSTEM_KNOWLEDGE、formula-only QFQ、数据质量、无未来数据泄漏与 Research Dataset 读取验证。当前 `CONTROLLED_ACCEPTANCE_STATUS=PASSED`、`REDUCED_RESEARCH_OPERATIONAL_READY=true`、`M1_RESEARCH_DATA_READY=PASS`；完整 F1 仍为 `F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE`，十项技术阻断不变。** Tushare 保持 `V13_LINEAGE_PARTIAL/PIT_PARTIAL`、稳定证券 ID `PARTIAL`，不声明完整公司行动、Provider PIT 或永久身份资格。四项正式门禁仍为 `PASS/BLOCKED/PENDING/BLOCKED`。Tushare 累计真实业务请求为 55，iFinD 为 0，scheduler 关闭。M1 已满足进入 M2 策略引擎阶段的缩减研究数据技术前置条件，但 M2 尚未开始，必须由后续独立阶段授权；M1 不授权生产/正常业务库、业务 scheduler、Agent、回测、Shadow、交易、F2B/F3、3A-R3B-1、3B 或其他阶段。
+**在智能体规则能力工作线上，缩减研究受控验收已经 `PASSED`，M1 研究数据层已经以两只沪深主板证券、七个开市日和两个休市日完成真实多日采集、增量、全窗口幂等、typed fact、SYSTEM_KNOWLEDGE、formula-only QFQ、数据质量、无未来数据泄漏与 Research Dataset 读取验证；M2 已交付统一策略、long-only 回测和研究 API，并完成真实 M1 数据只读 smoke。当前 `CONTROLLED_ACCEPTANCE_STATUS=PASSED`、`REDUCED_RESEARCH_OPERATIONAL_READY=true`、`M1_RESEARCH_DATA_READY=PASS`、`M2_STRATEGY_ENGINE_READY=PASS`；完整 F1 仍为 `F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE`，十项技术阻断不变。** Tushare 保持 `V13_LINEAGE_PARTIAL/PIT_PARTIAL`、稳定证券 ID `PARTIAL`，不声明完整公司行动、Provider PIT 或永久身份资格。四项正式门禁仍为 `PASS/BLOCKED/PENDING/BLOCKED`。Tushare 累计真实业务请求为 55，iFinD 为 0，scheduler 关闭。M2 已满足 M3 使用策略目录、参数化回测、标准指标和策略比较的技术前置条件，但 M3 必须由后续独立阶段授权；M2 不授权生产/正常业务库、业务 scheduler、Agent 编排、Shadow、真实订单、实盘、自动交易、F2B/F3、3A-R3B-1、3B 或其他阶段。
 
-阻断项包括稳定 source instrument ID、完整公司行动、revision 语义以及 published/effective 时间语义。当前免费聚合源和 `securities` 当前态投影均不得被视为正式来源；2G 的研究级 AKShare/CNINFO 公告来源同样不得用于解除这些门禁。当前仍未实现 `PROVIDER_PIT_VERIFIED`、`SECURITY_STATUS_EVENT_V2`、`security_status_history` 正式投影、Universe snapshot、`MARKET_BREADTH_V2`、完整 MARKET_REGIME、公告 PDF 语义分析或生产扫描切换。M1 只扩展 `PROVIDER_CAPTURE/RESEARCH_ONLY/formalEligible=false` 的 Tushare raw/factor/calendar 有限个人研究路径及其只读数据集，不等于完整 FORMAL、生产运行或正常业务库资格。正常业务库尚未执行 V13；完整 F1 当前只受 `BLOCKED_TECHNICAL_EVIDENCE` 阻断，生产摄取、M2/F2B、F3、3A-R3B-1 至 R3B-3 均未开始。既有 Shadow 观察规模门槛也未因 M1 行情事实增加而改变，因此完整 3A 未完成，3B 未开始。阶段 2D-2B 禁止外部行情补数、LLM 权威决策、投资建议和交易写操作。
+阻断项包括稳定 source instrument ID、完整公司行动、revision 语义以及 published/effective 时间语义。当前免费聚合源和 `securities` 当前态投影均不得被视为正式来源；2G 的研究级 AKShare/CNINFO 公告来源同样不得用于解除这些门禁。当前仍未实现 `PROVIDER_PIT_VERIFIED`、`SECURITY_STATUS_EVENT_V2`、`security_status_history` 正式投影、Universe snapshot、`MARKET_BREADTH_V2`、完整 MARKET_REGIME、公告 PDF 语义分析或生产扫描切换。M1 只扩展 `PROVIDER_CAPTURE/RESEARCH_ONLY/formalEligible=false` 的 Tushare raw/factor/calendar 有限个人研究路径及其只读数据集；M2 只在该边界内提供研究策略/回测能力，两者均不等于完整 FORMAL、生产运行或正常业务库资格。正常业务库尚未执行 V13；完整 F1 当前只受 `BLOCKED_TECHNICAL_EVIDENCE` 阻断，生产摄取、M3/F2B、F3、3A-R3B-1 至 R3B-3 均未开始。既有 Shadow 观察规模门槛也未因 M1 行情事实或 M2 回测 smoke 增加而改变，因此完整 3A 未完成，3B 未开始。阶段 2D-2B 禁止外部行情补数、LLM 权威决策、投资建议和交易写操作。
