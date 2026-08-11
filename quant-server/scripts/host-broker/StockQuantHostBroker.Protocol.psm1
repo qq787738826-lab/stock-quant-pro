@@ -13,6 +13,8 @@ $script:AllowedOperations = @(
     'RUN_M1_RESEARCH_DATA'
     'VERIFY_M1_TUSHARE_TOKEN'
     'RUN_M2_STRATEGY_RESEARCH_SMOKE'
+    'CHECK_OPENAI_CREDENTIAL_STATUS'
+    'RUN_M3_AGENT_RESEARCH_SMOKE'
     'READ_SANITIZED_RESULT'
 )
 $script:RequiredKeys = @(
@@ -232,6 +234,71 @@ $script:M2RequiredKeys = @(
     'maximum.provider.requests'
     'retry.budget'
     'redirects'
+    'created.at'
+    'expires.at'
+    'execution.source'
+    'no.retry'
+    'source.request.id'
+)
+
+$script:M3OpenAiCredentialRequiredKeys = @(
+    'schema.version'
+    'request.id'
+    'operation'
+    'git.commit'
+    'jar.path'
+    'jar.sha256'
+    'authorization.file'
+    'provider'
+    'model'
+    'provider.endpoint'
+    'maximum.model.calls'
+    'maximum.cost.usd'
+    'retry.budget'
+    'redirects'
+    'created.at'
+    'expires.at'
+    'execution.source'
+    'no.retry'
+    'source.request.id'
+)
+
+$script:M3RequiredKeys = @(
+    'schema.version'
+    'request.id'
+    'operation'
+    'git.commit'
+    'jar.path'
+    'jar.sha256'
+    'authorization.file'
+    'm3.dataset.contract'
+    'm3.strategy.engine'
+    'm3.backtest.engine'
+    'm3.research.api'
+    'm3.agent.runtime'
+    'm3.agent.team'
+    'm3.tool.gateway'
+    'm3.agent.eval'
+    'm3.research.report'
+    'securities'
+    'range.start'
+    'range.end'
+    'anchor.trade.date'
+    'database.host'
+    'database.port'
+    'database.name'
+    'database.user'
+    'schema.name'
+    'database.read.only'
+    'provider'
+    'model'
+    'provider.endpoint'
+    'maximum.model.calls'
+    'maximum.output.tokens.per.call'
+    'maximum.cost.usd'
+    'retry.budget'
+    'redirects'
+    'user.approval.reference'
     'created.at'
     'expires.at'
     'execution.source'
@@ -679,6 +746,14 @@ function Read-StockQuantHostBrokerRequest {
                 $script:M2RequiredKeys
                 break
             }
+            'CHECK_OPENAI_CREDENTIAL_STATUS' {
+                $script:M3OpenAiCredentialRequiredKeys
+                break
+            }
+            'RUN_M3_AGENT_RESEARCH_SMOKE' {
+                $script:M3RequiredKeys
+                break
+            }
             default { $script:RequiredKeys }
         }
     } else { $script:RequiredKeys }
@@ -731,6 +806,61 @@ function Read-StockQuantHostBrokerRequest {
             $values['redirects'] -ne 'NEVER' -or
             $values['execution.source'] -ne
                 'M2_STRATEGY_RESEARCH_READ_ONLY' -or
+            $values['no.retry'] -ne 'true') {
+            throw 'STOCK_QUANT_HOST_BROKER_REQUEST_SCOPE_INVALID'
+        }
+    } elseif ($values['operation'] -eq
+            'CHECK_OPENAI_CREDENTIAL_STATUS') {
+        if ($values['authorization.file'] -ne 'NONE' -or
+            $values['provider'] -ne 'OPENAI' -or
+            $values['model'] -ne 'gpt-5-mini-2025-08-07' -or
+            $values['provider.endpoint'] -ne 'NONE' -or
+            $values['maximum.model.calls'] -ne '0' -or
+            $values['maximum.cost.usd'] -ne '0.00' -or
+            $values['retry.budget'] -ne '0' -or
+            $values['redirects'] -ne 'NEVER' -or
+            $values['execution.source'] -ne
+                'M3_OPENAI_CREDENTIAL_READABILITY_CHECK' -or
+            $values['no.retry'] -ne 'true') {
+            throw 'STOCK_QUANT_HOST_BROKER_REQUEST_SCOPE_INVALID'
+        }
+    } elseif ($values['operation'] -eq
+            'RUN_M3_AGENT_RESEARCH_SMOKE') {
+        if ($values['authorization.file'] -ne 'NONE' -or
+            $values['m3.dataset.contract'] -ne
+                'M1_RESEARCH_DATASET_V1' -or
+            $values['m3.strategy.engine'] -ne 'STRATEGY_ENGINE_V1' -or
+            $values['m3.backtest.engine'] -ne 'BACKTEST_ENGINE_V1' -or
+            $values['m3.research.api'] -ne
+                'STRATEGY_RESEARCH_API_V1' -or
+            $values['m3.agent.runtime'] -ne 'AGENT_RUNTIME_V1' -or
+            $values['m3.agent.team'] -ne 'AGENT_RESEARCH_TEAM_V1' -or
+            $values['m3.tool.gateway'] -ne 'AGENT_TOOL_GATEWAY_V1' -or
+            $values['m3.agent.eval'] -ne 'AGENT_EVAL_V1' -or
+            $values['m3.research.report'] -ne 'RESEARCH_REPORT_V1' -or
+            $values['securities'] -ne '600000:SSE,000001:SZSE' -or
+            $values['range.start'] -ne '2025-01-02' -or
+            $values['range.end'] -ne '2025-01-10' -or
+            $values['anchor.trade.date'] -ne '2025-01-10' -or
+            $values['database.host'] -ne '127.0.0.1' -or
+            $values['database.port'] -ne '38432' -or
+            $values['database.name'] -ne 'stock_quant_research' -or
+            $values['database.user'] -ne 'stock_quant_research' -or
+            $values['schema.name'] -ne 'tushare_research' -or
+            $values['database.read.only'] -ne 'true' -or
+            $values['provider'] -ne 'OPENAI' -or
+            $values['model'] -ne 'gpt-5-mini-2025-08-07' -or
+            $values['provider.endpoint'] -ne
+                'https://api.openai.com/v1/responses' -or
+            $values['maximum.model.calls'] -ne '13' -or
+            $values['maximum.output.tokens.per.call'] -ne '1200' -or
+            $values['maximum.cost.usd'] -ne '0.10' -or
+            $values['retry.budget'] -ne '0' -or
+            $values['redirects'] -ne 'NEVER' -or
+            $values['user.approval.reference'] -ne
+                'USER_APPROVED_M3_OPENAI_SMOKE_USD_0_10' -or
+            $values['execution.source'] -ne
+                'M3_AGENT_RESEARCH_REAL_LLM_SMOKE' -or
             $values['no.retry'] -ne 'true') {
             throw 'STOCK_QUANT_HOST_BROKER_REQUEST_SCOPE_INVALID'
         }
@@ -820,6 +950,12 @@ function Read-StockQuantHostBrokerRequest {
                 '^SQHB_[0-9]{8}T[0-9]{6}Z_[A-F0-9]{12}$') {
             throw 'STOCK_QUANT_HOST_BROKER_SOURCE_REQUEST_INVALID'
         }
+    } elseif ($values['operation'] -eq
+            'RUN_M3_AGENT_RESEARCH_SMOKE') {
+        if ($values['source.request.id'] -notmatch
+                '^SQHB_[0-9]{8}T[0-9]{6}Z_[A-F0-9]{12}$') {
+            throw 'STOCK_QUANT_HOST_BROKER_SOURCE_REQUEST_INVALID'
+        }
     } elseif ($values['source.request.id'] -ne 'NONE') {
         throw 'STOCK_QUANT_HOST_BROKER_SOURCE_REQUEST_INVALID'
     }
@@ -854,6 +990,52 @@ function Read-StockQuantHostBrokerRequest {
         }
         $authorizationStatus =
             'M2_STAGE_APPROVED_ZERO_PROVIDER_READ_ONLY'
+    } elseif ($values['operation'] -eq
+            'CHECK_OPENAI_CREDENTIAL_STATUS') {
+        if ($values['authorization.file'] -ne 'NONE') {
+            throw 'STOCK_QUANT_HOST_BROKER_AUTHORIZATION_MODE_INVALID'
+        }
+        $authorizationStatus =
+            'M3_OPENAI_CREDENTIAL_READABILITY_ZERO_NETWORK'
+    } elseif ($values['operation'] -eq
+            'RUN_M3_AGENT_RESEARCH_SMOKE') {
+        if ($values['authorization.file'] -ne 'NONE') {
+            throw 'STOCK_QUANT_HOST_BROKER_AUTHORIZATION_MODE_INVALID'
+        }
+        $credentialResultPath = Join-Path $paths.Results `
+            "$($values['source.request.id']).result.json"
+        if (-not (Test-Path -LiteralPath $credentialResultPath `
+                -PathType Leaf)) {
+            throw 'STOCK_QUANT_HOST_BROKER_M3_CREDENTIAL_SOURCE_INVALID'
+        }
+        try {
+            $credentialResult = Get-Content `
+                -LiteralPath $credentialResultPath -Raw -Encoding UTF8 |
+                ConvertFrom-Json
+            $credentialCompleted = ConvertTo-StockQuantTimestamp `
+                ([string]$credentialResult.completedAt)
+        } catch {
+            throw 'STOCK_QUANT_HOST_BROKER_M3_CREDENTIAL_SOURCE_INVALID'
+        }
+        if ($credentialResult.schemaVersion -ne
+                'STOCK_QUANT_HOST_BROKER_RESULT_V1' -or
+            $credentialResult.requestId -ne $values['source.request.id'] -or
+            $credentialResult.gitCommit -ne $values['git.commit'] -or
+            $credentialResult.operation -ne
+                'CHECK_OPENAI_CREDENTIAL_STATUS' -or
+            $credentialResult.status -ne 'SUCCEEDED' -or
+            [int]$credentialResult.providerCallCount -ne 0 -or
+            [int]$credentialResult.retryCount -ne 0 -or
+            -not $credentialResult.summary.credentialReady -or
+            $credentialResult.summary.readStatus -ne 'SUCCESS' -or
+            [int]$credentialResult.summary.networkCallCount -ne 0 -or
+            $credentialResult.summary.outputAudit -ne 'PASSED' -or
+            $credentialCompleted -gt $Now.AddSeconds(1) -or
+            $Now - $credentialCompleted -gt [TimeSpan]::FromMinutes(15)) {
+            throw 'STOCK_QUANT_HOST_BROKER_M3_CREDENTIAL_SOURCE_INVALID'
+        }
+        $authorizationStatus =
+            'M3_USER_APPROVED_OPENAI_SMOKE_USD_0_10'
     } elseif ($values['operation'] -eq 'DIAGNOSE_TUSHARE_CREDENTIAL') {
         if ($values['authorization.file'] -ne 'NONE') {
             throw 'STOCK_QUANT_HOST_BROKER_AUTHORIZATION_MODE_INVALID'
@@ -1016,6 +1198,14 @@ function Write-StockQuantHostBrokerRequest {
                 $script:M2RequiredKeys
                 break
             }
+            'CHECK_OPENAI_CREDENTIAL_STATUS' {
+                $script:M3OpenAiCredentialRequiredKeys
+                break
+            }
+            'RUN_M3_AGENT_RESEARCH_SMOKE' {
+                $script:M3RequiredKeys
+                break
+            }
             default { $script:RequiredKeys }
         }
     } else { $script:RequiredKeys }
@@ -1042,7 +1232,7 @@ function Write-StockQuantHostBrokerRequest {
         "$key=$value"
     }
     $content = ($lines -join "`n") + "`n"
-    if ($content -match '(?i)(database\.password|jdbc\.password|provider\.token|token\.sha|credentialblob)') {
+    if ($content -match '(?i)(database\.password|jdbc\.password|provider\.token|token\.sha|credentialblob|api[._]?key)') {
         throw 'STOCK_QUANT_HOST_BROKER_REQUEST_SECRET_FIELD_FORBIDDEN'
     }
     try {
@@ -1075,8 +1265,8 @@ function Write-StockQuantHostBrokerResult {
     }
     $Result['schemaVersion'] = $script:ResultVersion
     $json = $Result | ConvertTo-Json -Depth 8
-    if ($json -match '(?i)"[^"\r\n]*(password|token|credentialblob|jdbc)[^"\r\n]*"\s*:' -or
-        $json -match '(?i)StockQuant/TushareToken') {
+    if ($json -match '(?i)"[^"\r\n]*(password|token|credentialblob|jdbc|api.?key)[^"\r\n]*"\s*:' -or
+        $json -match '(?i)StockQuant/(TushareToken|OpenAiApiKey)') {
         throw 'STOCK_QUANT_HOST_BROKER_RESULT_SECRET_FIELD_FORBIDDEN'
     }
     $temporary = Join-Path $paths.Results `

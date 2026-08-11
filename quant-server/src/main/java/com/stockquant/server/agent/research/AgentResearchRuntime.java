@@ -30,6 +30,12 @@ import java.util.Set;
 
 /** Bounded, evidence-first orchestration for the seven M3 research agents. */
 public final class AgentResearchRuntime implements AutoCloseable {
+    private static final Set<AgentRole> INDEPENDENT_WORKSTREAMS = Set.of(
+            AgentRole.DATA_ANALYST,
+            AgentRole.MARKET_TECHNICAL,
+            AgentRole.STRATEGY_RESEARCH,
+            AgentRole.RISK);
+
     private final AgentResearchToolGateway tools;
     private final ModelAdapter model;
     private final AgentPromptCatalog prompts;
@@ -54,30 +60,56 @@ public final class AgentResearchRuntime implements AutoCloseable {
         RunState runs = new RunState(task, deadline);
         AgentResearchToolGateway.Session session = tools.open(task);
 
-        runs.invoke(AgentRole.RESEARCH_COORDINATOR, "PLAN", List.of(),
+        AgentRun plan = runs.invoke(AgentRole.RESEARCH_COORDINATOR, "PLAN",
+                List.of(ToolCode.RESEARCH_DATASET,
+                        ToolCode.MARKET_TECHNICAL,
+                        ToolCode.STRATEGY_COMPARE,
+                        ToolCode.RISK_METRICS),
                 List.of(), false, BigDecimal.ONE);
+        requireResearchPlan(plan);
+
+        AgentRun dataSelection = runs.invoke(AgentRole.DATA_ANALYST,
+                "DATA_TOOL_SELECTION",
+                List.of(ToolCode.RESEARCH_DATASET), List.of(), false,
+                new BigDecimal("0.90"));
+        requireToolSelection(dataSelection, ToolCode.RESEARCH_DATASET);
         var dataset = session.inspectDataset();
         deadline.check();
         runs.invoke(AgentRole.DATA_ANALYST, "DATA_QUALITY",
-                List.of(ToolCode.RESEARCH_DATASET), dataset.citations(),
-                false, new BigDecimal("0.90"));
+                List.of(), dataset.citations(), false,
+                new BigDecimal("0.90"));
 
+        AgentRun technicalSelection = runs.invoke(
+                AgentRole.MARKET_TECHNICAL, "TECHNICAL_TOOL_SELECTION",
+                List.of(ToolCode.MARKET_TECHNICAL), dataset.citations(),
+                false, new BigDecimal("0.75"));
+        requireToolSelection(technicalSelection,
+                ToolCode.MARKET_TECHNICAL);
         var technical = session.analyzeTechnical(dataset.loaded());
         deadline.check();
         runs.invoke(AgentRole.MARKET_TECHNICAL, "TECHNICAL_ANALYSIS",
-                List.of(ToolCode.MARKET_TECHNICAL), technical.citations(),
-                false, new BigDecimal("0.75"));
+                List.of(), technical.citations(), false,
+                new BigDecimal("0.75"));
 
+        AgentRun strategySelection = runs.invoke(
+                AgentRole.STRATEGY_RESEARCH, "STRATEGY_TOOL_SELECTION",
+                List.of(ToolCode.STRATEGY_COMPARE), dataset.citations(),
+                false, new BigDecimal("0.75"));
+        requireToolSelection(strategySelection, ToolCode.STRATEGY_COMPARE);
         var strategies = session.compareStrategies(dataset.loaded());
         deadline.check();
         runs.invoke(AgentRole.STRATEGY_RESEARCH, "STRATEGY_EXPERIMENTS",
-                List.of(ToolCode.STRATEGY_COMPARE), strategies.citations(),
-                false, new BigDecimal("0.75"));
+                List.of(), strategies.citations(), false,
+                new BigDecimal("0.75"));
 
+        AgentRun riskSelection = runs.invoke(AgentRole.RISK,
+                "RISK_TOOL_SELECTION", List.of(ToolCode.RISK_METRICS),
+                strategies.citations(), false, new BigDecimal("0.75"));
+        requireToolSelection(riskSelection, ToolCode.RISK_METRICS);
         var risk = session.assessRisk(strategies.experiments());
         deadline.check();
         runs.invoke(AgentRole.RISK, "RISK_ASSESSMENT",
-                List.of(ToolCode.RISK_METRICS), risk.citations(), false,
+                List.of(), risk.citations(), false,
                 new BigDecimal("0.75"));
 
         List<Evidence> synthesisEvidence = new ArrayList<>();
@@ -201,6 +233,25 @@ public final class AgentResearchRuntime implements AutoCloseable {
         model.close();
     }
 
+    private static void requireResearchPlan(AgentRun run) {
+        Set<ToolCode> required = Set.of(ToolCode.values());
+        if (!run.findings().isEmpty()
+                || !Set.copyOf(run.requestedTools()).equals(required)) {
+            throw AgentResearchModels.invalid("M3_RESEARCH_PLAN_INVALID");
+        }
+    }
+
+    private static void requireToolSelection(
+            AgentRun run,
+            ToolCode required
+    ) {
+        if (!run.findings().isEmpty()
+                || !run.requestedTools().equals(List.of(required))) {
+            throw AgentResearchModels.invalid(
+                    "M3_AGENT_TOOL_SELECTION_INVALID");
+        }
+    }
+
     private final class RunState {
         private final ResearchTask task;
         private final Deadline deadline;
@@ -240,14 +291,16 @@ public final class AgentResearchRuntime implements AutoCloseable {
             canonical.put("objective", task.objective());
             canonical.put("allowedTools", allowedTools);
             canonical.put("evidence", evidence);
-            canonical.put("priorSummaries", summaries);
+            List<String> priorSummaries = INDEPENDENT_WORKSTREAMS
+                    .contains(role) ? List.of() : List.copyOf(summaries);
+            canonical.put("priorSummaries", priorSummaries);
             canonical.put("revision", revision);
             canonical.put("confidenceCap", confidenceCap);
             String fingerprint = AgentResearchCanonical.sha256(canonical);
             ModelAdapter.ModelRequest request = new ModelAdapter.ModelRequest(
                     callId, role, phase, prompt.version(), prompt.text(),
                     task.objective(), allowedTools, evidence,
-                    List.copyOf(summaries), revision, confidenceCap,
+                    priorSummaries, revision, confidenceCap,
                     fingerprint);
             ModelAdapter.ModelResponse response =
                     AgentModelResponseValidator.validate(request,
@@ -273,7 +326,9 @@ public final class AgentResearchRuntime implements AutoCloseable {
                     response.issueCodes(), response.reworkRequested(),
                     revision, response.usage());
             runs.add(run);
-            summaries.add(response.summary());
+            if (!phase.endsWith("_TOOL_SELECTION")) {
+                summaries.add(response.summary());
+            }
             deadline.check();
             return run;
         }

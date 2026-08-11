@@ -105,7 +105,27 @@ public final class AgentResearchEval {
         Set<ToolCode> expected = Set.of(ToolCode.values());
         Set<ToolCode> actual = new HashSet<>();
         report.toolCalls().forEach(value -> actual.add(value.toolCode()));
+        Map<AgentRole, ToolCode> specialistSelections = Map.of(
+                AgentRole.DATA_ANALYST, ToolCode.RESEARCH_DATASET,
+                AgentRole.MARKET_TECHNICAL, ToolCode.MARKET_TECHNICAL,
+                AgentRole.STRATEGY_RESEARCH, ToolCode.STRATEGY_COMPARE,
+                AgentRole.RISK, ToolCode.RISK_METRICS);
+        boolean coordinatorPlanned = report.agentRuns().stream().anyMatch(
+                value -> value.agentRole()
+                        == AgentRole.RESEARCH_COORDINATOR
+                        && "PLAN".equals(value.phase())
+                        && Set.copyOf(value.requestedTools()).equals(expected)
+                        && value.findings().isEmpty());
+        boolean specialistsSelected = specialistSelections.entrySet()
+                .stream().allMatch(entry -> report.agentRuns().stream()
+                        .filter(value -> value.agentRole() == entry.getKey()
+                                && value.phase().endsWith(
+                                "_TOOL_SELECTION"))
+                        .anyMatch(value -> value.requestedTools().equals(
+                                List.of(entry.getValue()))
+                                && value.findings().isEmpty()));
         return report.toolCallCount() == 4 && actual.equals(expected)
+                && coordinatorPlanned && specialistsSelected
                 && report.toolCalls().stream().allMatch(value ->
                 "SUCCEEDED".equals(value.status()));
     }

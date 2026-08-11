@@ -4,7 +4,7 @@ import java.util.Arrays;
 import java.util.Objects;
 
 /**
- * Explicit source of the two secrets allowed by local research automation.
+ * Explicit source of the fixed secrets allowed by local research automation.
  *
  * <p>Implementations must never use command-line arguments, environment
  * variables, system properties or plaintext files as a secret source.</p>
@@ -21,6 +21,10 @@ public interface SecretProvider extends AutoCloseable {
         return read(SecretTarget.TUSHARE_TOKEN);
     }
 
+    default SecretValue readOpenAiApiKey() {
+        return read(SecretTarget.OPENAI_API_KEY);
+    }
+
     @Override
     default void close() {
         // Providers own no long-lived plaintext by default.
@@ -28,7 +32,8 @@ public interface SecretProvider extends AutoCloseable {
 
     enum SecretTarget {
         RESEARCH_DATABASE_PASSWORD("StockQuant/ResearchDbPassword"),
-        TUSHARE_TOKEN("StockQuant/TushareToken");
+        TUSHARE_TOKEN("StockQuant/TushareToken"),
+        OPENAI_API_KEY("StockQuant/OpenAiApiKey");
 
         private final String credentialTarget;
 

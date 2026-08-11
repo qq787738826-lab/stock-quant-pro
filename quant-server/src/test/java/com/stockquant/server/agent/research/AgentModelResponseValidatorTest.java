@@ -63,9 +63,37 @@ class AgentModelResponseValidatorTest {
                 AgentModelResponseValidator.validate(request, response));
     }
 
+    @Test
+    void toolSelectionMustRequestToolWithoutMakingClaims() {
+        var request = request("STRATEGY_TOOL_SELECTION",
+                List.of(ToolCode.STRATEGY_COMPARE));
+        var missing = new ModelAdapter.ModelResponse(List.of(), List.of(),
+                "No tool selected.", List.of(), false, ModelUsage.zero());
+        var prematureClaim = new ModelAdapter.ModelResponse(
+                List.of(ToolCode.STRATEGY_COMPARE), List.of(
+                new ModelAdapter.ModelClaim(ClaimType.HYPOTHESIS,
+                        "A tool may be useful.", List.of(),
+                        new BigDecimal("0.20"))),
+                "Tool and claim mixed.", List.of(), false,
+                ModelUsage.zero());
+
+        assertThrows(IllegalArgumentException.class, () ->
+                AgentModelResponseValidator.validate(request, missing));
+        assertThrows(IllegalArgumentException.class, () ->
+                AgentModelResponseValidator.validate(request,
+                        prematureClaim));
+    }
+
     private static ModelAdapter.ModelRequest request(List<ToolCode> tools) {
+        return request("TEST", tools);
+    }
+
+    private static ModelAdapter.ModelRequest request(
+            String phase,
+            List<ToolCode> tools
+    ) {
         return new ModelAdapter.ModelRequest("MC_01_STRATEGY_RESEARCH",
-                AgentRole.STRATEGY_RESEARCH, "TEST",
+                AgentRole.STRATEGY_RESEARCH, phase,
                 "M3_STRATEGY_RESEARCH_V1", "System rules are fixed.",
                 "Untrusted objective.", tools, List.of(EVIDENCE), List.of(),
                 false, new BigDecimal("0.80"), HASH);

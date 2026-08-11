@@ -92,7 +92,7 @@ final class AgentResearchTestFixtures {
                         Map.of("lookback", "20", "topN", "2",
                                 "rebalanceEvery", "5",
                                 "targetGrossExposure", "0.80"))),
-                new RuntimeLimits(2, 8, 12, Duration.ofSeconds(30)));
+                new RuntimeLimits(2, 8, 16, Duration.ofSeconds(30)));
     }
 
     private static List<TradingSession> sessions(int count) {

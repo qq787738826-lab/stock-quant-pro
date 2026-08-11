@@ -77,6 +77,20 @@ public final class TushareControlledAcceptanceOutputAudit {
                 RegistryRequirement.DATABASE_ONLY);
     }
 
+    static <T> Captured<T> captureOpenAiCredentialOnlyProcess(
+            DynamicAction<T> action
+    ) throws Exception {
+        return captureDynamic(Objects.requireNonNull(action, "action"),
+                RegistryRequirement.OPENAI_API_KEY_ONLY);
+    }
+
+    static <T> Captured<T> captureM3OpenAiResearchProcess(
+            DynamicAction<T> action
+    ) throws Exception {
+        return captureDynamic(Objects.requireNonNull(action, "action"),
+                RegistryRequirement.M3_OPENAI_RESEARCH);
+    }
+
     static <T> Captured<T> captureDatabasePreparationProcess(
             DynamicAction<T> action
     ) throws Exception {
@@ -203,6 +217,7 @@ public final class TushareControlledAcceptanceOutputAudit {
     enum SensitiveKind {
         DATABASE_PASSWORD,
         TUSHARE_TOKEN,
+        OPENAI_API_KEY,
         ADMINISTRATOR_DATABASE_PASSWORD,
         DEDICATED_BOOTSTRAP_PASSWORD,
         DEDICATED_DATABASE_PASSWORD
@@ -253,6 +268,22 @@ public final class TushareControlledAcceptanceOutputAudit {
             if (!kinds.equals(List.of(SensitiveKind.DATABASE_PASSWORD))) {
                 throw new IllegalStateException(
                         "STOCK_QUANT_DATABASE_ONLY_SENSITIVE_REGISTRY_INCOMPLETE");
+            }
+        }
+
+        private void requireOpenAiApiKeyOnlyRegistration() {
+            if (!kinds.equals(List.of(SensitiveKind.OPENAI_API_KEY))) {
+                throw new IllegalStateException(
+                        "STOCK_QUANT_OPENAI_SENSITIVE_REGISTRY_INCOMPLETE");
+            }
+        }
+
+        private void requireM3OpenAiResearchRegistration() {
+            if (!kinds.equals(List.of(
+                    SensitiveKind.DATABASE_PASSWORD,
+                    SensitiveKind.OPENAI_API_KEY))) {
+                throw new IllegalStateException(
+                        "M3_OPENAI_SENSITIVE_REGISTRY_INCOMPLETE");
             }
         }
 
@@ -326,6 +357,20 @@ public final class TushareControlledAcceptanceOutputAudit {
             void validate(SensitiveRegistry registry) {
                 NONE.validate(registry);
                 registry.requireDatabaseOnlyRegistration();
+            }
+        },
+        OPENAI_API_KEY_ONLY {
+            @Override
+            void validate(SensitiveRegistry registry) {
+                NONE.validate(registry);
+                registry.requireOpenAiApiKeyOnlyRegistration();
+            }
+        },
+        M3_OPENAI_RESEARCH {
+            @Override
+            void validate(SensitiveRegistry registry) {
+                NONE.validate(registry);
+                registry.requireM3OpenAiResearchRegistration();
             }
         },
         DATABASE_PREPARATION {

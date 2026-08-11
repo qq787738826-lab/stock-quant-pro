@@ -22,27 +22,27 @@ public final class DeterministicFakeModelAdapter implements ModelAdapter {
 
     @Override
     public ModelResponse complete(ModelRequest request) {
+        if ("PLAN".equals(request.phase())
+                || request.phase().endsWith("_TOOL_SELECTION")) {
+            return toolSelection(request);
+        }
         return switch (request.agentRole()) {
             case RESEARCH_COORDINATOR -> coordinator(request);
-            case DATA_ANALYST -> response(request,
-                    List.of(ToolCode.RESEARCH_DATASET), ClaimType.FACT,
+            case DATA_ANALYST -> response(request, ClaimType.FACT,
                     "The accepted research dataset is eligible for bounded "
                             + "quantitative analysis.",
                     "Dataset eligibility was checked with deterministic "
                             + "evidence.");
-            case MARKET_TECHNICAL -> response(request,
-                    List.of(ToolCode.MARKET_TECHNICAL), ClaimType.INFERENCE,
+            case MARKET_TECHNICAL -> response(request, ClaimType.INFERENCE,
                     "The technical classifications are derived from the "
                             + "recorded adjusted-price observations.",
                     "Technical interpretation remains bounded by the "
                             + "observed window.");
-            case STRATEGY_RESEARCH -> response(request,
-                    List.of(ToolCode.STRATEGY_COMPARE), ClaimType.FACT,
+            case STRATEGY_RESEARCH -> response(request, ClaimType.FACT,
                     "The strategy comparison uses deterministic backtests "
                             + "with accounting and look-ahead guards.",
                     "Strategy metrics came from the strategy research API.");
-            case RISK -> response(request,
-                    List.of(ToolCode.RISK_METRICS), ClaimType.FACT,
+            case RISK -> response(request, ClaimType.FACT,
                     "The risk classification reflects quantified drawdown, "
                             + "volatility, and concentration evidence.",
                     "Risk was assessed independently from return preference.");
@@ -51,13 +51,14 @@ public final class DeterministicFakeModelAdapter implements ModelAdapter {
         };
     }
 
+    private static ModelResponse toolSelection(ModelRequest request) {
+        return new ModelResponse(request.allowedTools(), List.of(),
+                "The bounded role selected only its explicitly allowed "
+                        + "deterministic research tool contract.",
+                List.of(), false, ModelUsage.zero());
+    }
+
     private static ModelResponse coordinator(ModelRequest request) {
-        if ("PLAN".equals(request.phase())) {
-            return new ModelResponse(List.of(), List.of(),
-                    "Independent data, technical, strategy, and risk work "
-                            + "will be synthesized and challenged.",
-                    List.of(), false, ModelUsage.zero());
-        }
         boolean insufficient = insufficientOutOfSample(request);
         List<String> evidence = ids(request.evidence());
         ModelClaim claim = new ModelClaim(
@@ -120,14 +121,13 @@ public final class DeterministicFakeModelAdapter implements ModelAdapter {
 
     private static ModelResponse response(
             ModelRequest request,
-            List<ToolCode> tools,
             ClaimType type,
             String statement,
             String summary
     ) {
-        return new ModelResponse(tools, List.of(new ModelClaim(type, statement,
-                ids(request.evidence()), cap(request, "0.65"))), summary,
-                List.of(), false, ModelUsage.zero());
+        return new ModelResponse(List.of(), List.of(new ModelClaim(type,
+                statement, ids(request.evidence()), cap(request, "0.65"))),
+                summary, List.of(), false, ModelUsage.zero());
     }
 
     private static List<String> ids(List<Evidence> evidence) {

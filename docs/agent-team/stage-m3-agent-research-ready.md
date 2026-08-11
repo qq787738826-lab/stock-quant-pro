@@ -4,8 +4,8 @@
 
 - 长期任务分支：`codex/1.4.0-m3-agent-research-ready`
 - 冻结集成基线：`b041fbe807b817c4070781db33fbfca2d4f8bc4e`
-- 当前状态：`OFFLINE_AND_REAL_DATA_FAKE_MODEL_COMPLETE`
-- 外部门：`REAL_LLM_SMOKE=PENDING_EXTERNAL_CREDENTIAL_OR_BUDGET`
+- 当前状态：`REAL_LLM_RESOURCE_APPROVED_IMPLEMENTATION_COMPLETE`
+- 外部门：`REAL_LLM_SMOKE=PENDING_LOCAL_CREDENTIAL_ENTRY`
 - 在真实 LLM smoke 通过前，不声明 `M3_AGENT_RESEARCH_READY=PASS`，不执行最终合并。
 - M3 新增 Tushare 调用 0；累计真实调用保持 55；永久研究库写入 0。
 
@@ -30,8 +30,12 @@
   `store=false`、redirects NEVER 和精确模型快照 `gpt-5-mini-2025-08-07`。
 - 每次模型输出都经过工具白名单、Evidence ID、声明类型、置信度、数值引用和交易语言门禁；
   task、Evidence 和前序摘要始终作为不可信数据。
-- 仓库当前没有经授权的 LLM Credential Target 或其他合法密钥来源；适配器不会从环境变量、
-  参数或明文文件自动降级，因此真实 LLM smoke 保持 fail-closed。
+- 用户已授权唯一固定 Credential Target `StockQuant/OpenAiApiKey` 和 M3 总成本硬上限
+  US$0.10。一次性脚本只从原生安全 Console 写入 Windows Credential Manager；适配器不会从
+  环境变量、参数或明文文件降级。Broker 的零网络可读性检查与真实 smoke 是两个固定 operation。
+- Responses 调用使用 `reasoning.effort=minimal`、每次输出上限 1200 tokens、最多 13 次模型调用；
+  每次网络调用前按 UTF-8 请求字节和最大输出作保守成本预留，任一未知结果终止适配器，阶段真实
+  smoke 只允许消费一次，确保总成本不能超过 US$0.10。
 
 ## Fake Model 与评测证据
 
@@ -66,6 +70,12 @@
 
 ## 阶段内自主修复
 
+- 将模型工具调用从“运行时预先执行、模型事后描述”收口为 Coordinator 先规划、四个专业 Agent
+  分别选择白名单工具、运行时验证选择后才执行确定性工具；专业工作流在 Portfolio 综合前不接收
+  其他 Agent 摘要。当前完整流程为 13 次模型调用，Prompt 正式升级到 V2。
+- 新增固定 OpenAI Credential、输出审计注册、零网络探针、Responses API 成本/次数硬门禁和
+  Host Broker 固定 M3 operation；没有动态 Target、动态 URL、命令文本、环境变量密钥或重试。
+
 - 已运行 Resident Broker 进程只识别既有 M2 任务分支，首次 M3 请求在秘密读取前以
   `STOCK_QUANT_HOST_BROKER_GIT_BINDING_INVALID` 安全拒绝。修复只允许固定 M3 分支、固定 M3 JAR
   复用零 Provider、只读 M2 operation；没有增加 operation、动态命令、Credential Target 或网络权限。
@@ -78,7 +88,6 @@
   train/test、walk-forward、过拟合识别由 deterministic fixture 覆盖。
 - M1 仍是 SYSTEM_KNOWLEDGE 与 formula-only QFQ，`PROVIDER_PIT_VERIFIED=false`；完整 F1 十项
   技术证据缺口不变。
-- 需要一次有明确成本上限的真实 LLM smoke，验证真实模型遵守结构化协议、Evidence 引用、
-  工具白名单、Critic 修正和 prompt injection 边界。密钥不得发送到聊天；需先明确授权本机安全
-  Credential Target 或等价秘密托管方式。
+- 仍需用户仅在本机安全 Console 完成一次 API Key 录入；随后由 Broker 完成零网络可读性验证和
+  一次受 US$0.10 硬限制的真实 LLM smoke。密钥不得发送到聊天。
 - M3 不启动 M4、Shadow、业务 scheduler、真实订单、实盘或自动交易。

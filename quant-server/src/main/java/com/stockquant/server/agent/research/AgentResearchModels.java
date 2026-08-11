@@ -107,13 +107,13 @@ public final class AgentResearchModels {
                     || maxToolCalls < 4 || maxToolCalls > 16
                     || maxModelCalls < 7 || maxModelCalls > 20
                     || timeout.compareTo(Duration.ofSeconds(5)) < 0
-                    || timeout.compareTo(Duration.ofMinutes(2)) > 0) {
+                    || timeout.compareTo(Duration.ofMinutes(10)) > 0) {
                 throw invalid("M3_RUNTIME_LIMITS_INVALID");
             }
         }
 
         public static RuntimeLimits standard() {
-            return new RuntimeLimits(2, 8, 12, Duration.ofSeconds(30));
+            return new RuntimeLimits(2, 8, 16, Duration.ofSeconds(30));
         }
     }
 

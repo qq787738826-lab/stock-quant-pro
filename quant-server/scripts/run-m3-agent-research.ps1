@@ -11,7 +11,10 @@ param(
 
     [Parameter(Mandatory = $true)]
     [ValidatePattern('^M3SMOKE_[0-9]{8}T[0-9]{6}Z_[A-F0-9]{12}$')]
-    [string] $ExecutionId
+    [string] $ExecutionId,
+
+    [ValidateSet('FAKE', 'OPENAI')]
+    [string] $ModelMode = 'FAKE'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -59,7 +62,9 @@ try {
         'org.springframework.boot.loader.launch.PropertiesLauncher' `
         "--result-file=$result" "--report-directory=$reports" `
         "--execution-id=$ExecutionId" '--database-port=38432' `
-        '--execution-mode=FORMAL_LOCAL' 2>&1 |
+        "--execution-mode=$(if ($ModelMode -eq 'OPENAI') {
+            'FORMAL_LOCAL_OPENAI'
+        } else { 'FORMAL_LOCAL' })" 2>&1 |
         ForEach-Object { [string]$_ })
     if ($LASTEXITCODE -ne 0) {
         Write-Output "M3_AGENT_RESEARCH_FAILURE_REASON=$(Safe-Reason $output)"
@@ -70,6 +75,26 @@ try {
     }
     $sanitized = Get-Content -LiteralPath $result -Raw -Encoding UTF8 |
         ConvertFrom-Json
+    $agentRuns = @($sanitized.research.agentRuns)
+    $usage = $sanitized.research.totalModelUsage
+    [decimal]$estimatedCost = [decimal]::Parse(
+        [string]$usage.estimatedCostUsd,
+        [Globalization.NumberStyles]::Number,
+        [Globalization.CultureInfo]::InvariantCulture)
+    $modelEligible = if ($ModelMode -eq 'OPENAI') {
+        -not [bool]$sanitized.research.deterministic -and
+        [int]$sanitized.research.modelCallCount -eq 13 -and
+        [int]$usage.inputTokens -gt 0 -and
+        [int]$usage.outputTokens -gt 0 -and
+        $estimatedCost -gt 0 -and $estimatedCost -le [decimal]0.10 -and
+        @($agentRuns | Where-Object {
+            $_.modelProvider -ne 'OPENAI' -or
+            $_.model -ne 'gpt-5-mini-2025-08-07'
+        }).Count -eq 0
+    } else {
+        [bool]$sanitized.research.deterministic -and
+        $estimatedCost -eq 0
+    }
     if ($sanitized.schemaVersion -ne
             'M3_AGENT_RESEARCH_SMOKE_RESULT_V1' -or
         $sanitized.status -ne 'SUCCEEDED' -or
@@ -82,6 +107,7 @@ try {
         $sanitized.research.providerCalled -or
         $sanitized.research.shadowStarted -or
         $sanitized.research.tradingStarted -or
+        -not $modelEligible -or
         -not (Test-Path -LiteralPath $sanitized.reportFile -PathType Leaf)) {
         throw 'M3_AGENT_RESEARCH_RESULT_INVALID'
     }

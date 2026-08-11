@@ -16,6 +16,7 @@ import com.stockquant.server.agent.marketfacts.TushareM3AgentResearchSmokeResult
 import com.stockquant.server.agent.marketfacts.TushareM3AgentResearchSmokeResult.Result;
 import com.stockquant.server.agent.marketfacts.TushareM3AgentResearchSmokeResult.ResultFile;
 import com.stockquant.server.agent.research.AgentPromptCatalog;
+import com.stockquant.server.agent.research.AgentResearchModels;
 import com.stockquant.server.agent.research.AgentResearchModels.AgentRole;
 import com.stockquant.server.agent.research.AgentResearchModels.ResearchReport;
 import com.stockquant.server.agent.research.AgentResearchModels.ResearchTask;
@@ -25,11 +26,14 @@ import com.stockquant.server.agent.research.AgentResearchRuntime;
 import com.stockquant.server.agent.research.AgentResearchToolGateway;
 import com.stockquant.server.agent.research.DeterministicFakeModelAdapter;
 import com.stockquant.server.agent.research.M1AgentResearchDatasetSource;
+import com.stockquant.server.agent.research.ModelAdapter;
+import com.stockquant.server.agent.research.OpenAiResponsesModelAdapter;
 import org.springframework.jdbc.core.ConnectionCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import javax.sql.DataSource;
 import java.io.PrintWriter;
+import java.math.BigDecimal;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -91,39 +95,10 @@ public final class TushareM3AgentResearchManualRunner {
                             "M3_RUNNING"));
 
             Arguments boundLaunch = launch;
-            Captured<Execution> captured =
-                    TushareControlledAcceptanceOutputAudit
-                            .captureDatabaseOnlyProcess(registry -> {
-                                if (boundLaunch.executionMode()
-                                        == ExecutionMode.E2E_DRY_RUN) {
-                                    char[] password = syntheticPassword();
-                                    try {
-                                        registry.register(
-                                                SensitiveKind.DATABASE_PASSWORD,
-                                                password);
-                                        return execute(boundLaunch, password,
-                                                clock);
-                                    } finally {
-                                        Arrays.fill(password, '\0');
-                                    }
-                                }
-                                try (SecretProvider secrets =
-                                             CompositeSecretProvider.formalLocal(
-                                                     Mode.WINDOWS_CREDENTIAL_MANAGER);
-                                     SecretValue secret =
-                                             secrets.readResearchDatabasePassword()) {
-                                    char[] password = secret.copy();
-                                    try {
-                                        registry.register(
-                                                SensitiveKind.DATABASE_PASSWORD,
-                                                password);
-                                        return execute(boundLaunch, password,
-                                                clock);
-                                    } finally {
-                                        Arrays.fill(password, '\0');
-                                    }
-                                }
-                            });
+            Captured<Execution> captured = boundLaunch.executionMode()
+                    .usesOpenAi()
+                    ? captureOpenAiExecution(boundLaunch, clock)
+                    : captureFakeModelExecution(boundLaunch, clock);
             execution = captured.value();
             audit = audit(captured.auditResult());
             if (!audit.clean()) {
@@ -156,9 +131,71 @@ public final class TushareM3AgentResearchManualRunner {
         }
     }
 
+    private static Captured<Execution> captureFakeModelExecution(
+            Arguments launch,
+            Clock clock
+    ) throws Exception {
+        return TushareControlledAcceptanceOutputAudit
+                .captureDatabaseOnlyProcess(registry -> {
+                    if (launch.executionMode() == ExecutionMode.E2E_DRY_RUN) {
+                        char[] password = syntheticPassword();
+                        try {
+                            registry.register(SensitiveKind.DATABASE_PASSWORD,
+                                    password);
+                            return execute(launch, password, null, clock);
+                        } finally {
+                            Arrays.fill(password, '\0');
+                        }
+                    }
+                    try (SecretProvider secrets =
+                                 CompositeSecretProvider.formalLocal(
+                                         Mode.WINDOWS_CREDENTIAL_MANAGER);
+                         SecretValue secret =
+                                 secrets.readResearchDatabasePassword()) {
+                        char[] password = secret.copy();
+                        try {
+                            registry.register(SensitiveKind.DATABASE_PASSWORD,
+                                    password);
+                            return execute(launch, password, null, clock);
+                        } finally {
+                            Arrays.fill(password, '\0');
+                        }
+                    }
+                });
+    }
+
+    private static Captured<Execution> captureOpenAiExecution(
+            Arguments launch,
+            Clock clock
+    ) throws Exception {
+        return TushareControlledAcceptanceOutputAudit
+                .captureM3OpenAiResearchProcess(registry -> {
+                    try (SecretProvider secrets =
+                                 CompositeSecretProvider.formalLocal(
+                                         Mode.WINDOWS_CREDENTIAL_MANAGER);
+                         SecretValue database =
+                                 secrets.readResearchDatabasePassword();
+                         SecretValue openAi = secrets.readOpenAiApiKey()) {
+                        char[] password = database.copy();
+                        char[] apiKey = openAi.copy();
+                        try {
+                            registry.register(SensitiveKind.DATABASE_PASSWORD,
+                                    password);
+                            registry.register(SensitiveKind.OPENAI_API_KEY,
+                                    apiKey);
+                            return execute(launch, password, apiKey, clock);
+                        } finally {
+                            Arrays.fill(password, '\0');
+                            Arrays.fill(apiKey, '\0');
+                        }
+                    }
+                });
+    }
+
     private static Execution execute(
             Arguments launch,
             char[] password,
+            char[] openAiApiKey,
             Clock clock
     ) {
         try (ReadOnlyDataSource dataSource = new ReadOnlyDataSource(
@@ -183,13 +220,18 @@ public final class TushareM3AgentResearchManualRunner {
                     source, new DefaultStrategyResearchApi(),
                     BacktestConfig.standard(), clock);
             ResearchReport report;
+            ModelAdapter adapter = launch.executionMode().usesOpenAi()
+                    ? new OpenAiResponsesModelAdapter(
+                    Objects.requireNonNull(openAiApiKey, "openAiApiKey"),
+                    Duration.ofSeconds(45))
+                    : new DeterministicFakeModelAdapter();
             try (AgentResearchRuntime runtime = new AgentResearchRuntime(
-                    gateway, new DeterministicFakeModelAdapter(),
+                    gateway, adapter,
                     new AgentPromptCatalog(), clock)) {
                 report = runtime.run(task(launch.executionId(),
-                        clock.instant()));
+                        clock.instant(), launch.executionMode()));
             }
-            validateReport(report);
+            validateReport(report, launch.executionMode());
             DatabaseSnapshot after = snapshot(jdbc);
             if (!before.equals(after)) {
                 throw invalid("M3_PERMANENT_DATABASE_MUTATION_DETECTED");
@@ -198,7 +240,11 @@ public final class TushareM3AgentResearchManualRunner {
         }
     }
 
-    static ResearchTask task(String executionId, Instant knowledgeCutoff) {
+    static ResearchTask task(
+            String executionId,
+            Instant knowledgeCutoff,
+            ExecutionMode executionMode
+    ) {
         List<Security> securities = List.of(
                 new Security("600000", "SSE"),
                 new Security("000001", "SZSE")).stream().sorted().toList();
@@ -222,15 +268,27 @@ public final class TushareM3AgentResearchManualRunner {
                         Map.of("lookback", "3", "topN", "1",
                                 "rebalanceEvery", "2",
                                 "targetGrossExposure", "0.60"))),
-                new RuntimeLimits(2, 8, 12, Duration.ofSeconds(30)));
+                new RuntimeLimits(2, 8, 16,
+                        executionMode.usesOpenAi()
+                                ? Duration.ofMinutes(8)
+                                : Duration.ofSeconds(30)));
     }
 
-    private static void validateReport(ResearchReport report) {
+    static ResearchTask task(String executionId, Instant knowledgeCutoff) {
+        return task(executionId, knowledgeCutoff,
+                ExecutionMode.E2E_DRY_RUN);
+    }
+
+    private static void validateReport(
+            ResearchReport report,
+            ExecutionMode executionMode
+    ) {
         Set<AgentRole> roles = report.agentRuns().stream()
                 .map(value -> value.agentRole()).collect(Collectors.toSet());
+        boolean openAi = executionMode.usesOpenAi();
         if (!roles.equals(Set.of(AgentRole.values()))
                 || report.toolCallCount() != 4
-                || report.modelCallCount() < 8
+                || report.modelCallCount() != 13
                 || !report.dataset().typedFactReadback()
                 || !report.dataset().systemKnowledgeReadback()
                 || !report.dataset().dataQualityPassed()
@@ -245,7 +303,18 @@ public final class TushareM3AgentResearchManualRunner {
                 || !report.criticReview().correctionApplied()
                 || !report.researchOnly() || report.providerCalled()
                 || report.shadowStarted() || report.tradingStarted()
-                || !report.deterministic()) {
+                || report.deterministic() == openAi
+                || openAi && (report.totalModelUsage().inputTokens() <= 0
+                || report.totalModelUsage().outputTokens() <= 0
+                || report.totalModelUsage().estimatedCostUsd().signum() <= 0
+                || report.totalModelUsage().estimatedCostUsd().compareTo(
+                OpenAiResponsesModelAdapter.M3_HARD_COST_LIMIT_USD) > 0
+                || report.agentRuns().stream().anyMatch(value ->
+                !"OPENAI".equals(value.modelProvider())
+                        || !AgentResearchModels.REAL_MODEL.equals(
+                        value.model())))
+                || !openAi && report.totalModelUsage().estimatedCostUsd()
+                .compareTo(BigDecimal.ZERO) != 0) {
             throw invalid("M3_RESEARCH_REPORT_NOT_ELIGIBLE");
         }
     }
@@ -277,7 +346,7 @@ public final class TushareM3AgentResearchManualRunner {
                 : proof.m3StageEligible() || proof.governanceEligible();
         if (!eligible || !TushareControlledAcceptanceBuildProof
                 .M3_RUNNER_START_CLASS.equals(proof.runnerStartClass())
-                || launch.executionMode() == ExecutionMode.FORMAL_LOCAL
+                || launch.executionMode().formal()
                 && launch.databasePort() != FORMAL_DATABASE_PORT
                 || launch.executionMode() == ExecutionMode.E2E_DRY_RUN
                 && launch.databasePort() == FORMAL_DATABASE_PORT) {
@@ -450,7 +519,16 @@ public final class TushareM3AgentResearchManualRunner {
 
     enum ExecutionMode {
         E2E_DRY_RUN,
-        FORMAL_LOCAL
+        FORMAL_LOCAL,
+        FORMAL_LOCAL_OPENAI;
+
+        boolean usesOpenAi() {
+            return this == FORMAL_LOCAL_OPENAI;
+        }
+
+        boolean formal() {
+            return this != E2E_DRY_RUN;
+        }
     }
 
     private static final class ReadOnlyDataSource

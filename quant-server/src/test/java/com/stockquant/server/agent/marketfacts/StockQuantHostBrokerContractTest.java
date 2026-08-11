@@ -256,6 +256,8 @@ class StockQuantHostBrokerContractTest {
 
         for (String operation : List.of(
                 "CHECK_CREDENTIAL_STATUS", "RUN_FAKE_E2E", "RUN_DAY001",
+                "CHECK_OPENAI_CREDENTIAL_STATUS",
+                "RUN_M3_AGENT_RESEARCH_SMOKE",
                 "READ_SANITIZED_RESULT")) {
             assertTrue(protocol.contains("'" + operation + "'"), operation);
         }
@@ -307,6 +309,12 @@ class StockQuantHostBrokerContractTest {
         assertTrue(script.contains("Register-ObjectEvent"));
         assertTrue(script.contains("RUN_DAY001"));
         assertTrue(script.contains("RUN_FAKE_E2E"));
+        assertTrue(script.contains("CHECK_OPENAI_CREDENTIAL_STATUS"));
+        assertTrue(script.contains("RUN_M3_AGENT_RESEARCH_SMOKE"));
+        assertTrue(script.contains("OpenAiCredentialHealthProbe"));
+        assertTrue(script.contains("gpt-5-mini-2025-08-07"));
+        assertTrue(script.contains("Assert-M3OpenAiSmokeBudgetUnused"));
+        assertTrue(script.contains("M3_OPENAI_SMOKE_BUDGET_ALREADY_CONSUMED"));
         assertFalse(script.contains("Invoke-Expression"));
         assertFalse(script.contains("Start-Process"));
         assertFalse(script.contains("ScriptBlock]::Create"));

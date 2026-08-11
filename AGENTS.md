@@ -179,13 +179,14 @@ Vue 修改后：
   暂存或上传。Maven、Java、PowerShell、Git 与 PostgreSQL 命令只能用于当前仓库任务。
 - 本地数据库访问只允许 `127.0.0.1`。正式缩减研究固定为端口 `38432`；测试只允许由
   已审查脚本创建并在同次运行清理的随机临时端口，严禁改写永久库。
-- Windows Credential Manager 只允许两个 Target：`StockQuant/ResearchDbPassword` 和
-  `StockQuant/TushareToken`。Codex 不得枚举凭据、读取或回传原文，也不得调用 `cmdkey`
-  或其他凭据导出工具。CodexSandbox 身份不得直接读取这两个 Target；正式秘密只能由当前
+- Windows Credential Manager 只允许三个 Target：`StockQuant/ResearchDbPassword`、
+  `StockQuant/TushareToken` 和 `StockQuant/OpenAiApiKey`。Codex 不得枚举凭据、读取或回传原文，也不得调用 `cmdkey`
+  或其他凭据导出工具。CodexSandbox 身份不得直接读取这些 Target；正式秘密只能由当前
   真实 Windows 用户账户下的固定 `StockQuantLocalBroker` 计划任务在 Runner 进程内读取。
 - Codex 只能在 `quant-server/target/stock-quant-host-broker/requests` 写严格非敏感请求，
   并从同级 `results` 读取脱敏结果。operation 只允许 `CHECK_CREDENTIAL_STATUS`、
-  `RUN_FAKE_E2E`、`RUN_DAY001`、`READ_SANITIZED_RESULT`；禁止命令文本、动态脚本路径、
+  `RUN_FAKE_E2E`、`RUN_DAY001`、`READ_SANITIZED_RESULT`、
+  `CHECK_OPENAI_CREDENTIAL_STATUS`、`RUN_M3_AGENT_RESEARCH_SMOKE`；禁止命令文本、动态脚本路径、
   动态 Credential Target、秘密字段、路径逃逸、过期或重复 requestId。
 - 真实 Tushare 网络请求只允许固定宿主 Broker 以真实用户身份调用
   `quant-server/scripts/run-stock-quant-local-automation.ps1`，再启动已证明 Start-Class 的
@@ -194,6 +195,10 @@ Vue 修改后：
   等待脱敏结果；不得查询或触发 Task Scheduler，也不得直接启动正式 Runner。
   `stock_quant_formal_runner` 只用于请求和结果轮询，不允许访问 Tushare 域名。任何测试、E2E、
   诊断、修复、构建或普通 Java/PowerShell 命令均不得访问真实 Provider。
+- M3 真实 LLM smoke 只允许固定宿主 Broker 以真实用户身份启动已证明 Start-Class 的
+  `TushareM3AgentResearchManualRunner`，只读使用 M1/M2，并且只可访问固定 Responses API 与
+  `gpt-5-mini-2025-08-07`。阶段总成本硬上限为 US$0.10、retry=0、redirects=NEVER；
+  Fake/E2E、凭据状态检查和 CodexSandbox 均不得访问 OpenAI 网络。
 - 禁止把秘密写入参数、环境变量、文件、日志、证据、聊天或云端任务。正式凭据模式禁止
   在 Codex Cloud、CI、非 Windows 或无法确认本机上下文的环境运行；失败时必须关闭并
   保持 fail-closed，不得自动回退 Console、明文文件或环境变量。

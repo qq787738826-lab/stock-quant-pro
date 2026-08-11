@@ -10,7 +10,7 @@ import com.sun.jna.win32.StdCallLibrary;
 import java.util.Arrays;
 import java.util.Objects;
 
-/** Reads only the two allow-listed Generic Credentials for the current user. */
+/** Reads only the fixed allow-listed Generic Credentials for the current user. */
 public final class WindowsCredentialManagerSecretProvider
         implements SecretProvider {
     private static final int CRED_TYPE_GENERIC = 1;

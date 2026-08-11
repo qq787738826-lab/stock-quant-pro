@@ -4,13 +4,20 @@ param(
     [switch] $Status,
 
     [Parameter(ParameterSetName = 'ProviderOnly', Mandatory = $true)]
-    [switch] $ProviderOnly
+    [switch] $ProviderOnly,
+
+    [Parameter(ParameterSetName = 'OpenAiOnly', Mandatory = $true)]
+    [switch] $OpenAiOnly,
+
+    [Parameter(ParameterSetName = 'OpenAiStatus', Mandatory = $true)]
+    [switch] $OpenAiStatus
 )
 
 $ErrorActionPreference = 'Stop'
 $databaseTarget = 'StockQuant/ResearchDbPassword'
 $tushareTarget = 'StockQuant/TushareToken'
-$allowedTargets = @($databaseTarget, $tushareTarget)
+$openAiTarget = 'StockQuant/OpenAiApiKey'
+$allowedTargets = @($databaseTarget, $tushareTarget, $openAiTarget)
 
 if (-not ('StockQuant.CredentialManagerNative' -as [type])) {
     Add-Type -TypeDefinition @'
@@ -85,8 +92,10 @@ function Write-SecureCredential(
     [Security.SecureString] $Secret
 ) {
     Assert-AllowedTarget $Target
-    if ($null -eq $Secret -or $Secret.Length -lt 8 -or
-        $Secret.Length -gt 1280) {
+    $minimumLength = if ($Target -eq $openAiTarget) { 20 } else { 8 }
+    $maximumLength = if ($Target -eq $openAiTarget) { 512 } else { 1280 }
+    if ($null -eq $Secret -or $Secret.Length -lt $minimumLength -or
+        $Secret.Length -gt $maximumLength) {
         throw 'STOCK_QUANT_SECRET_VALUE_INVALID'
     }
     [IntPtr] $plaintext = [IntPtr]::Zero
@@ -112,23 +121,39 @@ function Write-SecureCredential(
     }
 }
 
-$databasePresent = Test-CredentialExists $databaseTarget
-$tusharePresent = Test-CredentialExists $tushareTarget
+$databasePresent = $false
+$tusharePresent = $false
+$openAiPresent = $false
+if (-not $OpenAiOnly -and -not $OpenAiStatus) {
+    $databasePresent = Test-CredentialExists $databaseTarget
+    $tusharePresent = Test-CredentialExists $tushareTarget
+}
+if ($OpenAiOnly -or $OpenAiStatus) {
+    $openAiPresent = Test-CredentialExists $openAiTarget
+}
 if ($Status) {
     Write-Output "$databaseTarget=$(if ($databasePresent) { 'PRESENT' } else { 'MISSING' })"
     Write-Output "$tushareTarget=$(if ($tusharePresent) { 'PRESENT' } else { 'MISSING' })"
     Write-Output "STOCK_QUANT_CREDENTIALS_READY=$($databasePresent -and $tusharePresent)"
     exit $(if ($databasePresent -and $tusharePresent) { 0 } else { 10 })
 }
+if ($OpenAiStatus) {
+    Write-Output "$openAiTarget=$(if ($openAiPresent) { 'PRESENT' } else { 'MISSING' })"
+    Write-Output "STOCK_QUANT_OPENAI_CREDENTIAL_READY=$openAiPresent"
+    exit $(if ($openAiPresent) { 0 } else { 10 })
+}
 
 if ($Host.Name -ne 'ConsoleHost' -or
     [Console]::IsInputRedirected -or [Console]::IsOutputRedirected) {
     throw 'STOCK_QUANT_NATIVE_SECURE_CONSOLE_REQUIRED'
 }
-if (($ProviderOnly -and $tusharePresent) -or
+if (($OpenAiOnly -and $openAiPresent) -or
+    ($ProviderOnly -and $tusharePresent) -or
     (-not $ProviderOnly -and ($databasePresent -or $tusharePresent))) {
     $confirmation = Read-Host `
-        $(if ($ProviderOnly) {
+        $(if ($OpenAiOnly) {
+            'Existing OpenAI credential will be replaced. Type OVERWRITE to continue'
+        } elseif ($ProviderOnly) {
             'Existing Tushare credential will be replaced. Type OVERWRITE to continue'
         } else {
             'Existing Stock Quant credentials will be replaced. Type OVERWRITE to continue'
@@ -140,21 +165,31 @@ if (($ProviderOnly -and $tusharePresent) -or
 
 $databaseSecret = $null
 $tushareSecret = $null
+$openAiSecret = $null
 try {
-    if (-not $ProviderOnly) {
+    if ($OpenAiOnly) {
+        $openAiSecret = Read-Host 'OpenAI API Key' -AsSecureString
+    } elseif (-not $ProviderOnly) {
         $databaseSecret = Read-Host `
             'stock_quant_research database password' -AsSecureString
     }
-    $tushareSecret = Read-Host 'Tushare Token' -AsSecureString
-    if (-not $ProviderOnly) {
-        Write-SecureCredential $databaseTarget $databaseSecret
+    if (-not $OpenAiOnly) {
+        $tushareSecret = Read-Host 'Tushare Token' -AsSecureString
+        if (-not $ProviderOnly) {
+            Write-SecureCredential $databaseTarget $databaseSecret
+        }
+        Write-SecureCredential $tushareTarget $tushareSecret
+    } else {
+        Write-SecureCredential $openAiTarget $openAiSecret
     }
-    Write-SecureCredential $tushareTarget $tushareSecret
-    Write-Output $(if ($ProviderOnly) {
+    Write-Output $(if ($OpenAiOnly) {
+        'STOCK_QUANT_OPENAI_CREDENTIAL_UPDATED=true'
+    } elseif ($ProviderOnly) {
         'STOCK_QUANT_PROVIDER_CREDENTIAL_UPDATED=true'
     } else { 'STOCK_QUANT_CREDENTIALS_CONFIGURED=true' })
     Write-Output 'STOCK_QUANT_CREDENTIAL_STORAGE=WINDOWS_CREDENTIAL_MANAGER_CURRENT_USER'
 } finally {
     if ($null -ne $databaseSecret) { $databaseSecret.Dispose() }
     if ($null -ne $tushareSecret) { $tushareSecret.Dispose() }
+    if ($null -ne $openAiSecret) { $openAiSecret.Dispose() }
 }

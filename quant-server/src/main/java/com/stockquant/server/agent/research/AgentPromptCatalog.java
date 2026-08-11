@@ -12,19 +12,19 @@ import java.util.Map;
 public final class AgentPromptCatalog {
     private static final Map<AgentRole, String> RESOURCES = Map.of(
             AgentRole.RESEARCH_COORDINATOR,
-            "agent-research/prompts/research-coordinator-v1.txt",
+            "agent-research/prompts/research-coordinator-v2.txt",
             AgentRole.DATA_ANALYST,
-            "agent-research/prompts/data-analyst-v1.txt",
+            "agent-research/prompts/data-analyst-v2.txt",
             AgentRole.MARKET_TECHNICAL,
-            "agent-research/prompts/market-technical-v1.txt",
+            "agent-research/prompts/market-technical-v2.txt",
             AgentRole.STRATEGY_RESEARCH,
-            "agent-research/prompts/strategy-research-v1.txt",
+            "agent-research/prompts/strategy-research-v2.txt",
             AgentRole.RISK,
-            "agent-research/prompts/risk-v1.txt",
+            "agent-research/prompts/risk-v2.txt",
             AgentRole.PORTFOLIO,
-            "agent-research/prompts/portfolio-v1.txt",
+            "agent-research/prompts/portfolio-v2.txt",
             AgentRole.CRITIC_REVIEW,
-            "agent-research/prompts/critic-review-v1.txt");
+            "agent-research/prompts/critic-review-v2.txt");
 
     private final Map<AgentRole, PromptDefinition> prompts;
 
@@ -56,7 +56,7 @@ public final class AgentPromptCatalog {
             String text = new String(stream.readAllBytes(),
                     StandardCharsets.UTF_8).replace("\r\n", "\n").trim();
             String version = text.lines().findFirst().orElse("");
-            if (!version.matches("PROMPT_VERSION=M3_[A-Z_]+_V1")
+            if (!version.matches("PROMPT_VERSION=M3_[A-Z_]+_V[1-9][0-9]*")
                     || text.length() < 120 || text.length() > 4_000) {
                 throw new IllegalStateException("M3_PROMPT_RESOURCE_INVALID");
             }

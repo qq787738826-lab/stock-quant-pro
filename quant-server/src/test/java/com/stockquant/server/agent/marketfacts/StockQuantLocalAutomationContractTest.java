@@ -11,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class StockQuantLocalAutomationContractTest {
 
     @Test
-    void setupScriptUsesNativeSecureInputAndOnlyTwoCredentialTargets()
+    void setupScriptUsesNativeSecureInputAndOnlyThreeCredentialTargets()
             throws Exception {
         String script = read("scripts/set-stock-quant-secrets.ps1");
         String parameters = script.substring(
@@ -28,8 +28,11 @@ class StockQuantLocalAutomationContractTest {
         assertTrue(script.contains("ZeroFreeCoTaskMemUnicode"));
         assertTrue(script.contains("StockQuant/ResearchDbPassword"));
         assertTrue(script.contains("StockQuant/TushareToken"));
+        assertTrue(script.contains("StockQuant/OpenAiApiKey"));
         assertTrue(script.contains("OVERWRITE"));
         assertTrue(parameters.contains("ProviderOnly"));
+        assertTrue(parameters.contains("OpenAiOnly"));
+        assertTrue(parameters.contains("OpenAiStatus"));
         assertTrue(script.contains(
                 "STOCK_QUANT_PROVIDER_CREDENTIAL_UPDATED=true"));
         assertTrue(script.contains("if (-not $ProviderOnly)"));

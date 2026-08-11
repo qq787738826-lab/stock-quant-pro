@@ -33,7 +33,14 @@ final class AgentModelResponseValidator {
             ModelAdapter.ModelRequest request,
             ModelAdapter.ModelResponse response
     ) {
-        if (response.claims().isEmpty()
+        boolean toolSelection = "PLAN".equals(request.phase())
+                || request.phase().endsWith("_TOOL_SELECTION");
+        if (toolSelection && (response.requestedTools().isEmpty()
+                || !response.claims().isEmpty())) {
+            throw AgentResearchModels.invalid(
+                    "M3_MODEL_TOOL_SELECTION_REJECTED");
+        }
+        if (!toolSelection && response.claims().isEmpty()
                 && request.agentRole() != AgentRole.RESEARCH_COORDINATOR) {
             throw AgentResearchModels.invalid("M3_MODEL_CLAIMS_REQUIRED");
         }

@@ -50,29 +50,35 @@ class SecretProviderTest {
     }
 
     @Test
-    void windowsProviderReadsOnlyBothExactTargetsAndCanReadRepeatedly() {
+    void windowsProviderReadsOnlyFixedExactTargetsAndCanReadRepeatedly() {
         List<String> targets = new ArrayList<>();
         List<char[]> returned = new ArrayList<>();
         var provider = new WindowsCredentialManagerSecretProvider(
                 true, target -> {
             targets.add(target);
             char[] value = (target.endsWith("TushareToken")
-                    ? "fake-token-value" : "fake-database-value").toCharArray();
+                    ? "fake-token-value"
+                    : target.endsWith("OpenAiApiKey")
+                    ? "sk-fake-openai-key-value"
+                    : "fake-database-value").toCharArray();
             returned.add(value);
             return value;
         });
 
         try (SecretValue first = provider.readResearchDatabasePassword();
              SecretValue second = provider.readResearchDatabasePassword();
-             SecretValue token = provider.readTushareToken()) {
+             SecretValue token = provider.readTushareToken();
+             SecretValue openAi = provider.readOpenAiApiKey()) {
             assertSecretEquals("fake-database-value", first);
             assertSecretEquals("fake-database-value", second);
             assertSecretEquals("fake-token-value", token);
+            assertSecretEquals("sk-fake-openai-key-value", openAi);
         }
         assertEquals(List.of(
                 "StockQuant/ResearchDbPassword",
                 "StockQuant/ResearchDbPassword",
-                "StockQuant/TushareToken"), targets);
+                "StockQuant/TushareToken",
+                "StockQuant/OpenAiApiKey"), targets);
         returned.forEach(SecretProviderTest::assertAllZero);
         assertFalse(provider.toString().contains("fake"));
     }
@@ -146,23 +152,32 @@ class SecretProviderTest {
         assertEquals("STOCK_QUANT_REAL_CREDENTIAL_ACCESS_FORBIDDEN",
                 assertThrows(IllegalStateException.class,
                         forbidden::readTushareToken).getMessage());
+        assertEquals("STOCK_QUANT_REAL_CREDENTIAL_ACCESS_FORBIDDEN",
+                assertThrows(IllegalStateException.class,
+                        forbidden::readOpenAiApiKey).getMessage());
     }
 
     @Test
     void consoleProviderIsExplicitAndClearsReaderOwnedArrays() {
         char[] database = "fake-console-database".toCharArray();
         char[] token = "fake-console-token".toCharArray();
+        char[] openAi = "sk-fake-console-openai-key".toCharArray();
         AtomicInteger calls = new AtomicInteger();
         ConsoleSecretProvider provider = ConsoleSecretProvider.forTest(
-                (format, arguments) -> calls.getAndIncrement() == 0
-                        ? database : token);
+                (format, arguments) -> switch (calls.getAndIncrement()) {
+                    case 0 -> database;
+                    case 1 -> token;
+                    default -> openAi;
+                });
 
         try (SecretValue ignored = provider.readResearchDatabasePassword();
-             SecretValue ignoredAgain = provider.readTushareToken()) {
-            assertEquals(2, calls.get());
+             SecretValue ignoredAgain = provider.readTushareToken();
+             SecretValue ignoredOpenAi = provider.readOpenAiApiKey()) {
+            assertEquals(3, calls.get());
         }
         assertAllZero(database);
         assertAllZero(token);
+        assertAllZero(openAi);
         assertEquals("ConsoleSecretProvider[REDACTED]", provider.toString());
     }
 
@@ -193,6 +208,10 @@ class SecretProviderTest {
         assertTrue(setup.contains("Read-Host")
                 && setup.contains("-AsSecureString"));
         assertTrue(setup.contains("ProviderOnly"));
+        assertTrue(setup.contains("OpenAiOnly"));
+        assertTrue(setup.contains("StockQuant/OpenAiApiKey"));
+        assertTrue(setup.contains(
+                "STOCK_QUANT_OPENAI_CREDENTIAL_UPDATED=true"));
         assertTrue(setup.contains(
                 "STOCK_QUANT_PROVIDER_CREDENTIAL_UPDATED=true"));
         assertFalse(setup.contains("ConvertFrom-SecureString"));

@@ -336,7 +336,7 @@ try {
         Exact $m3.research.strategyExperiments.experiments.Count 4 `
             'M3_E2E_EXPERIMENTS_INVALID'
         Exact $m3.research.toolCallCount 4 'M3_E2E_TOOL_CALLS_INVALID'
-        Exact $m3.research.modelCallCount 9 'M3_E2E_MODEL_CALLS_INVALID'
+        Exact $m3.research.modelCallCount 13 'M3_E2E_MODEL_CALLS_INVALID'
         Exact @($m3.research.agentRuns.agentRole | Sort-Object -Unique).Count 7 `
             'M3_E2E_AGENT_ROLES_INVALID'
         if (-not $m3.databaseReadOnly -or

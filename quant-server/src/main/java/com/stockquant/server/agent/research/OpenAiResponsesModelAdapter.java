@@ -32,6 +32,10 @@ public final class OpenAiResponsesModelAdapter implements ModelAdapter {
     static final URI RESPONSES_URI = URI.create(
             "https://api.openai.com/v1/responses");
     static final String ADAPTER_VERSION = "OPENAI_RESPONSES_ADAPTER_V1";
+    static final int MAXIMUM_MODEL_CALLS = 13;
+    static final int MAXIMUM_OUTPUT_TOKENS = 1_200;
+    public static final BigDecimal M3_HARD_COST_LIMIT_USD =
+            new BigDecimal("0.10");
     private static final int MAX_RESPONSE_BYTES = 1_048_576;
     private static final BigDecimal MILLION = new BigDecimal("1000000");
     private static final BigDecimal INPUT_PER_MILLION =
@@ -46,10 +50,19 @@ public final class OpenAiResponsesModelAdapter implements ModelAdapter {
     private final char[] apiKey;
     private final Duration timeout;
     private final Transport transport;
+    private final BigDecimal hardCostLimitUsd;
+    private BigDecimal accountedCostUsd = BigDecimal.ZERO;
+    private int attemptedCallCount;
+    private int networkCallCount;
+    private int completedCallCount;
+    private int inputTokenCount;
+    private int outputTokenCount;
+    private boolean terminated;
     private boolean closed;
 
     public OpenAiResponsesModelAdapter(char[] apiKey, Duration timeout) {
-        this(apiKey, timeout, new JdkTransport(timeout));
+        this(apiKey, timeout, new JdkTransport(timeout),
+                M3_HARD_COST_LIMIT_USD);
     }
 
     OpenAiResponsesModelAdapter(
@@ -57,11 +70,25 @@ public final class OpenAiResponsesModelAdapter implements ModelAdapter {
             Duration timeout,
             Transport transport
     ) {
+        this(apiKey, timeout, transport, M3_HARD_COST_LIMIT_USD);
+    }
+
+    OpenAiResponsesModelAdapter(
+            char[] apiKey,
+            Duration timeout,
+            Transport transport,
+            BigDecimal hardCostLimitUsd
+    ) {
         Objects.requireNonNull(apiKey, "apiKey");
         this.timeout = Objects.requireNonNull(timeout, "timeout");
         this.transport = Objects.requireNonNull(transport, "transport");
-        if (!validKey(apiKey) || timeout.compareTo(Duration.ofSeconds(5)) < 0
-                || timeout.compareTo(Duration.ofMinutes(2)) > 0) {
+        this.hardCostLimitUsd = Objects.requireNonNull(hardCostLimitUsd,
+                "hardCostLimitUsd");
+        if (!isStructurallyValidApiKey(apiKey)
+                || timeout.compareTo(Duration.ofSeconds(5)) < 0
+                || timeout.compareTo(Duration.ofMinutes(2)) > 0
+                || hardCostLimitUsd.signum() <= 0
+                || hardCostLimitUsd.compareTo(M3_HARD_COST_LIMIT_USD) > 0) {
             throw AgentResearchModels.invalid(
                     "M3_OPENAI_ADAPTER_CONFIGURATION_INVALID");
         }
@@ -80,20 +107,39 @@ public final class OpenAiResponsesModelAdapter implements ModelAdapter {
         if (closed) {
             throw AgentResearchModels.invalid("M3_OPENAI_ADAPTER_CLOSED");
         }
+        if (terminated) {
+            throw AgentResearchModels.invalid("M3_OPENAI_ADAPTER_TERMINATED");
+        }
+        if (attemptedCallCount >= MAXIMUM_MODEL_CALLS) {
+            terminated = true;
+            throw AgentResearchModels.invalid(
+                    "M3_OPENAI_MODEL_CALL_BUDGET_EXHAUSTED");
+        }
         String requestBody = requestBody(request);
+        int requestBytes = requestBody.getBytes(StandardCharsets.UTF_8).length;
+        BigDecimal reservation = maximumCallCost(requestBytes);
+        if (accountedCostUsd.add(reservation)
+                .compareTo(hardCostLimitUsd) > 0) {
+            terminated = true;
+            throw AgentResearchModels.invalid(
+                    "M3_OPENAI_COST_BUDGET_PRECALL_REJECTED");
+        }
+        attemptedCallCount++;
+        networkCallCount++;
         TransportResponse response;
         try {
             response = transport.post(RESPONSES_URI, apiKey, requestBody,
                     timeout);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
-            throw new IllegalStateException("M3_OPENAI_REQUEST_INTERRUPTED",
-                    exception);
+            accountUnknownCall(reservation);
+            throw new IllegalStateException("M3_OPENAI_REQUEST_INTERRUPTED");
         } catch (IOException exception) {
-            throw new IllegalStateException("M3_OPENAI_TRANSPORT_FAILED",
-                    exception);
+            accountUnknownCall(reservation);
+            throw new IllegalStateException("M3_OPENAI_TRANSPORT_FAILED");
         }
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
+            accountUnknownCall(reservation);
             throw new IllegalStateException("M3_OPENAI_HTTP_STATUS_"
                     + response.statusCode());
         }
@@ -102,22 +148,51 @@ public final class OpenAiResponsesModelAdapter implements ModelAdapter {
                 || response.contentType() == null
                 || !response.contentType().toLowerCase(Locale.ROOT)
                 .startsWith("application/json")) {
+            accountUnknownCall(reservation);
             throw new IllegalStateException("M3_OPENAI_RESPONSE_REJECTED");
         }
-        return parseResponse(response.body());
+        ModelResponse parsed;
+        try {
+            parsed = parseResponse(response.body());
+        } catch (RuntimeException error) {
+            accountUnknownCall(reservation);
+            throw error;
+        }
+        ModelUsage usage = parsed.usage();
+        if (usage.inputTokens() > requestBytes
+                || usage.outputTokens() > MAXIMUM_OUTPUT_TOKENS
+                || accountedCostUsd.add(usage.estimatedCostUsd())
+                .compareTo(hardCostLimitUsd) > 0) {
+            accountUnknownCall(reservation);
+            throw new IllegalStateException(
+                    "M3_OPENAI_USAGE_BUDGET_INVALID");
+        }
+        accountedCostUsd = accountedCostUsd.add(usage.estimatedCostUsd());
+        completedCallCount++;
+        inputTokenCount += usage.inputTokens();
+        outputTokenCount += usage.outputTokens();
+        return parsed;
     }
 
     @Override
     public synchronized void close() {
         Arrays.fill(apiKey, '\0');
+        terminated = true;
         closed = true;
+    }
+
+    public synchronized Telemetry telemetry() {
+        return new Telemetry(attemptedCallCount, networkCallCount,
+                completedCallCount, inputTokenCount, outputTokenCount,
+                accountedCostUsd, hardCostLimitUsd, terminated, closed);
     }
 
     private String requestBody(ModelRequest request) {
         ObjectNode root = mapper.createObjectNode();
         root.put("model", AgentResearchModels.REAL_MODEL);
         root.put("store", false);
-        root.put("max_output_tokens", 1_200);
+        root.put("max_output_tokens", MAXIMUM_OUTPUT_TOKENS);
+        root.putObject("reasoning").put("effort", "minimal");
         root.put("instructions", request.systemPrompt());
         ArrayNode input = root.putArray("input");
         ObjectNode message = input.addObject();
@@ -337,7 +412,8 @@ public final class OpenAiResponsesModelAdapter implements ModelAdapter {
         }
     }
 
-    private static boolean validKey(char[] value) {
+    public static boolean isStructurallyValidApiKey(char[] value) {
+        Objects.requireNonNull(value, "value");
         if (value.length < 20 || value.length > 512) {
             return false;
         }
@@ -348,6 +424,22 @@ public final class OpenAiResponsesModelAdapter implements ModelAdapter {
             }
         }
         return true;
+    }
+
+    private static BigDecimal maximumCallCost(int requestBytes) {
+        if (requestBytes <= 0) {
+            throw AgentResearchModels.invalid("M3_OPENAI_REQUEST_SIZE_INVALID");
+        }
+        return BigDecimal.valueOf(requestBytes)
+                .multiply(INPUT_PER_MILLION)
+                .add(BigDecimal.valueOf(MAXIMUM_OUTPUT_TOKENS)
+                        .multiply(OUTPUT_PER_MILLION))
+                .divide(MILLION, 12, RoundingMode.UP);
+    }
+
+    private void accountUnknownCall(BigDecimal reservation) {
+        accountedCostUsd = accountedCostUsd.add(reservation);
+        terminated = true;
     }
 
     private static IllegalStateException parseFailure() {
@@ -366,6 +458,34 @@ public final class OpenAiResponsesModelAdapter implements ModelAdapter {
     record TransportResponse(int statusCode, String contentType, String body) {
         TransportResponse {
             Objects.requireNonNull(body, "body");
+        }
+    }
+
+    public record Telemetry(
+            int attemptedCallCount,
+            int networkCallCount,
+            int completedCallCount,
+            int inputTokenCount,
+            int outputTokenCount,
+            BigDecimal accountedCostUsd,
+            BigDecimal hardCostLimitUsd,
+            boolean terminated,
+            boolean closed
+    ) {
+        public Telemetry {
+            Objects.requireNonNull(accountedCostUsd, "accountedCostUsd");
+            Objects.requireNonNull(hardCostLimitUsd, "hardCostLimitUsd");
+            if (attemptedCallCount < 0 || networkCallCount < 0
+                    || completedCallCount < 0 || inputTokenCount < 0
+                    || outputTokenCount < 0
+                    || completedCallCount > networkCallCount
+                    || networkCallCount > attemptedCallCount
+                    || attemptedCallCount > MAXIMUM_MODEL_CALLS
+                    || accountedCostUsd.signum() < 0
+                    || accountedCostUsd.compareTo(hardCostLimitUsd) > 0) {
+                throw AgentResearchModels.invalid(
+                        "M3_OPENAI_TELEMETRY_INVALID");
+            }
         }
     }
 

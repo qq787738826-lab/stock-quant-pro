@@ -9,6 +9,8 @@ param(
         'RUN_M1_RESEARCH_DATA',
         'VERIFY_M1_TUSHARE_TOKEN',
         'RUN_M2_STRATEGY_RESEARCH_SMOKE',
+        'CHECK_OPENAI_CREDENTIAL_STATUS',
+        'RUN_M3_AGENT_RESEARCH_SMOKE',
         'READ_SANITIZED_RESULT'
     )]
     [string] $Operation,
@@ -37,7 +39,11 @@ if ($identity -notmatch '(?i)CodexSandbox' -and
     throw 'STOCK_QUANT_HOST_BROKER_CODEX_SANDBOX_REQUIRED'
 }
 if ([string]::IsNullOrWhiteSpace($ArtifactPath)) {
-    $artifactName = if ($Operation -eq
+    $artifactName = if ($Operation -in @(
+            'CHECK_OPENAI_CREDENTIAL_STATUS',
+            'RUN_M3_AGENT_RESEARCH_SMOKE')) {
+        'quant-server-1.3.1-m3-agent-research-runner.jar'
+    } elseif ($Operation -eq
             'RUN_M2_STRATEGY_RESEARCH_SMOKE') {
         'quant-server-1.3.1-m2-strategy-research-runner.jar'
     } elseif ($Operation -in @(
@@ -55,7 +61,8 @@ $isM3Compatibility = $Operation -eq 'RUN_M2_STRATEGY_RESEARCH_SMOKE' -and
         [StringComparison]::OrdinalIgnoreCase)
 if ($Operation -in @(
         'READ_SANITIZED_RESULT',
-        'DIAGNOSE_TUSHARE_CREDENTIAL')) {
+        'DIAGNOSE_TUSHARE_CREDENTIAL',
+        'RUN_M3_AGENT_RESEARCH_SMOKE')) {
     if ($SourceRequestId -notmatch
             '^SQHB_[0-9]{8}T[0-9]{6}Z_[A-F0-9]{12}$') {
         throw 'STOCK_QUANT_HOST_BROKER_SOURCE_REQUEST_INVALID'
@@ -75,6 +82,11 @@ try {
         $branch -eq 'codex/1.4.0-m2-strategy-engine-ready') {
         'codex/1.4.0-m2-strategy-engine-ready'
     } elseif ($isM3Compatibility -and
+        $branch -eq 'codex/1.4.0-m3-agent-research-ready') {
+        'codex/1.4.0-m3-agent-research-ready'
+    } elseif ($Operation -in @(
+            'CHECK_OPENAI_CREDENTIAL_STATUS',
+            'RUN_M3_AGENT_RESEARCH_SMOKE') -and
         $branch -eq 'codex/1.4.0-m3-agent-research-ready') {
         'codex/1.4.0-m3-agent-research-ready'
     } else { $integrationBranch }
@@ -113,7 +125,9 @@ try {
         -MustExist -PathType Leaf
     if ($Operation -in @(
             'DIAGNOSE_TUSHARE_CREDENTIAL',
-            'RUN_M2_STRATEGY_RESEARCH_SMOKE')) {
+            'RUN_M2_STRATEGY_RESEARCH_SMOKE',
+            'CHECK_OPENAI_CREDENTIAL_STATUS',
+            'RUN_M3_AGENT_RESEARCH_SMOKE')) {
         if ($AuthorizationFile -ne 'NONE') {
             throw 'STOCK_QUANT_HOST_BROKER_AUTHORIZATION_MODE_INVALID'
         }
@@ -129,7 +143,75 @@ try {
     $requestId = New-StockQuantHostBrokerRequestId
     $createdAt = [DateTimeOffset]::UtcNow
     $expiresAt = $createdAt.AddMinutes(10)
-    if ($Operation -eq 'RUN_M2_STRATEGY_RESEARCH_SMOKE') {
+    if ($Operation -eq 'CHECK_OPENAI_CREDENTIAL_STATUS') {
+        $requestValues = [ordered]@{
+            'schema.version' = 'STOCK_QUANT_HOST_BROKER_REQUEST_V1'
+            'request.id' = $requestId
+            'operation' = $Operation
+            'git.commit' = $head
+            'jar.path' = $artifact
+            'jar.sha256' = $artifactHash
+            'authorization.file' = 'NONE'
+            'provider' = 'OPENAI'
+            'model' = 'gpt-5-mini-2025-08-07'
+            'provider.endpoint' = 'NONE'
+            'maximum.model.calls' = '0'
+            'maximum.cost.usd' = '0.00'
+            'retry.budget' = '0'
+            'redirects' = 'NEVER'
+            'created.at' = $createdAt.ToString('o')
+            'expires.at' = $expiresAt.ToString('o')
+            'execution.source' =
+                'M3_OPENAI_CREDENTIAL_READABILITY_CHECK'
+            'no.retry' = 'true'
+            'source.request.id' = 'NONE'
+        }
+    } elseif ($Operation -eq 'RUN_M3_AGENT_RESEARCH_SMOKE') {
+        $requestValues = [ordered]@{
+            'schema.version' = 'STOCK_QUANT_HOST_BROKER_REQUEST_V1'
+            'request.id' = $requestId
+            'operation' = $Operation
+            'git.commit' = $head
+            'jar.path' = $artifact
+            'jar.sha256' = $artifactHash
+            'authorization.file' = 'NONE'
+            'm3.dataset.contract' = 'M1_RESEARCH_DATASET_V1'
+            'm3.strategy.engine' = 'STRATEGY_ENGINE_V1'
+            'm3.backtest.engine' = 'BACKTEST_ENGINE_V1'
+            'm3.research.api' = 'STRATEGY_RESEARCH_API_V1'
+            'm3.agent.runtime' = 'AGENT_RUNTIME_V1'
+            'm3.agent.team' = 'AGENT_RESEARCH_TEAM_V1'
+            'm3.tool.gateway' = 'AGENT_TOOL_GATEWAY_V1'
+            'm3.agent.eval' = 'AGENT_EVAL_V1'
+            'm3.research.report' = 'RESEARCH_REPORT_V1'
+            'securities' = '600000:SSE,000001:SZSE'
+            'range.start' = '2025-01-02'
+            'range.end' = '2025-01-10'
+            'anchor.trade.date' = '2025-01-10'
+            'database.host' = '127.0.0.1'
+            'database.port' = '38432'
+            'database.name' = 'stock_quant_research'
+            'database.user' = 'stock_quant_research'
+            'schema.name' = 'tushare_research'
+            'database.read.only' = 'true'
+            'provider' = 'OPENAI'
+            'model' = 'gpt-5-mini-2025-08-07'
+            'provider.endpoint' =
+                'https://api.openai.com/v1/responses'
+            'maximum.model.calls' = '13'
+            'maximum.output.tokens.per.call' = '1200'
+            'maximum.cost.usd' = '0.10'
+            'retry.budget' = '0'
+            'redirects' = 'NEVER'
+            'user.approval.reference' =
+                'USER_APPROVED_M3_OPENAI_SMOKE_USD_0_10'
+            'created.at' = $createdAt.ToString('o')
+            'expires.at' = $expiresAt.ToString('o')
+            'execution.source' = 'M3_AGENT_RESEARCH_REAL_LLM_SMOKE'
+            'no.retry' = 'true'
+            'source.request.id' = $SourceRequestId
+        }
+    } elseif ($Operation -eq 'RUN_M2_STRATEGY_RESEARCH_SMOKE') {
         $requestValues = [ordered]@{
             'schema.version' = 'STOCK_QUANT_HOST_BROKER_REQUEST_V1'
             'request.id' = $requestId

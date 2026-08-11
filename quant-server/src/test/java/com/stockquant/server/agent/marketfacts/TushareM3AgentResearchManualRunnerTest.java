@@ -3,6 +3,7 @@ package com.stockquant.server.agent.marketfacts;
 import com.stockquant.server.agent.research.AgentResearchModels;
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
 import java.time.Instant;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -20,6 +21,11 @@ class TushareM3AgentResearchManualRunnerTest {
         assertEquals(15432, parsed.databasePort());
         assertEquals(TushareM3AgentResearchManualRunner.ExecutionMode
                 .E2E_DRY_RUN, parsed.executionMode());
+        assertEquals(TushareM3AgentResearchManualRunner.ExecutionMode
+                        .FORMAL_LOCAL_OPENAI,
+                TushareM3AgentResearchManualRunner.Arguments.parse(
+                        arguments("FORMAL_LOCAL_OPENAI", "38432"))
+                        .executionMode());
         assertThrows(IllegalStateException.class, () ->
                 TushareM3AgentResearchManualRunner.Arguments.parse(
                         new String[]{arguments("E2E_DRY_RUN", "15432")[0]}));
@@ -44,11 +50,19 @@ class TushareM3AgentResearchManualRunnerTest {
         assertEquals(4, task.strategies().size());
         assertEquals(2, task.limits().maxRounds());
         assertEquals(8, task.limits().maxToolCalls());
-        assertEquals(12, task.limits().maxModelCalls());
+        assertEquals(16, task.limits().maxModelCalls());
         assertTrue(task.objective().contains("M1"));
         assertTrue(task.objective().contains("M2"));
         assertEquals(AgentResearchModels.RuntimeLimits.standard(),
                 task.limits());
+
+        var openAiTask = TushareM3AgentResearchManualRunner.task(
+                "M3SMOKE_20260811T010203Z_A1B2C3D4E5F6",
+                Instant.parse("2026-08-11T01:02:03Z"),
+                TushareM3AgentResearchManualRunner.ExecutionMode
+                        .FORMAL_LOCAL_OPENAI);
+        assertEquals(Duration.ofMinutes(8),
+                openAiTask.limits().timeout());
     }
 
     private static String[] arguments(String mode, String port) {
