@@ -7,6 +7,7 @@ $script:BrokerVersion = 'STOCK_QUANT_HOST_BROKER_RESIDENT_V1'
 $script:TaskName = 'StockQuantLocalBroker'
 $script:AllowedOperations = @(
     'CHECK_CREDENTIAL_STATUS'
+    'DIAGNOSE_TUSHARE_CREDENTIAL'
     'RUN_FAKE_E2E'
     'RUN_DAY001'
     'READ_SANITIZED_RESULT'
@@ -368,7 +369,9 @@ function Read-StockQuantHostBrokerRequest {
         $values['no.retry'] -ne 'true') {
         throw 'STOCK_QUANT_HOST_BROKER_REQUEST_SCOPE_INVALID'
     }
-    if ($values['operation'] -eq 'READ_SANITIZED_RESULT') {
+    if ($values['operation'] -in @(
+            'READ_SANITIZED_RESULT',
+            'DIAGNOSE_TUSHARE_CREDENTIAL')) {
         if ($values['source.request.id'] -notmatch
                 '^SQHB_[0-9]{8}T[0-9]{6}Z_[A-F0-9]{12}$') {
             throw 'STOCK_QUANT_HOST_BROKER_SOURCE_REQUEST_INVALID'
@@ -399,23 +402,60 @@ function Read-StockQuantHostBrokerRequest {
     if (-not (Test-Path -LiteralPath $proof -PathType Leaf)) {
         throw 'STOCK_QUANT_HOST_BROKER_BUILD_PROOF_MISSING'
     }
-    $authorization = Assert-StockQuantPathInside `
-        -Path $values['authorization.file'] -Root $paths.TargetRoot `
-        -FailureCode 'STOCK_QUANT_HOST_BROKER_AUTHORIZATION_PATH_INVALID' `
-        -MustExist -PathType Leaf
-    if ([IO.Path]::GetExtension($authorization) -ne '.properties') {
-        throw 'STOCK_QUANT_HOST_BROKER_AUTHORIZATION_PATH_INVALID'
-    }
-    $authorizationStatus = Assert-StockQuantAuthorizationNonSensitive `
-        -Path $authorization `
-        -ExpectedGitCommit $values['git.commit'] `
-        -ExpectedArtifactHash $values['jar.sha256'] `
-        -ExpectedBuildProof $proof -Now $Now
-    if (($values['operation'] -eq 'RUN_DAY001' -and
-            $authorizationStatus -ne 'USER_APPROVED') -or
-        ($values['operation'] -eq 'RUN_FAKE_E2E' -and
-            $authorizationStatus -ne 'E2E_DRY_RUN')) {
-        throw 'STOCK_QUANT_HOST_BROKER_AUTHORIZATION_MODE_INVALID'
+    $authorization = $null
+    $authorizationStatus = 'NOT_REQUIRED_ZERO_PROVIDER_DIAGNOSTIC'
+    if ($values['operation'] -eq 'DIAGNOSE_TUSHARE_CREDENTIAL') {
+        if ($values['authorization.file'] -ne 'NONE') {
+            throw 'STOCK_QUANT_HOST_BROKER_AUTHORIZATION_MODE_INVALID'
+        }
+        $sourceResultPath = Join-Path $paths.Results `
+            "$($values['source.request.id']).result.json"
+        $sourceDay001Path = Join-Path $paths.Results `
+            "$($values['source.request.id']).day001.json"
+        if (-not (Test-Path -LiteralPath $sourceResultPath -PathType Leaf) -or
+            -not (Test-Path -LiteralPath $sourceDay001Path -PathType Leaf)) {
+            throw 'STOCK_QUANT_HOST_BROKER_DIAGNOSTIC_SOURCE_INVALID'
+        }
+        try {
+            $sourceResult = Get-Content -LiteralPath $sourceResultPath `
+                -Raw -Encoding UTF8 | ConvertFrom-Json
+            $sourceDay001 = Get-Content -LiteralPath $sourceDay001Path `
+                -Raw -Encoding UTF8 | ConvertFrom-Json
+        } catch {
+            throw 'STOCK_QUANT_HOST_BROKER_DIAGNOSTIC_SOURCE_INVALID'
+        }
+        if ($sourceResult.schemaVersion -ne
+                'STOCK_QUANT_HOST_BROKER_RESULT_V1' -or
+            $sourceResult.requestId -ne $values['source.request.id'] -or
+            $sourceResult.operation -ne 'RUN_DAY001' -or
+            $sourceResult.status -ne 'FAILED' -or
+            [int]$sourceResult.providerCallCount -ne 1 -or
+            [int]$sourceResult.retryCount -ne 0 -or
+            $sourceDay001.status -ne 'FAILED_VALIDATION' -or
+            $sourceDay001.safeFailureCode -ne 'TUSHARE_API_ERROR_40101' -or
+            [int]$sourceDay001.providerCallCount -ne 1 -or
+            [int]$sourceDay001.retryCount -ne 0) {
+            throw 'STOCK_QUANT_HOST_BROKER_DIAGNOSTIC_SOURCE_INVALID'
+        }
+    } else {
+        $authorization = Assert-StockQuantPathInside `
+            -Path $values['authorization.file'] -Root $paths.TargetRoot `
+            -FailureCode 'STOCK_QUANT_HOST_BROKER_AUTHORIZATION_PATH_INVALID' `
+            -MustExist -PathType Leaf
+        if ([IO.Path]::GetExtension($authorization) -ne '.properties') {
+            throw 'STOCK_QUANT_HOST_BROKER_AUTHORIZATION_PATH_INVALID'
+        }
+        $authorizationStatus = Assert-StockQuantAuthorizationNonSensitive `
+            -Path $authorization `
+            -ExpectedGitCommit $values['git.commit'] `
+            -ExpectedArtifactHash $values['jar.sha256'] `
+            -ExpectedBuildProof $proof -Now $Now
+        if (($values['operation'] -eq 'RUN_DAY001' -and
+                $authorizationStatus -ne 'USER_APPROVED') -or
+            ($values['operation'] -eq 'RUN_FAKE_E2E' -and
+                $authorizationStatus -ne 'E2E_DRY_RUN')) {
+            throw 'STOCK_QUANT_HOST_BROKER_AUTHORIZATION_MODE_INVALID'
+        }
     }
     [pscustomobject]@{
         SchemaVersion = $values['schema.version']

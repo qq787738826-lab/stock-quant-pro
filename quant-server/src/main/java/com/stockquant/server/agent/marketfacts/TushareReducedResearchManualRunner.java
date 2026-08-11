@@ -191,6 +191,9 @@ public final class TushareReducedResearchManualRunner {
                     : FinalStatus.FAILED_PERSISTENCE;
         }
         String code = safeCode(error);
+        if (isProviderFailureCode(code)) {
+            return FinalStatus.FAILED_PROVIDER;
+        }
         if (code.contains("OUTPUT_AUDIT")) {
             return FinalStatus.FAILED_OUTPUT_AUDIT;
         }
@@ -207,6 +210,17 @@ public final class TushareReducedResearchManualRunner {
         return progress.providerCalls == 0
                 ? FinalStatus.FAILED_PRE_PROVIDER
                 : FinalStatus.FAILED_VALIDATION;
+    }
+
+    private static boolean isProviderFailureCode(String code) {
+        return code.startsWith("TUSHARE_HTTP_")
+                || code.startsWith("TUSHARE_API_")
+                || code.startsWith("TUSHARE_PERMISSION_")
+                || code.startsWith("TUSHARE_CREDENTIAL_")
+                || code.startsWith("TUSHARE_ACCOUNT_")
+                || code.startsWith("TUSHARE_RESPONSE_JSON_")
+                || code.equals("TUSHARE_NETWORK_ERROR")
+                || code.equals("TUSHARE_TIMEOUT");
     }
 
     private static boolean isInterrupted(Throwable error) {
@@ -616,6 +630,16 @@ public final class TushareReducedResearchManualRunner {
             appendedCount = batch.appendedCount();
             idempotentCount = batch.idempotentCount();
             qfqPassed = symbol.qfqBars().size() == 1;
+        }
+
+        void recordProviderFailure(int calls, int retries) {
+            if (calls < 1 || calls > 3 || retries < 0 || retries >= calls) {
+                throw new IllegalArgumentException(
+                        "TUSHARE_REDUCED_RESEARCH_PROVIDER_COUNTS_INVALID");
+            }
+            providerPhase = true;
+            providerCalls = calls;
+            retryCount = retries;
         }
 
         Map<String, Integer> endpointCalls() {

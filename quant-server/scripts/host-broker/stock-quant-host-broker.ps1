@@ -11,6 +11,8 @@ $identity = [Security.Principal.WindowsIdentity]::GetCurrent().Name
 $integrationBranch = 'feature/1.4.0-agent-team'
 $preflightClass = 'com.stockquant.server.agent.marketfacts.' +
     'TushareReducedResearchDay001Preflight'
+$credentialProbeClass = 'com.stockquant.server.agent.marketfacts.' +
+    'TushareCredentialHealthProbe'
 $credentialStatusScript = Join-Path $paths.RepositoryRoot `
     'quant-server\scripts\set-stock-quant-secrets.ps1'
 $hostRunnerScript = Join-Path $paths.RepositoryRoot `
@@ -45,6 +47,44 @@ function Get-SafeMarker {
     $value = ([string]$matches[0]).Substring($prefix.Length)
     if ($value -notmatch '^[A-Z][A-Z0-9_]{2,127}$') { return $Fallback }
     return $value
+}
+
+function Get-SafeIntegerMarker {
+    param(
+        [object[]] $Lines,
+        [string] $Name
+    )
+    $prefix = "$Name="
+    $matches = @($Lines | Where-Object {
+        $null -ne $_ -and ([string]$_).StartsWith($prefix)
+    })
+    if ($matches.Count -ne 1) {
+        throw 'STOCK_QUANT_HOST_BROKER_DIAGNOSTIC_OUTPUT_INVALID'
+    }
+    $value = ([string]$matches[0]).Substring($prefix.Length)
+    if ($value -notmatch '^[0-9]{1,4}$') {
+        throw 'STOCK_QUANT_HOST_BROKER_DIAGNOSTIC_OUTPUT_INVALID'
+    }
+    return [int]$value
+}
+
+function Get-SafeBooleanMarker {
+    param(
+        [object[]] $Lines,
+        [string] $Name
+    )
+    $prefix = "$Name="
+    $matches = @($Lines | Where-Object {
+        $null -ne $_ -and ([string]$_).StartsWith($prefix)
+    })
+    if ($matches.Count -ne 1) {
+        throw 'STOCK_QUANT_HOST_BROKER_DIAGNOSTIC_OUTPUT_INVALID'
+    }
+    $value = ([string]$matches[0]).Substring($prefix.Length)
+    if ($value -cnotin @('true', 'false')) {
+        throw 'STOCK_QUANT_HOST_BROKER_DIAGNOSTIC_OUTPUT_INVALID'
+    }
+    return $value -ceq 'true'
 }
 
 function Assert-GitBinding {
@@ -139,6 +179,45 @@ function Invoke-CredentialStatus {
     }
     return [ordered]@{
         credentialsReady = $true
+        providerCallCount = 0
+        retryCount = 0
+    }
+}
+
+function Invoke-TushareCredentialDiagnostic {
+    param(
+        [Parameter(Mandatory = $true)]
+        [object] $BrokerRequest
+    )
+    $presence = @(& $credentialStatusScript -Status 2>&1)
+    if ($LASTEXITCODE -ne 0 -or
+        $presence -notcontains 'StockQuant/TushareToken=PRESENT') {
+        throw 'STOCK_QUANT_HOST_BROKER_CREDENTIALS_MISSING'
+    }
+    $output = @(& java "-Dloader.main=$credentialProbeClass" `
+        -cp $BrokerRequest.JarPath `
+        'org.springframework.boot.loader.launch.PropertiesLauncher' 2>&1 |
+        ForEach-Object { [string]$_ })
+    if ($LASTEXITCODE -ne 0 -or
+        $output -notcontains 'STOCK_QUANT_SECRET_READ=SUCCESS' -or
+        $output -notcontains 'STOCK_QUANT_PROVIDER_CALLS=0') {
+        $reason = Get-SafeMarker -Lines $output `
+            -Name 'STOCK_QUANT_SECRET_PROBE_REASON' `
+            -Fallback 'STOCK_QUANT_HOST_BROKER_CREDENTIAL_DIAGNOSTIC_FAILED'
+        throw $reason
+    }
+    $length = Get-SafeIntegerMarker -Lines $output `
+        -Name 'STOCK_QUANT_SECRET_LENGTH'
+    $format = Get-SafeMarker -Lines $output `
+        -Name 'STOCK_QUANT_SECRET_FORMAT' `
+        -Fallback 'INVALID_DIAGNOSTIC_OUTPUT'
+    $stable = Get-SafeBooleanMarker -Lines $output `
+        -Name 'STOCK_QUANT_SECRET_FINGERPRINT_STABLE'
+    return [ordered]@{
+        readStatus = 'SUCCESS'
+        valueLength = $length
+        valueFormat = $format
+        fingerprintStable = $stable
         providerCallCount = 0
         retryCount = 0
     }
@@ -430,6 +509,10 @@ function Invoke-ClaimedRequest {
         $script:stage = $operation
         $summary = switch ($operation) {
             'CHECK_CREDENTIAL_STATUS' { Invoke-CredentialStatus; break }
+            'DIAGNOSE_TUSHARE_CREDENTIAL' {
+                Invoke-TushareCredentialDiagnostic -BrokerRequest $request
+                break
+            }
             'RUN_FAKE_E2E' { Invoke-FakeE2e -BrokerRequest $request; break }
             'RUN_DAY001' { Invoke-Day001 -BrokerRequest $request; break }
             'READ_SANITIZED_RESULT' {

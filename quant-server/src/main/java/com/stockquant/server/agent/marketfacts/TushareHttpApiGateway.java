@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.stockquant.server.agent.marketfacts.TushareApiGateway.ErrorKind;
+import com.stockquant.server.agent.marketfacts.TushareApiGateway.GatewayDiagnostic;
 import com.stockquant.server.agent.marketfacts.TushareApiGateway.GatewayException;
 import com.stockquant.server.agent.marketfacts.TushareApiGateway.QueryMode;
 import com.stockquant.server.agent.marketfacts.TushareApiGateway.QueryResult;
@@ -32,6 +33,7 @@ public final class TushareHttpApiGateway
 
     private static final Set<String> ALLOWED_ENDPOINTS = Set.of(
             "stock_basic", "trade_cal", "daily", "adj_factor", "dividend");
+    private static final String JSON_CONTENT_TYPE = "application/json";
 
     private final ObjectMapper objectMapper;
     private final TushareMarketFactProperties properties;
@@ -122,7 +124,7 @@ public final class TushareHttpApiGateway
             }
             calls++;
             try {
-                JsonNode response = execute(
+                ResponseEnvelope response = execute(
                         endpoint, parameters, fields, timeout);
                 return new QueryResult(
                         parse(response), calls, retries);
@@ -137,7 +139,7 @@ public final class TushareHttpApiGateway
         }
     }
 
-    private JsonNode execute(
+    private ResponseEnvelope execute(
             String endpoint,
             ObjectNode parameters,
             List<String> fields,
@@ -187,21 +189,34 @@ public final class TushareHttpApiGateway
                     "Tushare network request failed",
                     error);
         }
+        List<String> parameterNames = new ArrayList<>();
+        parameters.fieldNames().forEachRemaining(parameterNames::add);
+        parameterNames.sort(String::compareTo);
+        GatewayDiagnostic transport = diagnostic(
+                exchange, endpoint, parameterNames, null,
+                "NOT_PARSED", false);
         if (exchange.statusCode() == 429) {
             throw failure(
                     ErrorKind.RATE_LIMITED,
                     "TUSHARE_HTTP_429",
                     "Tushare rate limit reached",
-                    null);
+                    null,
+                    transport);
         }
         if (exchange.statusCode() < 200
                 || exchange.statusCode() >= 300) {
+            String safeCode = switch (exchange.statusCode()) {
+                case 401 -> "TUSHARE_HTTP_UNAUTHORIZED_401";
+                case 403 -> "TUSHARE_HTTP_FORBIDDEN_403";
+                default -> "TUSHARE_HTTP_STATUS_" + exchange.statusCode();
+            };
             throw failure(
                     ErrorKind.NETWORK_ERROR,
-                    "TUSHARE_HTTP_ERROR",
+                    safeCode,
                     "Tushare HTTP request failed with status "
                             + exchange.statusCode(),
-                    null);
+                    null,
+                    transport);
         }
         JsonNode response;
         try {
@@ -211,19 +226,24 @@ public final class TushareHttpApiGateway
                     ErrorKind.STRUCTURE_CHANGED,
                     "TUSHARE_RESPONSE_JSON_INVALID",
                     "Tushare response JSON is invalid",
-                    error);
+                    error,
+                    transport);
         }
         if (response == null) {
             throw failure(
                     ErrorKind.STRUCTURE_CHANGED,
                     "TUSHARE_NULL_RESPONSE",
                     "Tushare returned an empty response envelope",
-                    null);
+                    null,
+                    transport);
         }
-        return response;
+        return new ResponseEnvelope(response, diagnostic(
+                exchange, endpoint, parameterNames, null,
+                "NOT_APPLICABLE", true));
     }
 
-    private Table parse(JsonNode response) {
+    private Table parse(ResponseEnvelope envelope) {
+        JsonNode response = envelope.body();
         JsonNode codeNode = response.get("code");
         if (codeNode == null || !codeNode.canConvertToInt()) {
             throw failure(
@@ -236,25 +256,47 @@ public final class TushareHttpApiGateway
         if (code != 0) {
             String message = safeProviderMessage(
                     response.path("msg").asText("provider error"));
-            if (code == 429 || isRateLimitMessage(message)) {
+            String category = providerMessageCategory(message);
+            GatewayDiagnostic diagnostic = withProvider(
+                    envelope.diagnostic(), code, category);
+            if (code == 429 || "RATE_LIMITED".equals(category)) {
                 throw failure(
                         ErrorKind.RATE_LIMITED,
                         "TUSHARE_API_RATE_LIMITED",
                         message,
-                        null);
+                        null,
+                        diagnostic);
             }
             if (code == 2002) {
                 throw failure(
                         ErrorKind.PERMISSION_DENIED,
                         "TUSHARE_PERMISSION_DENIED",
                         message,
-                        null);
+                        null,
+                        withProvider(envelope.diagnostic(), code,
+                                "PERMISSION_DENIED"));
+            }
+            if (code == 40101) {
+                String safeCode = switch (category) {
+                    case "INVALID_CREDENTIAL" ->
+                            "TUSHARE_CREDENTIAL_REJECTED_40101";
+                    case "PERMISSION_DENIED" ->
+                            "TUSHARE_PERMISSION_DENIED_40101";
+                    case "ACCOUNT_RESTRICTED" ->
+                            "TUSHARE_ACCOUNT_RESTRICTED_40101";
+                    default -> "TUSHARE_API_ERROR_40101";
+                };
+                ErrorKind kind = "PERMISSION_DENIED".equals(category)
+                        || "ACCOUNT_RESTRICTED".equals(category)
+                        ? ErrorKind.PERMISSION_DENIED : ErrorKind.API_ERROR;
+                throw failure(kind, safeCode, message, null, diagnostic);
             }
             throw failure(
                     ErrorKind.API_ERROR,
                     "TUSHARE_API_ERROR_" + code,
                     message,
-                    null);
+                    null,
+                    diagnostic);
         }
 
         JsonNode data = response.get("data");
@@ -335,12 +377,72 @@ public final class TushareHttpApiGateway
         return safe.length() > 256 ? safe.substring(0, 256) : safe;
     }
 
-    private static boolean isRateLimitMessage(String message) {
+    private static String providerMessageCategory(String message) {
         String normalized = message == null
                 ? "" : message.toLowerCase(java.util.Locale.ROOT);
-        return normalized.contains("每分钟最多访问")
+        if (normalized.contains("rate limit")
                 || normalized.contains("频次限制")
-                || normalized.contains("rate limit");
+                || normalized.contains("每分钟最多访问")) {
+            return "RATE_LIMITED";
+        }
+        if (normalized.contains("invalid token")
+                || normalized.contains("token invalid")
+                || normalized.contains("token验证失败")
+                || normalized.contains("token认证失败")
+                || normalized.contains("token无效")
+                || normalized.contains("token失效")
+                || normalized.contains("token错误")) {
+            return "INVALID_CREDENTIAL";
+        }
+        if (normalized.contains("permission denied")
+                || normalized.contains("access denied")
+                || normalized.contains("没有访问")
+                || normalized.contains("无权限")
+                || normalized.contains("权限不足")
+                || normalized.contains("积分不足")) {
+            return "PERMISSION_DENIED";
+        }
+        if (normalized.contains("account disabled")
+                || normalized.contains("account suspended")
+                || normalized.contains("账号禁用")
+                || normalized.contains("账户禁用")
+                || normalized.contains("账号冻结")
+                || normalized.contains("账户冻结")) {
+            return "ACCOUNT_RESTRICTED";
+        }
+        return "OTHER_PROVIDER_ERROR";
+    }
+
+    private GatewayDiagnostic diagnostic(
+            HttpExchangeResult exchange,
+            String endpoint,
+            List<String> parameterNames,
+            Integer providerCode,
+            String category,
+            boolean jsonValid
+    ) {
+        String path = baseUri.getRawPath();
+        if (path == null || path.isBlank()) {
+            path = "/";
+        }
+        return new GatewayDiagnostic(
+                exchange.statusCode(), providerCode, category, endpoint,
+                parameterNames, baseUri.getHost(), path, JSON_CONTENT_TYPE,
+                exchange.contentType(), jsonValid);
+    }
+
+    private static GatewayDiagnostic withProvider(
+            GatewayDiagnostic diagnostic,
+            int providerCode,
+            String category
+    ) {
+        return new GatewayDiagnostic(
+                diagnostic.httpStatus(), providerCode, category,
+                diagnostic.endpoint(), diagnostic.requestParameterNames(),
+                diagnostic.providerHost(), diagnostic.providerPath(),
+                diagnostic.requestContentType(),
+                diagnostic.responseContentType(),
+                diagnostic.responseJsonValid());
     }
 
     private static void validateRequest(
@@ -383,7 +485,8 @@ public final class TushareHttpApiGateway
                 error.getMessage(),
                 calls,
                 retries,
-                error.getCause());
+                error.getCause(),
+                error.diagnostic());
     }
 
     private static GatewayException failure(
@@ -396,13 +499,41 @@ public final class TushareHttpApiGateway
                 kind, code, message, 0, 0, cause);
     }
 
-    record HttpExchangeResult(int statusCode, String body) {
+    private static GatewayException failure(
+            ErrorKind kind,
+            String code,
+            String message,
+            Throwable cause,
+            GatewayDiagnostic diagnostic
+    ) {
+        return new GatewayException(
+                kind, code, message, 0, 0, cause, diagnostic);
+    }
+
+    record HttpExchangeResult(
+            int statusCode,
+            String contentType,
+            String body
+    ) {
+        HttpExchangeResult(int statusCode, String body) {
+            this(statusCode, JSON_CONTENT_TYPE, body);
+        }
+
         HttpExchangeResult {
-            if (statusCode < 100 || statusCode > 599 || body == null) {
+            if (statusCode < 100 || statusCode > 599
+                    || contentType == null || contentType.length() > 128
+                    || contentType.matches(".*[\\x00-\\x1F\\x7F].*")
+                    || body == null) {
                 throw new IllegalArgumentException(
                         "invalid Tushare HTTP exchange result");
             }
         }
+    }
+
+    private record ResponseEnvelope(
+            JsonNode body,
+            GatewayDiagnostic diagnostic
+    ) {
     }
 
     @FunctionalInterface
@@ -434,7 +565,10 @@ public final class TushareHttpApiGateway
                     HttpResponse.BodyHandlers.ofString(
                             StandardCharsets.UTF_8));
             return new HttpExchangeResult(
-                    response.statusCode(), response.body());
+                    response.statusCode(),
+                    response.headers().firstValue("Content-Type")
+                            .orElse("MISSING"),
+                    response.body());
         }
     }
 

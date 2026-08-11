@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Locale;
 
 /** Narrow transport seam used by the provider-neutral Tushare adapter. */
 public interface TushareApiGateway {
@@ -30,6 +31,49 @@ public interface TushareApiGateway {
         NETWORK_ERROR,
         API_ERROR,
         STRUCTURE_CHANGED
+    }
+
+    /** Strictly non-secret transport evidence retained with a gateway error. */
+    record GatewayDiagnostic(
+            int httpStatus,
+            Integer providerCode,
+            String providerMessageCategory,
+            String endpoint,
+            List<String> requestParameterNames,
+            String providerHost,
+            String providerPath,
+            String requestContentType,
+            String responseContentType,
+            boolean responseJsonValid
+    ) {
+        public GatewayDiagnostic {
+            if (httpStatus < 100 || httpStatus > 599
+                    || providerCode != null
+                    && (providerCode < -999_999 || providerCode > 999_999)
+                    || providerMessageCategory == null
+                    || !providerMessageCategory.matches("[A-Z][A-Z0-9_]{2,63}")
+                    || endpoint == null
+                    || !endpoint.matches("[a-z][a-z0-9_]{0,63}")
+                    || providerHost == null
+                    || !providerHost.toLowerCase(Locale.ROOT)
+                    .equals("api.tushare.pro")
+                    || providerPath == null || providerPath.isBlank()
+                    || !"application/json".equals(requestContentType)
+                    || responseContentType == null
+                    || responseContentType.length() > 128
+                    || responseContentType.matches(".*[\\x00-\\x1F\\x7F].*")) {
+                throw new IllegalArgumentException(
+                        "invalid Tushare gateway diagnostic");
+            }
+            requestParameterNames = List.copyOf(requestParameterNames);
+            if (requestParameterNames.isEmpty()
+                    || requestParameterNames.stream().anyMatch(name ->
+                    name == null
+                            || !name.matches("[a-z][a-z0-9_]{0,63}"))) {
+                throw new IllegalArgumentException(
+                        "invalid Tushare gateway diagnostic");
+            }
+        }
     }
 
     record Table(
@@ -65,6 +109,7 @@ public interface TushareApiGateway {
         private final String safeCode;
         private final int providerCallCount;
         private final int rateLimitRetryCount;
+        private final GatewayDiagnostic diagnostic;
 
         public GatewayException(
                 ErrorKind kind,
@@ -74,11 +119,25 @@ public interface TushareApiGateway {
                 int rateLimitRetryCount,
                 Throwable cause
         ) {
+            this(kind, safeCode, safeMessage, providerCallCount,
+                    rateLimitRetryCount, cause, null);
+        }
+
+        public GatewayException(
+                ErrorKind kind,
+                String safeCode,
+                String safeMessage,
+                int providerCallCount,
+                int rateLimitRetryCount,
+                Throwable cause,
+                GatewayDiagnostic diagnostic
+        ) {
             super(safeMessage, cause);
             this.kind = kind;
             this.safeCode = safeCode;
             this.providerCallCount = providerCallCount;
             this.rateLimitRetryCount = rateLimitRetryCount;
+            this.diagnostic = diagnostic;
         }
 
         public ErrorKind kind() {
@@ -95,6 +154,10 @@ public interface TushareApiGateway {
 
         public int rateLimitRetryCount() {
             return rateLimitRetryCount;
+        }
+
+        public GatewayDiagnostic diagnostic() {
+            return diagnostic;
         }
     }
 }

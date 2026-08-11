@@ -18,6 +18,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -190,6 +191,87 @@ class TushareHttpApiGatewayTest {
     }
 
     @Test
+    void httpAuthenticationStatusesRemainDistinctFromProviderBodyCodes() {
+        for (var expected : List.of(
+                List.of("401", "TUSHARE_HTTP_UNAUTHORIZED_401"),
+                List.of("403", "TUSHARE_HTTP_FORBIDDEN_403"))) {
+            Fixture fixture = fixture(properties(), 180, 90_000);
+            fixture.exchange.respond(
+                    Integer.parseInt(expected.get(0)),
+                    "text/plain; charset=utf-8",
+                    "sanitized transport rejection");
+
+            GatewayException error = assertThrows(
+                    GatewayException.class,
+                    () -> fixture.gateway.query(
+                            "daily",
+                            datedSecurityParameters(),
+                            List.of("ts_code"),
+                            Duration.ofSeconds(5),
+                            QueryMode.CONTROLLED_NO_RETRY,
+                            session(0, false)));
+
+            assertEquals(expected.get(1), error.safeCode());
+            assertEquals(ErrorKind.NETWORK_ERROR, error.kind());
+            assertNotNull(error.diagnostic());
+            assertEquals(Integer.parseInt(expected.get(0)),
+                    error.diagnostic().httpStatus());
+            assertEquals(null, error.diagnostic().providerCode());
+            assertEquals("NOT_PARSED",
+                    error.diagnostic().providerMessageCategory());
+            assertEquals("daily", error.diagnostic().endpoint());
+            assertEquals(List.of("end_date", "start_date", "ts_code"),
+                    error.diagnostic().requestParameterNames());
+            assertEquals("api.tushare.pro",
+                    error.diagnostic().providerHost());
+            assertEquals("/", error.diagnostic().providerPath());
+            assertEquals("application/json",
+                    error.diagnostic().requestContentType());
+            assertEquals("text/plain; charset=utf-8",
+                    error.diagnostic().responseContentType());
+            assertFalse(error.diagnostic().responseJsonValid());
+        }
+    }
+
+    @Test
+    void code40101UsesSanitizedMessageCategoryWithoutBecomingHttp401() {
+        for (var expected : List.of(
+                List.of("invalid token", "INVALID_CREDENTIAL",
+                        "TUSHARE_CREDENTIAL_REJECTED_40101", "API_ERROR"),
+                List.of("permission denied", "PERMISSION_DENIED",
+                        "TUSHARE_PERMISSION_DENIED_40101",
+                        "PERMISSION_DENIED"),
+                List.of("account suspended", "ACCOUNT_RESTRICTED",
+                        "TUSHARE_ACCOUNT_RESTRICTED_40101",
+                        "PERMISSION_DENIED"),
+                List.of("provider rejected request", "OTHER_PROVIDER_ERROR",
+                        "TUSHARE_API_ERROR_40101", "API_ERROR"))) {
+            Fixture fixture = fixture(properties(), 180, 90_000);
+            fixture.exchange.respond(200, """
+                    {"code":40101,"msg":"%s","data":null}
+                    """.formatted(expected.get(0)));
+
+            GatewayException error = assertThrows(
+                    GatewayException.class,
+                    () -> fixture.gateway.query(
+                            "daily",
+                            datedSecurityParameters(),
+                            List.of("ts_code"),
+                            Duration.ofSeconds(5),
+                            QueryMode.CONTROLLED_NO_RETRY,
+                            session(0, false)));
+
+            assertEquals(expected.get(2), error.safeCode());
+            assertEquals(ErrorKind.valueOf(expected.get(3)), error.kind());
+            assertEquals(200, error.diagnostic().httpStatus());
+            assertEquals(40101, error.diagnostic().providerCode());
+            assertEquals(expected.get(1),
+                    error.diagnostic().providerMessageCategory());
+            assertTrue(error.diagnostic().responseJsonValid());
+        }
+    }
+
+    @Test
     void providerRateMessagesOverrideCode2002PermissionDefault() {
         for (String message : List.of(
                 "每分钟最多访问200次",
@@ -239,7 +321,7 @@ class TushareHttpApiGatewayTest {
     @Test
     void invalidJsonIsStructureChangedRatherThanNetworkError() {
         Fixture fixture = fixture(properties(), 180, 90_000);
-        fixture.exchange.respond(200, "{not-json");
+        fixture.exchange.respond(200, "text/html", "{not-json");
         GatewayException error = assertThrows(
                 GatewayException.class,
                 () -> fixture.gateway.query(
@@ -252,6 +334,10 @@ class TushareHttpApiGatewayTest {
         assertEquals(ErrorKind.STRUCTURE_CHANGED, error.kind());
         assertEquals("TUSHARE_RESPONSE_JSON_INVALID",
                 error.safeCode());
+        assertEquals(200, error.diagnostic().httpStatus());
+        assertEquals("text/html",
+                error.diagnostic().responseContentType());
+        assertFalse(error.diagnostic().responseJsonValid());
     }
 
     @Test
@@ -403,6 +489,12 @@ class TushareHttpApiGatewayTest {
             responses.addLast(
                     new TushareHttpApiGateway.HttpExchangeResult(
                             status, body));
+        }
+
+        private void respond(int status, String contentType, String body) {
+            responses.addLast(
+                    new TushareHttpApiGateway.HttpExchangeResult(
+                            status, contentType, body));
         }
 
         @Override

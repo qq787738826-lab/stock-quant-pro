@@ -3,14 +3,14 @@ param(
     [Parameter(Mandatory = $true)]
     [ValidateSet(
         'CHECK_CREDENTIAL_STATUS',
+        'DIAGNOSE_TUSHARE_CREDENTIAL',
         'RUN_FAKE_E2E',
         'RUN_DAY001',
         'READ_SANITIZED_RESULT'
     )]
     [string] $Operation,
 
-    [Parameter(Mandatory = $true)]
-    [string] $AuthorizationFile,
+    [string] $AuthorizationFile = 'NONE',
 
     [string] $ArtifactPath,
 
@@ -36,7 +36,9 @@ if ([string]::IsNullOrWhiteSpace($ArtifactPath)) {
     $ArtifactPath = Join-Path $paths.RepositoryRoot `
         'quant-server\target\quant-server-1.3.1-reduced-research-day001-runner.jar'
 }
-if ($Operation -eq 'READ_SANITIZED_RESULT') {
+if ($Operation -in @(
+        'READ_SANITIZED_RESULT',
+        'DIAGNOSE_TUSHARE_CREDENTIAL')) {
     if ($SourceRequestId -notmatch
             '^SQHB_[0-9]{8}T[0-9]{6}Z_[A-F0-9]{12}$') {
         throw 'STOCK_QUANT_HOST_BROKER_SOURCE_REQUEST_INVALID'
@@ -81,10 +83,17 @@ try {
         -Root $paths.TargetRoot `
         -FailureCode 'STOCK_QUANT_HOST_BROKER_JAR_PATH_INVALID' `
         -MustExist -PathType Leaf
-    $authorization = Assert-StockQuantPathInside -Path $AuthorizationFile `
-        -Root $paths.TargetRoot `
-        -FailureCode 'STOCK_QUANT_HOST_BROKER_AUTHORIZATION_PATH_INVALID' `
-        -MustExist -PathType Leaf
+    if ($Operation -eq 'DIAGNOSE_TUSHARE_CREDENTIAL') {
+        if ($AuthorizationFile -ne 'NONE') {
+            throw 'STOCK_QUANT_HOST_BROKER_AUTHORIZATION_MODE_INVALID'
+        }
+        $authorization = 'NONE'
+    } else {
+        $authorization = Assert-StockQuantPathInside -Path $AuthorizationFile `
+            -Root $paths.TargetRoot `
+            -FailureCode 'STOCK_QUANT_HOST_BROKER_AUTHORIZATION_PATH_INVALID' `
+            -MustExist -PathType Leaf
+    }
     $artifactHash = ((Get-FileHash -LiteralPath $artifact `
         -Algorithm SHA256).Hash).ToLowerInvariant()
     $requestId = New-StockQuantHostBrokerRequestId

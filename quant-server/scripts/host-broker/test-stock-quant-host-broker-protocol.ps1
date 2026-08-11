@@ -168,6 +168,58 @@ try {
     }
     $passed++
 
+    $diagnosticSourceId = New-StockQuantHostBrokerRequestId
+    $createdRequestIds.Add($diagnosticSourceId)
+    Write-StockQuantHostBrokerResult -Result ([ordered]@{
+        requestId = $diagnosticSourceId
+        operation = 'RUN_DAY001'
+        status = 'FAILED'
+        stage = 'DAY001_RUNNER'
+        reason = 'STOCK_QUANT_LOCAL_AUTOMATION_FAILED'
+        gitCommit = ('a' * 40)
+        providerCallCount = 1
+        retryCount = 0
+        noRetry = $true
+        startedAt = [DateTimeOffset]::UtcNow.AddSeconds(-2).ToString('o')
+        completedAt = [DateTimeOffset]::UtcNow.AddSeconds(-1).ToString('o')
+        summary = $null
+    }) | Out-Null
+    $diagnosticDay001Path = Join-Path $paths.Results `
+        "$diagnosticSourceId.day001.json"
+    $diagnosticDay001 = [ordered]@{
+        status = 'FAILED_VALIDATION'
+        safeFailureCode = 'TUSHARE_API_ERROR_40101'
+        providerCallCount = 1
+        retryCount = 0
+    } | ConvertTo-Json
+    [IO.File]::WriteAllText(
+        $diagnosticDay001Path, $diagnosticDay001 + "`n",
+        [Text.UTF8Encoding]::new($false))
+
+    $diagnostic = New-Values -Operation 'DIAGNOSE_TUSHARE_CREDENTIAL'
+    $diagnostic['authorization.file'] = 'NONE'
+    $diagnostic['source.request.id'] = $diagnosticSourceId
+    $diagnosticPath = Write-StockQuantHostBrokerRequest -Values $diagnostic
+    $createdFiles.Add($diagnosticPath)
+    $parsedDiagnostic = Read-StockQuantHostBrokerRequest `
+        -Path $diagnosticPath
+    if ($parsedDiagnostic.Operation -ne 'DIAGNOSE_TUSHARE_CREDENTIAL' -or
+        $null -ne $parsedDiagnostic.AuthorizationFile -or
+        $parsedDiagnostic.AuthorizationStatus -ne
+            'NOT_REQUIRED_ZERO_PROVIDER_DIAGNOSTIC') {
+        throw 'DIAGNOSTIC_REQUEST_ROUND_TRIP_FAILED'
+    }
+    $passed++
+
+    $diagnosticWithAuthorization = New-Values `
+        -Operation 'DIAGNOSE_TUSHARE_CREDENTIAL'
+    $diagnosticWithAuthorization['source.request.id'] = $diagnosticSourceId
+    $diagnosticWithAuthorizationPath = Write-RawValues `
+        -Values $diagnosticWithAuthorization
+    Assert-ThrowsCode {
+        Read-StockQuantHostBrokerRequest $diagnosticWithAuthorizationPath
+    } 'STOCK_QUANT_HOST_BROKER_AUTHORIZATION_MODE_INVALID'
+
     Write-TestAuthorization -ArtifactHash $artifactHash `
         -OmitKey 'redirects'
     $missingAuthorizationPath = Write-RawValues -Values (New-Values)
@@ -328,7 +380,7 @@ try {
     } 'HOST_BROKER_NOT_RUNNING'
 
     Write-Output "STOCK_QUANT_HOST_BROKER_PROTOCOL_TESTS=$passed/0/0/0"
-    if ($passed -ne 19) { throw 'BROKER_PROTOCOL_TEST_COUNT_INVALID' }
+    if ($passed -ne 21) { throw 'BROKER_PROTOCOL_TEST_COUNT_INVALID' }
 } finally {
     if ($heartbeatCreated -and
         (Test-Path -LiteralPath $paths.Heartbeat -PathType Leaf)) {

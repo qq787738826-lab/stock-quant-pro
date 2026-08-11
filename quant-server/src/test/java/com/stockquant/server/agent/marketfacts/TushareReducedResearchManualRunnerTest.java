@@ -109,6 +109,25 @@ class TushareReducedResearchManualRunnerTest {
     }
 
     @Test
+    void providerBodyCodeFailureIsPersistedAsFailedProvider() throws Exception {
+        var environment = new FakeEnvironment(
+                authorization(Day001Mode.IDEMPOTENCY_VERIFICATION),
+                ExecutionBehavior.PROVIDER_FAILURE);
+        Path result = temporary.resolve("provider-failure.json");
+
+        int exit = TushareReducedResearchManualRunner.run(
+                arguments(result), environment);
+
+        assertEquals(20, exit);
+        JsonNode json = new ObjectMapper().readTree(result.toFile());
+        assertEquals("FAILED_PROVIDER", json.path("status").asText());
+        assertEquals(1, json.path("providerCallCount").asInt());
+        assertEquals(0, json.path("retryCount").asInt());
+        assertEquals("TUSHARE_API_ERROR_40101",
+                json.path("safeFailureCode").asText());
+    }
+
+    @Test
     void secretOutputFailsTheAuditWithoutProducingAcceptancePass()
             throws Exception {
         var environment = new FakeEnvironment(
@@ -251,6 +270,7 @@ class TushareReducedResearchManualRunnerTest {
     private enum ExecutionBehavior {
         SUCCESS,
         DATABASE_FAILURE,
+        PROVIDER_FAILURE,
         LEAK_SECRET
     }
 
@@ -345,6 +365,11 @@ class TushareReducedResearchManualRunnerTest {
             if (behavior == ExecutionBehavior.DATABASE_FAILURE) {
                 throw new IllegalStateException(
                         "TUSHARE_REDUCED_RESEARCH_DATABASE_MISMATCH");
+            }
+            if (behavior == ExecutionBehavior.PROVIDER_FAILURE) {
+                progress.recordProviderFailure(1, 0);
+                throw new TushareDedicatedResearchBatchService
+                        .RuntimeBlockedException("TUSHARE_API_ERROR_40101");
             }
             if (behavior == ExecutionBehavior.LEAK_SECRET) {
                 System.err.println(new String(token));
