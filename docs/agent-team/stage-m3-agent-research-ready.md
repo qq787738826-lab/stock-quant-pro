@@ -4,10 +4,11 @@
 
 - 长期任务分支：`codex/1.4.0-m3-agent-research-ready`
 - 冻结集成基线：`b041fbe807b817c4070781db33fbfca2d4f8bc4e`
-- 当前状态：`BAILIAN_OFFLINE_ADAPTATION_COMPLETE`
-- 外部门：`BAILIAN_REAL_LLM_SMOKE=PENDING_LOCAL_CREDENTIAL_AND_BUDGET`
+- 当前状态：`BAILIAN_REAL_LLM_SMOKE_BLOCKED_EXTERNAL_BINDING`
+- 外部门：`BAILIAN_REAL_LLM_SMOKE=BLOCKED_EXTERNAL_CREDENTIAL_ENDPOINT_BINDING`
 - 在真实 LLM smoke 通过前，不声明 `M3_AGENT_RESEARCH_READY=PASS`，不执行最终合并。
-- M3 新增 Tushare 调用 0；累计真实调用保持 55；永久研究库写入 0。
+- M3 新增 Tushare 调用 0；累计真实调用保持 55；百炼真实 HTTP 请求 2、完成模型调用 0；
+  永久研究库写入 0。
 
 ## 交付契约
 
@@ -95,6 +96,27 @@
   train/test、walk-forward、过拟合识别由 deterministic fixture 覆盖。
 - M1 仍是 SYSTEM_KNOWLEDGE 与 formula-only QFQ，`PROVIDER_PIT_VERIFIED=false`；完整 F1 十项
   技术证据缺口不变。
-- 仍需用户仅在本机安全 Console 完成一次百炼 API Key 录入并批准最低 smoke 预算；随后由 Broker
-  完成零网络可读性验证和一次受 CNY 5.00 硬限制的真实 LLM smoke。密钥不得发送到聊天。
+- 百炼 API Key 已通过 Broker 零网络可读性验证，但真实 smoke 尚未通过：当前固定北京通用端点
+  收到 HTTP 401、合法 JSON、`INVALID_API_KEY`，属于外部 Key/地域/套餐专属 Base URL 绑定问题。
+  密钥不得发送到聊天；必须先在百炼控制台确认 Key 与 Base URL/地域/业务空间的官方绑定。
 - M3 不启动 M4、Shadow、业务 scheduler、真实订单、实盘或自动交易。
+
+## 真实百炼 smoke 阻断证据（2026-08-11）
+
+- 用户批准模型 `qwen3.7-plus` 与阶段总成本上限 CNY 5.00。Broker 零网络 Credential request
+  `SQHB_20260811T110240Z_6718DC513DAC` 成功，网络调用 0、输出审计通过。
+- 脱敏诊断 request `SQHB_20260811T110306Z_69BAAA58B4FC` 只发出 1 次 HTTP 请求，retry 0；
+  HTTP status 401，响应 Content-Type 为 JSON，JSON 解析成功，body error code 规范化为
+  `INVALID_API_KEY`，分类为 `AUTHENTICATION / INVALID_OR_UNBOUND_API_KEY`。模型完成调用 0，
+  token usage 0，保守占账 CNY 0.125；输出审计 clean，数据库写入 0，Tushare 调用 0。
+- 前一版缺少失败遥测的首个请求按 CNY 0.50 保守占账；一次 Runner 前账本兼容失败可证明模型调用 0。
+  当前阶段保守累计占账 CNY 0.625，未超过 CNY 5.00，但在外部绑定确认前停止新增真实调用。
+- 阿里云官方错误码文档明确：`InvalidApiKey` 包括 Key 填写/删除、`sk-sp-` 套餐专属 Key 与通用
+  Base URL 混用、以及 Key 与 Base URL 地域不一致；官方模型卡同时为 `qwen3.7-plus` 列出带
+  `WorkspaceId` 的区域化 MaaS Base URL。当前证据不能在不读取密钥内容的前提下替用户选择绑定。
+- 代码修复提交 `0bd0f030e3b8a8b0d24273a63d54ee86fe213906` 增加 HTTP status、body code、
+  Content-Type/JSON、调用数与成本的脱敏失败证据；`6214d739ccd6823b81a3b46bdb6e187512a54caf`
+  修复旧结果在 PowerShell StrictMode 下的预算账本兼容。打包 Fake M1→M2→M3 + 临时
+  PostgreSQL E2E 再次 PASS，临时残留 0。
+- 当前结论：`BAILIAN_REAL_LLM_SMOKE=BLOCKED_EXTERNAL_CREDENTIAL_ENDPOINT_BINDING`，不得声明
+  `M3_AGENT_RESEARCH_READY=PASS`，不得执行最终集成收口。
