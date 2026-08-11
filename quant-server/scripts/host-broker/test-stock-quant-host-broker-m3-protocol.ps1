@@ -12,6 +12,7 @@ $artifact = Join-Path $root 'm3-protocol-test.jar'
 $proof = "$artifact.f1f-b2-proof.properties"
 $processing = $null
 $credentialResultPath = $null
+$telemetryResultPath = $null
 $tests = 0
 
 function Write-Lines([string] $Path, [System.Collections.IDictionary] $Values) {
@@ -180,6 +181,61 @@ try {
     }
     $tests++
 
+    $telemetry = @(
+        ConvertTo-StockQuantM3CallTelemetrySummary -Telemetry @(
+            [pscustomobject]@{
+                callNumber = 1
+                status = 'RESPONSE_REJECTED'
+                inputTokenCount = 100
+                outputTokenCount = 40
+                reasoningTokenCount = 0
+                totalTokenCount = 140
+                estimatedCost = '0.006'
+                accountedCost = '0.12'
+                providerReportedActualCostCny = $null
+                actualCostStatus = 'NOT_PROVIDED_BY_API'
+            }))
+    if ($telemetry.Count -ne 1 -or
+        $telemetry[0].inputUnits -ne 100 -or
+        $telemetry[0].outputUnits -ne 40 -or
+        $telemetry[0].totalUnits -ne 140 -or
+        @($telemetry[0].Keys | Where-Object {
+            $_ -match '(?i)token|api.?key|credential'
+        }).Count -ne 0) {
+        throw 'M3_PROTOCOL_TELEMETRY_SANITIZATION_FAILED'
+    }
+    $telemetryResultId = New-StockQuantHostBrokerRequestId
+    $telemetryResultPath = Write-StockQuantHostBrokerResult -Result `
+        ([ordered]@{
+            requestId = $telemetryResultId
+            operation = 'RUN_M3_AGENT_RESEARCH_SMOKE'
+            status = 'FAILED'
+            stage = 'RUN_M3_AGENT_RESEARCH_SMOKE'
+            reason = 'M3_BAILIAN_RESPONSE_PARSE_FAILED'
+            gitCommit = $head
+            providerCallCount = 0
+            retryCount = 0
+            noRetry = $true
+            startedAt = $created.ToString('o')
+            completedAt = $created.AddSeconds(1).ToString('o')
+            summary = [ordered]@{
+                modelInputUnits = 100
+                modelOutputUnits = 40
+                modelReasoningUnits = 0
+                modelTotalUnits = 140
+                modelCallTelemetry = $telemetry
+            }
+        })
+    $telemetryRoundTrip = Get-Content -LiteralPath $telemetryResultPath `
+        -Raw -Encoding UTF8 | ConvertFrom-Json
+    if ($telemetryRoundTrip.schemaVersion -ne
+            'STOCK_QUANT_HOST_BROKER_RESULT_V1' -or
+        @($telemetryRoundTrip.summary.modelCallTelemetry).Count -ne 1 -or
+        [int]$telemetryRoundTrip.summary.modelTotalUnits -ne 140) {
+        throw 'M3_PROTOCOL_TELEMETRY_ROUNDTRIP_FAILED'
+    }
+    $tests++
+
     $missingCredentialSource = Copy-Values $smoke
     $missingCredentialSource['request.id'] =
         New-StockQuantHostBrokerRequestId
@@ -255,6 +311,10 @@ try {
     if ($credentialResultPath -and
         (Test-Path -LiteralPath $credentialResultPath)) {
         Remove-Item -LiteralPath $credentialResultPath -Force
+    }
+    if ($telemetryResultPath -and
+        (Test-Path -LiteralPath $telemetryResultPath)) {
+        Remove-Item -LiteralPath $telemetryResultPath -Force
     }
     if (Test-Path -LiteralPath $root) {
         $full = [IO.Path]::GetFullPath($root).TrimEnd('\', '/')

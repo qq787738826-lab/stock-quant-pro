@@ -243,14 +243,14 @@ public final class OpenAiResponsesModelAdapter implements ModelAdapter {
         try {
             parsed = parseResponse(response.body(), request);
         } catch (ResponseFailure error) {
-            accountUnknownCall(reservation);
+            accountRejectedResponse(response.body(), reservation);
             throw failure(error.reasonSuffix(), error.source(),
                     response.statusCode(), contentTypeCategory(
                             response.contentType()), "VALID_JSON",
                     error.providerCode(), error.providerCategory(),
                     error.messageCategory());
         } catch (RuntimeException error) {
-            accountUnknownCall(reservation);
+            accountRejectedResponse(response.body(), reservation);
             throw failure("RESPONSE_PARSE_FAILED",
                     FailureSource.RESPONSE_PARSE, response.statusCode(),
                     contentTypeCategory(response.contentType()),
@@ -436,7 +436,9 @@ public final class OpenAiResponsesModelAdapter implements ModelAdapter {
                 "reworkRequested").forEach(required::add);
         ObjectNode properties = root.putObject("properties");
         ObjectNode requestedTools = properties.putObject("requestedTools");
-        enumArray(requestedTools, ToolCode.values());
+        enumArray(requestedTools, toolSelection
+                ? request.allowedTools().toArray(ToolCode[]::new)
+                : ToolCode.values());
         requestedTools.put("minItems", toolSelection
                 ? request.allowedTools().size() : 0);
         requestedTools.put("maxItems", toolSelection
@@ -524,10 +526,14 @@ public final class OpenAiResponsesModelAdapter implements ModelAdapter {
             ModelRequest request
     ) throws IOException {
         try {
-            JsonNode structured = mapper.readTree(outputText);
-            requireExactFields(structured, SetNames.RESPONSE_FIELDS);
+            JsonNode structured = structuredJson(outputText);
             boolean toolSelection = "PLAN".equals(request.phase())
                     || request.phase().endsWith("_TOOL_SELECTION");
+            boolean phaseToolSelection = request.phase().endsWith(
+                    "_TOOL_SELECTION");
+            if (!phaseToolSelection) {
+                requireExactFields(structured, SetNames.RESPONSE_FIELDS);
+            }
             boolean critic = request.agentRole()
                     == AgentResearchModels.AgentRole.CRITIC_REVIEW;
             List<ToolCode> tools = toolSelection
@@ -535,7 +541,10 @@ public final class OpenAiResponsesModelAdapter implements ModelAdapter {
                     : List.of();
             List<ModelClaim> claims = new ArrayList<>();
             JsonNode claimNodes = structured.path("claims");
-            if (!claimNodes.isArray()) {
+            if (!claimNodes.isArray() && phaseToolSelection
+                    && claimNodes.isMissingNode()) {
+                claimNodes = mapper.createArrayNode();
+            } else if (!claimNodes.isArray()) {
                 throw parseFailure();
             }
             if (!toolSelection) {
@@ -557,14 +566,50 @@ public final class OpenAiResponsesModelAdapter implements ModelAdapter {
             List<CriticIssueCode> issues = critic ? enums(
                     structured.path("issueCodes"), CriticIssueCode.class)
                     : List.of();
+            if (critic && !structured.path("reworkRequested").isBoolean()) {
+                throw parseFailure();
+            }
+            String summary = phaseToolSelection
+                    && (!structured.path("summary").isTextual()
+                    || structured.path("summary").asText().isBlank())
+                    ? "Tool selection completed."
+                    : requiredText(structured.path("summary"));
             return new ModelResponse(tools, claims,
-                    requiredText(structured.path("summary")), issues,
+                    summary, issues,
                     critic && structured.path("reworkRequested").asBoolean(),
                     usage);
         } catch (IllegalStateException exception) {
             throw exception;
         } catch (RuntimeException exception) {
             throw parseFailure();
+        }
+    }
+
+    private JsonNode structuredJson(String outputText) throws IOException {
+        String candidate = requiredText(mapper.getNodeFactory().textNode(
+                outputText)).strip();
+        if (candidate.startsWith("```")) {
+            int lineEnd = candidate.indexOf('\n');
+            int fenceEnd = candidate.lastIndexOf("```");
+            if (lineEnd < 0 || fenceEnd <= lineEnd
+                    || fenceEnd != candidate.length() - 3) {
+                throw parseFailure();
+            }
+            String header = candidate.substring(0, lineEnd).strip();
+            if (!"```".equals(header)
+                    && !"```json".equalsIgnoreCase(header)) {
+                throw parseFailure();
+            }
+            candidate = candidate.substring(lineEnd + 1, fenceEnd).strip();
+        }
+        try (com.fasterxml.jackson.core.JsonParser parser =
+                     mapper.getFactory().createParser(candidate)) {
+            JsonNode result = mapper.readTree(parser);
+            if (result == null || !result.isObject()
+                    || parser.nextToken() != null) {
+                throw parseFailure();
+            }
+            return result;
         }
     }
 
@@ -734,8 +779,34 @@ public final class OpenAiResponsesModelAdapter implements ModelAdapter {
     ) {
         callTelemetry.add(callTelemetry(attemptedCallCount,
                 "USAGE_REJECTED", usage, reservation));
+        accountKnownUsage(usage);
         accountedCost = accountedCost.add(reservation);
         terminated = true;
+    }
+
+    private void accountRejectedResponse(
+            String responseBody,
+            BigDecimal reservation
+    ) {
+        ModelUsage recovered = recoverUsage(responseBody);
+        if (recovered == null) {
+            accountUnknownCall(reservation);
+            return;
+        }
+        callTelemetry.add(callTelemetry(attemptedCallCount,
+                "RESPONSE_REJECTED", recovered, reservation));
+        accountKnownUsage(recovered);
+        accountedCost = accountedCost.add(reservation);
+        terminated = true;
+    }
+
+    private ModelUsage recoverUsage(String responseBody) {
+        try {
+            JsonNode root = mapper.readTree(responseBody);
+            return usage(root.path("usage"));
+        } catch (RuntimeException | IOException error) {
+            return null;
+        }
     }
 
     private void accountCompletedUsage(ModelUsage usage) {
@@ -743,6 +814,10 @@ public final class OpenAiResponsesModelAdapter implements ModelAdapter {
                 usage, usage.estimatedCost()));
         accountedCost = accountedCost.add(usage.estimatedCost());
         completedCallCount++;
+        accountKnownUsage(usage);
+    }
+
+    private void accountKnownUsage(ModelUsage usage) {
         inputTokenCount += usage.inputTokens();
         outputTokenCount += usage.outputTokens();
         reasoningTokenCount += usage.reasoningTokens();
@@ -986,7 +1061,8 @@ public final class OpenAiResponsesModelAdapter implements ModelAdapter {
             Objects.requireNonNull(actualCostStatus, "actualCostStatus");
             if (callNumber < 1 || callNumber > MAXIMUM_MODEL_CALLS
                     || !status.matches(
-                    "COMPLETED|USAGE_REJECTED|USAGE_UNAVAILABLE")
+                    "COMPLETED|RESPONSE_REJECTED|USAGE_REJECTED|"
+                            + "USAGE_UNAVAILABLE")
                     || inputTokenCount < 0 || outputTokenCount < 0
                     || reasoningTokenCount < 0
                     || reasoningTokenCount > outputTokenCount

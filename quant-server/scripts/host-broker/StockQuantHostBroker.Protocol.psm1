@@ -1283,6 +1283,71 @@ function Write-StockQuantHostBrokerResult {
     return $destination
 }
 
+function ConvertTo-StockQuantM3CallTelemetrySummary {
+    param(
+        [Parameter(Mandatory = $true)]
+        [object[]] $Telemetry
+    )
+    foreach ($entry in $Telemetry) {
+        [int]$inputUnits = [int]$entry.inputTokenCount
+        [int]$outputUnits = [int]$entry.outputTokenCount
+        [int]$reasoningUnits = [int]$entry.reasoningTokenCount
+        [int]$totalUnits = [int]$entry.totalTokenCount
+        [decimal]$estimatedCost = [decimal]::Parse(
+            [string]$entry.estimatedCost,
+            [Globalization.NumberStyles]::Number,
+            [Globalization.CultureInfo]::InvariantCulture)
+        [decimal]$accountedCost = [decimal]::Parse(
+            [string]$entry.accountedCost,
+            [Globalization.NumberStyles]::Number,
+            [Globalization.CultureInfo]::InvariantCulture)
+        $actualStatus = [string]$entry.actualCostStatus
+        $actualValue = $entry.providerReportedActualCostCny
+        if ([int]$entry.callNumber -lt 1 -or
+            [int]$entry.callNumber -gt 16 -or
+            [string]$entry.status -notin @(
+                'COMPLETED', 'RESPONSE_REJECTED', 'USAGE_REJECTED',
+                'USAGE_UNAVAILABLE') -or
+            $inputUnits -lt 0 -or $outputUnits -lt 0 -or
+            $reasoningUnits -lt 0 -or $reasoningUnits -gt $outputUnits -or
+            $totalUnits -ne ($inputUnits + $outputUnits) -or
+            $estimatedCost -lt 0 -or $accountedCost -lt 0 -or
+            $actualStatus -notin @('PROVIDED', 'NOT_PROVIDED_BY_API') -or
+            ($actualStatus -eq 'PROVIDED') -ne ($null -ne $actualValue)) {
+            throw 'STOCK_QUANT_HOST_BROKER_M3_TELEMETRY_INVALID'
+        }
+        $actualCost = $null
+        if ($null -ne $actualValue) {
+            $actualCost = [decimal]::Parse(
+                [string]$actualValue,
+                [Globalization.NumberStyles]::Number,
+                [Globalization.CultureInfo]::InvariantCulture)
+            if ($actualCost -lt 0) {
+                throw 'STOCK_QUANT_HOST_BROKER_M3_TELEMETRY_INVALID'
+            }
+        }
+        [ordered]@{
+            callNumber = [int]$entry.callNumber
+            status = [string]$entry.status
+            inputUnits = $inputUnits
+            outputUnits = $outputUnits
+            reasoningUnits = $reasoningUnits
+            totalUnits = $totalUnits
+            estimatedCostCny = $estimatedCost.ToString(
+                [Globalization.CultureInfo]::InvariantCulture)
+            accountedCostCny = $accountedCost.ToString(
+                [Globalization.CultureInfo]::InvariantCulture)
+            actualCostCny = $(if ($null -eq $actualCost) {
+                $null
+            } else {
+                $actualCost.ToString(
+                    [Globalization.CultureInfo]::InvariantCulture)
+            })
+            actualCostStatus = $actualStatus
+        }
+    }
+}
+
 function Write-StockQuantHostBrokerHeartbeat {
     param(
         [Parameter(Mandatory = $true)]
@@ -1479,6 +1544,7 @@ Export-ModuleMember -Function @(
     'Assert-StockQuantHostBrokerRequestIdAvailable'
     'Write-StockQuantHostBrokerRequest'
     'Write-StockQuantHostBrokerResult'
+    'ConvertTo-StockQuantM3CallTelemetrySummary'
     'Write-StockQuantHostBrokerHeartbeat'
     'Read-StockQuantHostBrokerHeartbeat'
     'New-StockQuantHostBrokerRequestId'

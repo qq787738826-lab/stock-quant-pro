@@ -783,25 +783,27 @@ function Invoke-M3AgentResearchSmoke {
                                 $failed.modelDiagnostics) {
                             [int]$failed.modelDiagnostics.completedCallCount
                         } else { 0 })
-                        modelInputTokens = $(if ($null -ne
+                        modelInputUnits = $(if ($null -ne
                                 $failed.modelDiagnostics) {
                             [int]$failed.modelDiagnostics.inputTokenCount
                         } else { 0 })
-                        modelOutputTokens = $(if ($null -ne
+                        modelOutputUnits = $(if ($null -ne
                                 $failed.modelDiagnostics) {
                             [int]$failed.modelDiagnostics.outputTokenCount
                         } else { 0 })
-                        modelReasoningTokens = $(if ($null -ne
+                        modelReasoningUnits = $(if ($null -ne
                                 $failed.modelDiagnostics) {
                             [int]$failed.modelDiagnostics.reasoningTokenCount
                         } else { 0 })
-                        modelTotalTokens = $(if ($null -ne
+                        modelTotalUnits = $(if ($null -ne
                                 $failed.modelDiagnostics) {
                             [int]$failed.modelDiagnostics.totalTokenCount
                         } else { 0 })
                         modelCallTelemetry = $(if ($null -ne
                                 $failed.modelDiagnostics) {
-                            @($failed.modelDiagnostics.callTelemetry)
+                            @(ConvertTo-StockQuantM3CallTelemetrySummary `
+                                -Telemetry @(
+                                    $failed.modelDiagnostics.callTelemetry))
                         } else { @() })
                         providerReportedActualCostCny = $null
                         actualCostStatus = 'NOT_PROVIDED_BY_API'
@@ -941,7 +943,9 @@ function Invoke-M3AgentResearchSmoke {
         modelOutputUnits = [int]$usage.outputTokens
         modelReasoningUnits = [int]$usage.reasoningTokens
         modelTotalUnits = [int]$usage.totalTokens
-        modelCallTelemetry = @($modelDiagnostics.callTelemetry)
+        modelCallTelemetry = @(
+            ConvertTo-StockQuantM3CallTelemetrySummary `
+                -Telemetry @($modelDiagnostics.callTelemetry))
         estimatedCostCny = $estimatedCost.ToString(
             [Globalization.CultureInfo]::InvariantCulture)
         accountedCostCny = $diagnosticCost.ToString(

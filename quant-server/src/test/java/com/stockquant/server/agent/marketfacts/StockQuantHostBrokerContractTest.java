@@ -323,6 +323,8 @@ class StockQuantHostBrokerContractTest {
         assertTrue(script.contains("M3_BAILIAN_STAGE_BUDGET_EXHAUSTED"));
         assertTrue(script.contains("M3_BAILIAN_TRANCHE_2"));
         assertTrue(script.contains("approvalMarker"));
+        assertTrue(script.contains(
+                "ConvertTo-StockQuantM3CallTelemetrySummary"));
         assertTrue(script.contains("legacyFailureReserve"));
         assertTrue(script.contains("modelProviderMessageCategory"));
         assertFalse(script.contains("Invoke-Expression"));
