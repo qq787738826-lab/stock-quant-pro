@@ -7,7 +7,6 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.stockquant.core.research.DefaultStrategyResearchApi;
 import com.stockquant.core.research.StrategyResearchModels.BacktestConfig;
 import com.stockquant.server.agent.research.AgentResearchModels.ClaimType;
-import com.stockquant.server.agent.research.AgentResearchModels.ToolCode;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -15,29 +14,28 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
-import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-class OpenAiAgentResearchRuntimeTest {
+class BailianAgentResearchRuntimeTest {
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final Clock CLOCK = Clock.fixed(
             Instant.parse("2026-08-11T01:02:03Z"), ZoneOffset.UTC);
 
     @Test
-    void responsesAdapterCompletesAllSevenAgentsWithinHardBudget() {
-        AtomicInteger networkCalls = new AtomicInteger();
+    void bailianTransportCompletesSevenAgentFlowWithinFixedBudget() {
+        AtomicInteger transportCalls = new AtomicInteger();
         OpenAiResponsesModelAdapter.Transport transport =
                 (uri, key, body, timeout) -> {
-                    networkCalls.incrementAndGet();
+                    transportCalls.incrementAndGet();
                     return new OpenAiResponsesModelAdapter.TransportResponse(
                             200, "application/json", responseFor(body));
                 };
-        var adapter = new OpenAiResponsesModelAdapter(
-                "sk-test-only-not-a-real-secret-value".toCharArray(),
+        var adapter = OpenAiResponsesModelAdapter.bailian(
+                "sk-bailian-test-only-not-a-real-secret-value".toCharArray(),
                 Duration.ofSeconds(10), transport);
         var source = (AgentResearchDatasetSource) ignored ->
                 AgentResearchTestFixtures.loadedDataset();
@@ -50,26 +48,30 @@ class OpenAiAgentResearchRuntimeTest {
             report = runtime.run(AgentResearchTestFixtures.task());
         }
 
-        assertEquals(13, networkCalls.get());
+        assertEquals(13, transportCalls.get());
         assertEquals(13, report.modelCallCount());
         assertEquals(4, report.toolCallCount());
         assertFalse(report.deterministic());
         assertFalse(report.providerCalled());
         assertTrue(report.researchOnly());
+        assertEquals("CNY", report.totalModelUsage().costCurrency());
+        assertEquals(new BigDecimal("0.078000000000"),
+                report.totalModelUsage().estimatedCost());
         assertTrue(report.totalModelUsage().estimatedCost().compareTo(
-                OpenAiResponsesModelAdapter.M3_HARD_COST_LIMIT_USD) < 0);
-        assertEquals("USD", report.totalModelUsage().costCurrency());
+                OpenAiResponsesModelAdapter.M3_BAILIAN_HARD_COST_LIMIT_CNY)
+                < 0);
         assertEquals(13, adapter.telemetry().completedCallCount());
         assertEquals(1_300, adapter.telemetry().inputTokenCount());
         assertEquals(520, adapter.telemetry().outputTokenCount());
+        assertEquals("CNY", adapter.telemetry().costCurrency());
         assertTrue(adapter.telemetry().closed());
     }
 
     private static String responseFor(String requestBody) {
         try {
             JsonNode request = MAPPER.readTree(requestBody);
-            JsonNode payload = MAPPER.readTree(request.path("input").get(0)
-                    .path("content").get(0).path("text").asText());
+            JsonNode payload = MAPPER.readTree(request.path("messages").get(1)
+                    .path("content").asText());
             String phase = payload.path("phase").asText();
             String role = payload.path("agentRole").asText();
             ArrayNode allowed = (ArrayNode) payload.path("allowedTools");
@@ -87,8 +89,8 @@ class OpenAiAgentResearchRuntimeTest {
                 claim.put("claimType", claimType(role).name());
                 claim.put("statement",
                         "The cited evidence supports this bounded finding.");
-                ArrayNode citations = claim.putArray("evidenceIds");
-                citations.add(evidence.get(0).path("evidenceId").asText());
+                claim.putArray("evidenceIds").add(
+                        evidence.get(0).path("evidenceId").asText());
                 claim.put("confidence", 0.5);
             }
             structured.put("summary", selection
@@ -102,18 +104,18 @@ class OpenAiAgentResearchRuntimeTest {
             structured.put("reworkRequested", critic);
 
             ObjectNode root = MAPPER.createObjectNode();
-            root.put("model", AgentResearchModels.REAL_MODEL);
-            ArrayNode output = root.putArray("output");
-            ObjectNode message = output.addObject();
-            message.put("type", "message");
-            ObjectNode content = message.putArray("content").addObject();
-            content.put("type", "output_text");
-            content.put("text", MAPPER.writeValueAsString(structured));
+            root.put("model", OpenAiResponsesModelAdapter.BAILIAN_MODEL);
+            ObjectNode choice = root.putArray("choices").addObject();
+            choice.put("index", 0);
+            choice.putObject("message").put("role", "assistant")
+                    .put("content", MAPPER.writeValueAsString(structured));
+            choice.put("finish_reason", "stop");
             ObjectNode usage = root.putObject("usage");
-            usage.put("input_tokens", 100);
-            usage.put("output_tokens", 40);
-            usage.putObject("input_tokens_details")
-                    .put("cached_tokens", 0);
+            usage.put("prompt_tokens", 100);
+            usage.put("completion_tokens", 40);
+            usage.put("total_tokens", 140);
+            usage.putObject("prompt_tokens_details")
+                    .put("cached_tokens", 20);
             return MAPPER.writeValueAsString(root);
         } catch (Exception error) {
             throw new IllegalStateException(error);

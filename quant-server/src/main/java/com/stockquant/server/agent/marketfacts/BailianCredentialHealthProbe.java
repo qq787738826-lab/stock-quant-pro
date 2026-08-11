@@ -8,19 +8,19 @@ import com.stockquant.server.agent.research.OpenAiResponsesModelAdapter;
 
 import java.util.Arrays;
 
-/** Fixed-target, zero-network readability probe for the M3 OpenAI key. */
-public final class OpenAiCredentialHealthProbe {
+/** Fixed-target, zero-network readability probe for the M3 Bailian key. */
+public final class BailianCredentialHealthProbe {
     static final int EXIT_SUCCESS = 0;
     static final int EXIT_REJECTED = 20;
 
-    private OpenAiCredentialHealthProbe() {
+    private BailianCredentialHealthProbe() {
     }
 
     public static void main(String[] args) {
         if (args != null && args.length != 0) {
             System.err.println(
-                    "STOCK_QUANT_OPENAI_CREDENTIAL_PROBE_REASON="
-                            + "M3_OPENAI_CREDENTIAL_PROBE_ARGUMENTS_INVALID");
+                    "STOCK_QUANT_BAILIAN_CREDENTIAL_PROBE_REASON="
+                            + "M3_BAILIAN_CREDENTIAL_PROBE_ARGUMENTS_INVALID");
             System.exit(EXIT_REJECTED);
         }
         int exit;
@@ -34,11 +34,11 @@ public final class OpenAiCredentialHealthProbe {
     static int run(SecretProvider provider) {
         try {
             Captured<Boolean> captured = TushareControlledAcceptanceOutputAudit
-                    .captureOpenAiCredentialOnlyProcess(registry -> {
-                        try (SecretValue value = provider.readOpenAiApiKey()) {
+                    .captureBailianCredentialOnlyProcess(registry -> {
+                        try (SecretValue value = provider.readBailianApiKey()) {
                             char[] key = value.copy();
                             try {
-                                registry.register(SensitiveKind.OPENAI_API_KEY,
+                                registry.register(SensitiveKind.BAILIAN_API_KEY,
                                         key);
                                 return OpenAiResponsesModelAdapter
                                         .isStructurallyValidApiKey(key);
@@ -50,11 +50,11 @@ public final class OpenAiCredentialHealthProbe {
             if (!Boolean.TRUE.equals(captured.value())
                     || !captured.auditResult().clean()) {
                 throw new IllegalStateException(
-                        "M3_OPENAI_CREDENTIAL_FORMAT_INVALID");
+                        "M3_BAILIAN_CREDENTIAL_FORMAT_INVALID");
             }
-            System.out.println("STOCK_QUANT_OPENAI_CREDENTIAL_READ=SUCCESS");
-            System.out.println("STOCK_QUANT_OPENAI_NETWORK_CALLS=0");
-            System.out.println("STOCK_QUANT_OPENAI_OUTPUT_AUDIT=PASSED");
+            System.out.println("STOCK_QUANT_BAILIAN_CREDENTIAL_READ=SUCCESS");
+            System.out.println("STOCK_QUANT_BAILIAN_NETWORK_CALLS=0");
+            System.out.println("STOCK_QUANT_BAILIAN_OUTPUT_AUDIT=PASSED");
             return EXIT_SUCCESS;
         } catch (Throwable error) {
             Throwable reasonSource = error instanceof
@@ -62,9 +62,9 @@ public final class OpenAiCredentialHealthProbe {
                             .CapturedExecutionException
                     && error.getCause() != null
                     ? error.getCause() : error;
-            System.err.println("STOCK_QUANT_OPENAI_CREDENTIAL_PROBE_REASON="
+            System.err.println("STOCK_QUANT_BAILIAN_CREDENTIAL_PROBE_REASON="
                     + safeCode(reasonSource));
-            System.err.println("STOCK_QUANT_OPENAI_NETWORK_CALLS=0");
+            System.err.println("STOCK_QUANT_BAILIAN_NETWORK_CALLS=0");
             return EXIT_REJECTED;
         }
     }
@@ -78,6 +78,6 @@ public final class OpenAiCredentialHealthProbe {
                 return message;
             }
         }
-        return "M3_OPENAI_CREDENTIAL_PROBE_FAILED";
+        return "M3_BAILIAN_CREDENTIAL_PROBE_FAILED";
     }
 }

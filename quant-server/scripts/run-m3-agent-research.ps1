@@ -13,7 +13,7 @@ param(
     [ValidatePattern('^M3SMOKE_[0-9]{8}T[0-9]{6}Z_[A-F0-9]{12}$')]
     [string] $ExecutionId,
 
-    [ValidateSet('FAKE', 'OPENAI')]
+    [ValidateSet('FAKE', 'BAILIAN')]
     [string] $ModelMode = 'FAKE'
 )
 
@@ -62,8 +62,8 @@ try {
         'org.springframework.boot.loader.launch.PropertiesLauncher' `
         "--result-file=$result" "--report-directory=$reports" `
         "--execution-id=$ExecutionId" '--database-port=38432' `
-        "--execution-mode=$(if ($ModelMode -eq 'OPENAI') {
-            'FORMAL_LOCAL_OPENAI'
+        "--execution-mode=$(if ($ModelMode -eq 'BAILIAN') {
+            'FORMAL_LOCAL_BAILIAN'
         } else { 'FORMAL_LOCAL' })" 2>&1 |
         ForEach-Object { [string]$_ })
     if ($LASTEXITCODE -ne 0) {
@@ -78,22 +78,23 @@ try {
     $agentRuns = @($sanitized.research.agentRuns)
     $usage = $sanitized.research.totalModelUsage
     [decimal]$estimatedCost = [decimal]::Parse(
-        [string]$usage.estimatedCostUsd,
+        [string]$usage.estimatedCost,
         [Globalization.NumberStyles]::Number,
         [Globalization.CultureInfo]::InvariantCulture)
-    $modelEligible = if ($ModelMode -eq 'OPENAI') {
+    $modelEligible = if ($ModelMode -eq 'BAILIAN') {
         -not [bool]$sanitized.research.deterministic -and
         [int]$sanitized.research.modelCallCount -eq 13 -and
         [int]$usage.inputTokens -gt 0 -and
         [int]$usage.outputTokens -gt 0 -and
-        $estimatedCost -gt 0 -and $estimatedCost -le [decimal]0.10 -and
+        $estimatedCost -gt 0 -and $estimatedCost -le [decimal]5.00 -and
+        [string]$usage.costCurrency -eq 'CNY' -and
         @($agentRuns | Where-Object {
-            $_.modelProvider -ne 'OPENAI' -or
-            $_.model -ne 'gpt-5-mini-2025-08-07'
+            $_.modelProvider -ne 'BAILIAN' -or
+            $_.model -ne 'qwen3.7-plus'
         }).Count -eq 0
     } else {
         [bool]$sanitized.research.deterministic -and
-        $estimatedCost -eq 0
+        $estimatedCost -eq 0 -and [string]$usage.costCurrency -eq 'NONE'
     }
     if ($sanitized.schemaVersion -ne
             'M3_AGENT_RESEARCH_SMOKE_RESULT_V1' -or

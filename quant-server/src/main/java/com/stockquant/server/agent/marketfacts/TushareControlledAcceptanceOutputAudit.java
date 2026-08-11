@@ -77,18 +77,18 @@ public final class TushareControlledAcceptanceOutputAudit {
                 RegistryRequirement.DATABASE_ONLY);
     }
 
-    static <T> Captured<T> captureOpenAiCredentialOnlyProcess(
+    static <T> Captured<T> captureBailianCredentialOnlyProcess(
             DynamicAction<T> action
     ) throws Exception {
         return captureDynamic(Objects.requireNonNull(action, "action"),
-                RegistryRequirement.OPENAI_API_KEY_ONLY);
+                RegistryRequirement.BAILIAN_API_KEY_ONLY);
     }
 
-    static <T> Captured<T> captureM3OpenAiResearchProcess(
+    static <T> Captured<T> captureM3BailianResearchProcess(
             DynamicAction<T> action
     ) throws Exception {
         return captureDynamic(Objects.requireNonNull(action, "action"),
-                RegistryRequirement.M3_OPENAI_RESEARCH);
+                RegistryRequirement.M3_BAILIAN_RESEARCH);
     }
 
     static <T> Captured<T> captureDatabasePreparationProcess(
@@ -217,7 +217,7 @@ public final class TushareControlledAcceptanceOutputAudit {
     enum SensitiveKind {
         DATABASE_PASSWORD,
         TUSHARE_TOKEN,
-        OPENAI_API_KEY,
+        BAILIAN_API_KEY,
         ADMINISTRATOR_DATABASE_PASSWORD,
         DEDICATED_BOOTSTRAP_PASSWORD,
         DEDICATED_DATABASE_PASSWORD
@@ -271,19 +271,19 @@ public final class TushareControlledAcceptanceOutputAudit {
             }
         }
 
-        private void requireOpenAiApiKeyOnlyRegistration() {
-            if (!kinds.equals(List.of(SensitiveKind.OPENAI_API_KEY))) {
+        private void requireBailianApiKeyOnlyRegistration() {
+            if (!kinds.equals(List.of(SensitiveKind.BAILIAN_API_KEY))) {
                 throw new IllegalStateException(
-                        "STOCK_QUANT_OPENAI_SENSITIVE_REGISTRY_INCOMPLETE");
+                        "STOCK_QUANT_BAILIAN_SENSITIVE_REGISTRY_INCOMPLETE");
             }
         }
 
-        private void requireM3OpenAiResearchRegistration() {
+        private void requireM3BailianResearchRegistration() {
             if (!kinds.equals(List.of(
                     SensitiveKind.DATABASE_PASSWORD,
-                    SensitiveKind.OPENAI_API_KEY))) {
+                    SensitiveKind.BAILIAN_API_KEY))) {
                 throw new IllegalStateException(
-                        "M3_OPENAI_SENSITIVE_REGISTRY_INCOMPLETE");
+                        "M3_BAILIAN_SENSITIVE_REGISTRY_INCOMPLETE");
             }
         }
 
@@ -359,18 +359,18 @@ public final class TushareControlledAcceptanceOutputAudit {
                 registry.requireDatabaseOnlyRegistration();
             }
         },
-        OPENAI_API_KEY_ONLY {
+        BAILIAN_API_KEY_ONLY {
             @Override
             void validate(SensitiveRegistry registry) {
                 NONE.validate(registry);
-                registry.requireOpenAiApiKeyOnlyRegistration();
+                registry.requireBailianApiKeyOnlyRegistration();
             }
         },
-        M3_OPENAI_RESEARCH {
+        M3_BAILIAN_RESEARCH {
             @Override
             void validate(SensitiveRegistry registry) {
                 NONE.validate(registry);
-                registry.requireM3OpenAiResearchRegistration();
+                registry.requireM3BailianResearchRegistration();
             }
         },
         DATABASE_PREPARATION {

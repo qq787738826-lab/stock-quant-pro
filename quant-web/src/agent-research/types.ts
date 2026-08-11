@@ -44,7 +44,12 @@ export interface AgentRun {
   issueCodes: string[]
   reworkRequested: boolean
   revised: boolean
-  usage: { inputTokens: number; outputTokens: number; estimatedCostUsd: number }
+  usage: {
+    inputTokens: number
+    outputTokens: number
+    estimatedCost: number
+    costCurrency: 'NONE' | 'USD' | 'CNY'
+  }
 }
 
 export interface StrategyExperiment {
@@ -131,7 +136,12 @@ export interface ResearchReport {
   rounds: number
   toolCallCount: number
   modelCallCount: number
-  totalModelUsage: { inputTokens: number; outputTokens: number; estimatedCostUsd: number }
+  totalModelUsage: {
+    inputTokens: number
+    outputTokens: number
+    estimatedCost: number
+    costCurrency: 'NONE' | 'USD' | 'CNY'
+  }
   deterministic: boolean
   researchOnly: boolean
   providerCalled: boolean

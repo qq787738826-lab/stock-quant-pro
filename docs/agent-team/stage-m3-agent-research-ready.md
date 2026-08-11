@@ -4,8 +4,8 @@
 
 - 长期任务分支：`codex/1.4.0-m3-agent-research-ready`
 - 冻结集成基线：`b041fbe807b817c4070781db33fbfca2d4f8bc4e`
-- 当前状态：`REAL_LLM_RESOURCE_APPROVED_IMPLEMENTATION_COMPLETE`
-- 外部门：`REAL_LLM_SMOKE=PENDING_LOCAL_CREDENTIAL_ENTRY`
+- 当前状态：`BAILIAN_ADAPTATION_IN_PROGRESS`
+- 外部门：`BAILIAN_REAL_LLM_SMOKE=PENDING_LOCAL_CREDENTIAL_AND_BUDGET`
 - 在真实 LLM smoke 通过前，不声明 `M3_AGENT_RESEARCH_READY=PASS`，不执行最终合并。
 - M3 新增 Tushare 调用 0；累计真实调用保持 55；永久研究库写入 0。
 
@@ -26,16 +26,17 @@
 ## 模型边界
 
 - `ModelAdapter` 与业务逻辑解耦；默认测试使用 `DETERMINISTIC_FAKE_MODEL_V1`。
-- 首个真实适配器使用固定 OpenAI Responses API、Structured Outputs 严格 JSON Schema、
-  `store=false`、redirects NEVER 和精确模型快照 `gpt-5-mini-2025-08-07`。
+- 正式真实适配器使用固定阿里云百炼 OpenAI-compatible Chat Completions endpoint、
+  `response_format=json_object`、客户端严格结构校验、redirects NEVER 和固定模型 `qwen3.7-plus`；
+  已完成的厂商无关 `ModelAdapter` 与 Responses 兼容实现继续保留。
 - 每次模型输出都经过工具白名单、Evidence ID、声明类型、置信度、数值引用和交易语言门禁；
   task、Evidence 和前序摘要始终作为不可信数据。
-- 用户已授权唯一固定 Credential Target `StockQuant/OpenAiApiKey` 和 M3 总成本硬上限
-  US$0.10。一次性脚本只从原生安全 Console 写入 Windows Credential Manager；适配器不会从
-  环境变量、参数或明文文件降级。Broker 的零网络可读性检查与真实 smoke 是两个固定 operation。
-- Responses 调用使用 `reasoning.effort=minimal`、每次输出上限 1200 tokens、最多 13 次模型调用；
-  每次网络调用前按 UTF-8 请求字节和最大输出作保守成本预留，任一未知结果终止适配器，阶段真实
-  smoke 只允许消费一次，确保总成本不能超过 US$0.10。
+- 唯一固定 Credential Target 为 `StockQuant/BailianApiKey`。一次性脚本只从原生安全 Console
+  写入 Windows Credential Manager；适配器不会从环境变量、参数或明文文件降级。Broker 的
+  零网络可读性检查与真实 smoke 是两个固定 operation。
+- 百炼调用每次输出上限 600 tokens、最多 13 次模型调用；每次网络调用前按 UTF-8 请求字节和
+  最大输出作保守成本预留，任一未知结果终止适配器。真实 smoke 仅在用户批准 CNY 5.00 硬上限后
+  执行一次；当前未签发真实请求，真实百炼调用与成本均为 0。
 
 ## Fake Model 与评测证据
 
@@ -48,7 +49,7 @@
   M1 增量/幂等、M2 回测、M3 七 Agent、正式 Start-Class/build proof、Broker 兼容映射、
   输出脱敏和临时残留 0；M1 Fake Provider 调用 18，M2/M3 Provider 调用 0。
 - 最终核心回归：`quant-core 16/0/0/0`、`quant-server 48/0/0/0`；后者包含 M3 Runtime、
-  validator、OpenAI adapter、Eval、报告/API、M1/M2 适配、正式 Runner、build proof 与本地自动化
+  validator、OpenAI-compatible adapter、Eval、报告/API、M1/M2 适配、正式 Runner、build proof 与本地自动化
   合同。PowerShell 5.1 的 9 个相关脚本语法错误 0，Broker 协议 `7/0/0/0`，Vue/TypeScript
   production build PASS，`git diff --check` PASS。
 
@@ -73,7 +74,7 @@
 - 将模型工具调用从“运行时预先执行、模型事后描述”收口为 Coordinator 先规划、四个专业 Agent
   分别选择白名单工具、运行时验证选择后才执行确定性工具；专业工作流在 Portfolio 综合前不接收
   其他 Agent 摘要。当前完整流程为 13 次模型调用，Prompt 正式升级到 V2。
-- 新增固定 OpenAI Credential、输出审计注册、零网络探针、Responses API 成本/次数硬门禁和
+- 新增固定百炼 Credential、输出审计注册、零网络探针、OpenAI-compatible API 成本/次数硬门禁和
   Host Broker 固定 M3 operation；没有动态 Target、动态 URL、命令文本、环境变量密钥或重试。
 
 - 已运行 Resident Broker 进程只识别既有 M2 任务分支，首次 M3 请求在秘密读取前以
@@ -88,6 +89,6 @@
   train/test、walk-forward、过拟合识别由 deterministic fixture 覆盖。
 - M1 仍是 SYSTEM_KNOWLEDGE 与 formula-only QFQ，`PROVIDER_PIT_VERIFIED=false`；完整 F1 十项
   技术证据缺口不变。
-- 仍需用户仅在本机安全 Console 完成一次 API Key 录入；随后由 Broker 完成零网络可读性验证和
-  一次受 US$0.10 硬限制的真实 LLM smoke。密钥不得发送到聊天。
+- 仍需用户仅在本机安全 Console 完成一次百炼 API Key 录入并批准最低 smoke 预算；随后由 Broker
+  完成零网络可读性验证和一次受 CNY 5.00 硬限制的真实 LLM smoke。密钥不得发送到聊天。
 - M3 不启动 M4、Shadow、业务 scheduler、真实订单、实盘或自动交易。

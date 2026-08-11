@@ -6,18 +6,18 @@ param(
     [Parameter(ParameterSetName = 'ProviderOnly', Mandatory = $true)]
     [switch] $ProviderOnly,
 
-    [Parameter(ParameterSetName = 'OpenAiOnly', Mandatory = $true)]
-    [switch] $OpenAiOnly,
+    [Parameter(ParameterSetName = 'BailianOnly', Mandatory = $true)]
+    [switch] $BailianOnly,
 
-    [Parameter(ParameterSetName = 'OpenAiStatus', Mandatory = $true)]
-    [switch] $OpenAiStatus
+    [Parameter(ParameterSetName = 'BailianStatus', Mandatory = $true)]
+    [switch] $BailianStatus
 )
 
 $ErrorActionPreference = 'Stop'
 $databaseTarget = 'StockQuant/ResearchDbPassword'
 $tushareTarget = 'StockQuant/TushareToken'
-$openAiTarget = 'StockQuant/OpenAiApiKey'
-$allowedTargets = @($databaseTarget, $tushareTarget, $openAiTarget)
+$bailianTarget = 'StockQuant/BailianApiKey'
+$allowedTargets = @($databaseTarget, $tushareTarget, $bailianTarget)
 
 if (-not ('StockQuant.CredentialManagerNative' -as [type])) {
     Add-Type -TypeDefinition @'
@@ -92,8 +92,8 @@ function Write-SecureCredential(
     [Security.SecureString] $Secret
 ) {
     Assert-AllowedTarget $Target
-    $minimumLength = if ($Target -eq $openAiTarget) { 20 } else { 8 }
-    $maximumLength = if ($Target -eq $openAiTarget) { 512 } else { 1280 }
+    $minimumLength = if ($Target -eq $bailianTarget) { 20 } else { 8 }
+    $maximumLength = if ($Target -eq $bailianTarget) { 512 } else { 1280 }
     if ($null -eq $Secret -or $Secret.Length -lt $minimumLength -or
         $Secret.Length -gt $maximumLength) {
         throw 'STOCK_QUANT_SECRET_VALUE_INVALID'
@@ -123,13 +123,13 @@ function Write-SecureCredential(
 
 $databasePresent = $false
 $tusharePresent = $false
-$openAiPresent = $false
-if (-not $OpenAiOnly -and -not $OpenAiStatus) {
+$bailianPresent = $false
+if (-not $BailianOnly -and -not $BailianStatus) {
     $databasePresent = Test-CredentialExists $databaseTarget
     $tusharePresent = Test-CredentialExists $tushareTarget
 }
-if ($OpenAiOnly -or $OpenAiStatus) {
-    $openAiPresent = Test-CredentialExists $openAiTarget
+if ($BailianOnly -or $BailianStatus) {
+    $bailianPresent = Test-CredentialExists $bailianTarget
 }
 if ($Status) {
     Write-Output "$databaseTarget=$(if ($databasePresent) { 'PRESENT' } else { 'MISSING' })"
@@ -137,22 +137,22 @@ if ($Status) {
     Write-Output "STOCK_QUANT_CREDENTIALS_READY=$($databasePresent -and $tusharePresent)"
     exit $(if ($databasePresent -and $tusharePresent) { 0 } else { 10 })
 }
-if ($OpenAiStatus) {
-    Write-Output "$openAiTarget=$(if ($openAiPresent) { 'PRESENT' } else { 'MISSING' })"
-    Write-Output "STOCK_QUANT_OPENAI_CREDENTIAL_READY=$openAiPresent"
-    exit $(if ($openAiPresent) { 0 } else { 10 })
+if ($BailianStatus) {
+    Write-Output "$bailianTarget=$(if ($bailianPresent) { 'PRESENT' } else { 'MISSING' })"
+    Write-Output "STOCK_QUANT_BAILIAN_CREDENTIAL_READY=$bailianPresent"
+    exit $(if ($bailianPresent) { 0 } else { 10 })
 }
 
 if ($Host.Name -ne 'ConsoleHost' -or
     [Console]::IsInputRedirected -or [Console]::IsOutputRedirected) {
     throw 'STOCK_QUANT_NATIVE_SECURE_CONSOLE_REQUIRED'
 }
-if (($OpenAiOnly -and $openAiPresent) -or
+if (($BailianOnly -and $bailianPresent) -or
     ($ProviderOnly -and $tusharePresent) -or
     (-not $ProviderOnly -and ($databasePresent -or $tusharePresent))) {
     $confirmation = Read-Host `
-        $(if ($OpenAiOnly) {
-            'Existing OpenAI credential will be replaced. Type OVERWRITE to continue'
+        $(if ($BailianOnly) {
+            'Existing Bailian credential will be replaced. Type OVERWRITE to continue'
         } elseif ($ProviderOnly) {
             'Existing Tushare credential will be replaced. Type OVERWRITE to continue'
         } else {
@@ -165,25 +165,25 @@ if (($OpenAiOnly -and $openAiPresent) -or
 
 $databaseSecret = $null
 $tushareSecret = $null
-$openAiSecret = $null
+$bailianSecret = $null
 try {
-    if ($OpenAiOnly) {
-        $openAiSecret = Read-Host 'OpenAI API Key' -AsSecureString
+    if ($BailianOnly) {
+        $bailianSecret = Read-Host 'Bailian API Key' -AsSecureString
     } elseif (-not $ProviderOnly) {
         $databaseSecret = Read-Host `
             'stock_quant_research database password' -AsSecureString
     }
-    if (-not $OpenAiOnly) {
+    if (-not $BailianOnly) {
         $tushareSecret = Read-Host 'Tushare Token' -AsSecureString
         if (-not $ProviderOnly) {
             Write-SecureCredential $databaseTarget $databaseSecret
         }
         Write-SecureCredential $tushareTarget $tushareSecret
     } else {
-        Write-SecureCredential $openAiTarget $openAiSecret
+        Write-SecureCredential $bailianTarget $bailianSecret
     }
-    Write-Output $(if ($OpenAiOnly) {
-        'STOCK_QUANT_OPENAI_CREDENTIAL_UPDATED=true'
+    Write-Output $(if ($BailianOnly) {
+        'STOCK_QUANT_BAILIAN_CREDENTIAL_UPDATED=true'
     } elseif ($ProviderOnly) {
         'STOCK_QUANT_PROVIDER_CREDENTIAL_UPDATED=true'
     } else { 'STOCK_QUANT_CREDENTIALS_CONFIGURED=true' })
@@ -191,5 +191,5 @@ try {
 } finally {
     if ($null -ne $databaseSecret) { $databaseSecret.Dispose() }
     if ($null -ne $tushareSecret) { $tushareSecret.Dispose() }
-    if ($null -ne $openAiSecret) { $openAiSecret.Dispose() }
+    if ($null -ne $bailianSecret) { $bailianSecret.Dispose() }
 }

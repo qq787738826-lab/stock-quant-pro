@@ -28,11 +28,12 @@ class StockQuantLocalAutomationContractTest {
         assertTrue(script.contains("ZeroFreeCoTaskMemUnicode"));
         assertTrue(script.contains("StockQuant/ResearchDbPassword"));
         assertTrue(script.contains("StockQuant/TushareToken"));
-        assertTrue(script.contains("StockQuant/OpenAiApiKey"));
+        assertTrue(script.contains("StockQuant/BailianApiKey"));
+        assertFalse(script.contains("OpenAi"));
         assertTrue(script.contains("OVERWRITE"));
         assertTrue(parameters.contains("ProviderOnly"));
-        assertTrue(parameters.contains("OpenAiOnly"));
-        assertTrue(parameters.contains("OpenAiStatus"));
+        assertTrue(parameters.contains("BailianOnly"));
+        assertTrue(parameters.contains("BailianStatus"));
         assertTrue(script.contains(
                 "STOCK_QUANT_PROVIDER_CREDENTIAL_UPDATED=true"));
         assertTrue(script.contains("if (-not $ProviderOnly)"));

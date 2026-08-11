@@ -31,7 +31,7 @@ public final class ConsoleSecretProvider implements SecretProvider {
             case RESEARCH_DATABASE_PASSWORD ->
                     "Dedicated research database password: ";
             case TUSHARE_TOKEN -> "Tushare token: ";
-            case OPENAI_API_KEY -> "OpenAI API key: ";
+            case BAILIAN_API_KEY -> "Bailian API key: ";
         };
         char[] value;
         try {

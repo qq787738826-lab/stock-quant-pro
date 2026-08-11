@@ -18,8 +18,8 @@ $m1TokenVerificationPreflightClass =
     'TushareM1TokenVerificationPreflight'
 $credentialProbeClass = 'com.stockquant.server.agent.marketfacts.' +
     'TushareCredentialHealthProbe'
-$openAiCredentialProbeClass = 'com.stockquant.server.agent.marketfacts.' +
-    'OpenAiCredentialHealthProbe'
+$bailianCredentialProbeClass = 'com.stockquant.server.agent.marketfacts.' +
+    'BailianCredentialHealthProbe'
 $credentialStatusScript = Join-Path $paths.RepositoryRoot `
     'quant-server\scripts\set-stock-quant-secrets.ps1'
 $hostRunnerScript = Join-Path $paths.RepositoryRoot `
@@ -122,7 +122,7 @@ function Assert-GitBinding {
                 'RUN_DAY001', 'RUN_M1_RESEARCH_DATA',
                 'VERIFY_M1_TUSHARE_TOKEN',
                 'RUN_M2_STRATEGY_RESEARCH_SMOKE',
-                'CHECK_OPENAI_CREDENTIAL_STATUS',
+                'CHECK_BAILIAN_CREDENTIAL_STATUS',
                 'RUN_M3_AGENT_RESEARCH_SMOKE')) {
             $requiredBranch = if ($BrokerRequest.Operation -eq 'RUN_DAY001') {
                 $integrationBranch
@@ -139,7 +139,7 @@ function Assert-GitBinding {
                     [StringComparison]::OrdinalIgnoreCase)) {
                 'codex/1.4.0-m3-agent-research-ready'
             } elseif ($BrokerRequest.Operation -in @(
-                    'CHECK_OPENAI_CREDENTIAL_STATUS',
+                    'CHECK_BAILIAN_CREDENTIAL_STATUS',
                     'RUN_M3_AGENT_RESEARCH_SMOKE') -and
                 $branch -eq 'codex/1.4.0-m3-agent-research-ready' -and
                 [IO.Path]::GetFullPath($BrokerRequest.JarPath).Equals(
@@ -283,34 +283,34 @@ function Invoke-CredentialStatus {
     }
 }
 
-function Invoke-OpenAiCredentialStatus {
+function Invoke-BailianCredentialStatus {
     param(
         [Parameter(Mandatory = $true)]
         [object] $BrokerRequest
     )
     if ($BrokerRequest.AuthorizationStatus -ne
-            'M3_OPENAI_CREDENTIAL_READABILITY_ZERO_NETWORK' -or
+            'M3_BAILIAN_CREDENTIAL_READABILITY_ZERO_NETWORK' -or
         $null -ne $BrokerRequest.AuthorizationFile) {
         throw 'STOCK_QUANT_HOST_BROKER_M3_CREDENTIAL_SCOPE_INVALID'
     }
-    $presence = @(& $credentialStatusScript -OpenAiStatus 2>&1 |
+    $presence = @(& $credentialStatusScript -BailianStatus 2>&1 |
         ForEach-Object { [string]$_ })
     if ($LASTEXITCODE -ne 0 -or
-        $presence -notcontains 'StockQuant/OpenAiApiKey=PRESENT' -or
-        $presence -notcontains 'STOCK_QUANT_OPENAI_CREDENTIAL_READY=True') {
-        throw 'STOCK_QUANT_HOST_BROKER_OPENAI_CREDENTIAL_MISSING'
+        $presence -notcontains 'StockQuant/BailianApiKey=PRESENT' -or
+        $presence -notcontains 'STOCK_QUANT_BAILIAN_CREDENTIAL_READY=True') {
+        throw 'STOCK_QUANT_HOST_BROKER_BAILIAN_CREDENTIAL_MISSING'
     }
-    $output = @(& java "-Dloader.main=$openAiCredentialProbeClass" `
+    $output = @(& java "-Dloader.main=$bailianCredentialProbeClass" `
         -cp $BrokerRequest.JarPath `
         'org.springframework.boot.loader.launch.PropertiesLauncher' 2>&1 |
         ForEach-Object { [string]$_ })
     if ($LASTEXITCODE -ne 0 -or
-        $output -notcontains 'STOCK_QUANT_OPENAI_CREDENTIAL_READ=SUCCESS' -or
-        $output -notcontains 'STOCK_QUANT_OPENAI_NETWORK_CALLS=0' -or
-        $output -notcontains 'STOCK_QUANT_OPENAI_OUTPUT_AUDIT=PASSED') {
+        $output -notcontains 'STOCK_QUANT_BAILIAN_CREDENTIAL_READ=SUCCESS' -or
+        $output -notcontains 'STOCK_QUANT_BAILIAN_NETWORK_CALLS=0' -or
+        $output -notcontains 'STOCK_QUANT_BAILIAN_OUTPUT_AUDIT=PASSED') {
         throw (Get-SafeMarker -Lines $output `
-            -Name 'STOCK_QUANT_OPENAI_CREDENTIAL_PROBE_REASON' `
-            -Fallback 'STOCK_QUANT_HOST_BROKER_OPENAI_CREDENTIAL_READ_FAILED')
+            -Name 'STOCK_QUANT_BAILIAN_CREDENTIAL_PROBE_REASON' `
+            -Fallback 'STOCK_QUANT_HOST_BROKER_BAILIAN_CREDENTIAL_READ_FAILED')
     }
     return [ordered]@{
         credentialReady = $true
@@ -739,13 +739,13 @@ function Invoke-M2StrategyResearchSmoke {
 function Invoke-M3AgentResearchSmoke {
     param([Parameter(Mandatory = $true)] [object] $BrokerRequest)
     if ($BrokerRequest.AuthorizationStatus -ne
-            'M3_USER_APPROVED_OPENAI_SMOKE_USD_0_10' -or
+            'M3_USER_APPROVED_BAILIAN_SMOKE_CNY_5_00' -or
         $null -ne $BrokerRequest.AuthorizationFile) {
         throw 'STOCK_QUANT_HOST_BROKER_M3_SCOPE_INVALID'
     }
-    Assert-M3OpenAiSmokeBudgetUnused -BrokerRequest $BrokerRequest
+    Assert-M3BailianSmokeBudgetUnused -BrokerRequest $BrokerRequest
     $runnerResult = Join-Path $paths.Results `
-        "$($BrokerRequest.RequestId).m3-openai.json"
+        "$($BrokerRequest.RequestId).m3-bailian.json"
     if (Test-Path -LiteralPath $runnerResult) {
         throw 'STOCK_QUANT_HOST_BROKER_RUNNER_RESULT_ALREADY_EXISTS'
     }
@@ -754,7 +754,7 @@ function Invoke-M3AgentResearchSmoke {
     $output = @(& $m3RunnerScript `
         -ResultFile $runnerResult -ReportDirectory $reportDirectory `
         -ArtifactPath $BrokerRequest.JarPath -ExecutionId $executionId `
-        -ModelMode OPENAI 2>&1 | ForEach-Object { [string]$_ })
+        -ModelMode BAILIAN 2>&1 | ForEach-Object { [string]$_ })
     if ($LASTEXITCODE -ne 0) {
         if (Test-Path -LiteralPath $runnerResult -PathType Leaf) {
             try {
@@ -791,7 +791,7 @@ function Invoke-M3AgentResearchSmoke {
     $roles = @($runs | Select-Object -ExpandProperty agentRole -Unique)
     $usage = $m3.research.totalModelUsage
     [decimal]$estimatedCost = [decimal]::Parse(
-        [string]$usage.estimatedCostUsd,
+        [string]$usage.estimatedCost,
         [Globalization.NumberStyles]::Number,
         [Globalization.CultureInfo]::InvariantCulture)
     if ($m3.schemaVersion -ne 'M3_AGENT_RESEARCH_SMOKE_RESULT_V1' -or
@@ -808,11 +808,12 @@ function Invoke-M3AgentResearchSmoke {
         [int]$m3.research.toolCallCount -ne 4 -or
         [int]$usage.inputTokens -le 0 -or
         [int]$usage.outputTokens -le 0 -or
-        $estimatedCost -le 0 -or $estimatedCost -gt [decimal]0.10 -or
+        $estimatedCost -le 0 -or $estimatedCost -gt [decimal]5.00 -or
+        [string]$usage.costCurrency -ne 'CNY' -or
         $runs.Count -ne 13 -or $roles.Count -ne 7 -or
         @($runs | Where-Object {
-            $_.modelProvider -ne 'OPENAI' -or
-            $_.model -ne 'gpt-5-mini-2025-08-07'
+            $_.modelProvider -ne 'BAILIAN' -or
+            $_.model -ne 'qwen3.7-plus'
         }).Count -ne 0 -or
         -not $m3.research.dataset.typedFactReadback -or
         -not $m3.research.dataset.systemKnowledgeReadback -or
@@ -834,10 +835,11 @@ function Invoke-M3AgentResearchSmoke {
         externalModelCallCount = 13
         modelInputUnits = [int]$usage.inputTokens
         modelOutputUnits = [int]$usage.outputTokens
-        estimatedCostUsd = $estimatedCost.ToString(
+        estimatedCostCny = $estimatedCost.ToString(
             [Globalization.CultureInfo]::InvariantCulture)
-        hardCostLimitUsd = '0.10'
-        model = 'gpt-5-mini-2025-08-07'
+        hardCostLimitCny = '5.00'
+        costCurrency = 'CNY'
+        model = 'qwen3.7-plus'
         agentRoleCount = 7
         toolCallCount = 4
         researchStatus = [string]$m3.research.status
@@ -855,26 +857,28 @@ function Invoke-M3AgentResearchSmoke {
     }
 }
 
-function Assert-M3OpenAiSmokeBudgetUnused {
+function Assert-M3BailianSmokeBudgetUnused {
     param([Parameter(Mandatory = $true)] [object] $BrokerRequest)
     $operationMarker = 'RUN_M3_AGENT_RESEARCH_SMOKE'
     $prior = @()
     $prior += @(Get-ChildItem -LiteralPath $paths.Requests -File |
         Where-Object { $_.FullName -ne $processingPath } |
         Where-Object {
-            $_.Length -gt 0 -and $_.Length -le 65536 -and
-            (Get-Content -LiteralPath $_.FullName -Raw -Encoding UTF8) `
-                -match "(?m)^operation=$operationMarker$"
+            if ($_.Length -le 0 -or $_.Length -gt 65536) { return $false }
+            $content = Get-Content -LiteralPath $_.FullName -Raw -Encoding UTF8
+            return $content -match "(?m)^operation=$operationMarker$" -and
+                $content -match '(?m)^provider=BAILIAN$'
         })
     $prior += @(Get-ChildItem -LiteralPath $paths.Results -File `
         -Filter '*.result.json' | Where-Object {
-            $_.Name -ne "$($BrokerRequest.RequestId).result.json" -and
-            $_.Length -gt 0 -and $_.Length -le 1048576 -and
-            (Get-Content -LiteralPath $_.FullName -Raw -Encoding UTF8) `
-                -match ('"operation"\s*:\s*"' + $operationMarker + '"')
+            if ($_.Name -eq "$($BrokerRequest.RequestId).result.json" -or
+                $_.Length -le 0 -or $_.Length -gt 1048576) { return $false }
+            $content = Get-Content -LiteralPath $_.FullName -Raw -Encoding UTF8
+            return $content -match ('"operation"\s*:\s*"' + $operationMarker + '"') -and
+                $content -match '"model"\s*:\s*"qwen3\.7-plus"'
         })
     if ($prior.Count -ne 0) {
-        throw 'M3_OPENAI_SMOKE_BUDGET_ALREADY_CONSUMED'
+        throw 'M3_BAILIAN_SMOKE_BUDGET_ALREADY_CONSUMED'
     }
 }
 
@@ -1069,8 +1073,8 @@ function Invoke-ClaimedRequest {
                 Invoke-M2StrategyResearchSmoke -BrokerRequest $request
                 break
             }
-            'CHECK_OPENAI_CREDENTIAL_STATUS' {
-                Invoke-OpenAiCredentialStatus -BrokerRequest $request
+            'CHECK_BAILIAN_CREDENTIAL_STATUS' {
+                Invoke-BailianCredentialStatus -BrokerRequest $request
                 break
             }
             'RUN_M3_AGENT_RESEARCH_SMOKE' {

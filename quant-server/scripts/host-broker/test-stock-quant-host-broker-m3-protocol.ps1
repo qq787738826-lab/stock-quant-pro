@@ -73,28 +73,28 @@ try {
     $credential = [ordered]@{
         'schema.version' = 'STOCK_QUANT_HOST_BROKER_REQUEST_V1'
         'request.id' = $credentialId
-        'operation' = 'CHECK_OPENAI_CREDENTIAL_STATUS'
+        'operation' = 'CHECK_BAILIAN_CREDENTIAL_STATUS'
         'git.commit' = $head
         'jar.path' = $artifact
         'jar.sha256' = $hash
         'authorization.file' = 'NONE'
-        'provider' = 'OPENAI'
-        'model' = 'gpt-5-mini-2025-08-07'
+        'provider' = 'BAILIAN'
+        'model' = 'qwen3.7-plus'
         'provider.endpoint' = 'NONE'
         'maximum.model.calls' = '0'
-        'maximum.cost.usd' = '0.00'
+        'maximum.cost.cny' = '0.00'
         'retry.budget' = '0'
         'redirects' = 'NEVER'
         'created.at' = $created.ToString('o')
         'expires.at' = $created.AddMinutes(10).ToString('o')
-        'execution.source' = 'M3_OPENAI_CREDENTIAL_READABILITY_CHECK'
+        'execution.source' = 'M3_BAILIAN_CREDENTIAL_READABILITY_CHECK'
         'no.retry' = 'true'
         'source.request.id' = 'NONE'
     }
     $parsedCredential = Read-Valid $credential
-    if ($parsedCredential.Operation -ne 'CHECK_OPENAI_CREDENTIAL_STATUS' -or
+    if ($parsedCredential.Operation -ne 'CHECK_BAILIAN_CREDENTIAL_STATUS' -or
         $parsedCredential.AuthorizationStatus -ne
-            'M3_OPENAI_CREDENTIAL_READABILITY_ZERO_NETWORK' -or
+            'M3_BAILIAN_CREDENTIAL_READABILITY_ZERO_NETWORK' -or
         $null -ne $parsedCredential.AuthorizationFile) {
         throw 'M3_PROTOCOL_VALID_CREDENTIAL_REQUEST_REJECTED'
     }
@@ -104,7 +104,7 @@ try {
     $credentialResult = [ordered]@{
         schemaVersion = 'STOCK_QUANT_HOST_BROKER_RESULT_V1'
         requestId = $credentialId
-        operation = 'CHECK_OPENAI_CREDENTIAL_STATUS'
+        operation = 'CHECK_BAILIAN_CREDENTIAL_STATUS'
         status = 'SUCCEEDED'
         stage = 'COMPLETED'
         reason = 'STOCK_QUANT_HOST_BROKER_SUCCEEDED'
@@ -154,16 +154,17 @@ try {
         'database.user' = 'stock_quant_research'
         'schema.name' = 'tushare_research'
         'database.read.only' = 'true'
-        'provider' = 'OPENAI'
-        'model' = 'gpt-5-mini-2025-08-07'
-        'provider.endpoint' = 'https://api.openai.com/v1/responses'
+        'provider' = 'BAILIAN'
+        'model' = 'qwen3.7-plus'
+        'provider.endpoint' =
+            'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'
         'maximum.model.calls' = '13'
-        'maximum.output.tokens.per.call' = '1200'
-        'maximum.cost.usd' = '0.10'
+        'maximum.output.tokens.per.call' = '600'
+        'maximum.cost.cny' = '5.00'
         'retry.budget' = '0'
         'redirects' = 'NEVER'
         'user.approval.reference' =
-            'USER_APPROVED_M3_OPENAI_SMOKE_USD_0_10'
+            'USER_APPROVED_M3_BAILIAN_SMOKE_CNY_5_00'
         'created.at' = $created.ToString('o')
         'expires.at' = $created.AddMinutes(10).ToString('o')
         'execution.source' = 'M3_AGENT_RESEARCH_REAL_LLM_SMOKE'
@@ -173,7 +174,7 @@ try {
     $parsedSmoke = Read-Valid $smoke
     if ($parsedSmoke.Operation -ne 'RUN_M3_AGENT_RESEARCH_SMOKE' -or
         $parsedSmoke.AuthorizationStatus -ne
-            'M3_USER_APPROVED_OPENAI_SMOKE_USD_0_10' -or
+            'M3_USER_APPROVED_BAILIAN_SMOKE_CNY_5_00' -or
         $null -ne $parsedSmoke.AuthorizationFile) {
         throw 'M3_PROTOCOL_VALID_SMOKE_REQUEST_REJECTED'
     }
@@ -201,7 +202,7 @@ try {
 
     $higherCost = Copy-Values $smoke
     $higherCost['request.id'] = New-StockQuantHostBrokerRequestId
-    $higherCost['maximum.cost.usd'] = '0.11'
+    $higherCost['maximum.cost.cny'] = '5.01'
     Expect-Rejection $higherCost `
         'STOCK_QUANT_HOST_BROKER_REQUEST_SCOPE_INVALID'
 
@@ -237,7 +238,7 @@ try {
 
     Write-Output "STOCK_QUANT_M3_BROKER_PROTOCOL_TESTS=$tests"
     Write-Output 'STOCK_QUANT_M3_BROKER_PROTOCOL_FAILURES=0'
-    Write-Output 'STOCK_QUANT_M3_BROKER_OPENAI_NETWORK_CALLS=0'
+    Write-Output 'STOCK_QUANT_M3_BROKER_BAILIAN_NETWORK_CALLS=0'
     Write-Output 'STOCK_QUANT_M3_BROKER_TUSHARE_CALLS=0'
     Write-Output 'STOCK_QUANT_M3_BROKER_DATABASE_WRITES=0'
 } finally {

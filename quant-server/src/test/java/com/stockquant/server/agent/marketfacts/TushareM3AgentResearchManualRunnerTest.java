@@ -22,9 +22,9 @@ class TushareM3AgentResearchManualRunnerTest {
         assertEquals(TushareM3AgentResearchManualRunner.ExecutionMode
                 .E2E_DRY_RUN, parsed.executionMode());
         assertEquals(TushareM3AgentResearchManualRunner.ExecutionMode
-                        .FORMAL_LOCAL_OPENAI,
+                        .FORMAL_LOCAL_BAILIAN,
                 TushareM3AgentResearchManualRunner.Arguments.parse(
-                        arguments("FORMAL_LOCAL_OPENAI", "38432"))
+                        arguments("FORMAL_LOCAL_BAILIAN", "38432"))
                         .executionMode());
         assertThrows(IllegalStateException.class, () ->
                 TushareM3AgentResearchManualRunner.Arguments.parse(
@@ -56,13 +56,13 @@ class TushareM3AgentResearchManualRunnerTest {
         assertEquals(AgentResearchModels.RuntimeLimits.standard(),
                 task.limits());
 
-        var openAiTask = TushareM3AgentResearchManualRunner.task(
+        var bailianTask = TushareM3AgentResearchManualRunner.task(
                 "M3SMOKE_20260811T010203Z_A1B2C3D4E5F6",
                 Instant.parse("2026-08-11T01:02:03Z"),
                 TushareM3AgentResearchManualRunner.ExecutionMode
-                        .FORMAL_LOCAL_OPENAI);
+                        .FORMAL_LOCAL_BAILIAN);
         assertEquals(Duration.ofMinutes(8),
-                openAiTask.limits().timeout());
+                bailianTask.limits().timeout());
     }
 
     private static String[] arguments(String mode, String port) {

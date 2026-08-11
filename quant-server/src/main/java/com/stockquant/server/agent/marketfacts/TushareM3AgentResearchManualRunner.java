@@ -16,7 +16,6 @@ import com.stockquant.server.agent.marketfacts.TushareM3AgentResearchSmokeResult
 import com.stockquant.server.agent.marketfacts.TushareM3AgentResearchSmokeResult.Result;
 import com.stockquant.server.agent.marketfacts.TushareM3AgentResearchSmokeResult.ResultFile;
 import com.stockquant.server.agent.research.AgentPromptCatalog;
-import com.stockquant.server.agent.research.AgentResearchModels;
 import com.stockquant.server.agent.research.AgentResearchModels.AgentRole;
 import com.stockquant.server.agent.research.AgentResearchModels.ResearchReport;
 import com.stockquant.server.agent.research.AgentResearchModels.ResearchTask;
@@ -96,8 +95,8 @@ public final class TushareM3AgentResearchManualRunner {
 
             Arguments boundLaunch = launch;
             Captured<Execution> captured = boundLaunch.executionMode()
-                    .usesOpenAi()
-                    ? captureOpenAiExecution(boundLaunch, clock)
+                    .usesBailian()
+                    ? captureBailianExecution(boundLaunch, clock)
                     : captureFakeModelExecution(boundLaunch, clock);
             execution = captured.value();
             audit = audit(captured.auditResult());
@@ -164,24 +163,24 @@ public final class TushareM3AgentResearchManualRunner {
                 });
     }
 
-    private static Captured<Execution> captureOpenAiExecution(
+    private static Captured<Execution> captureBailianExecution(
             Arguments launch,
             Clock clock
     ) throws Exception {
         return TushareControlledAcceptanceOutputAudit
-                .captureM3OpenAiResearchProcess(registry -> {
+                .captureM3BailianResearchProcess(registry -> {
                     try (SecretProvider secrets =
                                  CompositeSecretProvider.formalLocal(
                                          Mode.WINDOWS_CREDENTIAL_MANAGER);
                          SecretValue database =
-                                 secrets.readResearchDatabasePassword();
-                         SecretValue openAi = secrets.readOpenAiApiKey()) {
+                                  secrets.readResearchDatabasePassword();
+                         SecretValue bailian = secrets.readBailianApiKey()) {
                         char[] password = database.copy();
-                        char[] apiKey = openAi.copy();
+                        char[] apiKey = bailian.copy();
                         try {
                             registry.register(SensitiveKind.DATABASE_PASSWORD,
                                     password);
-                            registry.register(SensitiveKind.OPENAI_API_KEY,
+                            registry.register(SensitiveKind.BAILIAN_API_KEY,
                                     apiKey);
                             return execute(launch, password, apiKey, clock);
                         } finally {
@@ -195,7 +194,7 @@ public final class TushareM3AgentResearchManualRunner {
     private static Execution execute(
             Arguments launch,
             char[] password,
-            char[] openAiApiKey,
+            char[] bailianApiKey,
             Clock clock
     ) {
         try (ReadOnlyDataSource dataSource = new ReadOnlyDataSource(
@@ -220,9 +219,9 @@ public final class TushareM3AgentResearchManualRunner {
                     source, new DefaultStrategyResearchApi(),
                     BacktestConfig.standard(), clock);
             ResearchReport report;
-            ModelAdapter adapter = launch.executionMode().usesOpenAi()
-                    ? new OpenAiResponsesModelAdapter(
-                    Objects.requireNonNull(openAiApiKey, "openAiApiKey"),
+            ModelAdapter adapter = launch.executionMode().usesBailian()
+                    ? OpenAiResponsesModelAdapter.bailian(
+                    Objects.requireNonNull(bailianApiKey, "bailianApiKey"),
                     Duration.ofSeconds(45))
                     : new DeterministicFakeModelAdapter();
             try (AgentResearchRuntime runtime = new AgentResearchRuntime(
@@ -269,7 +268,7 @@ public final class TushareM3AgentResearchManualRunner {
                                 "rebalanceEvery", "2",
                                 "targetGrossExposure", "0.60"))),
                 new RuntimeLimits(2, 8, 16,
-                        executionMode.usesOpenAi()
+                        executionMode.usesBailian()
                                 ? Duration.ofMinutes(8)
                                 : Duration.ofSeconds(30)));
     }
@@ -285,7 +284,7 @@ public final class TushareM3AgentResearchManualRunner {
     ) {
         Set<AgentRole> roles = report.agentRuns().stream()
                 .map(value -> value.agentRole()).collect(Collectors.toSet());
-        boolean openAi = executionMode.usesOpenAi();
+        boolean bailian = executionMode.usesBailian();
         if (!roles.equals(Set.of(AgentRole.values()))
                 || report.toolCallCount() != 4
                 || report.modelCallCount() != 13
@@ -303,18 +302,21 @@ public final class TushareM3AgentResearchManualRunner {
                 || !report.criticReview().correctionApplied()
                 || !report.researchOnly() || report.providerCalled()
                 || report.shadowStarted() || report.tradingStarted()
-                || report.deterministic() == openAi
-                || openAi && (report.totalModelUsage().inputTokens() <= 0
+                || report.deterministic() == bailian
+                || bailian && (report.totalModelUsage().inputTokens() <= 0
                 || report.totalModelUsage().outputTokens() <= 0
-                || report.totalModelUsage().estimatedCostUsd().signum() <= 0
-                || report.totalModelUsage().estimatedCostUsd().compareTo(
-                OpenAiResponsesModelAdapter.M3_HARD_COST_LIMIT_USD) > 0
+                || report.totalModelUsage().estimatedCost().signum() <= 0
+                || report.totalModelUsage().estimatedCost().compareTo(
+                OpenAiResponsesModelAdapter.M3_BAILIAN_HARD_COST_LIMIT_CNY) > 0
+                || !"CNY".equals(report.totalModelUsage().costCurrency())
                 || report.agentRuns().stream().anyMatch(value ->
-                !"OPENAI".equals(value.modelProvider())
-                        || !AgentResearchModels.REAL_MODEL.equals(
+                !"BAILIAN".equals(value.modelProvider())
+                        || !OpenAiResponsesModelAdapter.BAILIAN_MODEL.equals(
                         value.model())))
-                || !openAi && report.totalModelUsage().estimatedCostUsd()
-                .compareTo(BigDecimal.ZERO) != 0) {
+                || !bailian && (report.totalModelUsage().estimatedCost()
+                .compareTo(BigDecimal.ZERO) != 0
+                || !"NONE".equals(
+                report.totalModelUsage().costCurrency()))) {
             throw invalid("M3_RESEARCH_REPORT_NOT_ELIGIBLE");
         }
     }
@@ -520,10 +522,10 @@ public final class TushareM3AgentResearchManualRunner {
     enum ExecutionMode {
         E2E_DRY_RUN,
         FORMAL_LOCAL,
-        FORMAL_LOCAL_OPENAI;
+        FORMAL_LOCAL_BAILIAN;
 
-        boolean usesOpenAi() {
-            return this == FORMAL_LOCAL_OPENAI;
+        boolean usesBailian() {
+            return this == FORMAL_LOCAL_BAILIAN;
         }
 
         boolean formal() {

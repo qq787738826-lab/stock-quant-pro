@@ -58,8 +58,8 @@ class SecretProviderTest {
             targets.add(target);
             char[] value = (target.endsWith("TushareToken")
                     ? "fake-token-value"
-                    : target.endsWith("OpenAiApiKey")
-                    ? "sk-fake-openai-key-value"
+                    : target.endsWith("BailianApiKey")
+                    ? "sk-fake-bailian-key-value"
                     : "fake-database-value").toCharArray();
             returned.add(value);
             return value;
@@ -68,17 +68,17 @@ class SecretProviderTest {
         try (SecretValue first = provider.readResearchDatabasePassword();
              SecretValue second = provider.readResearchDatabasePassword();
              SecretValue token = provider.readTushareToken();
-             SecretValue openAi = provider.readOpenAiApiKey()) {
+             SecretValue bailian = provider.readBailianApiKey()) {
             assertSecretEquals("fake-database-value", first);
             assertSecretEquals("fake-database-value", second);
             assertSecretEquals("fake-token-value", token);
-            assertSecretEquals("sk-fake-openai-key-value", openAi);
+            assertSecretEquals("sk-fake-bailian-key-value", bailian);
         }
         assertEquals(List.of(
                 "StockQuant/ResearchDbPassword",
                 "StockQuant/ResearchDbPassword",
                 "StockQuant/TushareToken",
-                "StockQuant/OpenAiApiKey"), targets);
+                "StockQuant/BailianApiKey"), targets);
         returned.forEach(SecretProviderTest::assertAllZero);
         assertFalse(provider.toString().contains("fake"));
     }
@@ -154,7 +154,7 @@ class SecretProviderTest {
                         forbidden::readTushareToken).getMessage());
         assertEquals("STOCK_QUANT_REAL_CREDENTIAL_ACCESS_FORBIDDEN",
                 assertThrows(IllegalStateException.class,
-                        forbidden::readOpenAiApiKey).getMessage());
+                        forbidden::readBailianApiKey).getMessage());
     }
 
     @Test
@@ -172,7 +172,7 @@ class SecretProviderTest {
 
         try (SecretValue ignored = provider.readResearchDatabasePassword();
              SecretValue ignoredAgain = provider.readTushareToken();
-             SecretValue ignoredOpenAi = provider.readOpenAiApiKey()) {
+             SecretValue ignoredBailian = provider.readBailianApiKey()) {
             assertEquals(3, calls.get());
         }
         assertAllZero(database);
@@ -208,10 +208,10 @@ class SecretProviderTest {
         assertTrue(setup.contains("Read-Host")
                 && setup.contains("-AsSecureString"));
         assertTrue(setup.contains("ProviderOnly"));
-        assertTrue(setup.contains("OpenAiOnly"));
-        assertTrue(setup.contains("StockQuant/OpenAiApiKey"));
+        assertTrue(setup.contains("BailianOnly"));
+        assertTrue(setup.contains("StockQuant/BailianApiKey"));
         assertTrue(setup.contains(
-                "STOCK_QUANT_OPENAI_CREDENTIAL_UPDATED=true"));
+                "STOCK_QUANT_BAILIAN_CREDENTIAL_UPDATED=true"));
         assertTrue(setup.contains(
                 "STOCK_QUANT_PROVIDER_CREDENTIAL_UPDATED=true"));
         assertFalse(setup.contains("ConvertFrom-SecureString"));

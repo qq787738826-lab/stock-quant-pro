@@ -343,9 +343,17 @@ public final class AgentResearchRuntime implements AutoCloseable {
             int output = runs.stream().mapToInt(value ->
                     value.usage().outputTokens()).sum();
             BigDecimal cost = runs.stream().map(value ->
-                            value.usage().estimatedCostUsd())
+                            value.usage().estimatedCost())
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
-            return new ModelUsage(input, output, cost);
+            Set<String> currencies = runs.stream().map(value ->
+                    value.usage().costCurrency()).collect(
+                    java.util.stream.Collectors.toUnmodifiableSet());
+            if (currencies.size() != 1) {
+                throw AgentResearchModels.invalid(
+                        "M3_MODEL_USAGE_CURRENCY_MISMATCH");
+            }
+            return new ModelUsage(input, output, cost,
+                    currencies.iterator().next());
         }
     }
 

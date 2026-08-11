@@ -420,18 +420,23 @@ public final class AgentResearchModels {
     public record ModelUsage(
             int inputTokens,
             int outputTokens,
-            BigDecimal estimatedCostUsd
+            BigDecimal estimatedCost,
+            String costCurrency
     ) {
         public ModelUsage {
-            Objects.requireNonNull(estimatedCostUsd, "estimatedCostUsd");
+            Objects.requireNonNull(estimatedCost, "estimatedCost");
+            costCurrency = required(costCurrency, "costCurrency");
             if (inputTokens < 0 || outputTokens < 0
-                    || estimatedCostUsd.signum() < 0) {
+                    || estimatedCost.signum() < 0
+                    || !costCurrency.matches("NONE|USD|CNY")
+                    || ("NONE".equals(costCurrency)
+                    && estimatedCost.signum() != 0)) {
                 throw invalid("M3_MODEL_USAGE_INVALID");
             }
         }
 
         public static ModelUsage zero() {
-            return new ModelUsage(0, 0, BigDecimal.ZERO);
+            return new ModelUsage(0, 0, BigDecimal.ZERO, "NONE");
         }
     }
 

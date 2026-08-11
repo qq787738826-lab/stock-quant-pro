@@ -21,8 +21,8 @@ public interface SecretProvider extends AutoCloseable {
         return read(SecretTarget.TUSHARE_TOKEN);
     }
 
-    default SecretValue readOpenAiApiKey() {
-        return read(SecretTarget.OPENAI_API_KEY);
+    default SecretValue readBailianApiKey() {
+        return read(SecretTarget.BAILIAN_API_KEY);
     }
 
     @Override
@@ -33,7 +33,7 @@ public interface SecretProvider extends AutoCloseable {
     enum SecretTarget {
         RESEARCH_DATABASE_PASSWORD("StockQuant/ResearchDbPassword"),
         TUSHARE_TOKEN("StockQuant/TushareToken"),
-        OPENAI_API_KEY("StockQuant/OpenAiApiKey");
+        BAILIAN_API_KEY("StockQuant/BailianApiKey");
 
         private final String credentialTarget;
 

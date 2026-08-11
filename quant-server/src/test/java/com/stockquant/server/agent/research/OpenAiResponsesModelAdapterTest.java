@@ -55,7 +55,8 @@ class OpenAiResponsesModelAdapterTest {
             assertEquals(1_000, result.usage().inputTokens());
             assertEquals(200, result.usage().outputTokens());
             assertEquals(new BigDecimal("0.000560000000"),
-                    result.usage().estimatedCostUsd());
+                    result.usage().estimatedCost());
+            assertEquals("USD", result.usage().costCurrency());
             var telemetry = adapter.telemetry();
             assertEquals(1, telemetry.attemptedCallCount());
             assertEquals(1, telemetry.networkCallCount());
@@ -63,9 +64,10 @@ class OpenAiResponsesModelAdapterTest {
             assertEquals(1_000, telemetry.inputTokenCount());
             assertEquals(200, telemetry.outputTokenCount());
             assertEquals(new BigDecimal("0.000560000000"),
-                    telemetry.accountedCostUsd());
+                    telemetry.accountedCost());
             assertEquals(new BigDecimal("0.10"),
-                    telemetry.hardCostLimitUsd());
+                    telemetry.hardCostLimit());
+            assertEquals("USD", telemetry.costCurrency());
         }
     }
 
@@ -156,7 +158,7 @@ class OpenAiResponsesModelAdapterTest {
                         () -> bounded.complete(request())).getMessage());
         assertEquals(OpenAiResponsesModelAdapter.MAXIMUM_MODEL_CALLS,
                 bounded.telemetry().networkCallCount());
-        assertTrue(bounded.telemetry().accountedCostUsd().compareTo(
+        assertTrue(bounded.telemetry().accountedCost().compareTo(
                 OpenAiResponsesModelAdapter.M3_HARD_COST_LIMIT_USD) < 0);
         bounded.close();
     }

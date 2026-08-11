@@ -9,7 +9,7 @@ param(
         'RUN_M1_RESEARCH_DATA',
         'VERIFY_M1_TUSHARE_TOKEN',
         'RUN_M2_STRATEGY_RESEARCH_SMOKE',
-        'CHECK_OPENAI_CREDENTIAL_STATUS',
+        'CHECK_BAILIAN_CREDENTIAL_STATUS',
         'RUN_M3_AGENT_RESEARCH_SMOKE',
         'READ_SANITIZED_RESULT'
     )]
@@ -43,7 +43,7 @@ function Assert-StockQuantHostBrokerInvoker([object] $Heartbeat) {
 }
 if ([string]::IsNullOrWhiteSpace($ArtifactPath)) {
     $artifactName = if ($Operation -in @(
-            'CHECK_OPENAI_CREDENTIAL_STATUS',
+            'CHECK_BAILIAN_CREDENTIAL_STATUS',
             'RUN_M3_AGENT_RESEARCH_SMOKE')) {
         'quant-server-1.3.1-m3-agent-research-runner.jar'
     } elseif ($Operation -eq
@@ -88,7 +88,7 @@ try {
         $branch -eq 'codex/1.4.0-m3-agent-research-ready') {
         'codex/1.4.0-m3-agent-research-ready'
     } elseif ($Operation -in @(
-            'CHECK_OPENAI_CREDENTIAL_STATUS',
+            'CHECK_BAILIAN_CREDENTIAL_STATUS',
             'RUN_M3_AGENT_RESEARCH_SMOKE') -and
         $branch -eq 'codex/1.4.0-m3-agent-research-ready') {
         'codex/1.4.0-m3-agent-research-ready'
@@ -130,7 +130,7 @@ try {
     if ($Operation -in @(
             'DIAGNOSE_TUSHARE_CREDENTIAL',
             'RUN_M2_STRATEGY_RESEARCH_SMOKE',
-            'CHECK_OPENAI_CREDENTIAL_STATUS',
+            'CHECK_BAILIAN_CREDENTIAL_STATUS',
             'RUN_M3_AGENT_RESEARCH_SMOKE')) {
         if ($AuthorizationFile -ne 'NONE') {
             throw 'STOCK_QUANT_HOST_BROKER_AUTHORIZATION_MODE_INVALID'
@@ -147,7 +147,7 @@ try {
     $requestId = New-StockQuantHostBrokerRequestId
     $createdAt = [DateTimeOffset]::UtcNow
     $expiresAt = $createdAt.AddMinutes(10)
-    if ($Operation -eq 'CHECK_OPENAI_CREDENTIAL_STATUS') {
+    if ($Operation -eq 'CHECK_BAILIAN_CREDENTIAL_STATUS') {
         $requestValues = [ordered]@{
             'schema.version' = 'STOCK_QUANT_HOST_BROKER_REQUEST_V1'
             'request.id' = $requestId
@@ -156,17 +156,17 @@ try {
             'jar.path' = $artifact
             'jar.sha256' = $artifactHash
             'authorization.file' = 'NONE'
-            'provider' = 'OPENAI'
-            'model' = 'gpt-5-mini-2025-08-07'
+            'provider' = 'BAILIAN'
+            'model' = 'qwen3.7-plus'
             'provider.endpoint' = 'NONE'
             'maximum.model.calls' = '0'
-            'maximum.cost.usd' = '0.00'
+            'maximum.cost.cny' = '0.00'
             'retry.budget' = '0'
             'redirects' = 'NEVER'
             'created.at' = $createdAt.ToString('o')
             'expires.at' = $expiresAt.ToString('o')
             'execution.source' =
-                'M3_OPENAI_CREDENTIAL_READABILITY_CHECK'
+                'M3_BAILIAN_CREDENTIAL_READABILITY_CHECK'
             'no.retry' = 'true'
             'source.request.id' = 'NONE'
         }
@@ -198,17 +198,17 @@ try {
             'database.user' = 'stock_quant_research'
             'schema.name' = 'tushare_research'
             'database.read.only' = 'true'
-            'provider' = 'OPENAI'
-            'model' = 'gpt-5-mini-2025-08-07'
+            'provider' = 'BAILIAN'
+            'model' = 'qwen3.7-plus'
             'provider.endpoint' =
-                'https://api.openai.com/v1/responses'
+                'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'
             'maximum.model.calls' = '13'
-            'maximum.output.tokens.per.call' = '1200'
-            'maximum.cost.usd' = '0.10'
+            'maximum.output.tokens.per.call' = '600'
+            'maximum.cost.cny' = '5.00'
             'retry.budget' = '0'
             'redirects' = 'NEVER'
             'user.approval.reference' =
-                'USER_APPROVED_M3_OPENAI_SMOKE_USD_0_10'
+                'USER_APPROVED_M3_BAILIAN_SMOKE_CNY_5_00'
             'created.at' = $createdAt.ToString('o')
             'expires.at' = $expiresAt.ToString('o')
             'execution.source' = 'M3_AGENT_RESEARCH_REAL_LLM_SMOKE'
