@@ -53,6 +53,7 @@ class BailianOpenAiCompatibleModelAdapterTest {
             assertFalse(request.path("stream").asBoolean());
             assertEquals(0, request.path("temperature").asInt());
             assertEquals(600, request.path("max_tokens").asInt());
+            assertFalse(request.path("enable_thinking").asBoolean(true));
             assertEquals("json_object", request.path("response_format")
                     .path("type").asText());
             assertEquals(2, request.path("messages").size());
@@ -267,6 +268,34 @@ class BailianOpenAiCompatibleModelAdapterTest {
                 assertThrows(IllegalArgumentException.class,
                         () -> adapter.complete(request())).getMessage());
         assertEquals(1, calls.get());
+        adapter.close();
+    }
+
+    @Test
+    void rejectsHiddenReasoningUsageAbovePinnedCompletionLimit() {
+        String response = successResponse(structuredResponse())
+                .replace("\"completion_tokens\":40",
+                        "\"completion_tokens\":640")
+                .replace("\"total_tokens\":140",
+                        "\"total_tokens\":740")
+                .replace("\"prompt_tokens_details\":{\"cached_tokens\":20}",
+                        "\"prompt_tokens_details\":{\"cached_tokens\":20},"
+                                + "\"completion_tokens_details\":{"
+                                + "\"reasoning_tokens\":610}");
+        var adapter = OpenAiResponsesModelAdapter.bailian(
+                TEST_KEY.toCharArray(), Duration.ofSeconds(10),
+                (uri, key, body, timeout) -> json(200, response));
+
+        IllegalStateException failure = assertThrows(
+                IllegalStateException.class,
+                () -> adapter.complete(request()));
+
+        assertEquals("M3_BAILIAN_OUTPUT_USAGE_LIMIT_EXCEEDED",
+                failure.getMessage());
+        assertEquals("USAGE_VALIDATION",
+                diagnostics(failure).failureSource());
+        assertEquals(1, diagnostics(failure).networkCallCount());
+        assertEquals(0, diagnostics(failure).completedCallCount());
         adapter.close();
     }
 

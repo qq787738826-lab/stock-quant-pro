@@ -254,13 +254,31 @@ public final class OpenAiResponsesModelAdapter implements ModelAdapter {
                     "INVALID_JSON", "NONE", "NONE", "NONE");
         }
         ModelUsage usage = parsed.usage();
-        if (usage.inputTokens() > requestBytes
-                || usage.outputTokens() > profile.maximumOutputTokens()
-                || !profile.costCurrency().equals(usage.costCurrency())
-                || accountedCost.add(usage.estimatedCost())
+        if (usage.inputTokens() > requestBytes) {
+            accountUnknownCall(reservation);
+            throw failure("INPUT_USAGE_LIMIT_EXCEEDED",
+                    FailureSource.USAGE_VALIDATION, response.statusCode(),
+                    contentTypeCategory(response.contentType()), "VALID_JSON",
+                    "NONE", "NONE", "NONE");
+        }
+        if (usage.outputTokens() > profile.maximumOutputTokens()) {
+            accountUnknownCall(reservation);
+            throw failure("OUTPUT_USAGE_LIMIT_EXCEEDED",
+                    FailureSource.USAGE_VALIDATION, response.statusCode(),
+                    contentTypeCategory(response.contentType()), "VALID_JSON",
+                    "NONE", "NONE", "NONE");
+        }
+        if (!profile.costCurrency().equals(usage.costCurrency())) {
+            accountUnknownCall(reservation);
+            throw failure("USAGE_CURRENCY_MISMATCH",
+                    FailureSource.USAGE_VALIDATION, response.statusCode(),
+                    contentTypeCategory(response.contentType()), "VALID_JSON",
+                    "NONE", "NONE", "NONE");
+        }
+        if (accountedCost.add(usage.estimatedCost())
                 .compareTo(profile.hardCostLimit()) > 0) {
             accountUnknownCall(reservation);
-            throw failure("USAGE_BUDGET_INVALID",
+            throw failure("COST_BUDGET_POSTCALL_EXCEEDED",
                     FailureSource.USAGE_VALIDATION, response.statusCode(),
                     contentTypeCategory(response.contentType()), "VALID_JSON",
                     "NONE", "NONE", "NONE");
@@ -341,6 +359,13 @@ public final class OpenAiResponsesModelAdapter implements ModelAdapter {
         root.put("stream", false);
         root.put("temperature", 0);
         root.put("max_tokens", profile.maximumOutputTokens());
+        if ("BAILIAN".equals(profile.provider())) {
+            // qwen3.7-plus is a hybrid thinking model. Hidden reasoning tokens
+            // are reported in completion_tokens, so pin non-thinking mode for
+            // this bounded structured-output smoke instead of silently
+            // exceeding the declared completion budget.
+            root.put("enable_thinking", false);
+        }
         ArrayNode messages = root.putArray("messages");
         messages.addObject().put("role", "system").put("content",
                 request.systemPrompt()

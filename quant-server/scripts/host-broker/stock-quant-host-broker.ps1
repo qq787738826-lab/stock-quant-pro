@@ -927,6 +927,7 @@ function Get-M3BailianStageBudget {
     $operationMarker = 'RUN_M3_AGENT_RESEARCH_SMOKE'
     [decimal]$hardLimit = [decimal]5.00
     [decimal]$legacyFailureReserve = [decimal]0.50
+    $maximumModelAttempts = 4
     [decimal]$used = [decimal]0.00
     $modelAttempts = 0
     $seen = @{}
@@ -1000,7 +1001,7 @@ function Get-M3BailianStageBudget {
         }
         $used += $cost
     }
-    if ($modelAttempts -ge 3 -or $prior.Count -ge 6 -or
+    if ($modelAttempts -ge $maximumModelAttempts -or $prior.Count -ge 6 -or
         $used -ge $hardLimit) {
         throw 'M3_BAILIAN_STAGE_BUDGET_EXHAUSTED'
     }
