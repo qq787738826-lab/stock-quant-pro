@@ -813,6 +813,8 @@ function Invoke-M3AgentResearchSmoke {
                         } else { '0.50' })
                         stagePriorAccountedCostCny =
                             [string]$stageBudget.PriorCostCny
+                        stagePriorModelAttemptCount =
+                            [int]$stageBudget.PriorModelAttemptCount
                         stageRemainingCostBeforeRunCny =
                             [string]$stageBudget.RemainingCostCny
                         outputAudit = $(if ($failed.outputAudit.clean) {
@@ -899,6 +901,8 @@ function Invoke-M3AgentResearchSmoke {
         model = 'qwen3.7-plus'
         stageAttempt = [int]$stageBudget.AttemptNumber
         stagePriorAccountedCostCny = [string]$stageBudget.PriorCostCny
+        stagePriorModelAttemptCount =
+            [int]$stageBudget.PriorModelAttemptCount
         stageRemainingCostBeforeRunCny =
             [string]$stageBudget.RemainingCostCny
         agentRoleCount = 7
@@ -924,6 +928,7 @@ function Get-M3BailianStageBudget {
     [decimal]$hardLimit = [decimal]5.00
     [decimal]$legacyFailureReserve = [decimal]0.50
     [decimal]$used = [decimal]0.00
+    $modelAttempts = 0
     $seen = @{}
     $prior = @(Get-ChildItem -LiteralPath $paths.Requests -File |
         Where-Object { $_.FullName -ne $processingPath } |
@@ -986,15 +991,24 @@ function Get-M3BailianStageBudget {
                 [int]$modelDiagnostics.networkCallCount -gt 13) {
                 throw 'M3_BAILIAN_STAGE_BUDGET_LEDGER_INVALID'
             }
+            if ([int]$modelDiagnostics.networkCallCount -gt 0) {
+                $modelAttempts++
+            }
+        } elseif ([string]$priorResult.reason -match
+                '^M3_BAILIAN_[A-Z0-9_]+$') {
+            $modelAttempts++
         }
         $used += $cost
     }
-    if ($prior.Count -ge 3 -or $used -ge $hardLimit) {
+    if ($modelAttempts -ge 3 -or $prior.Count -ge 6 -or
+        $used -ge $hardLimit) {
         throw 'M3_BAILIAN_STAGE_BUDGET_EXHAUSTED'
     }
     [decimal]$remaining = $hardLimit - $used
     return [pscustomobject]@{
-        AttemptNumber = $prior.Count + 1
+        AttemptNumber = $modelAttempts + 1
+        PriorRequestCount = $prior.Count
+        PriorModelAttemptCount = $modelAttempts
         PriorCostCny = $used.ToString(
             [Globalization.CultureInfo]::InvariantCulture)
         RemainingCostCny = $remaining.ToString(
