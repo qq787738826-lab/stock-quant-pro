@@ -271,7 +271,7 @@ public final class TushareM1ResearchDatasetService {
                            SELECT 1
                              FROM pit_market_fact_observations o
                             WHERE o.fact_type = reference->>'factType'
-                              AND o.source_code = 'TUSHARE'
+                              AND o.source_code = b.source_code
                               AND o.source_instrument_id =
                                   reference->>'sourceIdentity'
                               AND o.natural_key = reference->>'naturalKey'
@@ -280,9 +280,11 @@ public final class TushareM1ResearchDatasetService {
                        ))
                   FROM pit_market_fact_batches b
                   CROSS JOIN LATERAL jsonb_array_elements(
-                      b.provider_metadata_json->'factReferences') reference
+                      b.provider_metadata_json->'factReferences')
+                      AS references(reference)
                  WHERE b.id = ?
-                 GROUP BY b.id, b.response_complete, b.record_count
+                 GROUP BY b.id, b.response_complete, b.record_count,
+                          b.source_code
                 """, Boolean.class, result.receivedCount(), result.batchId());
         return Boolean.TRUE.equals(verified);
     }

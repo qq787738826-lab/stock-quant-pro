@@ -51,7 +51,7 @@ SELECT concat(
              SELECT 1
                FROM tushare_research.pit_market_fact_observations o
               WHERE o.fact_type = refs.reference->>'factType'
-                AND o.source_code = 'TUSHARE'
+                AND o.source_code = b.source_code
                 AND o.source_instrument_id =
                     refs.reference->>'sourceIdentity'
                 AND o.natural_key = refs.reference->>'naturalKey'
