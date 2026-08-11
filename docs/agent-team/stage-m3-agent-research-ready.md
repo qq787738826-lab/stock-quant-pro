@@ -4,11 +4,13 @@
 
 - 长期任务分支：`codex/1.4.0-m3-agent-research-ready`
 - 冻结集成基线：`b041fbe807b817c4070781db33fbfca2d4f8bc4e`
-- 当前状态：`BAILIAN_REAL_LLM_SMOKE_BLOCKED_EXTERNAL_BINDING`
-- 外部门：`BAILIAN_REAL_LLM_SMOKE=BLOCKED_EXTERNAL_CREDENTIAL_ENDPOINT_BINDING`
+- 当前状态：`BAILIAN_REAL_LLM_SMOKE_BLOCKED_ADDITIONAL_BUDGET`
+- 外部门：`EXTERNAL_BAILIAN_BUDGET_REQUIRED`
 - 在真实 LLM smoke 通过前，不声明 `M3_AGENT_RESEARCH_READY=PASS`，不执行最终合并。
-- M3 新增 Tushare 调用 0；累计真实调用保持 55；百炼真实 HTTP 请求 2、完成模型调用 0；
-  永久研究库写入 0。
+- M3 新增 Tushare 调用 0；累计真实调用保持 55；百炼真实 smoke operation 共 4 个。前三个
+  operation 各 1 次 HTTP；最后一次运行在旧代码中未保留非 Provider 异常后的 usage telemetry，
+  因而该次 HTTP/已完成模型调用只能证明 1 至 13 次，阶段总 HTTP 为 4 至 16 次。CNY 5.00
+  阶段预算按 fail-closed 全额占账，永久研究库写入 0。
 
 ## 交付契约
 
@@ -35,9 +37,10 @@
 - 唯一固定 Credential Target 为 `StockQuant/BailianApiKey`。一次性脚本只从原生安全 Console
   写入 Windows Credential Manager；适配器不会从环境变量、参数或明文文件降级。Broker 的
   零网络可读性检查与真实 smoke 是两个固定 operation。
-- 百炼调用每次输出上限 600 tokens、最多 13 次模型调用；每次网络调用前按 UTF-8 请求字节和
-  最大输出作保守成本预留，任一未知结果终止适配器。真实 smoke 仅在用户批准 CNY 5.00 硬上限后
-  执行一次；当前未签发真实请求，真实百炼调用与成本均为 0。
+- 百炼调用固定 `enable_thinking=false`，每次可见输出上限 600 tokens、单次研究最多 13 次模型调用；
+  每次网络调用前按 UTF-8 请求字节和最大输出作保守成本预留，任一未知结果终止适配器。当前
+  CNY 5.00 阶段预算已因旧结果 telemetry 不完整而保守全额占账；获得新增预算前 Broker 必须拒绝
+  新真实研究请求。
 
 ## Fake Model 与评测证据
 
@@ -47,6 +50,9 @@
 - 当前代码的打包 JAR + Fake Provider + PostgreSQL 16 临时实例 M1→M2→M3 E2E 再次 PASS；
   Start-Class 为 `TushareM3AgentResearchManualRunner`，百炼/Tushare 真实调用 0、永久库写入 0、
   临时残留 0；Vue/TypeScript production build PASS。
+- 最新受影响核心定向回归 `37/0/0/0`，包含动态结构契约、非 Critic 控制字段隔离、隐藏推理
+  usage 上限、运行时失败 telemetry、Agent Eval、Runner 与 Broker 合同；Broker M3 协议
+  `11/0/0/0`，百炼/Tushare 调用和永久库写入均为 0。
 - 4 证券 × 180 交易日 deterministic fixture 完成 4 个代表策略的 M1/M2 工具链研究。
 - 同输入、参数和固定时钟的完整 `ResearchReport` 与 SHA-256 指纹完全一致。
 - `AGENT_EVAL_V1` 15/15：数据引用、工具调用、回测引用、风险识别、未来数据拒绝、
@@ -96,9 +102,9 @@
   train/test、walk-forward、过拟合识别由 deterministic fixture 覆盖。
 - M1 仍是 SYSTEM_KNOWLEDGE 与 formula-only QFQ，`PROVIDER_PIT_VERIFIED=false`；完整 F1 十项
   技术证据缺口不变。
-- 百炼 API Key 已通过 Broker 零网络可读性验证，但真实 smoke 尚未通过：当前固定北京通用端点
-  收到 HTTP 401、合法 JSON、`INVALID_API_KEY`，属于外部 Key/地域/套餐专属 Base URL 绑定问题。
-  密钥不得发送到聊天；必须先在百炼控制台确认 Key 与 Base URL/地域/业务空间的官方绑定。
+- 覆盖更新后的百炼 API Key 已通过 Broker 零网络可读性验证，并在北京官方 OpenAI-compatible
+  endpoint 得到 HTTP 200 合法 JSON；原外部 Key/地域绑定阻断已经解除。真实研究仍未完成，当前
+  唯一外部门是新增百炼预算，因为最后一次旧代码运行缺少可审计的累计 usage telemetry。
 - M3 不启动 M4、Shadow、业务 scheduler、真实订单、实盘或自动交易。
 
 ## 真实百炼 smoke 阻断证据（2026-08-11）
@@ -110,13 +116,27 @@
   `INVALID_API_KEY`，分类为 `AUTHENTICATION / INVALID_OR_UNBOUND_API_KEY`。模型完成调用 0，
   token usage 0，保守占账 CNY 0.125；输出审计 clean，数据库写入 0，Tushare 调用 0。
 - 前一版缺少失败遥测的首个请求按 CNY 0.50 保守占账；一次 Runner 前账本兼容失败可证明模型调用 0。
-  当前阶段保守累计占账 CNY 0.625，未超过 CNY 5.00，但在外部绑定确认前停止新增真实调用。
+  在该历史 checkpoint，保守累计占账为 CNY 0.625；这不是当前剩余预算。
 - 阿里云官方错误码文档明确：`InvalidApiKey` 包括 Key 填写/删除、`sk-sp-` 套餐专属 Key 与通用
   Base URL 混用、以及 Key 与 Base URL 地域不一致；官方模型卡同时为 `qwen3.7-plus` 列出带
-  `WorkspaceId` 的区域化 MaaS Base URL。当前证据不能在不读取密钥内容的前提下替用户选择绑定。
+  `WorkspaceId` 的区域化 MaaS Base URL。该历史外部绑定阻断已由后续覆盖 Key 的 HTTP 200 证据解除。
 - 代码修复提交 `0bd0f030e3b8a8b0d24273a63d54ee86fe213906` 增加 HTTP status、body code、
   Content-Type/JSON、调用数与成本的脱敏失败证据；`6214d739ccd6823b81a3b46bdb6e187512a54caf`
   修复旧结果在 PowerShell StrictMode 下的预算账本兼容。打包 Fake M1→M2→M3 + 临时
   PostgreSQL E2E 再次 PASS，临时残留 0。
-- 当前结论：`BAILIAN_REAL_LLM_SMOKE=BLOCKED_EXTERNAL_CREDENTIAL_ENDPOINT_BINDING`，不得声明
-  `M3_AGENT_RESEARCH_READY=PASS`，不得执行最终集成收口。
+- Key 覆盖后，零网络检查 request `SQHB_20260811T112215Z_25694F644A9A` 成功；request
+  `SQHB_20260811T112254Z_471D88A6465D` 得到 HTTP 200、合法 JSON、无 Provider error，但百炼
+  混合 thinking usage 被旧的 600-token 可见输出门误判。提交
+  `702142381e495c16b9cb066cc38e318dfd5db637` 固定 `enable_thinking=false`，并把四个 usage
+  拒绝条件拆成独立脱敏 reason；Fake Transport 复现与定向回归通过。
+- 技术恢复 request `SQHB_20260811T113104Z_F5EF48861C2B` 通过 HTTP/JSON/usage 解析后，被本地
+  `M3_MODEL_CRITIC_AUTHORITY_REJECTED` 阻断，retry 0、Tushare 调用 0、永久库写入 0、输出审计
+  clean。该旧 Runner 只为 Provider 异常持久化 telemetry，未为后续本地 guard 保存累计调用与
+  usage；因此精确调用数和成本不可追溯，不能用运行时长或 reason 猜测。
+- 提交 `5c47cde5da6e52255f3dd050eda6954f4fbda99b` 将非 Critic 控制字段在官方 Adapter 边界
+  确定性隔离、生成按角色/阶段收窄的 JSON 契约，并在任意后续本地 guard 失败时持久化完整脱敏
+  telemetry。Broker 对历史缺失 telemetry 的真实运行按当时全部剩余预算占账；当前保守累计恰为
+  CNY 5.00，禁止继续真实请求。修复后的 37 项定向回归、11 项 Broker 协议及打包 Fake
+  M1→M2→M3 + 临时 PostgreSQL E2E 均 PASS，真实百炼新增调用 0、临时残留 0。
+- 当前结论：`EXTERNAL_BAILIAN_BUDGET_REQUIRED`。在用户批准一笔新的、明确隔离的真实百炼
+  预算前，不得再次调用百炼，不得声明 `M3_AGENT_RESEARCH_READY=PASS`，不得执行最终集成收口。
