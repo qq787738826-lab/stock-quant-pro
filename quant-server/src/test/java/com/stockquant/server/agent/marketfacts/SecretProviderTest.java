@@ -192,6 +192,9 @@ class SecretProviderTest {
         assertFalse(setup.matches("(?s).*param\\([^)]*(Password|Token).*"));
         assertTrue(setup.contains("Read-Host")
                 && setup.contains("-AsSecureString"));
+        assertTrue(setup.contains("ProviderOnly"));
+        assertTrue(setup.contains(
+                "STOCK_QUANT_PROVIDER_CREDENTIAL_UPDATED=true"));
         assertFalse(setup.contains("ConvertFrom-SecureString"));
         assertFalse(setup.contains("SetEnvironmentVariable"));
         assertTrue(runner.contains("WINDOWS_CREDENTIAL_MANAGER"));

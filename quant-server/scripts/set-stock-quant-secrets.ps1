@@ -1,7 +1,10 @@
 [CmdletBinding(DefaultParameterSetName = 'Configure')]
 param(
     [Parameter(ParameterSetName = 'Status', Mandatory = $true)]
-    [switch] $Status
+    [switch] $Status,
+
+    [Parameter(ParameterSetName = 'ProviderOnly', Mandatory = $true)]
+    [switch] $ProviderOnly
 )
 
 $ErrorActionPreference = 'Stop'
@@ -122,9 +125,14 @@ if ($Host.Name -ne 'ConsoleHost' -or
     [Console]::IsInputRedirected -or [Console]::IsOutputRedirected) {
     throw 'STOCK_QUANT_NATIVE_SECURE_CONSOLE_REQUIRED'
 }
-if ($databasePresent -or $tusharePresent) {
+if (($ProviderOnly -and $tusharePresent) -or
+    (-not $ProviderOnly -and ($databasePresent -or $tusharePresent))) {
     $confirmation = Read-Host `
-        'Existing Stock Quant credentials will be replaced. Type OVERWRITE to continue'
+        $(if ($ProviderOnly) {
+            'Existing Tushare credential will be replaced. Type OVERWRITE to continue'
+        } else {
+            'Existing Stock Quant credentials will be replaced. Type OVERWRITE to continue'
+        })
     if ($confirmation -cne 'OVERWRITE') {
         throw 'STOCK_QUANT_CREDENTIAL_OVERWRITE_NOT_CONFIRMED'
     }
@@ -133,12 +141,18 @@ if ($databasePresent -or $tusharePresent) {
 $databaseSecret = $null
 $tushareSecret = $null
 try {
-    $databaseSecret = Read-Host `
-        'stock_quant_research database password' -AsSecureString
+    if (-not $ProviderOnly) {
+        $databaseSecret = Read-Host `
+            'stock_quant_research database password' -AsSecureString
+    }
     $tushareSecret = Read-Host 'Tushare Token' -AsSecureString
-    Write-SecureCredential $databaseTarget $databaseSecret
+    if (-not $ProviderOnly) {
+        Write-SecureCredential $databaseTarget $databaseSecret
+    }
     Write-SecureCredential $tushareTarget $tushareSecret
-    Write-Output 'STOCK_QUANT_CREDENTIALS_CONFIGURED=true'
+    Write-Output $(if ($ProviderOnly) {
+        'STOCK_QUANT_PROVIDER_CREDENTIAL_UPDATED=true'
+    } else { 'STOCK_QUANT_CREDENTIALS_CONFIGURED=true' })
     Write-Output 'STOCK_QUANT_CREDENTIAL_STORAGE=WINDOWS_CREDENTIAL_MANAGER_CURRENT_USER'
 } finally {
     if ($null -ne $databaseSecret) { $databaseSecret.Dispose() }

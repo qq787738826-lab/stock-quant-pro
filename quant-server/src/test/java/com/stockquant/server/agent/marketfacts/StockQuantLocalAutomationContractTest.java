@@ -29,6 +29,10 @@ class StockQuantLocalAutomationContractTest {
         assertTrue(script.contains("StockQuant/ResearchDbPassword"));
         assertTrue(script.contains("StockQuant/TushareToken"));
         assertTrue(script.contains("OVERWRITE"));
+        assertTrue(parameters.contains("ProviderOnly"));
+        assertTrue(script.contains(
+                "STOCK_QUANT_PROVIDER_CREDENTIAL_UPDATED=true"));
+        assertTrue(script.contains("if (-not $ProviderOnly)"));
         assertTrue(script.contains("STOCK_QUANT_CREDENTIALS_READY"));
         assertFalse(script.contains("ConvertFrom-SecureString"));
         assertFalse(script.contains("SetEnvironmentVariable"));
