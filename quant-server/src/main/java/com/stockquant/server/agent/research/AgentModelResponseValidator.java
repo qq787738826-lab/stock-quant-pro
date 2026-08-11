@@ -6,6 +6,7 @@ import com.stockquant.server.agent.research.AgentResearchModels.Evidence;
 import com.stockquant.server.agent.research.AgentResearchModels.ToolCode;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -25,6 +26,11 @@ final class AgentModelResponseValidator {
                     + "submit\\s+(?:a\\s+)?trade|真实下单|自动交易|执行交易)");
     private static final Map<AgentRole, Set<ClaimType>> CLAIM_TYPES =
             claimTypes();
+    private static final Set<String> DOWNGRADE_TO_UNKNOWN = Set.of(
+            "M3_MODEL_EVIDENCE_REFERENCE_REJECTED",
+            "M3_UNSUPPORTED_MODEL_CLAIM",
+            "M3_UNKNOWN_CONFIDENCE_REJECTED",
+            "M3_UNSUPPORTED_NUMERIC_CLAIM");
 
     private AgentModelResponseValidator() {
     }
@@ -66,8 +72,24 @@ final class AgentModelResponseValidator {
                         "M3_MODEL_EVIDENCE_DUPLICATE");
             }
         }
+        List<ModelAdapter.ModelClaim> validatedClaims = new ArrayList<>();
         for (ModelAdapter.ModelClaim claim : response.claims()) {
-            validateClaim(request, claim, evidence);
+            try {
+                validateClaim(request, claim, evidence);
+                validatedClaims.add(claim);
+            } catch (IllegalArgumentException failure) {
+                if (!DOWNGRADE_TO_UNKNOWN.contains(failure.getMessage())) {
+                    throw failure;
+                }
+                ModelAdapter.ModelClaim unknown = new ModelAdapter.ModelClaim(
+                        ClaimType.UNKNOWN,
+                        rejectedClaimStatement(failure.getMessage()),
+                        List.of(), claim.confidence()
+                        .min(new BigDecimal("0.50"))
+                        .min(request.confidenceCap()));
+                validateClaim(request, unknown, evidence);
+                validatedClaims.add(unknown);
+            }
         }
         if (response.summary().length() > 800
                 || containsControl(response.summary())
@@ -75,7 +97,35 @@ final class AgentModelResponseValidator {
             throw AgentResearchModels.invalid(
                     "M3_MODEL_SUMMARY_REJECTED");
         }
-        return response;
+        String summary = NUMBER.matcher(response.summary()).find()
+                ? "Structured role analysis completed under deterministic "
+                + "evidence constraints."
+                : response.summary();
+        return new ModelAdapter.ModelResponse(response.requestedTools(),
+                validatedClaims, summary, response.issueCodes(),
+                response.reworkRequested(), response.usage());
+    }
+
+    static Set<ClaimType> allowedClaimTypes(AgentRole role) {
+        return CLAIM_TYPES.get(role);
+    }
+
+    private static String rejectedClaimStatement(String reason) {
+        return switch (reason) {
+            case "M3_MODEL_EVIDENCE_REFERENCE_REJECTED" ->
+                    "A model claim was rejected because its evidence "
+                            + "reference was not present in deterministic "
+                            + "tool output.";
+            case "M3_UNSUPPORTED_MODEL_CLAIM" ->
+                    "A model claim was rejected because deterministic "
+                            + "supporting evidence was insufficient.";
+            case "M3_UNKNOWN_CONFIDENCE_REJECTED" ->
+                    "A model uncertainty claim was rejected because its "
+                            + "confidence exceeded the uncertainty limit.";
+            default -> "A model-supplied numeric statement was rejected "
+                    + "because cited deterministic evidence did not directly "
+                    + "support it.";
+        };
     }
 
     private static void validateClaim(

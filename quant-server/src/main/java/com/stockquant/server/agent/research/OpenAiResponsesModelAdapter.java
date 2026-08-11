@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.stockquant.server.agent.research.AgentResearchModels.ClaimType;
 import com.stockquant.server.agent.research.AgentResearchModels.CriticIssueCode;
+import com.stockquant.server.agent.research.AgentResearchModels.Evidence;
 import com.stockquant.server.agent.research.AgentResearchModels.ModelUsage;
 import com.stockquant.server.agent.research.AgentResearchModels.ToolCode;
 
@@ -454,18 +455,25 @@ public final class OpenAiResponsesModelAdapter implements ModelAdapter {
                 .forEach(claimRequired::add);
         ObjectNode claimProperties = claim.putObject("properties");
         enumValue(claimProperties.putObject("claimType"),
-                ClaimType.values());
+                AgentModelResponseValidator.allowedClaimTypes(
+                        request.agentRole()).toArray(ClaimType[]::new));
         claimProperties.putObject("statement").put("type", "string")
                 .put("maxLength", 320);
         ObjectNode evidenceIds = claimProperties.putObject("evidenceIds");
         evidenceIds.put("type", "array");
         evidenceIds.put("uniqueItems", true);
         evidenceIds.put("maxItems", 6);
-        evidenceIds.putObject("items").put("type", "string");
+        ObjectNode evidenceId = evidenceIds.putObject("items")
+                .put("type", "string");
+        if (!request.evidence().isEmpty()) {
+            ArrayNode identifiers = evidenceId.putArray("enum");
+            request.evidence().stream().map(Evidence::evidenceId)
+                    .distinct().sorted().forEach(identifiers::add);
+        }
         ObjectNode confidence = claimProperties.putObject("confidence");
         confidence.put("type", "number");
         confidence.put("minimum", 0);
-        confidence.put("maximum", 1);
+        confidence.put("maximum", request.confidenceCap());
         properties.putObject("summary").put("type", "string")
                 .put("maxLength", 320);
         ObjectNode issueCodes = properties.putObject("issueCodes");

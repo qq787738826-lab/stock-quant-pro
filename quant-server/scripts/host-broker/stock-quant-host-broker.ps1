@@ -758,12 +758,17 @@ function Invoke-M3AgentResearchSmoke {
         -MaximumCostCny $stageBudget.RemainingCostCny 2>&1 |
         ForEach-Object { [string]$_ })
     if ($LASTEXITCODE -ne 0) {
+        $sanitizedRunnerReason = $null
         if (Test-Path -LiteralPath $runnerResult -PathType Leaf) {
             try {
                 $failed = Get-Content -LiteralPath $runnerResult `
                     -Raw -Encoding UTF8 | ConvertFrom-Json
                 if ([int]$failed.providerCallCount -eq 0 -and
                     [int]$failed.databaseWriteCount -eq 0) {
+                    if ([string]$failed.reason -match
+                            '^[A-Z][A-Z0-9_]{7,127}$') {
+                        $sanitizedRunnerReason = [string]$failed.reason
+                    }
                     $script:failureSummary = [ordered]@{
                         executionId = [string]$failed.executionId
                         providerCallCount = 0
@@ -852,6 +857,9 @@ function Invoke-M3AgentResearchSmoke {
                     }
                 }
             } catch { $script:failureSummary = $null }
+        }
+        if ($null -ne $sanitizedRunnerReason) {
+            throw $sanitizedRunnerReason
         }
         throw (Get-SafeMarker -Lines $output `
             -Name 'M3_AGENT_RESEARCH_FAILURE_REASON' `

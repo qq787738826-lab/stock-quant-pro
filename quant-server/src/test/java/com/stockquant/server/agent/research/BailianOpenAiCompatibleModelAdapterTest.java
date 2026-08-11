@@ -66,6 +66,10 @@ class BailianOpenAiCompatibleModelAdapterTest {
                     + "\"array\",\"uniqueItems\":true"));
             assertTrue(system.contains("\"maxItems\":0"));
             assertTrue(system.contains("\"const\":false"));
+            assertTrue(system.contains("\"maximum\":0.8"));
+            assertTrue(system.contains(
+                    "EV_RESEARCH_DATASET_cccccccccccc"));
+            assertFalse(system.contains("\"RECOMMENDATION\""));
             assertEquals("user", request.path("messages").get(1)
                     .path("role").asText());
             JsonNode payload = MAPPER.readTree(request.path("messages").get(1)

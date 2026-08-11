@@ -11,7 +11,9 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AgentModelResponseValidatorTest {
     private static final String HASH = "a".repeat(64);
@@ -21,7 +23,7 @@ class AgentModelResponseValidatorTest {
             "The deterministic Sharpe value is 1.25.");
 
     @Test
-    void rejectsFabricatedMetricNotPresentInCitedEvidence() {
+    void downgradesFabricatedMetricToEvidenceFreeUnknown() {
         var request = request(List.of(ToolCode.STRATEGY_COMPARE));
         var response = new ModelAdapter.ModelResponse(
                 List.of(ToolCode.STRATEGY_COMPARE), List.of(
@@ -31,8 +33,16 @@ class AgentModelResponseValidatorTest {
                         new BigDecimal("0.50"))),
                 "Structured summary.", List.of(), false, ModelUsage.zero());
 
-        assertThrows(IllegalArgumentException.class, () ->
-                AgentModelResponseValidator.validate(request, response));
+        var validated = AgentModelResponseValidator.validate(request,
+                response);
+
+        assertEquals(1, validated.claims().size());
+        assertEquals(ClaimType.UNKNOWN,
+                validated.claims().get(0).claimType());
+        assertTrue(validated.claims().get(0).evidenceIds().isEmpty());
+        assertTrue(validated.claims().get(0).statement().contains(
+                "was rejected"));
+        assertTrue(!validated.claims().get(0).statement().contains("9.99"));
     }
 
     @Test
@@ -61,6 +71,26 @@ class AgentModelResponseValidatorTest {
 
         assertThrows(IllegalArgumentException.class, () ->
                 AgentModelResponseValidator.validate(request, response));
+    }
+
+    @Test
+    void downgradesUnknownEvidenceReferenceWithoutPropagatingClaim() {
+        var request = request(List.of());
+        var response = new ModelAdapter.ModelResponse(List.of(), List.of(
+                new ModelAdapter.ModelClaim(ClaimType.FACT,
+                        "The strategy result is supported.",
+                        List.of("EV_STRATEGY_COMPARE_bbbbbbbbbbbb"),
+                        new BigDecimal("0.30"))),
+                "Structured summary.", List.of(), false, ModelUsage.zero());
+
+        var validated = AgentModelResponseValidator.validate(request,
+                response);
+
+        assertEquals(ClaimType.UNKNOWN,
+                validated.claims().get(0).claimType());
+        assertTrue(validated.claims().get(0).evidenceIds().isEmpty());
+        assertTrue(validated.claims().get(0).statement().contains(
+                "was rejected"));
     }
 
     @Test
