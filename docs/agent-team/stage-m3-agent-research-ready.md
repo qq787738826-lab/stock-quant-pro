@@ -4,7 +4,7 @@
 
 - 长期任务分支：`codex/1.4.0-m3-agent-research-ready`
 - 冻结集成基线：`b041fbe807b817c4070781db33fbfca2d4f8bc4e`
-- 当前状态：`BAILIAN_ADAPTATION_IN_PROGRESS`
+- 当前状态：`BAILIAN_OFFLINE_ADAPTATION_COMPLETE`
 - 外部门：`BAILIAN_REAL_LLM_SMOKE=PENDING_LOCAL_CREDENTIAL_AND_BUDGET`
 - 在真实 LLM smoke 通过前，不声明 `M3_AGENT_RESEARCH_READY=PASS`，不执行最终合并。
 - M3 新增 Tushare 调用 0；累计真实调用保持 55；永久研究库写入 0。
@@ -40,6 +40,12 @@
 
 ## Fake Model 与评测证据
 
+- 百炼切换受影响定向回归 `48/0/0/0`：固定 endpoint/model、Chat Completions 请求、严格结构化
+  输出、CNY usage、HTTP/API 错误映射、零重试、7 Agent Fake Transport、Credential、Runner 与
+  Broker 合同均通过；Broker M3 协议 `11/0/0/0`，相关 PowerShell 5.1 语法错误 0。
+- 当前代码的打包 JAR + Fake Provider + PostgreSQL 16 临时实例 M1→M2→M3 E2E 再次 PASS；
+  Start-Class 为 `TushareM3AgentResearchManualRunner`，百炼/Tushare 真实调用 0、永久库写入 0、
+  临时残留 0；Vue/TypeScript production build PASS。
 - 4 证券 × 180 交易日 deterministic fixture 完成 4 个代表策略的 M1/M2 工具链研究。
 - 同输入、参数和固定时钟的完整 `ResearchReport` 与 SHA-256 指纹完全一致。
 - `AGENT_EVAL_V1` 15/15：数据引用、工具调用、回测引用、风险识别、未来数据拒绝、

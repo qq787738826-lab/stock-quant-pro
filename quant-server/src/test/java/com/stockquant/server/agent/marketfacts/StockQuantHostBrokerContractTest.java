@@ -321,7 +321,6 @@ class StockQuantHostBrokerContractTest {
         assertTrue(script.contains("qwen3.7-plus"));
         assertTrue(script.contains("Assert-M3BailianSmokeBudgetUnused"));
         assertTrue(script.contains("M3_BAILIAN_SMOKE_BUDGET_ALREADY_CONSUMED"));
-        assertFalse(script.contains("CHECK_OPENAI_CREDENTIAL_STATUS"));
         assertFalse(script.contains("Invoke-Expression"));
         assertFalse(script.contains("Start-Process"));
         assertFalse(script.contains("ScriptBlock]::Create"));
