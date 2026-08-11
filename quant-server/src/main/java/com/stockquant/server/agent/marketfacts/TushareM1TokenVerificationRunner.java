@@ -187,7 +187,7 @@ public final class TushareM1TokenVerificationRunner {
         }
     }
 
-    private static VerificationResult result(
+    static VerificationResult result(
             TushareM1TokenVerificationAuthorization authorization,
             String status,
             Instant startedAt,
@@ -197,6 +197,22 @@ public final class TushareM1TokenVerificationRunner {
             String failureCode
     ) {
         GatewayDiagnostic diagnostic = progress.diagnostic;
+        Integer httpStatus = null;
+        Integer providerCode = null;
+        String providerMessageCategory = "NOT_RUN";
+        boolean responseJsonValid = false;
+        if (diagnostic != null) {
+            httpStatus = diagnostic.httpStatus();
+            providerCode = diagnostic.providerCode();
+            providerMessageCategory =
+                    diagnostic.providerMessageCategory();
+            responseJsonValid = diagnostic.responseJsonValid();
+        } else if (progress.providerCalls == 1) {
+            httpStatus = 200;
+            providerCode = 0;
+            providerMessageCategory = "SUCCESS";
+            responseJsonValid = true;
+        }
         return new VerificationResult(
                 RESULT_VERSION, authorization.verificationId(), status,
                 authorization.gitCommit(), authorization.artifactSha256(),
@@ -210,17 +226,8 @@ public final class TushareM1TokenVerificationRunner {
                         + progress.providerCalls,
                 progress.fieldCount, progress.rowCount,
                 progress.mappedRowCount, progress.targetRowPresent,
-                diagnostic == null
-                        ? progress.providerCalls == 1 ? 200 : null
-                        : diagnostic.httpStatus(),
-                diagnostic == null
-                        ? progress.providerCalls == 1 ? 0 : null
-                        : diagnostic.providerCode(),
-                diagnostic == null
-                        ? progress.providerCalls == 1 ? "SUCCESS" : "NOT_RUN"
-                        : diagnostic.providerMessageCategory(),
-                diagnostic == null ? progress.providerCalls == 1
-                        : diagnostic.responseJsonValid(),
+                httpStatus, providerCode, providerMessageCategory,
+                responseJsonValid,
                 audit, failureCode, startedAt, completedAt,
                 "CONSUMED", false,
                 Map.of("databaseConnected", false,
@@ -377,7 +384,7 @@ public final class TushareM1TokenVerificationRunner {
         }
     }
 
-    private static final class Progress {
+    static final class Progress {
         private int providerCalls;
         private int retryCount;
         private int fieldCount;

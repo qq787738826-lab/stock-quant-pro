@@ -26,6 +26,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -133,6 +134,26 @@ class TushareM1TokenVerificationTest {
         assertTrue(json.contains("\"verificationId\":"
                 + "\"M1TOKEN_20260811T030000Z_ABCDEF123456\""));
         assertTrue(json.contains("\"databaseConnected\":false"));
+    }
+
+    @Test
+    void runningResultKeepsDiagnosticsNullBeforeAnyProviderCall()
+            throws Exception {
+        var authorization = TushareM1TokenVerificationAuthorization.from(
+                authorization("2"));
+        Instant startedAt = Instant.parse("2026-08-11T03:00:00Z");
+        var result = TushareM1TokenVerificationRunner.result(
+                authorization, "RUNNING", startedAt, startedAt,
+                new TushareM1TokenVerificationRunner.Progress(),
+                TushareM1TokenVerificationRunner.Audit.notRun(), null);
+
+        assertEquals(0, result.providerCallCount());
+        assertNull(result.httpStatus());
+        assertNull(result.providerCode());
+        assertEquals("NOT_RUN", result.providerMessageCategory());
+        String json = new ObjectMapper().registerModule(new JavaTimeModule())
+                .writeValueAsString(result);
+        assertTrue(json.contains("\"httpStatus\":null"));
     }
 
     private static TushareMarketFactProvider provider(
