@@ -98,8 +98,40 @@ public record TushareDedicatedResearchBatchAuthorization(
                 RuntimePermission.FORBIDDEN);
     }
 
+    public static TushareDedicatedResearchBatchAuthorization
+    m1ResearchData() {
+        return new TushareDedicatedResearchBatchAuthorization(
+                TushareMarketFactProvider.PROVIDER_CODE,
+                TushareMarketFactProvider.ADAPTER_VERSION,
+                AccountScope.PERSONAL_2000_POINT,
+                UsageQualification.RESEARCH_ONLY,
+                WrittenPermissionCompleteness.COMPLETE,
+                RuntimeMode.M1_RESEARCH_DATA_MANUAL,
+                RunNamespace.FORMAL,
+                FormalEligibility.NOT_ELIGIBLE,
+                TushareManualBoundedSession.M1_MAX_SYMBOLS,
+                TushareManualBoundedSession.M1_MAX_NATURAL_DAYS,
+                TushareManualBoundedSession
+                        .M1_MAX_PROVIDER_BUSINESS_REQUESTS,
+                FACT_TYPES,
+                AutomaticRetryPolicy.DISABLED,
+                RuntimePermission.FORBIDDEN,
+                RuntimePermission.FORBIDDEN,
+                RuntimePermission.FORBIDDEN,
+                RuntimePermission.FORBIDDEN,
+                RuntimePermission.FORBIDDEN,
+                RuntimePermission.FORBIDDEN,
+                RuntimePermission.FORBIDDEN);
+    }
+
     public void validateFrozen() {
         if (!manualPersonalResearch().equals(this)) {
+            throw invalid();
+        }
+    }
+
+    public void validateM1Frozen() {
+        if (!m1ResearchData().equals(this)) {
             throw invalid();
         }
     }
@@ -135,7 +167,8 @@ public record TushareDedicatedResearchBatchAuthorization(
     }
 
     public enum RuntimeMode {
-        DEDICATED_LOCAL_MANUAL
+        DEDICATED_LOCAL_MANUAL,
+        M1_RESEARCH_DATA_MANUAL
     }
 
     public enum FormalEligibility {

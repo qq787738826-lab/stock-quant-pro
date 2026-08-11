@@ -62,7 +62,7 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
     public static final int STOCK_BASIC_MAX_ROWS = 1;
     public static final int DIVIDEND_EVIDENCE_MAX_ROWS = 1_000;
     private static final int MAXIMUM_NATURAL_DAYS =
-            TushareManualBoundedSession.MAX_TIME_SERIES_NATURAL_DAYS;
+            TushareManualBoundedSession.M1_MAX_NATURAL_DAYS;
     private static final DateTimeFormatter PROVIDER_DATE =
             DateTimeFormatter.BASIC_ISO_DATE;
     private static final Set<FactType> SUPPORTED_FACT_TYPES =
@@ -626,6 +626,40 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
         }
         return fetch(
                 request, QueryMode.CONTROLLED_NO_RETRY, session);
+    }
+
+    /**
+     * Explicit M1 manual window path. It keeps the same three accepted
+     * endpoints and zero-retry transport while allowing a bounded historical
+     * window for one to three main-board securities.
+     */
+    public MarketFactResponse fetchForM1ResearchData(
+            MarketFactRequest request,
+            TushareManualBoundedSession session
+    ) {
+        if (session == null
+                || session.sessionProfile()
+                != TushareManualBoundedSession.SessionProfile
+                .M1_RESEARCH_DATA_MANUAL
+                || session.maximumBusinessRequests()
+                != session.allowedSymbols().size() * 3
+                || session.maximumBusinessRequests()
+                > TushareManualBoundedSession
+                .M1_MAX_PROVIDER_BUSINESS_REQUESTS
+                || !session.allowedEndpoints().equals(
+                TushareManualBoundedSession.F1E_ALLOWED_ENDPOINTS)
+                || session.automaticRetryAllowed()) {
+            throw new IllegalArgumentException(
+                    "TUSHARE_M1_SESSION_INVALID");
+        }
+        if (request == null
+                || !request.factTypes().equals(SUPPORTED_FACT_TYPES)
+                || !request.rangeStart().equals(session.allowedStart())
+                || !request.rangeEnd().equals(session.allowedEnd())) {
+            throw new IllegalArgumentException(
+                    "TUSHARE_M1_FACT_SCOPE_INVALID");
+        }
+        return fetch(request, QueryMode.CONTROLLED_NO_RETRY, session);
     }
 
     private MarketFactResponse fetch(

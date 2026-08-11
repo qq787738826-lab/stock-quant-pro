@@ -29,6 +29,9 @@ public final class TushareManualBoundedSession {
     public static final int F1E_MAX_PROVIDER_BUSINESS_REQUESTS = 9;
     public static final int F1E_MAX_SYMBOLS = 3;
     public static final int F1E_MAX_NATURAL_DAYS = 1;
+    public static final int M1_MAX_PROVIDER_BUSINESS_REQUESTS = 9;
+    public static final int M1_MAX_SYMBOLS = 3;
+    public static final int M1_MAX_NATURAL_DAYS = 31;
     /**
      * Natural-day bound for daily, adj_factor and trade_cal only.
      * Reference endpoints have no date parameters and remain bounded by
@@ -61,6 +64,7 @@ public final class TushareManualBoundedSession {
     private final Set<String> allowedEndpoints;
     private final boolean automaticRetryAllowed;
     private final SessionProfile sessionProfile;
+    private final int maximumNaturalDays;
     private int consumedBusinessRequests;
 
     public TushareManualBoundedSession(
@@ -114,6 +118,7 @@ public final class TushareManualBoundedSession {
                 allowedEnd, "allowedEnd");
         this.sessionProfile = Objects.requireNonNull(
                 sessionProfile, "sessionProfile");
+        this.maximumNaturalDays = maximumNaturalDays(sessionProfile);
         if (this.allowedSymbols.isEmpty()
                 || this.allowedSymbols.size() > MAX_SESSION_SYMBOLS
                 || this.allowedExchanges.isEmpty()
@@ -123,7 +128,7 @@ public final class TushareManualBoundedSession {
                 || allowedEnd.isBefore(allowedStart)
                 || ChronoUnit.DAYS.between(
                 allowedStart, allowedEnd) + 1
-                > MAX_TIME_SERIES_NATURAL_DAYS
+                > this.maximumNaturalDays
                 || initiallyConsumedBusinessRequests < 0
                 || initiallyConsumedBusinessRequests
                 > maximumBusinessRequests) {
@@ -213,6 +218,45 @@ public final class TushareManualBoundedSession {
                 SessionProfile.F1E_DEDICATED_LOCAL_MANUAL);
     }
 
+    public static TushareManualBoundedSession m1ResearchDataManual(
+            java.util.List<TushareDedicatedResearchBatchCommand
+                    .SecuritySelection> securities,
+            LocalDate rangeStart,
+            LocalDate rangeEnd
+    ) {
+        Objects.requireNonNull(securities, "securities");
+        Objects.requireNonNull(rangeStart, "rangeStart");
+        Objects.requireNonNull(rangeEnd, "rangeEnd");
+        if (securities.isEmpty() || securities.size() > M1_MAX_SYMBOLS
+                || rangeEnd.isBefore(rangeStart)
+                || ChronoUnit.DAYS.between(rangeStart, rangeEnd) + 1
+                > M1_MAX_NATURAL_DAYS) {
+            throw new IllegalArgumentException(
+                    "TUSHARE_M1_SESSION_PROFILE_INVALID");
+        }
+        Set<String> symbols = new java.util.LinkedHashSet<>();
+        Set<String> exchanges = new java.util.LinkedHashSet<>();
+        securities.forEach(security -> {
+            Objects.requireNonNull(security, "security");
+            symbols.add(security.providerInstrumentId());
+            exchanges.add(security.exchange());
+        });
+        if (symbols.size() != securities.size()) {
+            throw new IllegalArgumentException(
+                    "TUSHARE_M1_SESSION_PROFILE_INVALID");
+        }
+        return new TushareManualBoundedSession(
+                securities.size() * 3,
+                Set.copyOf(symbols),
+                Set.copyOf(exchanges),
+                rangeStart,
+                rangeEnd,
+                F1E_ALLOWED_ENDPOINTS,
+                false,
+                0,
+                SessionProfile.M1_RESEARCH_DATA_MANUAL);
+    }
+
     /**
      * Validates and atomically reserves one provider business request.
      * The budget failure happens before the HTTP strategy is invoked.
@@ -272,7 +316,7 @@ public final class TushareManualBoundedSession {
                 || start.isBefore(allowedStart)
                 || end.isAfter(allowedEnd)
                 || ChronoUnit.DAYS.between(start, end) + 1
-                > MAX_TIME_SERIES_NATURAL_DAYS) {
+                > maximumNaturalDays) {
             throw new IllegalArgumentException(
                     "Tushare dates are outside MANUAL_BOUNDED session");
         }
@@ -374,8 +418,25 @@ public final class TushareManualBoundedSession {
             }
             return;
         }
-        if (sessionProfile
-                != SessionProfile.F1E_DEDICATED_LOCAL_MANUAL
+        if (sessionProfile == SessionProfile.M1_RESEARCH_DATA_MANUAL) {
+            if (maximumBusinessRequests != allowedSymbols.size() * 3
+                    || maximumBusinessRequests
+                    > M1_MAX_PROVIDER_BUSINESS_REQUESTS
+                    || allowedSymbols.isEmpty()
+                    || allowedSymbols.size() > M1_MAX_SYMBOLS
+                    || allowedExchanges.isEmpty()
+                    || !F1A_ALLOWED_EXCHANGES.containsAll(allowedExchanges)
+                    || !allowedEndpoints.equals(F1E_ALLOWED_ENDPOINTS)
+                    || automaticRetryAllowed
+                    || initiallyConsumedBusinessRequests != 0) {
+                throw new IllegalArgumentException(
+                        "TUSHARE_M1_SESSION_PROFILE_INVALID");
+            }
+            validateSymbolIdentities(allowedSymbols, allowedExchanges,
+                    "TUSHARE_M1_SECURITY_IDENTITY_INVALID");
+            return;
+        }
+        if (sessionProfile != SessionProfile.F1E_DEDICATED_LOCAL_MANUAL
                 || maximumBusinessRequests != allowedSymbols.size() * 3
                 || maximumBusinessRequests
                 > F1E_MAX_PROVIDER_BUSINESS_REQUESTS
@@ -389,6 +450,15 @@ public final class TushareManualBoundedSession {
             throw new IllegalArgumentException(
                     "invalid Tushare F1E session profile");
         }
+        validateSymbolIdentities(allowedSymbols, allowedExchanges,
+                "invalid Tushare F1E symbol identity");
+    }
+
+    private static void validateSymbolIdentities(
+            Set<String> allowedSymbols,
+            Set<String> allowedExchanges,
+            String failureCode
+    ) {
         allowedSymbols.forEach(tsCode -> {
             String suffix = tsCode.substring(6);
             String exchange = switch (suffix) {
@@ -399,10 +469,18 @@ public final class TushareManualBoundedSession {
             if (!allowedExchanges.contains(exchange)
                     || !tsCode.equals(f1cTsCode(
                     tsCode.substring(0, 6), exchange))) {
-                throw new IllegalArgumentException(
-                        "invalid Tushare F1E symbol identity");
+                throw new IllegalArgumentException(failureCode);
             }
         });
+    }
+
+    private static int maximumNaturalDays(SessionProfile profile) {
+        return switch (profile) {
+            case F1A_ACCEPTANCE, F1C_ISOLATED_MANUAL ->
+                    MAX_TIME_SERIES_NATURAL_DAYS;
+            case F1E_DEDICATED_LOCAL_MANUAL -> F1E_MAX_NATURAL_DAYS;
+            case M1_RESEARCH_DATA_MANUAL -> M1_MAX_NATURAL_DAYS;
+        };
     }
 
     private static String f1cTsCode(String symbol, String exchange) {
@@ -425,6 +503,7 @@ public final class TushareManualBoundedSession {
     public enum SessionProfile {
         F1A_ACCEPTANCE,
         F1C_ISOLATED_MANUAL,
-        F1E_DEDICATED_LOCAL_MANUAL
+        F1E_DEDICATED_LOCAL_MANUAL,
+        M1_RESEARCH_DATA_MANUAL
     }
 }

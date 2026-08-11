@@ -6,6 +6,7 @@ param(
         'DIAGNOSE_TUSHARE_CREDENTIAL',
         'RUN_FAKE_E2E',
         'RUN_DAY001',
+        'RUN_M1_RESEARCH_DATA',
         'READ_SANITIZED_RESULT'
     )]
     [string] $Operation,
@@ -33,8 +34,12 @@ if ($identity -notmatch '(?i)CodexSandbox') {
     throw 'STOCK_QUANT_HOST_BROKER_CODEX_SANDBOX_REQUIRED'
 }
 if ([string]::IsNullOrWhiteSpace($ArtifactPath)) {
-    $ArtifactPath = Join-Path $paths.RepositoryRoot `
-        'quant-server\target\quant-server-1.3.1-reduced-research-day001-runner.jar'
+    $artifactName = if ($Operation -eq 'RUN_M1_RESEARCH_DATA') {
+        'quant-server-1.3.1-m1-research-data-runner.jar'
+    } else {
+        'quant-server-1.3.1-reduced-research-day001-runner.jar'
+    }
+    $ArtifactPath = Join-Path $paths.TargetRoot $artifactName
 }
 if ($Operation -in @(
         'READ_SANITIZED_RESULT',
@@ -49,7 +54,12 @@ if ($Operation -in @(
 
 Push-Location $paths.RepositoryRoot
 try {
-    $remoteRef = "refs/heads/$integrationBranch"
+    $branch = (git branch --show-current).Trim()
+    $requiredBranch = if ($Operation -eq 'RUN_M1_RESEARCH_DATA' -and
+        $branch -eq 'codex/1.4.0-m1-research-data-ready') {
+        'codex/1.4.0-m1-research-data-ready'
+    } else { $integrationBranch }
+    $remoteRef = "refs/heads/$requiredBranch"
     $remoteQuery = @(& git ls-remote --exit-code origin $remoteRef 2>&1 |
         ForEach-Object { [string]$_ })
     $remoteQueryExit = $LASTEXITCODE
@@ -59,16 +69,15 @@ try {
     if ($remoteQueryExit -ne 0 -or $remoteMatch.Count -ne 1) {
         throw 'STOCK_QUANT_HOST_BROKER_GIT_REMOTE_QUERY_FAILED'
     }
-    $branch = (git branch --show-current).Trim()
     $head = (git rev-parse HEAD).Trim()
     $remote = ($remoteMatch[0] -split '\s+', 2)[0]
     $tracking = (git rev-parse `
-        "refs/remotes/origin/$integrationBranch").Trim()
+        "refs/remotes/origin/$requiredBranch").Trim()
     $divergence = (git rev-list --left-right --count `
-        "$integrationBranch...origin/$integrationBranch").Trim() -split '\s+'
+        "$requiredBranch...origin/$requiredBranch").Trim() -split '\s+'
     $unexpected = @(git status --porcelain=v1 --untracked-files=normal |
         Where-Object { $_ -and $_ -notmatch '^\?\? \.ai(?:/|$)' })
-    if ($branch -ne $integrationBranch -or $head -ne $remote -or
+    if ($branch -ne $requiredBranch -or $head -ne $remote -or
         $tracking -ne $remote -or
         $divergence.Count -ne 2 -or $divergence[0] -ne '0' -or
         $divergence[1] -ne '0' -or $unexpected.Count -ne 0 -or
@@ -99,7 +108,49 @@ try {
     $requestId = New-StockQuantHostBrokerRequestId
     $createdAt = [DateTimeOffset]::UtcNow
     $expiresAt = $createdAt.AddMinutes(10)
-    $requestValues = [ordered]@{
+    if ($Operation -eq 'RUN_M1_RESEARCH_DATA') {
+        $authorizationValues = Read-StrictStockQuantProperties `
+            -Path $authorization
+        $requestValues = [ordered]@{
+            'schema.version' = 'STOCK_QUANT_HOST_BROKER_REQUEST_V1'
+            'request.id' = $requestId
+            'operation' = $Operation
+            'git.commit' = $head
+            'jar.path' = $artifact
+            'jar.sha256' = $artifactHash
+            'authorization.file' = $authorization
+            'm1.mode' = [string]$authorizationValues['mode']
+            'securities' = [string]$authorizationValues['securities']
+            'range.start' = [string]$authorizationValues['range.start']
+            'range.end' = [string]$authorizationValues['range.end']
+            'anchor.trade.date' =
+                [string]$authorizationValues['anchor.trade.date']
+            'database.host' = '127.0.0.1'
+            'database.port' = '38432'
+            'database.name' = 'stock_quant_research'
+            'database.user' = 'stock_quant_research'
+            'schema.name' = 'tushare_research'
+            'provider' = 'TUSHARE'
+            'provider.endpoints' = 'daily,adj_factor,trade_cal'
+            'endpoint.daily.requests' = '2'
+            'endpoint.adj_factor.requests' = '2'
+            'endpoint.trade_cal.requests' = '2'
+            'maximum.provider.requests' = '6'
+            'retry.budget' = '0'
+            'redirects' = 'NEVER'
+            'provider.historical.baseline' = '34'
+            'provider.stage.limit' = '30'
+            'provider.cumulative.limit' = '64'
+            'provider.stage.calls.before' =
+                [string]$authorizationValues['provider.stage.calls.before']
+            'created.at' = $createdAt.ToString('o')
+            'expires.at' = $expiresAt.ToString('o')
+            'execution.source' = 'M1_RESEARCH_DATA_MANUAL'
+            'no.retry' = 'true'
+            'source.request.id' = 'NONE'
+        }
+    } else {
+        $requestValues = [ordered]@{
         'schema.version' = 'STOCK_QUANT_HOST_BROKER_REQUEST_V1'
         'request.id' = $requestId
         'operation' = $Operation
@@ -129,6 +180,7 @@ try {
         'execution.source' = 'REDUCED_RESEARCH_MANUAL_DAY001'
         'no.retry' = 'true'
         'source.request.id' = $SourceRequestId
+        }
     }
     Read-StockQuantHostBrokerHeartbeat -ExpectedGitCommit $head |
         Out-Null

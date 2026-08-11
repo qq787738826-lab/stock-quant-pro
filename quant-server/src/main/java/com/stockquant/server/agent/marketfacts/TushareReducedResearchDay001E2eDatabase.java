@@ -23,6 +23,26 @@ final class TushareReducedResearchDay001E2eDatabase {
         if (!authorization.e2eDryRun() || !proof.e2eDryRunEligible()) {
             throw blocked("TUSHARE_REDUCED_RESEARCH_E2E_BUILD_REQUIRED");
         }
+        initializeVerified(dataSource);
+    }
+
+    static void initializeM1(
+            DataSource dataSource,
+            TushareM1ResearchDataAuthorization authorization,
+            VerifiedBuildProof proof
+    ) {
+        Objects.requireNonNull(dataSource, "dataSource");
+        Objects.requireNonNull(authorization, "authorization");
+        Objects.requireNonNull(proof, "proof").validate();
+        if (!authorization.e2eDryRun() || !proof.e2eDryRunEligible()
+                || !TushareControlledAcceptanceBuildProof.M1_RUNNER_START_CLASS
+                .equals(proof.runnerStartClass())) {
+            throw blocked("TUSHARE_M1_E2E_BUILD_REQUIRED");
+        }
+        initializeVerified(dataSource);
+    }
+
+    private static void initializeVerified(DataSource dataSource) {
         JdbcTemplate jdbc = new JdbcTemplate(dataSource);
         Target target = jdbc.queryForObject("""
                 SELECT current_database(), current_user,

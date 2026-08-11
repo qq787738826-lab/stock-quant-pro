@@ -10,6 +10,7 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.ArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /** Network-free gateway used only by an explicitly marked packaged E2E dry run. */
@@ -52,21 +53,13 @@ final class TushareControlledAcceptanceE2eDryRunGateway
                     1, 0, null);
         }
         String date = parameters.path("start_date").asText("20250103");
+        String endDate = parameters.path("end_date").asText(date);
         String tsCode = parameters.path("ts_code").asText("600000.SH");
         String exchange = parameters.path("exchange").asText("SSE");
         List<List<JsonNode>> rows = switch (endpoint) {
-            case "daily" -> List.of(
-                    daily("000001.SZ", date),
-                    daily(tsCode, previousDate(date)),
-                    daily(tsCode, date));
-            case "adj_factor" -> List.of(
-                    factor("000001.SZ", date),
-                    factor(tsCode, previousDate(date)),
-                    factor(tsCode, date));
-            case "trade_cal" -> List.of(
-                    calendar("SZSE", date),
-                    calendar(exchange, previousDate(date)),
-                    calendar(exchange, date));
+            case "daily" -> dailyWindow(tsCode, date, endDate);
+            case "adj_factor" -> factorWindow(tsCode, date, endDate);
+            case "trade_cal" -> calendarWindow(exchange, date, endDate);
             default -> throw new IllegalArgumentException(
                     "TUSHARE_ENDPOINT_NOT_ALLOWED");
         };
@@ -94,9 +87,74 @@ final class TushareControlledAcceptanceE2eDryRunGateway
     }
 
     private static List<JsonNode> calendar(String exchange, String date) {
+        boolean open = isOpen(date);
         return List.of(
-                text(exchange), text(date), decimal("1"),
+                text(exchange), text(date), decimal(open ? "1" : "0"),
                 text(previousDate(date)));
+    }
+
+    private static List<List<JsonNode>> dailyWindow(
+            String tsCode,
+            String start,
+            String end
+    ) {
+        List<List<JsonNode>> result = new ArrayList<>();
+        result.add(daily("999999.SZ", start));
+        result.add(daily(tsCode, previousDate(start)));
+        dates(start, end).stream().filter(
+                TushareControlledAcceptanceE2eDryRunGateway::isOpen)
+                .forEach(value -> result.add(daily(tsCode, value)));
+        return List.copyOf(result);
+    }
+
+    private static List<List<JsonNode>> factorWindow(
+            String tsCode,
+            String start,
+            String end
+    ) {
+        List<List<JsonNode>> result = new ArrayList<>();
+        result.add(factor("999999.SZ", start));
+        result.add(factor(tsCode, previousDate(start)));
+        dates(start, end).stream().filter(
+                TushareControlledAcceptanceE2eDryRunGateway::isOpen)
+                .forEach(value -> result.add(factor(tsCode, value)));
+        return List.copyOf(result);
+    }
+
+    private static List<List<JsonNode>> calendarWindow(
+            String exchange,
+            String start,
+            String end
+    ) {
+        List<List<JsonNode>> result = new ArrayList<>();
+        result.add(calendar(otherExchange(exchange), start));
+        result.add(calendar(exchange, previousDate(start)));
+        dates(start, end).forEach(value ->
+                result.add(calendar(exchange, value)));
+        return List.copyOf(result);
+    }
+
+    private static List<String> dates(String start, String end) {
+        LocalDate from = LocalDate.parse(start, DateTimeFormatter.BASIC_ISO_DATE);
+        LocalDate to = LocalDate.parse(end, DateTimeFormatter.BASIC_ISO_DATE);
+        List<String> result = new ArrayList<>();
+        for (LocalDate value = from; !value.isAfter(to);
+                value = value.plusDays(1)) {
+            result.add(value.format(DateTimeFormatter.BASIC_ISO_DATE));
+        }
+        return List.copyOf(result);
+    }
+
+    private static boolean isOpen(String value) {
+        return switch (LocalDate.parse(value, DateTimeFormatter.BASIC_ISO_DATE)
+                .getDayOfWeek()) {
+            case SATURDAY, SUNDAY -> false;
+            default -> true;
+        };
+    }
+
+    private static String otherExchange(String exchange) {
+        return "SSE".equals(exchange) ? "SZSE" : "SSE";
     }
 
     private static String previousDate(String value) {

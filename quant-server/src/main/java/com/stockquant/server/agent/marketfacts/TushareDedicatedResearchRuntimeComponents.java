@@ -28,17 +28,23 @@ final class TushareDedicatedResearchRuntimeComponents implements AutoCloseable {
     private final ObjectMapper mapper;
     private final TushareMarketFactProperties properties;
     private final TushareDedicatedResearchBatchService batchService;
+    private final TushareM1ResearchDataService m1ResearchDataService;
+    private final TushareM1ResearchDatasetService m1ResearchDatasetService;
     private final TushareControlledAcceptanceReadbackService readbackService;
 
     private TushareDedicatedResearchRuntimeComponents(
             ObjectMapper mapper,
             TushareMarketFactProperties properties,
             TushareDedicatedResearchBatchService batchService,
+            TushareM1ResearchDataService m1ResearchDataService,
+            TushareM1ResearchDatasetService m1ResearchDatasetService,
             TushareControlledAcceptanceReadbackService readbackService
     ) {
         this.mapper = mapper;
         this.properties = properties;
         this.batchService = batchService;
+        this.m1ResearchDataService = m1ResearchDataService;
+        this.m1ResearchDatasetService = m1ResearchDatasetService;
         this.readbackService = readbackService;
     }
 
@@ -140,10 +146,14 @@ final class TushareDedicatedResearchRuntimeComponents implements AutoCloseable {
         TushareDedicatedResearchBatchService batch =
                 new TushareDedicatedResearchBatchService(
                         provider, dedicatedGuard, capture, clock);
+        TushareM1ResearchDatasetService m1Dataset =
+                new TushareM1ResearchDatasetService(facts, jdbc);
+        TushareM1ResearchDataService m1 = new TushareM1ResearchDataService(
+                provider, dedicatedGuard, capture, m1Dataset, clock);
         TushareControlledAcceptanceReadbackService readback =
                 new TushareControlledAcceptanceReadbackService(jdbc, dedicatedGuard);
         return new TushareDedicatedResearchRuntimeComponents(
-                mapper, properties, batch, readback);
+                mapper, properties, batch, m1, m1Dataset, readback);
     }
 
     private static ObjectMapper mapper() {
@@ -169,6 +179,14 @@ final class TushareDedicatedResearchRuntimeComponents implements AutoCloseable {
 
     TushareControlledAcceptanceReadbackService readbackService() {
         return readbackService;
+    }
+
+    TushareM1ResearchDataService m1ResearchDataService() {
+        return m1ResearchDataService;
+    }
+
+    TushareM1ResearchDatasetService m1ResearchDatasetService() {
+        return m1ResearchDatasetService;
     }
 
     long totalProviderAttemptCount() {

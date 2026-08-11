@@ -1,21 +1,26 @@
 param(
     [Parameter(Mandatory = $true)] [string] $ExpectedCommit,
-    [ValidateSet('PREPARATION_ONLY', 'CONTROLLED_BUILD_ARTIFACT', 'E2E_DRY_RUN')]
+    [ValidateSet('PREPARATION_ONLY', 'CONTROLLED_BUILD_ARTIFACT',
+        'M1_STAGE_CONTROLLED_BUILD_ARTIFACT', 'E2E_DRY_RUN')]
     [string] $Mode = 'PREPARATION_ONLY',
 
-    [ValidateSet('F1F_B2', 'REDUCED_RESEARCH_DAY001')]
+    [ValidateSet('F1F_B2', 'REDUCED_RESEARCH_DAY001', 'M1_RESEARCH_DATA')]
     [string] $RunnerProfile = 'F1F_B2'
 )
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $requiredBranch = 'feature/1.4.0-agent-team'
-$artifactName = if ($RunnerProfile -eq 'REDUCED_RESEARCH_DAY001') {
+$artifactName = if ($RunnerProfile -eq 'M1_RESEARCH_DATA') {
+    'quant-server-1.3.1-m1-research-data-runner.jar'
+} elseif ($RunnerProfile -eq 'REDUCED_RESEARCH_DAY001') {
     'quant-server-1.3.1-reduced-research-day001-runner.jar'
 } else {
     'quant-server-1.3.1-f1f-b2-runner.jar'
 }
-$runnerStartClass = if ($RunnerProfile -eq 'REDUCED_RESEARCH_DAY001') {
+$runnerStartClass = if ($RunnerProfile -eq 'M1_RESEARCH_DATA') {
+    'com.stockquant.server.agent.marketfacts.TushareM1ResearchDataManualRunner'
+} elseif ($RunnerProfile -eq 'REDUCED_RESEARCH_DAY001') {
     'com.stockquant.server.agent.marketfacts.TushareReducedResearchManualRunner'
 } else {
     'com.stockquant.server.agent.marketfacts.TushareControlledAcceptanceRunner'
@@ -86,6 +91,12 @@ try {
     if ($Mode -eq 'CONTROLLED_BUILD_ARTIFACT') {
         if ($actualBranch -ne $requiredBranch -or $remoteCommit -ne $ExpectedCommit) {
             throw 'TUSHARE_CONTROLLED_ACCEPTANCE_INTEGRATION_BASELINE_REQUIRED'
+        }
+    } elseif ($Mode -eq 'M1_STAGE_CONTROLLED_BUILD_ARTIFACT') {
+        if ($actualBranch -ne 'codex/1.4.0-m1-research-data-ready' -or
+            $remoteCommit -ne $ExpectedCommit -or
+            $RunnerProfile -ne 'M1_RESEARCH_DATA') {
+            throw 'TUSHARE_M1_STAGE_BUILD_BASELINE_REQUIRED'
         }
     } elseif ($actualBranch -ne $requiredBranch -and
         -not $actualBranch.StartsWith('codex/')) {

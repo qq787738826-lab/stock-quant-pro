@@ -11,12 +11,16 @@ $identity = [Security.Principal.WindowsIdentity]::GetCurrent().Name
 $integrationBranch = 'feature/1.4.0-agent-team'
 $preflightClass = 'com.stockquant.server.agent.marketfacts.' +
     'TushareReducedResearchDay001Preflight'
+$m1PreflightClass = 'com.stockquant.server.agent.marketfacts.' +
+    'TushareM1ResearchDataPreflight'
 $credentialProbeClass = 'com.stockquant.server.agent.marketfacts.' +
     'TushareCredentialHealthProbe'
 $credentialStatusScript = Join-Path $paths.RepositoryRoot `
     'quant-server\scripts\set-stock-quant-secrets.ps1'
 $hostRunnerScript = Join-Path $paths.RepositoryRoot `
     'quant-server\scripts\run-stock-quant-local-automation.ps1'
+$m1RunnerScript = Join-Path $paths.RepositoryRoot `
+    'quant-server\scripts\run-m1-research-data.ps1'
 $fakeE2eScript = Join-Path $paths.RepositoryRoot `
     'quant-server\scripts\run-reduced-research-day001-e2e-dry-run.ps1'
 $mutex = [Threading.Mutex]::new($false, 'Local\StockQuantLocalBroker')
@@ -103,17 +107,23 @@ function Assert-GitBinding {
             @(git diff --cached --name-only).Count -ne 0) {
             throw 'STOCK_QUANT_HOST_BROKER_GIT_BINDING_INVALID'
         }
-        if ($BrokerRequest.Operation -eq 'RUN_DAY001') {
-            git fetch --quiet origin $integrationBranch
+        if ($BrokerRequest.Operation -in @(
+                'RUN_DAY001', 'RUN_M1_RESEARCH_DATA')) {
+            $requiredBranch = if ($BrokerRequest.Operation -eq 'RUN_DAY001') {
+                $integrationBranch
+            } elseif ($branch -eq 'codex/1.4.0-m1-research-data-ready') {
+                'codex/1.4.0-m1-research-data-ready'
+            } else { $integrationBranch }
+            git fetch --quiet origin $requiredBranch
             if ($LASTEXITCODE -ne 0) {
                 throw 'STOCK_QUANT_HOST_BROKER_GIT_FETCH_FAILED'
             }
             $remote = (git rev-parse `
-                "refs/remotes/origin/$integrationBranch").Trim()
+                "refs/remotes/origin/$requiredBranch").Trim()
             $divergence = (git rev-list --left-right --count `
-                "$integrationBranch...origin/$integrationBranch").Trim() `
+                "$requiredBranch...origin/$requiredBranch").Trim() `
                 -split '\s+'
-            if ($branch -ne $integrationBranch -or
+            if ($branch -ne $requiredBranch -or
                 $remote -ne $BrokerRequest.GitCommit -or
                 $divergence.Count -ne 2 -or $divergence[0] -ne '0' -or
                 $divergence[1] -ne '0') {
@@ -125,6 +135,31 @@ function Assert-GitBinding {
         }
     } finally {
         Pop-Location
+    }
+}
+
+function Assert-M1UserApprovedPreflight {
+    param([Parameter(Mandatory = $true)] [object] $BrokerRequest)
+    if (Test-Path -LiteralPath `
+            "$($BrokerRequest.AuthorizationFile).consumed") {
+        throw 'TUSHARE_M1_AUTHORIZATION_ALREADY_CONSUMED'
+    }
+    $output = @(& java "-Dloader.main=$m1PreflightClass" `
+        -cp $BrokerRequest.JarPath `
+        'org.springframework.boot.loader.launch.PropertiesLauncher' `
+        "--authorization-file=$($BrokerRequest.AuthorizationFile)" 2>&1 |
+        ForEach-Object { [string]$_ })
+    if ($LASTEXITCODE -ne 0 -or
+        $output -notcontains 'TUSHARE_M1_PREFLIGHT=PASS' -or
+        $output -notcontains
+            "TUSHARE_M1_GIT_COMMIT=$($BrokerRequest.GitCommit)" -or
+        $output -notcontains
+            "TUSHARE_M1_ARTIFACT_SHA256=$($BrokerRequest.JarSha256)" -or
+        $output -notcontains
+            "TUSHARE_M1_BUILD_PROOF_PATH=$($BrokerRequest.BuildProofPath)") {
+        throw (Get-SafeMarker -Lines $output `
+            -Name 'TUSHARE_M1_PREFLIGHT_REASON' `
+            -Fallback 'STOCK_QUANT_HOST_BROKER_M1_AUTHORIZATION_INVALID')
     }
 }
 
@@ -336,6 +371,93 @@ function Invoke-Day001 {
     }
 }
 
+function Invoke-M1ResearchData {
+    param([Parameter(Mandatory = $true)] [object] $BrokerRequest)
+    Assert-M1UserApprovedPreflight -BrokerRequest $BrokerRequest
+    $runnerResult = Join-Path $paths.Results `
+        "$($BrokerRequest.RequestId).m1.json"
+    if (Test-Path -LiteralPath $runnerResult) {
+        throw 'STOCK_QUANT_HOST_BROKER_RUNNER_RESULT_ALREADY_EXISTS'
+    }
+    $output = @(& $m1RunnerScript `
+        -AuthorizationFile $BrokerRequest.AuthorizationFile `
+        -ResultFile $runnerResult -ArtifactPath $BrokerRequest.JarPath `
+        -SecretMode WINDOWS_CREDENTIAL_MANAGER 2>&1 |
+        ForEach-Object { [string]$_ })
+    if ($LASTEXITCODE -ne 0) {
+        if (Test-Path -LiteralPath $runnerResult -PathType Leaf) {
+            try {
+                $failed = Get-Content -LiteralPath $runnerResult `
+                    -Raw -Encoding UTF8 | ConvertFrom-Json
+                $calls = [int]$failed.providerCallCount
+                if ($calls -ge 0 -and $calls -le 6 -and
+                    [int]$failed.retryCount -eq 0) {
+                    $script:failureSummary = [ordered]@{
+                        runId = [string]$failed.runId
+                        providerCallCount = $calls
+                        retryCount = 0
+                        captureBatchIds = @($failed.captureBatchIds)
+                        newObservationCount =
+                            [int]$failed.newObservationCount
+                        idempotentChainTailCount =
+                            [int]$failed.idempotentChainTailCount
+                        outputAudit = $(if ($failed.outputAudit.clean) {
+                            'PASSED'
+                        } else { 'FAILED' })
+                    }
+                }
+            } catch { $script:failureSummary = $null }
+        }
+        $failureStage = Get-SafeMarker -Lines $output `
+            -Name 'STOCK_QUANT_M1_FAILURE_STAGE' `
+            -Fallback 'FAILED_VALIDATION'
+        $failureReason = Get-SafeMarker -Lines $output `
+            -Name 'STOCK_QUANT_M1_FAILURE_REASON' `
+            -Fallback 'STOCK_QUANT_HOST_BROKER_M1_FAILED'
+        throw [InvalidOperationException]::new(
+            $failureReason + '__STAGE__' + $failureStage)
+    }
+    if (-not (Test-Path -LiteralPath $runnerResult -PathType Leaf)) {
+        throw 'STOCK_QUANT_HOST_BROKER_RUNNER_RESULT_MISSING'
+    }
+    $m1 = Get-Content -LiteralPath $runnerResult -Raw -Encoding UTF8 |
+        ConvertFrom-Json
+    if ($m1.status -ne 'SUCCEEDED' -or
+        [int]$m1.providerCallCount -ne 6 -or [int]$m1.retryCount -ne 0 -or
+        [int]$m1.endpointCallCounts.daily -ne 2 -or
+        [int]$m1.endpointCallCounts.adj_factor -ne 2 -or
+        [int]$m1.endpointCallCounts.trade_cal -ne 2 -or
+        -not $m1.researchDataset.typedFactReadback -or
+        -not $m1.researchDataset.systemKnowledgeReadback -or
+        -not $m1.researchDataset.formulaOnlyQfq -or
+        -not $m1.researchDataset.dataQuality -or
+        -not $m1.researchDataset.noFutureDataLeakage -or
+        -not $m1.researchDataset.m2Readable -or
+        -not $m1.outputAudit.clean) {
+        throw 'STOCK_QUANT_HOST_BROKER_M1_RESULT_INVALID'
+    }
+    return [ordered]@{
+        runId = [string]$m1.runId
+        providerCallCount = [int]$m1.providerCallCount
+        retryCount = [int]$m1.retryCount
+        stageProviderCallsAfter = [int]$m1.stageProviderCallsAfter
+        cumulativeProviderCallsAfter = [int]$m1.cumulativeProviderCallsAfter
+        captureBatchIds = @($m1.captureBatchIds)
+        receivedFactCount = [int]$m1.receivedFactCount
+        newObservationCount = [int]$m1.newObservationCount
+        idempotentChainTailCount = [int]$m1.idempotentChainTailCount
+        typedFactReadback = $true
+        systemKnowledgeReadback = $true
+        formulaOnlyQfq = $true
+        qfqBarCount = [int]$m1.researchDataset.qfqBarCount
+        dataQuality = $true
+        noFutureDataLeakage = $true
+        m2Readable = $true
+        outputAudit = 'PASSED'
+        sanitizedResult = $runnerResult
+    }
+}
+
 function Read-SanitizedBrokerResult {
     param(
         [Parameter(Mandatory = $true)]
@@ -515,6 +637,10 @@ function Invoke-ClaimedRequest {
             }
             'RUN_FAKE_E2E' { Invoke-FakeE2e -BrokerRequest $request; break }
             'RUN_DAY001' { Invoke-Day001 -BrokerRequest $request; break }
+            'RUN_M1_RESEARCH_DATA' {
+                Invoke-M1ResearchData -BrokerRequest $request
+                break
+            }
             'READ_SANITIZED_RESULT' {
                 Read-SanitizedBrokerResult -BrokerRequest $request
                 break

@@ -363,6 +363,53 @@ public class PitMarketFactRepository {
                 Timestamp.from(cutoff));
     }
 
+    public List<TradingCalendarObservation> findCalendarAsOf(
+            String sourceCode,
+            String sourceInstrumentId,
+            String exchange,
+            LocalDate from,
+            LocalDate to,
+            Instant cutoff
+    ) {
+        String sql = """
+                WITH visible AS (
+                    SELECT %s, c.exchange, c.calendar_date, c.is_open,
+                           c.session_code,
+                           row_number() OVER (
+                               PARTITION BY c.exchange, c.calendar_date
+                               ORDER BY
+                                        CASE o.revision_qualification
+                                          WHEN 'PROVIDER_VERIFIED' THEN 4
+                                          WHEN 'SYSTEM_KNOWLEDGE_ONLY' THEN 3
+                                          WHEN 'PROVIDER_UNVERIFIED' THEN 2
+                                          WHEN 'PROVIDER_UNAVAILABLE' THEN 1
+                                          ELSE 0
+                                        END DESC,
+                                        o.known_at DESC,
+                                        o.chain_sequence DESC, o.id DESC
+                           ) AS selected_version
+                    FROM pit_market_fact_observations o
+                    JOIN pit_market_fact_batches capture
+                      ON capture.id=o.batch_id
+                     AND capture.response_complete
+                    JOIN trading_calendar_facts_v1 c
+                      ON c.observation_id=o.id
+                    WHERE o.fact_type='TRADING_CALENDAR'
+                      AND o.source_code=?
+                      AND o.source_instrument_id=?
+                      AND c.exchange=?
+                      AND c.calendar_date BETWEEN ? AND ?
+                      AND o.known_at<=?
+            )
+                SELECT * FROM visible
+                WHERE selected_version=1
+                ORDER BY calendar_date
+                """.formatted(ENVELOPE_COLUMNS);
+        return jdbcTemplate.query(sql, this::mapCalendar,
+                sourceCode, sourceInstrumentId, exchange, from, to,
+                Timestamp.from(cutoff));
+    }
+
     public List<RawDailyBarObservation> findRawBarsAsOf(
             String sourceCode,
             String sourceInstrumentId,
@@ -421,6 +468,61 @@ public class PitMarketFactRepository {
                 sourceCode, sourceInstrumentId, symbol, exchange,
                 effectiveTradeDate,
                 Timestamp.from(cutoff), limit);
+    }
+
+    public List<RawDailyBarObservation> findRawBarsWindowAsOf(
+            String sourceCode,
+            String sourceInstrumentId,
+            String symbol,
+            String exchange,
+            LocalDate from,
+            LocalDate to,
+            Instant cutoff
+    ) {
+        String sql = """
+                WITH visible AS (
+                    SELECT %s, b.symbol, b.exchange, b.trade_date,
+                           b.open, b.high, b.low, b.close, b.volume,
+                           b.volume_qualification, b.volume_unit_code,
+                           b.volume_semantic_code,
+                           b.amount, b.amount_qualification,
+                           b.amount_unit_code, b.amount_semantic_code,
+                           b.turnover_rate, b.turnover_rate_qualification,
+                           b.turnover_rate_unit_code,
+                           b.turnover_rate_semantic_code,
+                           row_number() OVER (
+                               PARTITION BY b.symbol, b.exchange, b.trade_date
+                               ORDER BY
+                                        CASE o.revision_qualification
+                                          WHEN 'PROVIDER_VERIFIED' THEN 4
+                                          WHEN 'SYSTEM_KNOWLEDGE_ONLY' THEN 3
+                                          WHEN 'PROVIDER_UNVERIFIED' THEN 2
+                                          WHEN 'PROVIDER_UNAVAILABLE' THEN 1
+                                          ELSE 0
+                                        END DESC,
+                                        o.known_at DESC,
+                                        o.chain_sequence DESC, o.id DESC
+                           ) AS selected_version
+                    FROM pit_market_fact_observations o
+                    JOIN pit_market_fact_batches capture
+                      ON capture.id=o.batch_id
+                     AND capture.response_complete
+                    JOIN raw_daily_bar_facts_v2 b ON b.observation_id=o.id
+                    WHERE o.fact_type='RAW_DAILY_BAR'
+                      AND o.source_code=?
+                      AND o.source_instrument_id=?
+                      AND b.symbol=?
+                      AND b.exchange=?
+                      AND b.trade_date BETWEEN ? AND ?
+                      AND o.known_at<=?
+            )
+                SELECT * FROM visible
+                WHERE selected_version=1
+                ORDER BY trade_date
+                """.formatted(ENVELOPE_COLUMNS);
+        return jdbcTemplate.query(sql, this::mapRaw,
+                sourceCode, sourceInstrumentId, symbol, exchange,
+                from, to, Timestamp.from(cutoff));
     }
 
     public List<AdjustmentFactorObservation> findFactorsAsOf(
