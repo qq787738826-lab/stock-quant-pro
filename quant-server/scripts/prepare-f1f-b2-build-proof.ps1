@@ -1,24 +1,30 @@
 param(
     [Parameter(Mandatory = $true)] [string] $ExpectedCommit,
     [ValidateSet('PREPARATION_ONLY', 'CONTROLLED_BUILD_ARTIFACT',
-        'M1_STAGE_CONTROLLED_BUILD_ARTIFACT', 'E2E_DRY_RUN')]
+        'M1_STAGE_CONTROLLED_BUILD_ARTIFACT',
+        'M2_STAGE_CONTROLLED_BUILD_ARTIFACT', 'E2E_DRY_RUN')]
     [string] $Mode = 'PREPARATION_ONLY',
 
-    [ValidateSet('F1F_B2', 'REDUCED_RESEARCH_DAY001', 'M1_RESEARCH_DATA')]
+    [ValidateSet('F1F_B2', 'REDUCED_RESEARCH_DAY001', 'M1_RESEARCH_DATA',
+        'M2_STRATEGY_RESEARCH')]
     [string] $RunnerProfile = 'F1F_B2'
 )
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $requiredBranch = 'feature/1.4.0-agent-team'
-$artifactName = if ($RunnerProfile -eq 'M1_RESEARCH_DATA') {
+$artifactName = if ($RunnerProfile -eq 'M2_STRATEGY_RESEARCH') {
+    'quant-server-1.3.1-m2-strategy-research-runner.jar'
+} elseif ($RunnerProfile -eq 'M1_RESEARCH_DATA') {
     'quant-server-1.3.1-m1-research-data-runner.jar'
 } elseif ($RunnerProfile -eq 'REDUCED_RESEARCH_DAY001') {
     'quant-server-1.3.1-reduced-research-day001-runner.jar'
 } else {
     'quant-server-1.3.1-f1f-b2-runner.jar'
 }
-$runnerStartClass = if ($RunnerProfile -eq 'M1_RESEARCH_DATA') {
+$runnerStartClass = if ($RunnerProfile -eq 'M2_STRATEGY_RESEARCH') {
+    'com.stockquant.server.agent.marketfacts.TushareM2StrategyResearchManualRunner'
+} elseif ($RunnerProfile -eq 'M1_RESEARCH_DATA') {
     'com.stockquant.server.agent.marketfacts.TushareM1ResearchDataManualRunner'
 } elseif ($RunnerProfile -eq 'REDUCED_RESEARCH_DAY001') {
     'com.stockquant.server.agent.marketfacts.TushareReducedResearchManualRunner'
@@ -97,6 +103,12 @@ try {
             $remoteCommit -ne $ExpectedCommit -or
             $RunnerProfile -ne 'M1_RESEARCH_DATA') {
             throw 'TUSHARE_M1_STAGE_BUILD_BASELINE_REQUIRED'
+        }
+    } elseif ($Mode -eq 'M2_STAGE_CONTROLLED_BUILD_ARTIFACT') {
+        if ($actualBranch -ne 'codex/1.4.0-m2-strategy-engine-ready' -or
+            $remoteCommit -ne $ExpectedCommit -or
+            $RunnerProfile -ne 'M2_STRATEGY_RESEARCH') {
+            throw 'STOCK_QUANT_M2_STAGE_BUILD_BASELINE_REQUIRED'
         }
     } elseif ($actualBranch -ne $requiredBranch -and
         -not $actualBranch.StartsWith('codex/')) {

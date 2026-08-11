@@ -70,6 +70,13 @@ public final class TushareControlledAcceptanceOutputAudit {
                 RegistryRequirement.TUSHARE_TOKEN_ONLY);
     }
 
+    static <T> Captured<T> captureDatabaseOnlyProcess(
+            DynamicAction<T> action
+    ) throws Exception {
+        return captureDynamic(Objects.requireNonNull(action, "action"),
+                RegistryRequirement.DATABASE_ONLY);
+    }
+
     static <T> Captured<T> captureDatabasePreparationProcess(
             DynamicAction<T> action
     ) throws Exception {
@@ -242,6 +249,13 @@ public final class TushareControlledAcceptanceOutputAudit {
             }
         }
 
+        private void requireDatabaseOnlyRegistration() {
+            if (!kinds.equals(List.of(SensitiveKind.DATABASE_PASSWORD))) {
+                throw new IllegalStateException(
+                        "STOCK_QUANT_DATABASE_ONLY_SENSITIVE_REGISTRY_INCOMPLETE");
+            }
+        }
+
         private void requireCompleteDatabasePreparationRegistration() {
             if ((databasePreparationSecretsRequired
                     && !kinds.equals(List.of(
@@ -305,6 +319,13 @@ public final class TushareControlledAcceptanceOutputAudit {
             void validate(SensitiveRegistry registry) {
                 NONE.validate(registry);
                 registry.requireTushareTokenOnlyRegistration();
+            }
+        },
+        DATABASE_ONLY {
+            @Override
+            void validate(SensitiveRegistry registry) {
+                NONE.validate(registry);
+                registry.requireDatabaseOnlyRegistration();
             }
         },
         DATABASE_PREPARATION {

@@ -32,6 +32,9 @@ public final class TushareControlledAcceptanceBuildProof {
     static final String M1_RUNNER_START_CLASS =
             "com.stockquant.server.agent.marketfacts."
                     + "TushareM1ResearchDataManualRunner";
+    static final String M2_RUNNER_START_CLASS =
+            "com.stockquant.server.agent.marketfacts."
+                    + "TushareM2StrategyResearchManualRunner";
     static final String M1_STAGE_BRANCH =
             "codex/1.4.0-m1-research-data-ready";
     private static final Set<String> REQUIRED_PROPERTIES = Set.of(
@@ -117,6 +120,9 @@ public final class TushareControlledAcceptanceBuildProof {
                     : buildMode
                     == BuildMode.M1_STAGE_CONTROLLED_BUILD_ARTIFACT
                     ? ProofSource.M1_STAGE_CONTROLLED_BUILD_ARTIFACT
+                    : buildMode
+                    == BuildMode.M2_STAGE_CONTROLLED_BUILD_ARTIFACT
+                    ? ProofSource.M2_STAGE_CONTROLLED_BUILD_ARTIFACT
                     : buildMode == BuildMode.E2E_DRY_RUN
                     ? ProofSource.E2E_DRY_RUN
                     : ProofSource.PREPARATION_ONLY;
@@ -255,7 +261,8 @@ public final class TushareControlledAcceptanceBuildProof {
                     || !BOOT_MAIN_CLASS.equals(manifest.mainClass())
                     || !Set.of(F1F_B2_RUNNER_START_CLASS,
                     DAY001_RUNNER_START_CLASS,
-                    M1_RUNNER_START_CLASS).contains(manifest.startClass())
+                    M1_RUNNER_START_CLASS,
+                    M2_RUNNER_START_CLASS).contains(manifest.startClass())
                     || !gitCommit.equals(manifest.gitCommit())
                     || !remoteGitCommit.equals(manifest.remoteGitCommit())
                     || !branchAllowedForMode(branchName, buildMode)
@@ -263,6 +270,9 @@ public final class TushareControlledAcceptanceBuildProof {
                     && !gitCommit.equals(remoteGitCommit)
                     || buildMode
                     == BuildMode.M1_STAGE_CONTROLLED_BUILD_ARTIFACT
+                    && !gitCommit.equals(remoteGitCommit)
+                    || buildMode
+                    == BuildMode.M2_STAGE_CONTROLLED_BUILD_ARTIFACT
                     && !gitCommit.equals(remoteGitCommit)
                     || !branchName.equals(manifest.branchName())
                     || trackedWorkspaceClean != manifest.trackedWorkspaceClean()
@@ -305,6 +315,15 @@ public final class TushareControlledAcceptanceBuildProof {
                     && buildMode
                     == BuildMode.M1_STAGE_CONTROLLED_BUILD_ARTIFACT
                     && M1_RUNNER_START_CLASS.equals(runnerStartClass());
+        }
+
+        boolean m2StageEligible() {
+            validate();
+            return source
+                    == ProofSource.M2_STAGE_CONTROLLED_BUILD_ARTIFACT
+                    && buildMode
+                    == BuildMode.M2_STAGE_CONTROLLED_BUILD_ARTIFACT
+                    && M2_RUNNER_START_CLASS.equals(runnerStartClass());
         }
 
         public String gitCommit() { return gitCommit; }
@@ -371,6 +390,7 @@ public final class TushareControlledAcceptanceBuildProof {
     public enum ProofSource {
         CONTROLLED_BUILD_ARTIFACT,
         M1_STAGE_CONTROLLED_BUILD_ARTIFACT,
+        M2_STAGE_CONTROLLED_BUILD_ARTIFACT,
         E2E_DRY_RUN,
         PREPARATION_ONLY,
         TEST_ONLY
@@ -380,6 +400,7 @@ public final class TushareControlledAcceptanceBuildProof {
         PREPARATION_ONLY,
         CONTROLLED_BUILD_ARTIFACT,
         M1_STAGE_CONTROLLED_BUILD_ARTIFACT,
+        M2_STAGE_CONTROLLED_BUILD_ARTIFACT,
         E2E_DRY_RUN
     }
 
@@ -461,6 +482,9 @@ public final class TushareControlledAcceptanceBuildProof {
         }
         if (buildMode == BuildMode.M1_STAGE_CONTROLLED_BUILD_ARTIFACT) {
             return M1_STAGE_BRANCH.equals(branchName);
+        }
+        if (buildMode == BuildMode.M2_STAGE_CONTROLLED_BUILD_ARTIFACT) {
+            return "codex/1.4.0-m2-strategy-engine-ready".equals(branchName);
         }
         return REQUIRED_INTEGRATION_BRANCH.equals(branchName)
                 || branchName.startsWith("codex/");
