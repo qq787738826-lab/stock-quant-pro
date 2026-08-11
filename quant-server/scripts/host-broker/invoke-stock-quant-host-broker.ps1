@@ -7,6 +7,7 @@ param(
         'RUN_FAKE_E2E',
         'RUN_DAY001',
         'RUN_M1_RESEARCH_DATA',
+        'VERIFY_M1_TUSHARE_TOKEN',
         'READ_SANITIZED_RESULT'
     )]
     [string] $Operation,
@@ -34,7 +35,8 @@ if ($identity -notmatch '(?i)CodexSandbox') {
     throw 'STOCK_QUANT_HOST_BROKER_CODEX_SANDBOX_REQUIRED'
 }
 if ([string]::IsNullOrWhiteSpace($ArtifactPath)) {
-    $artifactName = if ($Operation -eq 'RUN_M1_RESEARCH_DATA') {
+    $artifactName = if ($Operation -in @(
+            'RUN_M1_RESEARCH_DATA', 'VERIFY_M1_TUSHARE_TOKEN')) {
         'quant-server-1.3.1-m1-research-data-runner.jar'
     } else {
         'quant-server-1.3.1-reduced-research-day001-runner.jar'
@@ -55,7 +57,8 @@ if ($Operation -in @(
 Push-Location $paths.RepositoryRoot
 try {
     $branch = (git branch --show-current).Trim()
-    $requiredBranch = if ($Operation -eq 'RUN_M1_RESEARCH_DATA' -and
+    $requiredBranch = if ($Operation -in @(
+            'RUN_M1_RESEARCH_DATA', 'VERIFY_M1_TUSHARE_TOKEN') -and
         $branch -eq 'codex/1.4.0-m1-research-data-ready') {
         'codex/1.4.0-m1-research-data-ready'
     } else { $integrationBranch }
@@ -146,6 +149,38 @@ try {
             'created.at' = $createdAt.ToString('o')
             'expires.at' = $expiresAt.ToString('o')
             'execution.source' = 'M1_RESEARCH_DATA_MANUAL'
+            'no.retry' = 'true'
+            'source.request.id' = 'NONE'
+        }
+    } elseif ($Operation -eq 'VERIFY_M1_TUSHARE_TOKEN') {
+        $authorizationValues = Read-StrictStockQuantProperties `
+            -Path $authorization
+        $requestValues = [ordered]@{
+            'schema.version' = 'STOCK_QUANT_HOST_BROKER_REQUEST_V1'
+            'request.id' = $requestId
+            'operation' = $Operation
+            'git.commit' = $head
+            'jar.path' = $artifact
+            'jar.sha256' = $artifactHash
+            'authorization.file' = $authorization
+            'security.symbol' = '600000'
+            'security.exchange' = 'SSE'
+            'trade.date' = '2025-01-03'
+            'provider' = 'TUSHARE'
+            'provider.endpoints' = 'daily'
+            'endpoint.daily.requests' = '1'
+            'maximum.provider.requests' = '1'
+            'retry.budget' = '0'
+            'redirects' = 'NEVER'
+            'provider.historical.baseline' = '34'
+            'provider.stage.limit' = '30'
+            'provider.cumulative.limit' = '64'
+            'provider.stage.calls.before' =
+                [string]$authorizationValues['provider.stage.calls.before']
+            'created.at' = $createdAt.ToString('o')
+            'expires.at' = $expiresAt.ToString('o')
+            'execution.source' =
+                'M1_TUSHARE_TOKEN_VERIFICATION_MANUAL'
             'no.retry' = 'true'
             'source.request.id' = 'NONE'
         }

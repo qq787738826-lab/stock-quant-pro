@@ -662,6 +662,65 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
         return fetch(request, QueryMode.CONTROLLED_NO_RETRY, session);
     }
 
+    /**
+     * Performs exactly one daily request for an already user-approved M1
+     * credential verification. No database component is involved.
+     */
+    M1TokenVerification verifyM1Token(
+            MarketFactRequest request,
+            TushareManualBoundedSession session
+    ) {
+        if (session == null
+                || session.sessionProfile()
+                != TushareManualBoundedSession.SessionProfile
+                .M1_TOKEN_VERIFICATION
+                || session.maximumBusinessRequests() != 1
+                || !session.allowedEndpoints().equals(Set.of("daily"))
+                || session.automaticRetryAllowed()) {
+            throw new IllegalArgumentException(
+                    "TUSHARE_M1_TOKEN_VERIFICATION_SESSION_INVALID");
+        }
+        if (request == null
+                || !request.factTypes().equals(Set.of(FactType.RAW_DAILY_BAR))
+                || !request.rangeStart().equals(request.rangeEnd())
+                || !request.rangeStart().equals(session.allowedStart())
+                || !request.rangeEnd().equals(session.allowedEnd())) {
+            throw new IllegalArgumentException(
+                    "TUSHARE_M1_TOKEN_VERIFICATION_SCOPE_INVALID");
+        }
+        validateRequest(request);
+        properties.requireManualBoundedToken();
+        QueryResult result = queryDaily(
+                request, QueryMode.CONTROLLED_NO_RETRY, session);
+        List<RawDailyBar> bars = mapDaily(request, result.table());
+        boolean targetPresent = bars.stream().anyMatch(bar ->
+                bar.symbol().equals(request.symbol())
+                        && bar.exchange().equals(request.exchange())
+                        && bar.tradeDate().equals(request.rangeStart()));
+        return new M1TokenVerification(
+                result.providerCallCount(), result.rateLimitRetryCount(),
+                result.table().fields().size(), result.table().rows().size(),
+                bars.size(), targetPresent);
+    }
+
+    record M1TokenVerification(
+            int providerCallCount,
+            int retryCount,
+            int fieldCount,
+            int rowCount,
+            int mappedRowCount,
+            boolean targetRowPresent
+    ) {
+        M1TokenVerification {
+            if (providerCallCount != 1 || retryCount != 0
+                    || fieldCount < 1 || rowCount < 0 || mappedRowCount < 0
+                    || mappedRowCount > rowCount) {
+                throw new IllegalArgumentException(
+                        "TUSHARE_M1_TOKEN_VERIFICATION_RESULT_INVALID");
+            }
+        }
+    }
+
     private MarketFactResponse fetch(
             MarketFactRequest request,
             QueryMode mode,

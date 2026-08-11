@@ -11,6 +11,7 @@ $root = Join-Path $paths.TargetRoot ($prefix + [Guid]::NewGuid().ToString('N'))
 $artifact = Join-Path $root 'm1-protocol-test.jar'
 $proof = "$artifact.f1f-b2-proof.properties"
 $authorization = Join-Path $root 'authorization.properties'
+$tokenAuthorization = Join-Path $root 'token-verification.properties'
 $processing = $null
 $diagnosticFiles = @()
 
@@ -137,6 +138,94 @@ try {
     Remove-Item -LiteralPath $processing -Force
     $processing = $null
 
+    $tokenAuth = [ordered]@{
+        'authorization.status' = 'USER_APPROVED'
+        'authorization.version' = 'M1_TUSHARE_TOKEN_VERIFICATION_V1'
+        'verification.id' = 'M1TOKEN_20260811T030000Z_ABCDEF123456'
+        'git.commit' = $head
+        'artifact.sha256' = $hash
+        'build.proof.path' = $proof
+        'provider' = 'TUSHARE'
+        'endpoint' = 'daily'
+        'security.symbol' = '600000'
+        'security.exchange' = 'SSE'
+        'trade.date' = '2025-01-03'
+        'endpoint.daily.requests' = '1'
+        'maximum.provider.requests' = '1'
+        'retry.budget' = '0'
+        'redirects' = 'NEVER'
+        'provider.historical.baseline' = '34'
+        'provider.stage.limit' = '30'
+        'provider.cumulative.limit' = '64'
+        'provider.stage.calls.before' = '2'
+        'issued.at' = $issued.ToString('o')
+        'expires.at' = $expires.ToString('o')
+        'purpose' = 'M1_RESEARCH_DATA_READY_TOKEN_VERIFICATION'
+        'execution.source' = 'M1_TUSHARE_TOKEN_VERIFICATION_MANUAL'
+        'user.approval.reference' =
+            'USER_APPROVED_M1_TOKEN_VERIFICATION'
+    }
+    Write-Lines $tokenAuthorization $tokenAuth
+    $tokenId = New-StockQuantHostBrokerRequestId
+    $tokenRequest = [ordered]@{
+        'schema.version' = 'STOCK_QUANT_HOST_BROKER_REQUEST_V1'
+        'request.id' = $tokenId
+        'operation' = 'VERIFY_M1_TUSHARE_TOKEN'
+        'git.commit' = $head
+        'jar.path' = $artifact
+        'jar.sha256' = $hash
+        'authorization.file' = $tokenAuthorization
+        'security.symbol' = '600000'
+        'security.exchange' = 'SSE'
+        'trade.date' = '2025-01-03'
+        'provider' = 'TUSHARE'
+        'provider.endpoints' = 'daily'
+        'endpoint.daily.requests' = '1'
+        'maximum.provider.requests' = '1'
+        'retry.budget' = '0'
+        'redirects' = 'NEVER'
+        'provider.historical.baseline' = '34'
+        'provider.stage.limit' = '30'
+        'provider.cumulative.limit' = '64'
+        'provider.stage.calls.before' = '2'
+        'created.at' = $created.ToString('o')
+        'expires.at' = $created.AddMinutes(10).ToString('o')
+        'execution.source' = 'M1_TUSHARE_TOKEN_VERIFICATION_MANUAL'
+        'no.retry' = 'true'
+        'source.request.id' = 'NONE'
+    }
+    $processing = Join-Path $paths.Requests `
+        "$tokenId.processing.properties"
+    Write-Lines $processing $tokenRequest
+    $parsedToken = Read-StockQuantHostBrokerRequest -Path $processing
+    if ($parsedToken.Operation -ne 'VERIFY_M1_TUSHARE_TOKEN' -or
+        $parsedToken.AuthorizationStatus -ne 'USER_APPROVED' -or
+        -not $parsedToken.NoRetry) {
+        throw 'M1_TOKEN_PROTOCOL_VALID_REQUEST_REJECTED'
+    }
+    Remove-Item -LiteralPath $processing -Force
+    $processing = $null
+
+    $tokenBudgetMismatch = [ordered]@{}
+    foreach ($key in $tokenRequest.Keys) {
+        $tokenBudgetMismatch[$key] = $tokenRequest[$key]
+    }
+    $tokenBudgetMismatch['request.id'] =
+        New-StockQuantHostBrokerRequestId
+    $tokenBudgetMismatch['maximum.provider.requests'] = '2'
+    Expect-Rejection $tokenBudgetMismatch `
+        'STOCK_QUANT_HOST_BROKER_REQUEST_SCOPE_INVALID'
+
+    $tokenBindingMismatch = [ordered]@{}
+    foreach ($key in $tokenRequest.Keys) {
+        $tokenBindingMismatch[$key] = $tokenRequest[$key]
+    }
+    $tokenBindingMismatch['request.id'] =
+        New-StockQuantHostBrokerRequestId
+    $tokenBindingMismatch['trade.date'] = '2025-01-06'
+    Expect-Rejection $tokenBindingMismatch `
+        'STOCK_QUANT_HOST_BROKER_REQUEST_SCOPE_INVALID'
+
     $overflow = [ordered]@{}
     foreach ($key in $values.Keys) { $overflow[$key] = $values[$key] }
     $overflow['request.id'] = New-StockQuantHostBrokerRequestId
@@ -217,7 +306,7 @@ try {
     Remove-Item -LiteralPath $processing -Force
     $processing = $null
 
-    Write-Output 'STOCK_QUANT_M1_BROKER_PROTOCOL_TESTS=5'
+    Write-Output 'STOCK_QUANT_M1_BROKER_PROTOCOL_TESTS=8'
     Write-Output 'STOCK_QUANT_M1_BROKER_PROTOCOL_FAILURES=0'
     Write-Output 'STOCK_QUANT_M1_BROKER_PROTOCOL_REAL_PROVIDER_CALLS=0'
 } finally {

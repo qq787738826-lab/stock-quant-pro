@@ -13,6 +13,9 @@ $preflightClass = 'com.stockquant.server.agent.marketfacts.' +
     'TushareReducedResearchDay001Preflight'
 $m1PreflightClass = 'com.stockquant.server.agent.marketfacts.' +
     'TushareM1ResearchDataPreflight'
+$m1TokenVerificationPreflightClass =
+    'com.stockquant.server.agent.marketfacts.' +
+    'TushareM1TokenVerificationPreflight'
 $credentialProbeClass = 'com.stockquant.server.agent.marketfacts.' +
     'TushareCredentialHealthProbe'
 $credentialStatusScript = Join-Path $paths.RepositoryRoot `
@@ -21,6 +24,8 @@ $hostRunnerScript = Join-Path $paths.RepositoryRoot `
     'quant-server\scripts\run-stock-quant-local-automation.ps1'
 $m1RunnerScript = Join-Path $paths.RepositoryRoot `
     'quant-server\scripts\run-m1-research-data.ps1'
+$m1TokenVerificationScript = Join-Path $paths.RepositoryRoot `
+    'quant-server\scripts\run-m1-tushare-token-verification.ps1'
 $fakeE2eScript = Join-Path $paths.RepositoryRoot `
     'quant-server\scripts\run-reduced-research-day001-e2e-dry-run.ps1'
 $mutex = [Threading.Mutex]::new($false, 'Local\StockQuantLocalBroker')
@@ -108,7 +113,8 @@ function Assert-GitBinding {
             throw 'STOCK_QUANT_HOST_BROKER_GIT_BINDING_INVALID'
         }
         if ($BrokerRequest.Operation -in @(
-                'RUN_DAY001', 'RUN_M1_RESEARCH_DATA')) {
+                'RUN_DAY001', 'RUN_M1_RESEARCH_DATA',
+                'VERIFY_M1_TUSHARE_TOKEN')) {
             $requiredBranch = if ($BrokerRequest.Operation -eq 'RUN_DAY001') {
                 $integrationBranch
             } elseif ($branch -eq 'codex/1.4.0-m1-research-data-ready') {
@@ -160,6 +166,34 @@ function Assert-M1UserApprovedPreflight {
         throw (Get-SafeMarker -Lines $output `
             -Name 'TUSHARE_M1_PREFLIGHT_REASON' `
             -Fallback 'STOCK_QUANT_HOST_BROKER_M1_AUTHORIZATION_INVALID')
+    }
+}
+
+function Assert-M1TokenVerificationPreflight {
+    param([Parameter(Mandatory = $true)] [object] $BrokerRequest)
+    if (Test-Path -LiteralPath `
+            "$($BrokerRequest.AuthorizationFile).consumed") {
+        throw 'TUSHARE_M1_TOKEN_VERIFICATION_AUTH_ALREADY_CONSUMED'
+    }
+    $output = @(& java `
+        "-Dloader.main=$m1TokenVerificationPreflightClass" `
+        -cp $BrokerRequest.JarPath `
+        'org.springframework.boot.loader.launch.PropertiesLauncher' `
+        "--authorization-file=$($BrokerRequest.AuthorizationFile)" 2>&1 |
+        ForEach-Object { [string]$_ })
+    if ($LASTEXITCODE -ne 0 -or $output -notcontains
+            'TUSHARE_M1_TOKEN_VERIFICATION_PREFLIGHT=PASS' -or
+        $output -notcontains
+            "TUSHARE_M1_TOKEN_VERIFICATION_GIT_COMMIT=$($BrokerRequest.GitCommit)" -or
+        $output -notcontains
+            "TUSHARE_M1_TOKEN_VERIFICATION_ARTIFACT_SHA256=$($BrokerRequest.JarSha256)" -or
+        $output -notcontains
+            "TUSHARE_M1_TOKEN_VERIFICATION_BUILD_PROOF_PATH=$($BrokerRequest.BuildProofPath)" -or
+        $output -notcontains
+            'TUSHARE_M1_TOKEN_VERIFICATION_MAXIMUM_PROVIDER_REQUESTS=1') {
+        throw (Get-SafeMarker -Lines $output `
+            -Name 'TUSHARE_M1_TOKEN_VERIFICATION_PREFLIGHT_REASON' `
+            -Fallback 'STOCK_QUANT_HOST_BROKER_M1_TOKEN_AUTH_INVALID')
     }
 }
 
@@ -368,6 +402,88 @@ function Invoke-Day001 {
         systemKnowledgeReadback = [string]$day001.systemKnowledgeReadback
         qfqResult = [string]$day001.formulaOnlyQfq.result
         outputAudit = 'PASSED'
+    }
+}
+
+function Invoke-M1TokenVerification {
+    param([Parameter(Mandatory = $true)] [object] $BrokerRequest)
+    Assert-M1TokenVerificationPreflight -BrokerRequest $BrokerRequest
+    $runnerResult = Join-Path $paths.Results `
+        "$($BrokerRequest.RequestId).m1-token-verification.json"
+    if (Test-Path -LiteralPath $runnerResult) {
+        throw 'STOCK_QUANT_HOST_BROKER_RUNNER_RESULT_ALREADY_EXISTS'
+    }
+    $output = @(& $m1TokenVerificationScript `
+        -AuthorizationFile $BrokerRequest.AuthorizationFile `
+        -ResultFile $runnerResult -ArtifactPath $BrokerRequest.JarPath `
+        2>&1 | ForEach-Object { [string]$_ })
+    if ($LASTEXITCODE -ne 0) {
+        if (Test-Path -LiteralPath $runnerResult -PathType Leaf) {
+            try {
+                $failed = Get-Content -LiteralPath $runnerResult `
+                    -Raw -Encoding UTF8 | ConvertFrom-Json
+                $calls = [int]$failed.providerCallCount
+                if ($calls -ge 0 -and $calls -le 1 -and
+                    [int]$failed.retryCount -eq 0) {
+                    $script:failureSummary = [ordered]@{
+                        verificationId = [string]$failed.verificationId
+                        providerCallCount = $calls
+                        retryCount = 0
+                        httpStatus = $failed.httpStatus
+                        providerCode = $failed.providerCode
+                        providerMessageCategory =
+                            [string]$failed.providerMessageCategory
+                        responseJsonValid =
+                            [bool]$failed.responseJsonValid
+                        targetRowPresent =
+                            [bool]$failed.targetRowPresent
+                        outputAudit = $(if ($failed.outputAudit.clean) {
+                            'PASSED'
+                        } else { 'FAILED' })
+                    }
+                }
+            } catch { $script:failureSummary = $null }
+        }
+        $failureStage = Get-SafeMarker -Lines $output `
+            -Name 'STOCK_QUANT_M1_TOKEN_VERIFICATION_FAILURE_STAGE' `
+            -Fallback 'FAILED_VALIDATION'
+        $failureReason = Get-SafeMarker -Lines $output `
+            -Name 'STOCK_QUANT_M1_TOKEN_VERIFICATION_FAILURE_REASON' `
+            -Fallback 'STOCK_QUANT_HOST_BROKER_M1_TOKEN_VERIFICATION_FAILED'
+        throw [InvalidOperationException]::new(
+            $failureReason + '__STAGE__' + $failureStage)
+    }
+    if (-not (Test-Path -LiteralPath $runnerResult -PathType Leaf)) {
+        throw 'STOCK_QUANT_HOST_BROKER_RUNNER_RESULT_MISSING'
+    }
+    $verification = Get-Content -LiteralPath $runnerResult `
+        -Raw -Encoding UTF8 | ConvertFrom-Json
+    if ($verification.status -ne 'SUCCEEDED' -or
+        [int]$verification.providerCallCount -ne 1 -or
+        [int]$verification.retryCount -ne 0 -or
+        $verification.endpoint -ne 'daily' -or
+        [int]$verification.providerCode -ne 0 -or
+        -not $verification.responseJsonValid -or
+        -not $verification.targetRowPresent -or
+        -not $verification.outputAudit.clean -or
+        $verification.prohibitedEffects.databaseConnected -or
+        $verification.prohibitedEffects.databaseWritten) {
+        throw 'STOCK_QUANT_HOST_BROKER_M1_TOKEN_VERIFICATION_RESULT_INVALID'
+    }
+    return [ordered]@{
+        verificationId = [string]$verification.verificationId
+        providerCallCount = 1
+        retryCount = 0
+        endpoint = 'daily'
+        httpStatus = [int]$verification.httpStatus
+        providerCode = 0
+        providerMessageCategory = 'SUCCESS'
+        responseJsonValid = $true
+        targetRowPresent = $true
+        outputAudit = 'PASSED'
+        databaseConnected = $false
+        databaseWritten = $false
+        sanitizedResult = $runnerResult
     }
 }
 
@@ -639,6 +755,10 @@ function Invoke-ClaimedRequest {
             'RUN_DAY001' { Invoke-Day001 -BrokerRequest $request; break }
             'RUN_M1_RESEARCH_DATA' {
                 Invoke-M1ResearchData -BrokerRequest $request
+                break
+            }
+            'VERIFY_M1_TUSHARE_TOKEN' {
+                Invoke-M1TokenVerification -BrokerRequest $request
                 break
             }
             'READ_SANITIZED_RESULT' {

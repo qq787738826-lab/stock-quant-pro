@@ -11,6 +11,7 @@ $script:AllowedOperations = @(
     'RUN_FAKE_E2E'
     'RUN_DAY001'
     'RUN_M1_RESEARCH_DATA'
+    'VERIFY_M1_TUSHARE_TOKEN'
     'READ_SANITIZED_RESULT'
 )
 $script:RequiredKeys = @(
@@ -141,6 +142,61 @@ $script:M1AuthorizationKeys = @(
     'database.user'
     'database.ssl.mode'
     'schema.name'
+    'issued.at'
+    'expires.at'
+    'purpose'
+    'execution.source'
+    'user.approval.reference'
+)
+
+$script:M1TokenVerificationRequiredKeys = @(
+    'schema.version'
+    'request.id'
+    'operation'
+    'git.commit'
+    'jar.path'
+    'jar.sha256'
+    'authorization.file'
+    'security.symbol'
+    'security.exchange'
+    'trade.date'
+    'provider'
+    'provider.endpoints'
+    'endpoint.daily.requests'
+    'maximum.provider.requests'
+    'retry.budget'
+    'redirects'
+    'provider.historical.baseline'
+    'provider.stage.limit'
+    'provider.cumulative.limit'
+    'provider.stage.calls.before'
+    'created.at'
+    'expires.at'
+    'execution.source'
+    'no.retry'
+    'source.request.id'
+)
+
+$script:M1TokenVerificationAuthorizationKeys = @(
+    'authorization.status'
+    'authorization.version'
+    'verification.id'
+    'git.commit'
+    'artifact.sha256'
+    'build.proof.path'
+    'provider'
+    'endpoint'
+    'security.symbol'
+    'security.exchange'
+    'trade.date'
+    'endpoint.daily.requests'
+    'maximum.provider.requests'
+    'retry.budget'
+    'redirects'
+    'provider.historical.baseline'
+    'provider.stage.limit'
+    'provider.cumulative.limit'
+    'provider.stage.calls.before'
     'issued.at'
     'expires.at'
     'purpose'
@@ -481,6 +537,85 @@ function Assert-StockQuantM1AuthorizationNonSensitive {
     return $values
 }
 
+function Assert-StockQuantM1TokenVerificationAuthorizationNonSensitive {
+    param(
+        [Parameter(Mandatory = $true)] [string] $Path,
+        [Parameter(Mandatory = $true)] [string] $ExpectedGitCommit,
+        [Parameter(Mandatory = $true)] [string] $ExpectedArtifactHash,
+        [Parameter(Mandatory = $true)] [string] $ExpectedBuildProof,
+        [DateTimeOffset] $Now = [DateTimeOffset]::UtcNow
+    )
+    $content = [IO.File]::ReadAllText($Path, [Text.Encoding]::UTF8)
+    if ($content -match '(?im)^\s*(database\.password|jdbc\.password|provider\.token|token|password)\s*=') {
+        throw 'STOCK_QUANT_HOST_BROKER_AUTHORIZATION_SECRET_FORBIDDEN'
+    }
+    $values = Read-StrictStockQuantProperties -Path $Path
+    if ($values.Count -ne
+            $script:M1TokenVerificationAuthorizationKeys.Count) {
+        throw 'STOCK_QUANT_HOST_BROKER_M1_TOKEN_AUTH_INVALID'
+    }
+    foreach ($key in $script:M1TokenVerificationAuthorizationKeys) {
+        if (-not $values.Contains($key) -or
+            [string]::IsNullOrWhiteSpace([string]$values[$key])) {
+            throw 'STOCK_QUANT_HOST_BROKER_M1_TOKEN_AUTH_INVALID'
+        }
+    }
+    foreach ($key in $values.Keys) {
+        if ($key -notin $script:M1TokenVerificationAuthorizationKeys) {
+            throw 'STOCK_QUANT_HOST_BROKER_M1_TOKEN_AUTH_INVALID'
+        }
+    }
+    [int] $callsBefore = -1
+    if ($values['authorization.status'] -ne 'USER_APPROVED' -or
+        $values['authorization.version'] -ne
+            'M1_TUSHARE_TOKEN_VERIFICATION_V1' -or
+        $values['verification.id'] -notmatch '^M1TOKEN_[A-Z0-9_]{8,55}$' -or
+        $values['git.commit'] -cne $ExpectedGitCommit -or
+        $values['artifact.sha256'] -cne $ExpectedArtifactHash -or
+        $values['provider'] -ne 'TUSHARE' -or
+        $values['endpoint'] -ne 'daily' -or
+        $values['security.symbol'] -ne '600000' -or
+        $values['security.exchange'] -ne 'SSE' -or
+        $values['trade.date'] -ne '2025-01-03' -or
+        $values['endpoint.daily.requests'] -ne '1' -or
+        $values['maximum.provider.requests'] -ne '1' -or
+        $values['retry.budget'] -ne '0' -or
+        $values['redirects'] -ne 'NEVER' -or
+        $values['provider.historical.baseline'] -ne '34' -or
+        $values['provider.stage.limit'] -ne '30' -or
+        $values['provider.cumulative.limit'] -ne '64' -or
+        -not [int]::TryParse(
+            [string]$values['provider.stage.calls.before'],
+            [Globalization.NumberStyles]::None,
+            [Globalization.CultureInfo]::InvariantCulture,
+            [ref]$callsBefore) -or $callsBefore -lt 0 -or
+        $callsBefore + 1 -gt 30 -or
+        $values['purpose'] -ne
+            'M1_RESEARCH_DATA_READY_TOKEN_VERIFICATION' -or
+        $values['execution.source'] -ne
+            'M1_TUSHARE_TOKEN_VERIFICATION_MANUAL' -or
+        $values['user.approval.reference'] -ne
+            'USER_APPROVED_M1_TOKEN_VERIFICATION') {
+        throw 'STOCK_QUANT_HOST_BROKER_M1_TOKEN_AUTH_INVALID'
+    }
+    $actualProof = ([IO.Path]::GetFullPath(
+            $values['build.proof.path'])).TrimEnd('\', '/')
+    $expectedProof = ([IO.Path]::GetFullPath(
+            $ExpectedBuildProof)).TrimEnd('\', '/')
+    if (-not $actualProof.Equals(
+            $expectedProof, [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'STOCK_QUANT_HOST_BROKER_M1_TOKEN_AUTH_INVALID'
+    }
+    $issued = ConvertTo-StockQuantTimestamp $values['issued.at']
+    $expires = ConvertTo-StockQuantTimestamp $values['expires.at']
+    if ($expires -le $issued -or
+        $expires - $issued -gt [TimeSpan]::FromMinutes(30) -or
+        $Now -lt $issued.AddMinutes(-1) -or $Now -ge $expires) {
+        throw 'STOCK_QUANT_HOST_BROKER_M1_TOKEN_AUTH_EXPIRED'
+    }
+    return $values
+}
+
 function Read-StockQuantHostBrokerRequest {
     param(
         [Parameter(Mandatory = $true)]
@@ -498,12 +633,16 @@ function Read-StockQuantHostBrokerRequest {
         throw 'STOCK_QUANT_HOST_BROKER_REQUEST_PATH_INVALID'
     }
     $values = Read-StrictStockQuantProperties -Path $full
-    $requestKeys = if ($values.Contains('operation') -and
-        $values['operation'] -eq 'RUN_M1_RESEARCH_DATA') {
-        $script:M1RequiredKeys
-    } else {
-        $script:RequiredKeys
-    }
+    $requestKeys = if ($values.Contains('operation')) {
+        switch ([string]$values['operation']) {
+            'RUN_M1_RESEARCH_DATA' { $script:M1RequiredKeys; break }
+            'VERIFY_M1_TUSHARE_TOKEN' {
+                $script:M1TokenVerificationRequiredKeys
+                break
+            }
+            default { $script:RequiredKeys }
+        }
+    } else { $script:RequiredKeys }
     if ($values.Count -ne $requestKeys.Count) {
         throw 'STOCK_QUANT_HOST_BROKER_REQUEST_FIELDS_INVALID'
     }
@@ -559,6 +698,32 @@ function Read-StockQuantHostBrokerRequest {
                 [ref]$m1CallsBefore) -or $m1CallsBefore -lt 0 -or
             $m1CallsBefore + 6 -gt 30 -or
             $values['execution.source'] -ne 'M1_RESEARCH_DATA_MANUAL' -or
+            $values['no.retry'] -ne 'true') {
+            throw 'STOCK_QUANT_HOST_BROKER_REQUEST_SCOPE_INVALID'
+        }
+    } elseif ($values['operation'] -eq 'VERIFY_M1_TUSHARE_TOKEN') {
+        [int] $verificationCallsBefore = -1
+        if ($values['security.symbol'] -ne '600000' -or
+            $values['security.exchange'] -ne 'SSE' -or
+            $values['trade.date'] -ne '2025-01-03' -or
+            $values['provider'] -ne 'TUSHARE' -or
+            $values['provider.endpoints'] -ne 'daily' -or
+            $values['endpoint.daily.requests'] -ne '1' -or
+            $values['maximum.provider.requests'] -ne '1' -or
+            $values['retry.budget'] -ne '0' -or
+            $values['redirects'] -ne 'NEVER' -or
+            $values['provider.historical.baseline'] -ne '34' -or
+            $values['provider.stage.limit'] -ne '30' -or
+            $values['provider.cumulative.limit'] -ne '64' -or
+            -not [int]::TryParse(
+                [string]$values['provider.stage.calls.before'],
+                [Globalization.NumberStyles]::None,
+                [Globalization.CultureInfo]::InvariantCulture,
+                [ref]$verificationCallsBefore) -or
+            $verificationCallsBefore -lt 0 -or
+            $verificationCallsBefore + 1 -gt 30 -or
+            $values['execution.source'] -ne
+                'M1_TUSHARE_TOKEN_VERIFICATION_MANUAL' -or
             $values['no.retry'] -ne 'true') {
             throw 'STOCK_QUANT_HOST_BROKER_REQUEST_SCOPE_INVALID'
         }
@@ -693,6 +858,28 @@ function Read-StockQuantHostBrokerRequest {
                 }
             }
             $authorizationStatus = 'USER_APPROVED'
+        } elseif ($values['operation'] -eq 'VERIFY_M1_TUSHARE_TOKEN') {
+            $tokenAuthorization =
+                Assert-StockQuantM1TokenVerificationAuthorizationNonSensitive `
+                    -Path $authorization `
+                    -ExpectedGitCommit $values['git.commit'] `
+                    -ExpectedArtifactHash $values['jar.sha256'] `
+                    -ExpectedBuildProof $proof -Now $Now
+            foreach ($binding in @(
+                    @('security.symbol', 'security.symbol'),
+                    @('security.exchange', 'security.exchange'),
+                    @('trade.date', 'trade.date'),
+                    @('endpoint', 'provider.endpoints'),
+                    @('endpoint.daily.requests', 'endpoint.daily.requests'),
+                    @('maximum.provider.requests', 'maximum.provider.requests'),
+                    @('provider.stage.calls.before',
+                        'provider.stage.calls.before'))) {
+                if ([string]$tokenAuthorization[$binding[0]] -cne
+                    [string]$values[$binding[1]]) {
+                    throw 'STOCK_QUANT_HOST_BROKER_M1_TOKEN_BINDING_INVALID'
+                }
+            }
+            $authorizationStatus = 'USER_APPROVED'
         } else {
             $authorizationStatus = Assert-StockQuantAuthorizationNonSensitive `
                 -Path $authorization `
@@ -701,7 +888,8 @@ function Read-StockQuantHostBrokerRequest {
                 -ExpectedBuildProof $proof -Now $Now
         }
         if (($values['operation'] -in @(
-                'RUN_DAY001', 'RUN_M1_RESEARCH_DATA') -and
+                'RUN_DAY001', 'RUN_M1_RESEARCH_DATA',
+                'VERIFY_M1_TUSHARE_TOKEN') -and
                 $authorizationStatus -ne 'USER_APPROVED') -or
             ($values['operation'] -eq 'RUN_FAKE_E2E' -and
                 $authorizationStatus -ne 'E2E_DRY_RUN')) {
@@ -746,12 +934,16 @@ function Write-StockQuantHostBrokerRequest {
         [Parameter(Mandatory = $true)]
         [System.Collections.IDictionary] $Values
     )
-    $requestKeys = if ($Values.Contains('operation') -and
-        $Values['operation'] -eq 'RUN_M1_RESEARCH_DATA') {
-        $script:M1RequiredKeys
-    } else {
-        $script:RequiredKeys
-    }
+    $requestKeys = if ($Values.Contains('operation')) {
+        switch ([string]$Values['operation']) {
+            'RUN_M1_RESEARCH_DATA' { $script:M1RequiredKeys; break }
+            'VERIFY_M1_TUSHARE_TOKEN' {
+                $script:M1TokenVerificationRequiredKeys
+                break
+            }
+            default { $script:RequiredKeys }
+        }
+    } else { $script:RequiredKeys }
     foreach ($key in $requestKeys) {
         if (-not $Values.Contains($key)) {
             throw 'STOCK_QUANT_HOST_BROKER_REQUEST_FIELDS_INVALID'

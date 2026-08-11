@@ -32,6 +32,7 @@ public final class TushareManualBoundedSession {
     public static final int M1_MAX_PROVIDER_BUSINESS_REQUESTS = 9;
     public static final int M1_MAX_SYMBOLS = 3;
     public static final int M1_MAX_NATURAL_DAYS = 31;
+    public static final int M1_TOKEN_VERIFICATION_MAX_PROVIDER_REQUESTS = 1;
     /**
      * Natural-day bound for daily, adj_factor and trade_cal only.
      * Reference endpoints have no date parameters and remain bounded by
@@ -257,6 +258,21 @@ public final class TushareManualBoundedSession {
                 SessionProfile.M1_RESEARCH_DATA_MANUAL);
     }
 
+    /** One fixed daily request used only to verify an updated M1 credential. */
+    public static TushareManualBoundedSession m1TokenVerification(
+            String symbol,
+            String exchange,
+            LocalDate tradeDate
+    ) {
+        Objects.requireNonNull(tradeDate, "tradeDate");
+        String tsCode = f1cTsCode(symbol, exchange);
+        return new TushareManualBoundedSession(
+                M1_TOKEN_VERIFICATION_MAX_PROVIDER_REQUESTS,
+                Set.of(tsCode), Set.of(exchange), tradeDate, tradeDate,
+                Set.of("daily"), false, 0,
+                SessionProfile.M1_TOKEN_VERIFICATION);
+    }
+
     /**
      * Validates and atomically reserves one provider business request.
      * The budget failure happens before the HTTP strategy is invoked.
@@ -436,6 +452,21 @@ public final class TushareManualBoundedSession {
                     "TUSHARE_M1_SECURITY_IDENTITY_INVALID");
             return;
         }
+        if (sessionProfile == SessionProfile.M1_TOKEN_VERIFICATION) {
+            if (maximumBusinessRequests
+                    != M1_TOKEN_VERIFICATION_MAX_PROVIDER_REQUESTS
+                    || allowedSymbols.size() != 1
+                    || allowedExchanges.size() != 1
+                    || !allowedEndpoints.equals(Set.of("daily"))
+                    || automaticRetryAllowed
+                    || initiallyConsumedBusinessRequests != 0) {
+                throw new IllegalArgumentException(
+                        "TUSHARE_M1_TOKEN_VERIFICATION_SESSION_INVALID");
+            }
+            validateSymbolIdentities(allowedSymbols, allowedExchanges,
+                    "TUSHARE_M1_TOKEN_VERIFICATION_IDENTITY_INVALID");
+            return;
+        }
         if (sessionProfile != SessionProfile.F1E_DEDICATED_LOCAL_MANUAL
                 || maximumBusinessRequests != allowedSymbols.size() * 3
                 || maximumBusinessRequests
@@ -480,6 +511,7 @@ public final class TushareManualBoundedSession {
                     MAX_TIME_SERIES_NATURAL_DAYS;
             case F1E_DEDICATED_LOCAL_MANUAL -> F1E_MAX_NATURAL_DAYS;
             case M1_RESEARCH_DATA_MANUAL -> M1_MAX_NATURAL_DAYS;
+            case M1_TOKEN_VERIFICATION -> 1;
         };
     }
 
@@ -504,6 +536,7 @@ public final class TushareManualBoundedSession {
         F1A_ACCEPTANCE,
         F1C_ISOLATED_MANUAL,
         F1E_DEDICATED_LOCAL_MANUAL,
-        M1_RESEARCH_DATA_MANUAL
+        M1_RESEARCH_DATA_MANUAL,
+        M1_TOKEN_VERIFICATION
     }
 }
