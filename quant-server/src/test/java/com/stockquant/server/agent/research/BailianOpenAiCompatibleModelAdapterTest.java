@@ -59,8 +59,13 @@ class BailianOpenAiCompatibleModelAdapterTest {
             assertEquals(2, request.path("messages").size());
             assertEquals("system", request.path("messages").get(0)
                     .path("role").asText());
-            assertTrue(request.path("messages").get(0).path("content")
-                    .asText().contains("additionalProperties"));
+            String system = request.path("messages").get(0)
+                    .path("content").asText();
+            assertTrue(system.contains("additionalProperties"));
+            assertTrue(system.contains("\"issueCodes\":{\"type\":"
+                    + "\"array\",\"uniqueItems\":true"));
+            assertTrue(system.contains("\"maxItems\":0"));
+            assertTrue(system.contains("\"const\":false"));
             assertEquals("user", request.path("messages").get(1)
                     .path("role").asText());
             JsonNode payload = MAPPER.readTree(request.path("messages").get(1)
@@ -72,6 +77,15 @@ class BailianOpenAiCompatibleModelAdapterTest {
             assertEquals(new BigDecimal("0.006000000000"),
                     response.usage().estimatedCost());
             assertEquals("CNY", response.usage().costCurrency());
+            var runtimeFailure = adapter.runtimeFailureDiagnostics();
+            assertEquals("RUNTIME_VALIDATION",
+                    runtimeFailure.failureSource());
+            assertEquals(1, runtimeFailure.networkCallCount());
+            assertEquals(1, runtimeFailure.completedCallCount());
+            assertEquals(100, runtimeFailure.inputTokenCount());
+            assertEquals(40, runtimeFailure.outputTokenCount());
+            assertEquals(new BigDecimal("0.006000000000"),
+                    runtimeFailure.accountedCost());
         }
         assertEquals("BAILIAN", adapter.descriptor().provider());
         assertEquals(OpenAiResponsesModelAdapter.BAILIAN_MODEL,
@@ -296,6 +310,25 @@ class BailianOpenAiCompatibleModelAdapterTest {
                 diagnostics(failure).failureSource());
         assertEquals(1, diagnostics(failure).networkCallCount());
         assertEquals(0, diagnostics(failure).completedCallCount());
+        adapter.close();
+    }
+
+    @Test
+    void stripsNonCriticControlFieldsAtProviderBoundary() {
+        String response = successResponse(structuredResponse())
+                .replace("\"issueCodes\":[]",
+                        "\"issueCodes\":[\"OVERCONFIDENCE\"]")
+                .replace("\"reworkRequested\":false",
+                        "\"reworkRequested\":true");
+        var adapter = OpenAiResponsesModelAdapter.bailian(
+                TEST_KEY.toCharArray(), Duration.ofSeconds(10),
+                (uri, key, body, timeout) -> json(200, response));
+
+        ModelAdapter.ModelResponse normalized = adapter.complete(request());
+
+        assertTrue(normalized.issueCodes().isEmpty());
+        assertFalse(normalized.reworkRequested());
+        AgentModelResponseValidator.validate(request(), normalized);
         adapter.close();
     }
 

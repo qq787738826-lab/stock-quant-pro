@@ -1,8 +1,11 @@
 package com.stockquant.server.agent.marketfacts;
 
 import com.stockquant.server.agent.research.AgentResearchModels;
+import com.stockquant.server.agent.research.OpenAiResponsesModelAdapter
+        .FailureDiagnostics;
 import org.junit.jupiter.api.Test;
 
+import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 
@@ -70,6 +73,21 @@ class TushareM3AgentResearchManualRunnerTest {
                         .FORMAL_LOCAL_BAILIAN);
         assertEquals(Duration.ofMinutes(8),
                 bailianTask.limits().timeout());
+    }
+
+    @Test
+    void preservesSanitizedUsageWhenRuntimeGuardRejectsModelOutput() {
+        var diagnostics = new FailureDiagnostics("RUNTIME_VALIDATION",
+                1, 1, 1, 100, 40, new BigDecimal("0.006000000000"),
+                new BigDecimal("4.25"), "CNY", 0, "NONE",
+                "NOT_EVALUATED", "NONE", "NONE", "NONE");
+        var failure = new TushareM3AgentResearchManualRunner
+                .ModelExecutionFailure(new IllegalStateException(
+                "M3_MODEL_CRITIC_AUTHORITY_REJECTED"), diagnostics);
+
+        assertEquals(diagnostics,
+                TushareM3AgentResearchManualRunner.modelDiagnostics(
+                        failure));
     }
 
     private static String[] arguments(String mode, String port) {

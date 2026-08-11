@@ -995,9 +995,25 @@ function Get-M3BailianStageBudget {
             if ([int]$modelDiagnostics.networkCallCount -gt 0) {
                 $modelAttempts++
             }
-        } elseif ([string]$priorResult.reason -match
-                '^M3_BAILIAN_[A-Z0-9_]+$') {
+        } else {
             $modelAttempts++
+            $brokerResult = Join-Path $paths.Results `
+                "$requestId.result.json"
+            if (Test-Path -LiteralPath $brokerResult -PathType Leaf) {
+                $terminal = Get-Content -LiteralPath $brokerResult -Raw `
+                    -Encoding UTF8 | ConvertFrom-Json
+                $remainingProperty = $terminal.summary.PSObject.Properties[
+                    'stageRemainingCostBeforeRunCny']
+                if ($null -ne $remainingProperty) {
+                    $cost = [decimal]::Parse(
+                        [string]$remainingProperty.Value,
+                        [Globalization.NumberStyles]::Number,
+                        [Globalization.CultureInfo]::InvariantCulture)
+                    if ($cost -le 0 -or $cost -gt $hardLimit) {
+                        throw 'M3_BAILIAN_STAGE_BUDGET_LEDGER_INVALID'
+                    }
+                }
+            }
         }
         $used += $cost
     }

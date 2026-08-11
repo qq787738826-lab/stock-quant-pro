@@ -238,7 +238,7 @@ public final class OpenAiResponsesModelAdapter implements ModelAdapter {
         }
         ModelResponse parsed;
         try {
-            parsed = parseResponse(response.body());
+            parsed = parseResponse(response.body(), request);
         } catch (ResponseFailure error) {
             accountUnknownCall(reservation);
             throw failure(error.reasonSuffix(), error.source(),
@@ -312,6 +312,20 @@ public final class OpenAiResponsesModelAdapter implements ModelAdapter {
                 "NOT_EVALUATED", "NONE", "NONE", "NONE");
     }
 
+    /**
+     * Captures completed provider usage when a later deterministic runtime
+     * guard rejects the otherwise valid model response. No response content
+     * or credential material is retained.
+     */
+    public synchronized FailureDiagnostics runtimeFailureDiagnostics() {
+        return new FailureDiagnostics(
+                FailureSource.RUNTIME_VALIDATION.name(), attemptedCallCount,
+                networkCallCount, completedCallCount, inputTokenCount,
+                outputTokenCount, accountedCost, profile.hardCostLimit(),
+                profile.costCurrency(), 0, "NONE", "NOT_EVALUATED",
+                "NONE", "NONE", "NONE");
+    }
+
     public static Optional<FailureDiagnostics> failureDiagnostics(
             Throwable error
     ) {
@@ -349,7 +363,7 @@ public final class OpenAiResponsesModelAdapter implements ModelAdapter {
         format.put("type", "json_schema");
         format.put("name", "agent_research_response");
         format.put("strict", true);
-        format.set("schema", schema());
+        format.set("schema", schema(request));
         return writeRequest(root);
     }
 
@@ -371,7 +385,7 @@ public final class OpenAiResponsesModelAdapter implements ModelAdapter {
                 request.systemPrompt()
                         + "\nReturn only one JSON object that validates against "
                         + "this schema; do not use markdown fences: "
-                        + AgentResearchCanonical.json(schema()));
+                        + AgentResearchCanonical.json(schema(request)));
         messages.addObject().put("role", "user").put("content",
                 AgentResearchCanonical.json(requestPayload(request)));
         root.putObject("response_format").put("type", "json_object");
@@ -406,7 +420,11 @@ public final class OpenAiResponsesModelAdapter implements ModelAdapter {
         }
     }
 
-    private ObjectNode schema() {
+    private ObjectNode schema(ModelRequest request) {
+        boolean toolSelection = "PLAN".equals(request.phase())
+                || request.phase().endsWith("_TOOL_SELECTION");
+        boolean critic = request.agentRole()
+                == AgentResearchModels.AgentRole.CRITIC_REVIEW;
         ObjectNode root = mapper.createObjectNode();
         root.put("type", "object");
         root.put("additionalProperties", false);
@@ -414,10 +432,15 @@ public final class OpenAiResponsesModelAdapter implements ModelAdapter {
         List.of("requestedTools", "claims", "summary", "issueCodes",
                 "reworkRequested").forEach(required::add);
         ObjectNode properties = root.putObject("properties");
-        enumArray(properties.putObject("requestedTools"), ToolCode.values());
+        ObjectNode requestedTools = properties.putObject("requestedTools");
+        enumArray(requestedTools, ToolCode.values());
+        requestedTools.put("minItems", toolSelection
+                ? request.allowedTools().size() : 0);
+        requestedTools.put("maxItems", toolSelection
+                ? request.allowedTools().size() : 0);
         ObjectNode claims = properties.putObject("claims");
         claims.put("type", "array");
-        claims.put("maxItems", 8);
+        claims.put("maxItems", toolSelection ? 0 : 8);
         ObjectNode claim = claims.putObject("items");
         claim.put("type", "object");
         claim.put("additionalProperties", false);
@@ -439,9 +462,16 @@ public final class OpenAiResponsesModelAdapter implements ModelAdapter {
         confidence.put("maximum", 1);
         properties.putObject("summary").put("type", "string")
                 .put("maxLength", 800);
-        enumArray(properties.putObject("issueCodes"),
-                CriticIssueCode.values());
-        properties.putObject("reworkRequested").put("type", "boolean");
+        ObjectNode issueCodes = properties.putObject("issueCodes");
+        enumArray(issueCodes, CriticIssueCode.values());
+        if (!critic) {
+            issueCodes.put("maxItems", 0);
+        }
+        ObjectNode reworkRequested = properties.putObject(
+                "reworkRequested").put("type", "boolean");
+        if (!critic) {
+            reworkRequested.put("const", false);
+        }
         return root;
     }
 
@@ -460,7 +490,7 @@ public final class OpenAiResponsesModelAdapter implements ModelAdapter {
         }
     }
 
-    private ModelResponse parseResponse(String body) {
+    private ModelResponse parseResponse(String body, ModelRequest request) {
         try {
             JsonNode root = mapper.readTree(body);
             if (root.path("error").isObject()) {
@@ -476,7 +506,8 @@ public final class OpenAiResponsesModelAdapter implements ModelAdapter {
             }
             String outputText = profile.apiShape() == ApiShape.RESPONSES
                     ? responsesOutputText(root) : chatOutputText(root);
-            return parseStructured(outputText, usage(root.path("usage")));
+            return parseStructured(outputText, usage(root.path("usage")),
+                    request);
         } catch (ResponseFailure exception) {
             throw exception;
         } catch (RuntimeException | IOException exception) {
@@ -486,37 +517,47 @@ public final class OpenAiResponsesModelAdapter implements ModelAdapter {
 
     private ModelResponse parseStructured(
             String outputText,
-            ModelUsage usage
+            ModelUsage usage,
+            ModelRequest request
     ) throws IOException {
         try {
             JsonNode structured = mapper.readTree(outputText);
             requireExactFields(structured, SetNames.RESPONSE_FIELDS);
-            List<ToolCode> tools = enums(structured.path("requestedTools"),
-                    ToolCode.class);
+            boolean toolSelection = "PLAN".equals(request.phase())
+                    || request.phase().endsWith("_TOOL_SELECTION");
+            boolean critic = request.agentRole()
+                    == AgentResearchModels.AgentRole.CRITIC_REVIEW;
+            List<ToolCode> tools = toolSelection
+                    ? enums(structured.path("requestedTools"), ToolCode.class)
+                    : List.of();
             List<ModelClaim> claims = new ArrayList<>();
             JsonNode claimNodes = structured.path("claims");
             if (!claimNodes.isArray()) {
                 throw parseFailure();
             }
-            for (JsonNode node : claimNodes) {
-                requireExactFields(node, SetNames.CLAIM_FIELDS);
-                List<String> ids = new ArrayList<>();
-                if (!node.path("evidenceIds").isArray()) {
-                    throw parseFailure();
+            if (!toolSelection) {
+                for (JsonNode node : claimNodes) {
+                    requireExactFields(node, SetNames.CLAIM_FIELDS);
+                    List<String> ids = new ArrayList<>();
+                    if (!node.path("evidenceIds").isArray()) {
+                        throw parseFailure();
+                    }
+                    node.path("evidenceIds").forEach(value -> ids.add(
+                            requiredText(value)));
+                    claims.add(new ModelClaim(
+                            ClaimType.valueOf(requiredText(node.path(
+                                    "claimType"))),
+                            requiredText(node.path("statement")), ids,
+                            node.path("confidence").decimalValue()));
                 }
-                node.path("evidenceIds").forEach(value -> ids.add(
-                        requiredText(value)));
-                claims.add(new ModelClaim(
-                        ClaimType.valueOf(requiredText(node.path(
-                                "claimType"))),
-                        requiredText(node.path("statement")), ids,
-                        node.path("confidence").decimalValue()));
             }
-            List<CriticIssueCode> issues = enums(
-                    structured.path("issueCodes"), CriticIssueCode.class);
+            List<CriticIssueCode> issues = critic ? enums(
+                    structured.path("issueCodes"), CriticIssueCode.class)
+                    : List.of();
             return new ModelResponse(tools, claims,
                     requiredText(structured.path("summary")), issues,
-                    structured.path("reworkRequested").asBoolean(), usage);
+                    critic && structured.path("reworkRequested").asBoolean(),
+                    usage);
         } catch (IllegalStateException exception) {
             throw exception;
         } catch (RuntimeException exception) {
@@ -864,7 +905,8 @@ public final class OpenAiResponsesModelAdapter implements ModelAdapter {
         RESPONSE_ENVELOPE,
         RESPONSE_PARSE,
         RESPONSE_VALIDATION,
-        USAGE_VALIDATION
+        USAGE_VALIDATION,
+        RUNTIME_VALIDATION
     }
 
     public record FailureDiagnostics(
@@ -899,7 +941,8 @@ public final class OpenAiResponsesModelAdapter implements ModelAdapter {
                     "providerMessageCategory");
             if (!failureSource.matches("NONE|TRANSPORT|HTTP_STATUS|"
                     + "PROVIDER_BODY|RESPONSE_ENVELOPE|RESPONSE_PARSE|"
-                    + "RESPONSE_VALIDATION|USAGE_VALIDATION")
+                    + "RESPONSE_VALIDATION|USAGE_VALIDATION|"
+                    + "RUNTIME_VALIDATION")
                     || attemptedCallCount < 0 || networkCallCount < 0
                     || completedCallCount < 0 || inputTokenCount < 0
                     || outputTokenCount < 0

@@ -237,8 +237,19 @@ public final class TushareM3AgentResearchManualRunner {
             try (AgentResearchRuntime runtime = new AgentResearchRuntime(
                     gateway, adapter,
                     new AgentPromptCatalog(), clock)) {
-                report = runtime.run(task(launch.executionId(),
-                        clock.instant(), launch.executionMode()));
+                try {
+                    report = runtime.run(task(launch.executionId(),
+                            clock.instant(), launch.executionMode()));
+                } catch (RuntimeException error) {
+                    if (bailianAdapter != null
+                            && OpenAiResponsesModelAdapter
+                            .failureDiagnostics(error).isEmpty()) {
+                        throw new ModelExecutionFailure(error,
+                                bailianAdapter
+                                        .runtimeFailureDiagnostics());
+                    }
+                    throw error;
+                }
             }
             validateReport(report, launch.executionMode(),
                     launch.maximumCostCny());
@@ -447,7 +458,13 @@ public final class TushareM3AgentResearchManualRunner {
         return "M3_AGENT_RESEARCH_EXECUTION_FAILED";
     }
 
-    private static FailureDiagnostics modelDiagnostics(Throwable error) {
+    static FailureDiagnostics modelDiagnostics(Throwable error) {
+        for (Throwable value = error; value != null;
+                value = value.getCause()) {
+            if (value instanceof ModelExecutionFailure failure) {
+                return failure.diagnostics();
+            }
+        }
         return OpenAiResponsesModelAdapter.failureDiagnostics(error)
                 .orElse(null);
     }
@@ -479,6 +496,23 @@ public final class TushareM3AgentResearchManualRunner {
             DatabaseSnapshot after,
             FailureDiagnostics modelDiagnostics
     ) {
+    }
+
+    static final class ModelExecutionFailure extends IllegalStateException {
+        private final FailureDiagnostics diagnostics;
+
+        ModelExecutionFailure(
+                RuntimeException cause,
+                FailureDiagnostics diagnostics
+        ) {
+            super((String) null, Objects.requireNonNull(cause, "cause"));
+            this.diagnostics = Objects.requireNonNull(diagnostics,
+                    "diagnostics");
+        }
+
+        FailureDiagnostics diagnostics() {
+            return diagnostics;
+        }
     }
 
     record Arguments(
