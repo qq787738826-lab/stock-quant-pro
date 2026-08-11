@@ -124,6 +124,14 @@ function Assert-GitBinding {
                     'RUN_M2_STRATEGY_RESEARCH_SMOKE' -and
                 $branch -eq 'codex/1.4.0-m2-strategy-engine-ready') {
                 'codex/1.4.0-m2-strategy-engine-ready'
+            } elseif ($BrokerRequest.Operation -eq
+                    'RUN_M2_STRATEGY_RESEARCH_SMOKE' -and
+                $branch -eq 'codex/1.4.0-m3-agent-research-ready' -and
+                [IO.Path]::GetFullPath($BrokerRequest.JarPath).Equals(
+                    (Join-Path $paths.TargetRoot `
+                        'quant-server-1.3.1-m3-agent-research-runner.jar'),
+                    [StringComparison]::OrdinalIgnoreCase)) {
+                'codex/1.4.0-m3-agent-research-ready'
             } elseif ($branch -eq 'codex/1.4.0-m1-research-data-ready') {
                 'codex/1.4.0-m1-research-data-ready'
             } else { $integrationBranch }
