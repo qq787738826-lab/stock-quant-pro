@@ -266,22 +266,23 @@ public final class TushareM1ResearchDatasetService {
         Boolean verified = jdbc.queryForObject("""
                 SELECT b.response_complete
                        AND b.record_count = ?
-                       AND count(reference) = b.record_count
+                       AND count(refs.reference) = b.record_count
                        AND bool_and(EXISTS (
                            SELECT 1
                              FROM pit_market_fact_observations o
-                            WHERE o.fact_type = reference->>'factType'
+                            WHERE o.fact_type = refs.reference->>'factType'
                               AND o.source_code = b.source_code
                               AND o.source_instrument_id =
-                                  reference->>'sourceIdentity'
-                              AND o.natural_key = reference->>'naturalKey'
+                                  refs.reference->>'sourceIdentity'
+                              AND o.natural_key =
+                                  refs.reference->>'naturalKey'
                               AND o.canonical_content_hash =
-                                  reference->>'canonicalContentHash'
+                                  refs.reference->>'canonicalContentHash'
                        ))
                   FROM pit_market_fact_batches b
                   CROSS JOIN LATERAL jsonb_array_elements(
                       b.provider_metadata_json->'factReferences')
-                      AS references(reference)
+                      AS refs(reference)
                  WHERE b.id = ?
                  GROUP BY b.id, b.response_complete, b.record_count,
                           b.source_code
