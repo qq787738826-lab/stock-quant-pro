@@ -34,9 +34,12 @@ $paths = Initialize-StockQuantHostBrokerDirectories
 $identity = [Security.Principal.WindowsIdentity]::GetCurrent().Name
 $integrationBranch = 'feature/1.4.0-agent-team'
 
-if ($identity -notmatch '(?i)CodexSandbox' -and
-    $Operation -ne 'RUN_M2_STRATEGY_RESEARCH_SMOKE') {
-    throw 'STOCK_QUANT_HOST_BROKER_CODEX_SANDBOX_REQUIRED'
+function Assert-StockQuantHostBrokerInvoker([object] $Heartbeat) {
+    $isCodexSandbox = $identity -match '(?i)CodexSandbox'
+    $isResidentUser = $identity -ceq [string]$Heartbeat.windowsUser
+    if (-not $isCodexSandbox -and -not $isResidentUser) {
+        throw 'STOCK_QUANT_HOST_BROKER_CODEX_SANDBOX_REQUIRED'
+    }
 }
 if ([string]::IsNullOrWhiteSpace($ArtifactPath)) {
     $artifactName = if ($Operation -in @(
@@ -116,8 +119,9 @@ try {
         throw 'STOCK_QUANT_HOST_BROKER_GIT_BASELINE_INVALID'
     }
 
-    Read-StockQuantHostBrokerHeartbeat -ExpectedGitCommit $head `
-        -AllowAncestorGitCommit | Out-Null
+    $heartbeat = Read-StockQuantHostBrokerHeartbeat `
+        -ExpectedGitCommit $head -AllowAncestorGitCommit
+    Assert-StockQuantHostBrokerInvoker -Heartbeat $heartbeat
 
     $artifact = Assert-StockQuantPathInside -Path $ArtifactPath `
         -Root $paths.TargetRoot `
@@ -351,8 +355,9 @@ try {
         'source.request.id' = $SourceRequestId
         }
     }
-    Read-StockQuantHostBrokerHeartbeat -ExpectedGitCommit $head `
-        -AllowAncestorGitCommit | Out-Null
+    $heartbeat = Read-StockQuantHostBrokerHeartbeat `
+        -ExpectedGitCommit $head -AllowAncestorGitCommit
+    Assert-StockQuantHostBrokerInvoker -Heartbeat $heartbeat
     $requestFile = Write-StockQuantHostBrokerRequest -Values $requestValues
 
     $resultPath = Join-Path $paths.Results "$requestId.result.json"

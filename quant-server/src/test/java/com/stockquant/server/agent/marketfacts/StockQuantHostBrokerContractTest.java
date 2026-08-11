@@ -218,7 +218,7 @@ class StockQuantHostBrokerContractTest {
     }
 
     @Test
-    void sandboxInvokerOnlyWritesRequestAndWaitsForResidentBroker()
+    void fixedInvokerOnlyWritesRequestAndWaitsForResidentBroker()
             throws Exception {
         String script = read("scripts/host-broker/"
                 + "invoke-stock-quant-host-broker.ps1");
@@ -230,6 +230,12 @@ class StockQuantHostBrokerContractTest {
         assertFalse(parameters.contains("Command"));
         assertFalse(parameters.contains("ScriptPath"));
         assertTrue(script.contains("CODEX_SANDBOX_REQUIRED"));
+        assertTrue(script.contains("$isCodexSandbox"));
+        assertTrue(script.contains("$isResidentUser"));
+        assertTrue(script.contains(
+                "$identity -ceq [string]$Heartbeat.windowsUser"));
+        assertFalse(script.contains(
+                "$Operation -ne 'RUN_M2_STRATEGY_RESEARCH_SMOKE'"));
         assertTrue(script.contains(
                 "git ls-remote --exit-code origin $remoteRef"));
         assertTrue(script.contains(
