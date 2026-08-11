@@ -2,6 +2,7 @@ package com.stockquant.server.agent.marketfacts;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.fasterxml.jackson.databind.node.DecimalNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
@@ -127,7 +128,7 @@ class TushareM1TokenVerificationTest {
                 Instant.parse("2026-08-11T03:00:00Z"), "CONSUMED",
                 false, Map.of("databaseConnected", false));
 
-        String json = new ObjectMapper().findAndRegisterModules()
+        String json = new ObjectMapper().registerModule(new JavaTimeModule())
                 .writeValueAsString(result);
         assertTrue(json.contains("\"verificationId\":"
                 + "\"M1TOKEN_20260811T030000Z_ABCDEF123456\""));

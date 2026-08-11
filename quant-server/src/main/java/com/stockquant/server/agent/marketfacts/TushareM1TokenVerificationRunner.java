@@ -2,6 +2,7 @@ package com.stockquant.server.agent.marketfacts;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.stockquant.server.agent.marketfacts.CompositeSecretProvider.Mode;
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.FactType;
 import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.MarketFactRequest;
@@ -16,6 +17,9 @@ import com.stockquant.server.agent.marketfacts.TushareControlledAcceptanceOutput
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.AccessDeniedException;
+import java.nio.file.FileAlreadyExistsException;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.time.Clock;
@@ -244,9 +248,21 @@ public final class TushareM1TokenVerificationRunner {
                     .writerWithDefaultPrettyPrinter().writeValueAsString(value);
             Files.writeString(path.toAbsolutePath().normalize(), json + '\n',
                     StandardCharsets.UTF_8, options);
+        } catch (JsonProcessingException error) {
+            throw new IllegalStateException(
+                    "TUSHARE_M1_TOKEN_VERIFICATION_RESULT_SERIALIZATION_FAILED");
+        } catch (FileAlreadyExistsException error) {
+            throw new IllegalStateException(
+                    "TUSHARE_M1_TOKEN_VERIFICATION_RESULT_ALREADY_EXISTS");
+        } catch (AccessDeniedException error) {
+            throw new IllegalStateException(
+                    "TUSHARE_M1_TOKEN_VERIFICATION_RESULT_ACCESS_DENIED");
+        } catch (NoSuchFileException error) {
+            throw new IllegalStateException(
+                    "TUSHARE_M1_TOKEN_VERIFICATION_RESULT_PARENT_MISSING");
         } catch (IOException error) {
             throw new IllegalStateException(
-                    "TUSHARE_M1_TOKEN_VERIFICATION_RESULT_WRITE_FAILED");
+                    "TUSHARE_M1_TOKEN_VERIFICATION_RESULT_FILE_WRITE_FAILED");
         }
     }
 
