@@ -944,7 +944,22 @@ function Get-M3BailianStageBudget {
         $seen[$requestId] = $true
         $runnerResult = Join-Path $paths.Results "$requestId.m3-bailian.json"
         if (-not (Test-Path -LiteralPath $runnerResult -PathType Leaf)) {
-            throw 'M3_BAILIAN_STAGE_BUDGET_LEDGER_INCOMPLETE'
+            $brokerResult = Join-Path $paths.Results "$requestId.result.json"
+            if (-not (Test-Path -LiteralPath $brokerResult -PathType Leaf)) {
+                throw 'M3_BAILIAN_STAGE_BUDGET_LEDGER_INCOMPLETE'
+            }
+            $terminal = Get-Content -LiteralPath $brokerResult -Raw `
+                -Encoding UTF8 | ConvertFrom-Json
+            if ($terminal.schemaVersion -ne
+                    'STOCK_QUANT_HOST_BROKER_RESULT_V1' -or
+                $terminal.requestId -ne $requestId -or
+                $terminal.operation -ne $operationMarker -or
+                $terminal.status -notin @('FAILED', 'REJECTED') -or
+                [int]$terminal.providerCallCount -ne 0 -or
+                [int]$terminal.retryCount -ne 0) {
+                throw 'M3_BAILIAN_STAGE_BUDGET_LEDGER_INVALID'
+            }
+            continue
         }
         $priorResult = Get-Content -LiteralPath $runnerResult -Raw `
             -Encoding UTF8 | ConvertFrom-Json
@@ -956,15 +971,19 @@ function Get-M3BailianStageBudget {
             throw 'M3_BAILIAN_STAGE_BUDGET_LEDGER_INVALID'
         }
         [decimal]$cost = $legacyFailureReserve
-        if ($null -ne $priorResult.modelDiagnostics) {
+        $diagnosticProperty =
+            $priorResult.PSObject.Properties['modelDiagnostics']
+        if ($null -ne $diagnosticProperty -and
+            $null -ne $diagnosticProperty.Value) {
+            $modelDiagnostics = $diagnosticProperty.Value
             $cost = [decimal]::Parse(
-                [string]$priorResult.modelDiagnostics.accountedCost,
+                [string]$modelDiagnostics.accountedCost,
                 [Globalization.NumberStyles]::Number,
                 [Globalization.CultureInfo]::InvariantCulture)
             if ($cost -lt 0 -or $cost -gt $hardLimit -or
-                [string]$priorResult.modelDiagnostics.costCurrency -ne 'CNY' -or
-                [int]$priorResult.modelDiagnostics.networkCallCount -lt 0 -or
-                [int]$priorResult.modelDiagnostics.networkCallCount -gt 13) {
+                [string]$modelDiagnostics.costCurrency -ne 'CNY' -or
+                [int]$modelDiagnostics.networkCallCount -lt 0 -or
+                [int]$modelDiagnostics.networkCallCount -gt 13) {
                 throw 'M3_BAILIAN_STAGE_BUDGET_LEDGER_INVALID'
             }
         }
