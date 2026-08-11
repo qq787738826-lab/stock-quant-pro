@@ -34,6 +34,44 @@ function Exact([object] $Actual, [object] $Expected, [string] $Code) {
     if ([string]$Actual -ne [string]$Expected) { throw $Code }
 }
 
+function Write-BatchReferenceDiagnostics {
+    $sql = @'
+SELECT concat(
+    'batch=', b.id,
+    ',complete=', b.response_complete,
+    ',record_count=', b.record_count,
+    ',reference_count=', jsonb_array_length(
+        coalesce(b.provider_metadata_json->'factReferences', '[]'::jsonb)),
+    ',matched_reference_count=', (
+        SELECT count(*)
+          FROM jsonb_array_elements(coalesce(
+                   b.provider_metadata_json->'factReferences', '[]'::jsonb))
+               AS refs(reference)
+         WHERE EXISTS (
+             SELECT 1
+               FROM tushare_research.pit_market_fact_observations o
+              WHERE o.fact_type = refs.reference->>'factType'
+                AND o.source_code = 'TUSHARE'
+                AND o.source_instrument_id =
+                    refs.reference->>'sourceIdentity'
+                AND o.natural_key = refs.reference->>'naturalKey'
+                AND o.canonical_content_hash =
+                    refs.reference->>'canonicalContentHash'
+         )
+    ))
+  FROM tushare_research.pit_market_fact_batches b
+ ORDER BY b.id
+'@
+    & "$pgBin\psql.exe" -X -q -A -t -h 127.0.0.1 -p $port `
+        -U stock_quant_research -d stock_quant_research `
+        -v ON_ERROR_STOP=1 -c $sql | ForEach-Object {
+            Write-Output "TUSHARE_M1_BATCH_REFERENCE_DIAGNOSTIC=$($_.Trim())"
+        }
+    if ($LASTEXITCODE -ne 0) {
+        throw 'TUSHARE_M1_E2E_REFERENCE_DIAGNOSTIC_FAILED'
+    }
+}
+
 function Write-Authorization(
     [string] $Path, [string] $RunId, [string] $Mode,
     [string] $Start, [string] $End, [string] $Anchor,
@@ -195,7 +233,9 @@ try {
     $result1 = Join-Path $root 'capture-1.json'
     Write-Authorization $auth1 'M1_E2E_CAPTURE_0001' 'CAPTURE' `
         '2025-01-02' '2025-01-06' '2025-01-06' 0 $hash
-    Exact (Run $auth1 $result1) 0 'TUSHARE_M1_E2E_CAPTURE_1_FAILED'
+    $capture1Exit = Run $auth1 $result1
+    if ($capture1Exit -ne 0) { Write-BatchReferenceDiagnostics }
+    Exact $capture1Exit 0 'TUSHARE_M1_E2E_CAPTURE_1_FAILED'
     Assert-Success $result1 'CAPTURE' 22 22 0 6 10 4
 
     $auth2 = Join-Path $root 'capture-2.properties'
