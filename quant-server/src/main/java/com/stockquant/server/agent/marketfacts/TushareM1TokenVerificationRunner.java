@@ -392,7 +392,7 @@ public final class TushareM1TokenVerificationRunner {
         }
     }
 
-    private record Audit(boolean captureComplete, boolean clean, int hitCount) {
+    record Audit(boolean captureComplete, boolean clean, int hitCount) {
         static Audit from(AuditResult value) {
             return value == null ? notRun()
                     : new Audit(value.captureComplete(), value.clean(),
@@ -404,7 +404,7 @@ public final class TushareM1TokenVerificationRunner {
         }
     }
 
-    private record VerificationResult(
+    record VerificationResult(
             String schemaVersion,
             String verificationId,
             String status,

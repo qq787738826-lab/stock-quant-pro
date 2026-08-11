@@ -17,6 +17,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.Map;
 import java.util.List;
 import java.util.HashSet;
 import java.util.Properties;
@@ -109,6 +110,28 @@ class TushareM1TokenVerificationTest {
                 .CapturedExecutionException.class, () ->
                 TushareControlledAcceptanceOutputAudit
                         .captureProviderOnlyProcess(registry -> 1));
+    }
+
+    @Test
+    void sanitizedResultModelIsJacksonSerializableInPackagedRuntime()
+            throws Exception {
+        var result = new TushareM1TokenVerificationRunner.VerificationResult(
+                "M1_TUSHARE_TOKEN_VERIFICATION_RESULT_V1",
+                "M1TOKEN_20260811T030000Z_ABCDEF123456", "RUNNING",
+                "a".repeat(40), "b".repeat(64), "daily", "600000",
+                "SSE", TRADE_DATE, 0, 0, 2, 2, 36, 0, 0, 0, false,
+                null, null, "NOT_RUN", false,
+                new TushareM1TokenVerificationRunner.Audit(
+                        false, false, 0),
+                null, Instant.parse("2026-08-11T03:00:00Z"),
+                Instant.parse("2026-08-11T03:00:00Z"), "CONSUMED",
+                false, Map.of("databaseConnected", false));
+
+        String json = new ObjectMapper().findAndRegisterModules()
+                .writeValueAsString(result);
+        assertTrue(json.contains("\"verificationId\":"
+                + "\"M1TOKEN_20260811T030000Z_ABCDEF123456\""));
+        assertTrue(json.contains("\"databaseConnected\":false"));
     }
 
     private static TushareMarketFactProvider provider(
