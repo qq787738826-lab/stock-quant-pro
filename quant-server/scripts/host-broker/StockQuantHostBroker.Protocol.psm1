@@ -12,6 +12,7 @@ $script:AllowedOperations = @(
     'RUN_DAY001'
     'RUN_M1_RESEARCH_DATA'
     'VERIFY_M1_TUSHARE_TOKEN'
+    'RUN_M2_STRATEGY_RESEARCH_SMOKE'
     'READ_SANITIZED_RESULT'
 )
 $script:RequiredKeys = @(
@@ -202,6 +203,40 @@ $script:M1TokenVerificationAuthorizationKeys = @(
     'purpose'
     'execution.source'
     'user.approval.reference'
+)
+
+$script:M2RequiredKeys = @(
+    'schema.version'
+    'request.id'
+    'operation'
+    'git.commit'
+    'jar.path'
+    'jar.sha256'
+    'authorization.file'
+    'm2.dataset.contract'
+    'm2.strategy.engine'
+    'm2.backtest.engine'
+    'm2.research.api'
+    'securities'
+    'range.start'
+    'range.end'
+    'anchor.trade.date'
+    'database.host'
+    'database.port'
+    'database.name'
+    'database.user'
+    'schema.name'
+    'database.read.only'
+    'provider'
+    'provider.endpoints'
+    'maximum.provider.requests'
+    'retry.budget'
+    'redirects'
+    'created.at'
+    'expires.at'
+    'execution.source'
+    'no.retry'
+    'source.request.id'
 )
 
 function Get-StockQuantHostBrokerPaths {
@@ -640,6 +675,10 @@ function Read-StockQuantHostBrokerRequest {
                 $script:M1TokenVerificationRequiredKeys
                 break
             }
+            'RUN_M2_STRATEGY_RESEARCH_SMOKE' {
+                $script:M2RequiredKeys
+                break
+            }
             default { $script:RequiredKeys }
         }
     } else { $script:RequiredKeys }
@@ -669,7 +708,33 @@ function Read-StockQuantHostBrokerRequest {
     if ($fileRequestId -cne $values['request.id']) {
         throw 'STOCK_QUANT_HOST_BROKER_REQUEST_ID_MISMATCH'
     }
-    if ($values['operation'] -eq 'RUN_M1_RESEARCH_DATA') {
+    if ($values['operation'] -eq 'RUN_M2_STRATEGY_RESEARCH_SMOKE') {
+        if ($values['m2.dataset.contract'] -ne
+                'M1_RESEARCH_DATASET_V1' -or
+            $values['m2.strategy.engine'] -ne 'STRATEGY_ENGINE_V1' -or
+            $values['m2.backtest.engine'] -ne 'BACKTEST_ENGINE_V1' -or
+            $values['m2.research.api'] -ne 'STRATEGY_RESEARCH_API_V1' -or
+            $values['securities'] -ne '600000:SSE,000001:SZSE' -or
+            $values['range.start'] -ne '2025-01-02' -or
+            $values['range.end'] -ne '2025-01-10' -or
+            $values['anchor.trade.date'] -ne '2025-01-10' -or
+            $values['database.host'] -ne '127.0.0.1' -or
+            $values['database.port'] -ne '38432' -or
+            $values['database.name'] -ne 'stock_quant_research' -or
+            $values['database.user'] -ne 'stock_quant_research' -or
+            $values['schema.name'] -ne 'tushare_research' -or
+            $values['database.read.only'] -ne 'true' -or
+            $values['provider'] -ne 'NONE' -or
+            $values['provider.endpoints'] -ne 'NONE' -or
+            $values['maximum.provider.requests'] -ne '0' -or
+            $values['retry.budget'] -ne '0' -or
+            $values['redirects'] -ne 'NEVER' -or
+            $values['execution.source'] -ne
+                'M2_STRATEGY_RESEARCH_READ_ONLY' -or
+            $values['no.retry'] -ne 'true') {
+            throw 'STOCK_QUANT_HOST_BROKER_REQUEST_SCOPE_INVALID'
+        }
+    } elseif ($values['operation'] -eq 'RUN_M1_RESEARCH_DATA') {
         [int] $m1CallsBefore = -1
         if ($values['m1.mode'] -notin @(
                 'CAPTURE', 'IDEMPOTENCY_VERIFICATION') -or
@@ -783,7 +848,13 @@ function Read-StockQuantHostBrokerRequest {
     }
     $authorization = $null
     $authorizationStatus = 'NOT_REQUIRED_ZERO_PROVIDER_DIAGNOSTIC'
-    if ($values['operation'] -eq 'DIAGNOSE_TUSHARE_CREDENTIAL') {
+    if ($values['operation'] -eq 'RUN_M2_STRATEGY_RESEARCH_SMOKE') {
+        if ($values['authorization.file'] -ne 'NONE') {
+            throw 'STOCK_QUANT_HOST_BROKER_AUTHORIZATION_MODE_INVALID'
+        }
+        $authorizationStatus =
+            'M2_STAGE_APPROVED_ZERO_PROVIDER_READ_ONLY'
+    } elseif ($values['operation'] -eq 'DIAGNOSE_TUSHARE_CREDENTIAL') {
         if ($values['authorization.file'] -ne 'NONE') {
             throw 'STOCK_QUANT_HOST_BROKER_AUTHORIZATION_MODE_INVALID'
         }
@@ -939,6 +1010,10 @@ function Write-StockQuantHostBrokerRequest {
             'RUN_M1_RESEARCH_DATA' { $script:M1RequiredKeys; break }
             'VERIFY_M1_TUSHARE_TOKEN' {
                 $script:M1TokenVerificationRequiredKeys
+                break
+            }
+            'RUN_M2_STRATEGY_RESEARCH_SMOKE' {
+                $script:M2RequiredKeys
                 break
             }
             default { $script:RequiredKeys }

@@ -26,6 +26,8 @@ $m1RunnerScript = Join-Path $paths.RepositoryRoot `
     'quant-server\scripts\run-m1-research-data.ps1'
 $m1TokenVerificationScript = Join-Path $paths.RepositoryRoot `
     'quant-server\scripts\run-m1-tushare-token-verification.ps1'
+$m2RunnerScript = Join-Path $paths.RepositoryRoot `
+    'quant-server\scripts\run-m2-strategy-research.ps1'
 $fakeE2eScript = Join-Path $paths.RepositoryRoot `
     'quant-server\scripts\run-reduced-research-day001-e2e-dry-run.ps1'
 $mutex = [Threading.Mutex]::new($false, 'Local\StockQuantLocalBroker')
@@ -114,9 +116,14 @@ function Assert-GitBinding {
         }
         if ($BrokerRequest.Operation -in @(
                 'RUN_DAY001', 'RUN_M1_RESEARCH_DATA',
-                'VERIFY_M1_TUSHARE_TOKEN')) {
+                'VERIFY_M1_TUSHARE_TOKEN',
+                'RUN_M2_STRATEGY_RESEARCH_SMOKE')) {
             $requiredBranch = if ($BrokerRequest.Operation -eq 'RUN_DAY001') {
                 $integrationBranch
+            } elseif ($BrokerRequest.Operation -eq
+                    'RUN_M2_STRATEGY_RESEARCH_SMOKE' -and
+                $branch -eq 'codex/1.4.0-m2-strategy-engine-ready') {
+                'codex/1.4.0-m2-strategy-engine-ready'
             } elseif ($branch -eq 'codex/1.4.0-m1-research-data-ready') {
                 'codex/1.4.0-m1-research-data-ready'
             } else { $integrationBranch }
@@ -574,6 +581,99 @@ function Invoke-M1ResearchData {
     }
 }
 
+function Invoke-M2StrategyResearchSmoke {
+    param([Parameter(Mandatory = $true)] [object] $BrokerRequest)
+    if ($BrokerRequest.AuthorizationStatus -ne
+            'M2_STAGE_APPROVED_ZERO_PROVIDER_READ_ONLY' -or
+        $BrokerRequest.AuthorizationFile -ne $null) {
+        throw 'STOCK_QUANT_HOST_BROKER_M2_SCOPE_INVALID'
+    }
+    $runnerResult = Join-Path $paths.Results `
+        "$($BrokerRequest.RequestId).m2.json"
+    if (Test-Path -LiteralPath $runnerResult) {
+        throw 'STOCK_QUANT_HOST_BROKER_RUNNER_RESULT_ALREADY_EXISTS'
+    }
+    $executionId = $BrokerRequest.RequestId -replace '^SQHB_', 'M2SMOKE_'
+    $output = @(& $m2RunnerScript `
+        -ResultFile $runnerResult -ArtifactPath $BrokerRequest.JarPath `
+        -ExecutionId $executionId 2>&1 |
+        ForEach-Object { [string]$_ })
+    if ($LASTEXITCODE -ne 0) {
+        if (Test-Path -LiteralPath $runnerResult -PathType Leaf) {
+            try {
+                $failed = Get-Content -LiteralPath $runnerResult `
+                    -Raw -Encoding UTF8 | ConvertFrom-Json
+                if ([int]$failed.providerCallCount -eq 0 -and
+                    [int]$failed.databaseWriteCount -eq 0) {
+                    $script:failureSummary = [ordered]@{
+                        executionId = [string]$failed.executionId
+                        providerCallCount = 0
+                        retryCount = 0
+                        databaseWriteCount = 0
+                        outputAudit = $(if ($failed.outputAudit.clean) {
+                            'PASSED'
+                        } else { 'FAILED' })
+                    }
+                }
+            } catch { $script:failureSummary = $null }
+        }
+        throw (Get-SafeMarker -Lines $output `
+            -Name 'M2_STRATEGY_RESEARCH_FAILURE_REASON' `
+            -Fallback 'STOCK_QUANT_HOST_BROKER_M2_FAILED')
+    }
+    if (-not (Test-Path -LiteralPath $runnerResult -PathType Leaf)) {
+        throw 'STOCK_QUANT_HOST_BROKER_RUNNER_RESULT_MISSING'
+    }
+    $m2 = Get-Content -LiteralPath $runnerResult -Raw -Encoding UTF8 |
+        ConvertFrom-Json
+    if ($m2.schemaVersion -ne
+            'M2_STRATEGY_RESEARCH_SMOKE_RESULT_V1' -or
+        $m2.status -ne 'SUCCEEDED' -or
+        [int]$m2.providerCallCount -ne 0 -or
+        [int]$m2.databaseWriteCount -ne 0 -or
+        -not $m2.databaseReadOnly -or
+        -not $m2.databaseSnapshotUnchanged -or
+        -not $m2.outputAudit.clean -or
+        -not $m2.research.accountingInvariant -or
+        -not $m2.research.lookAheadGuard -or
+        -not $m2.research.deterministicReplay -or
+        -not $m2.research.typedFactReadback -or
+        -not $m2.research.systemKnowledgeReadback -or
+        -not $m2.research.dataQuality -or
+        -not $m2.research.noFutureDataLeakage) {
+        throw 'STOCK_QUANT_HOST_BROKER_M2_RESULT_INVALID'
+    }
+    return [ordered]@{
+        executionId = [string]$m2.executionId
+        providerCallCount = 0
+        retryCount = 0
+        databaseWriteCount = 0
+        datasetVersion = [string]$m2.research.datasetVersion
+        securityCount = [int]$m2.research.securityCount
+        openSessionCount = [int]$m2.research.openSessionCount
+        qfqBarCount = [int]$m2.research.qfqBarCount
+        fillCount = [int]$m2.research.fillCount
+        deterministicFingerprint =
+            [string]$m2.research.deterministicFingerprint
+        finalEquity = [string]$m2.research.finalEquity
+        totalReturn = [string]$m2.research.totalReturn
+        maxDrawdown = [string]$m2.research.maxDrawdown
+        sharpeRatio = [string]$m2.research.sharpeRatio
+        turnover = [string]$m2.research.turnover
+        accountingInvariant = $true
+        lookAheadGuard = $true
+        deterministicReplay = $true
+        typedFactReadback = $true
+        systemKnowledgeReadback = $true
+        dataQuality = $true
+        noFutureDataLeakage = $true
+        databaseReadOnly = $true
+        databaseSnapshotUnchanged = $true
+        outputAudit = 'PASSED'
+        sanitizedResult = $runnerResult
+    }
+}
+
 function Read-SanitizedBrokerResult {
     param(
         [Parameter(Mandatory = $true)]
@@ -759,6 +859,10 @@ function Invoke-ClaimedRequest {
             }
             'VERIFY_M1_TUSHARE_TOKEN' {
                 Invoke-M1TokenVerification -BrokerRequest $request
+                break
+            }
+            'RUN_M2_STRATEGY_RESEARCH_SMOKE' {
+                Invoke-M2StrategyResearchSmoke -BrokerRequest $request
                 break
             }
             'READ_SANITIZED_RESULT' {

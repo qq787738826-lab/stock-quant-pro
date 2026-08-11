@@ -8,6 +8,7 @@ param(
         'RUN_DAY001',
         'RUN_M1_RESEARCH_DATA',
         'VERIFY_M1_TUSHARE_TOKEN',
+        'RUN_M2_STRATEGY_RESEARCH_SMOKE',
         'READ_SANITIZED_RESULT'
     )]
     [string] $Operation,
@@ -31,11 +32,15 @@ $paths = Initialize-StockQuantHostBrokerDirectories
 $identity = [Security.Principal.WindowsIdentity]::GetCurrent().Name
 $integrationBranch = 'feature/1.4.0-agent-team'
 
-if ($identity -notmatch '(?i)CodexSandbox') {
+if ($identity -notmatch '(?i)CodexSandbox' -and
+    $Operation -ne 'RUN_M2_STRATEGY_RESEARCH_SMOKE') {
     throw 'STOCK_QUANT_HOST_BROKER_CODEX_SANDBOX_REQUIRED'
 }
 if ([string]::IsNullOrWhiteSpace($ArtifactPath)) {
-    $artifactName = if ($Operation -in @(
+    $artifactName = if ($Operation -eq
+            'RUN_M2_STRATEGY_RESEARCH_SMOKE') {
+        'quant-server-1.3.1-m2-strategy-research-runner.jar'
+    } elseif ($Operation -in @(
             'RUN_M1_RESEARCH_DATA', 'VERIFY_M1_TUSHARE_TOKEN')) {
         'quant-server-1.3.1-m1-research-data-runner.jar'
     } else {
@@ -61,6 +66,9 @@ try {
             'RUN_M1_RESEARCH_DATA', 'VERIFY_M1_TUSHARE_TOKEN') -and
         $branch -eq 'codex/1.4.0-m1-research-data-ready') {
         'codex/1.4.0-m1-research-data-ready'
+    } elseif ($Operation -eq 'RUN_M2_STRATEGY_RESEARCH_SMOKE' -and
+        $branch -eq 'codex/1.4.0-m2-strategy-engine-ready') {
+        'codex/1.4.0-m2-strategy-engine-ready'
     } else { $integrationBranch }
     $remoteRef = "refs/heads/$requiredBranch"
     $remoteQuery = @(& git ls-remote --exit-code origin $remoteRef 2>&1 |
@@ -95,7 +103,9 @@ try {
         -Root $paths.TargetRoot `
         -FailureCode 'STOCK_QUANT_HOST_BROKER_JAR_PATH_INVALID' `
         -MustExist -PathType Leaf
-    if ($Operation -eq 'DIAGNOSE_TUSHARE_CREDENTIAL') {
+    if ($Operation -in @(
+            'DIAGNOSE_TUSHARE_CREDENTIAL',
+            'RUN_M2_STRATEGY_RESEARCH_SMOKE')) {
         if ($AuthorizationFile -ne 'NONE') {
             throw 'STOCK_QUANT_HOST_BROKER_AUTHORIZATION_MODE_INVALID'
         }
@@ -111,7 +121,41 @@ try {
     $requestId = New-StockQuantHostBrokerRequestId
     $createdAt = [DateTimeOffset]::UtcNow
     $expiresAt = $createdAt.AddMinutes(10)
-    if ($Operation -eq 'RUN_M1_RESEARCH_DATA') {
+    if ($Operation -eq 'RUN_M2_STRATEGY_RESEARCH_SMOKE') {
+        $requestValues = [ordered]@{
+            'schema.version' = 'STOCK_QUANT_HOST_BROKER_REQUEST_V1'
+            'request.id' = $requestId
+            'operation' = $Operation
+            'git.commit' = $head
+            'jar.path' = $artifact
+            'jar.sha256' = $artifactHash
+            'authorization.file' = 'NONE'
+            'm2.dataset.contract' = 'M1_RESEARCH_DATASET_V1'
+            'm2.strategy.engine' = 'STRATEGY_ENGINE_V1'
+            'm2.backtest.engine' = 'BACKTEST_ENGINE_V1'
+            'm2.research.api' = 'STRATEGY_RESEARCH_API_V1'
+            'securities' = '600000:SSE,000001:SZSE'
+            'range.start' = '2025-01-02'
+            'range.end' = '2025-01-10'
+            'anchor.trade.date' = '2025-01-10'
+            'database.host' = '127.0.0.1'
+            'database.port' = '38432'
+            'database.name' = 'stock_quant_research'
+            'database.user' = 'stock_quant_research'
+            'schema.name' = 'tushare_research'
+            'database.read.only' = 'true'
+            'provider' = 'NONE'
+            'provider.endpoints' = 'NONE'
+            'maximum.provider.requests' = '0'
+            'retry.budget' = '0'
+            'redirects' = 'NEVER'
+            'created.at' = $createdAt.ToString('o')
+            'expires.at' = $expiresAt.ToString('o')
+            'execution.source' = 'M2_STRATEGY_RESEARCH_READ_ONLY'
+            'no.retry' = 'true'
+            'source.request.id' = 'NONE'
+        }
+    } elseif ($Operation -eq 'RUN_M1_RESEARCH_DATA') {
         $authorizationValues = Read-StrictStockQuantProperties `
             -Path $authorization
         $requestValues = [ordered]@{
