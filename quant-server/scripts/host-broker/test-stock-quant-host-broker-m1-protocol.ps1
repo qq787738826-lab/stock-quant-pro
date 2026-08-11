@@ -12,6 +12,7 @@ $artifact = Join-Path $root 'm1-protocol-test.jar'
 $proof = "$artifact.f1f-b2-proof.properties"
 $authorization = Join-Path $root 'authorization.properties'
 $processing = $null
+$diagnosticFiles = @()
 
 function Write-Lines([string] $Path, [System.Collections.IDictionary] $Values) {
     $lines = foreach ($key in $Values.Keys) { "$key=$($Values[$key])" }
@@ -155,12 +156,78 @@ try {
     $expired['expires.at'] = $created.AddMinutes(-10).ToString('o')
     Expect-Rejection $expired 'STOCK_QUANT_HOST_BROKER_REQUEST_EXPIRED'
 
-    Write-Output 'STOCK_QUANT_M1_BROKER_PROTOCOL_TESTS=4'
+    $sourceId = New-StockQuantHostBrokerRequestId
+    $sourceResult = Join-Path $paths.Results "$sourceId.result.json"
+    $sourceM1 = Join-Path $paths.Results "$sourceId.m1.json"
+    $diagnosticFiles = @($sourceResult, $sourceM1)
+    [IO.File]::WriteAllText($sourceResult, (@{
+        schemaVersion = 'STOCK_QUANT_HOST_BROKER_RESULT_V1'
+        requestId = $sourceId
+        operation = 'RUN_M1_RESEARCH_DATA'
+        status = 'FAILED'
+        providerCallCount = 1
+        retryCount = 0
+    } | ConvertTo-Json -Compress), [Text.UTF8Encoding]::new($false))
+    [IO.File]::WriteAllText($sourceM1, (@{
+        status = 'FAILED_PROVIDER'
+        safeFailureCode = 'TUSHARE_API_ERROR_40101'
+        providerCallCount = 1
+        retryCount = 0
+    } | ConvertTo-Json -Compress), [Text.UTF8Encoding]::new($false))
+    $diagnosticId = New-StockQuantHostBrokerRequestId
+    $diagnostic = [ordered]@{
+        'schema.version' = 'STOCK_QUANT_HOST_BROKER_REQUEST_V1'
+        'request.id' = $diagnosticId
+        'operation' = 'DIAGNOSE_TUSHARE_CREDENTIAL'
+        'git.commit' = $head
+        'jar.path' = $artifact
+        'jar.sha256' = $hash
+        'authorization.file' = 'NONE'
+        'day001.mode' = 'IDEMPOTENCY_VERIFICATION'
+        'security.symbol' = '600000'
+        'security.exchange' = 'SSE'
+        'trade.date' = '2025-01-03'
+        'database.host' = '127.0.0.1'
+        'database.port' = '38432'
+        'database.name' = 'stock_quant_research'
+        'database.user' = 'stock_quant_research'
+        'schema.name' = 'tushare_research'
+        'provider' = 'TUSHARE'
+        'provider.endpoints' = 'daily,adj_factor,trade_cal'
+        'endpoint.daily.requests' = '1'
+        'endpoint.adj_factor.requests' = '1'
+        'endpoint.trade_cal.requests' = '1'
+        'maximum.provider.requests' = '3'
+        'retry.budget' = '0'
+        'redirects' = 'NEVER'
+        'created.at' = $created.ToString('o')
+        'expires.at' = $created.AddMinutes(10).ToString('o')
+        'execution.source' = 'REDUCED_RESEARCH_MANUAL_DAY001'
+        'no.retry' = 'true'
+        'source.request.id' = $sourceId
+    }
+    $processing = Join-Path $paths.Requests `
+        "$diagnosticId.processing.properties"
+    Write-Lines $processing $diagnostic
+    $parsedDiagnostic = Read-StockQuantHostBrokerRequest -Path $processing
+    if ($parsedDiagnostic.Operation -ne 'DIAGNOSE_TUSHARE_CREDENTIAL' -or
+        $parsedDiagnostic.SourceRequestId -ne $sourceId) {
+        throw 'M1_PROTOCOL_DIAGNOSTIC_REQUEST_REJECTED'
+    }
+    Remove-Item -LiteralPath $processing -Force
+    $processing = $null
+
+    Write-Output 'STOCK_QUANT_M1_BROKER_PROTOCOL_TESTS=5'
     Write-Output 'STOCK_QUANT_M1_BROKER_PROTOCOL_FAILURES=0'
     Write-Output 'STOCK_QUANT_M1_BROKER_PROTOCOL_REAL_PROVIDER_CALLS=0'
 } finally {
     if ($processing -and (Test-Path -LiteralPath $processing)) {
         Remove-Item -LiteralPath $processing -Force
+    }
+    foreach ($file in $diagnosticFiles) {
+        if (Test-Path -LiteralPath $file) {
+            Remove-Item -LiteralPath $file -Force
+        }
     }
     if (Test-Path -LiteralPath $root) {
         $full = [IO.Path]::GetFullPath($root).TrimEnd('\', '/')

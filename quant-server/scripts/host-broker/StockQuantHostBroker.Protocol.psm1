@@ -626,29 +626,40 @@ function Read-StockQuantHostBrokerRequest {
             "$($values['source.request.id']).result.json"
         $sourceDay001Path = Join-Path $paths.Results `
             "$($values['source.request.id']).day001.json"
+        $sourceM1Path = Join-Path $paths.Results `
+            "$($values['source.request.id']).m1.json"
+        $payloadPaths = @($sourceDay001Path, $sourceM1Path | Where-Object {
+            Test-Path -LiteralPath $_ -PathType Leaf
+        })
         if (-not (Test-Path -LiteralPath $sourceResultPath -PathType Leaf) -or
-            -not (Test-Path -LiteralPath $sourceDay001Path -PathType Leaf)) {
+            $payloadPaths.Count -ne 1) {
             throw 'STOCK_QUANT_HOST_BROKER_DIAGNOSTIC_SOURCE_INVALID'
         }
         try {
             $sourceResult = Get-Content -LiteralPath $sourceResultPath `
                 -Raw -Encoding UTF8 | ConvertFrom-Json
-            $sourceDay001 = Get-Content -LiteralPath $sourceDay001Path `
+            $sourcePayload = Get-Content -LiteralPath $payloadPaths[0] `
                 -Raw -Encoding UTF8 | ConvertFrom-Json
         } catch {
             throw 'STOCK_QUANT_HOST_BROKER_DIAGNOSTIC_SOURCE_INVALID'
         }
+        $sourceOperation = if ($payloadPaths[0] -eq $sourceM1Path) {
+            'RUN_M1_RESEARCH_DATA'
+        } else { 'RUN_DAY001' }
+        $sourceStatus = if ($sourceOperation -eq 'RUN_M1_RESEARCH_DATA') {
+            'FAILED_PROVIDER'
+        } else { 'FAILED_VALIDATION' }
         if ($sourceResult.schemaVersion -ne
                 'STOCK_QUANT_HOST_BROKER_RESULT_V1' -or
             $sourceResult.requestId -ne $values['source.request.id'] -or
-            $sourceResult.operation -ne 'RUN_DAY001' -or
+            $sourceResult.operation -ne $sourceOperation -or
             $sourceResult.status -ne 'FAILED' -or
             [int]$sourceResult.providerCallCount -ne 1 -or
             [int]$sourceResult.retryCount -ne 0 -or
-            $sourceDay001.status -ne 'FAILED_VALIDATION' -or
-            $sourceDay001.safeFailureCode -ne 'TUSHARE_API_ERROR_40101' -or
-            [int]$sourceDay001.providerCallCount -ne 1 -or
-            [int]$sourceDay001.retryCount -ne 0) {
+            $sourcePayload.status -ne $sourceStatus -or
+            $sourcePayload.safeFailureCode -ne 'TUSHARE_API_ERROR_40101' -or
+            [int]$sourcePayload.providerCallCount -ne 1 -or
+            [int]$sourcePayload.retryCount -ne 0) {
             throw 'STOCK_QUANT_HOST_BROKER_DIAGNOSTIC_SOURCE_INVALID'
         }
     } else {
