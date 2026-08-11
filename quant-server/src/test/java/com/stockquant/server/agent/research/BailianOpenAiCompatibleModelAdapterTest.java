@@ -52,7 +52,7 @@ class BailianOpenAiCompatibleModelAdapterTest {
                     request.path("model").asText());
             assertFalse(request.path("stream").asBoolean());
             assertEquals(0, request.path("temperature").asInt());
-            assertEquals(600, request.path("max_tokens").asInt());
+            assertEquals(900, request.path("max_tokens").asInt());
             assertFalse(request.path("enable_thinking").asBoolean(true));
             assertEquals("json_object", request.path("response_format")
                     .path("type").asText());
@@ -301,13 +301,13 @@ class BailianOpenAiCompatibleModelAdapterTest {
     void rejectsHiddenReasoningUsageAbovePinnedCompletionLimit() {
         String response = successResponse(structuredResponse())
                 .replace("\"completion_tokens\":40",
-                        "\"completion_tokens\":640")
+                        "\"completion_tokens\":940")
                 .replace("\"total_tokens\":140",
-                        "\"total_tokens\":740")
+                        "\"total_tokens\":1040")
                 .replace("\"prompt_tokens_details\":{\"cached_tokens\":20}",
                         "\"prompt_tokens_details\":{\"cached_tokens\":20},"
                                 + "\"completion_tokens_details\":{"
-                                + "\"reasoning_tokens\":610}");
+                                + "\"reasoning_tokens\":910}");
         var adapter = OpenAiResponsesModelAdapter.bailian(
                 TEST_KEY.toCharArray(), Duration.ofSeconds(10),
                 (uri, key, body, timeout) -> json(200, response));
@@ -323,9 +323,9 @@ class BailianOpenAiCompatibleModelAdapterTest {
         assertEquals(1, diagnostics(failure).networkCallCount());
         assertEquals(0, diagnostics(failure).completedCallCount());
         assertEquals(1, diagnostics(failure).callTelemetry().size());
-        assertEquals(610, diagnostics(failure).callTelemetry().get(0)
+        assertEquals(910, diagnostics(failure).callTelemetry().get(0)
                 .reasoningTokenCount());
-        assertEquals(740, diagnostics(failure).callTelemetry().get(0)
+        assertEquals(1040, diagnostics(failure).callTelemetry().get(0)
                 .totalTokenCount());
         adapter.close();
     }

@@ -42,7 +42,7 @@ public final class OpenAiResponsesModelAdapter implements ModelAdapter {
     public static final String BAILIAN_MODEL = "qwen3.7-plus";
     static final int MAXIMUM_MODEL_CALLS = 13;
     static final int MAXIMUM_OUTPUT_TOKENS = 1_200;
-    public static final int BAILIAN_MAXIMUM_OUTPUT_TOKENS = 600;
+    public static final int BAILIAN_MAXIMUM_OUTPUT_TOKENS = 900;
     public static final BigDecimal M3_HARD_COST_LIMIT_USD =
             new BigDecimal("0.10");
     public static final BigDecimal M3_BAILIAN_HARD_COST_LIMIT_CNY =
@@ -445,7 +445,7 @@ public final class OpenAiResponsesModelAdapter implements ModelAdapter {
                 ? request.allowedTools().size() : 0);
         ObjectNode claims = properties.putObject("claims");
         claims.put("type", "array");
-        claims.put("maxItems", toolSelection ? 0 : 8);
+        claims.put("maxItems", toolSelection ? 0 : 4);
         ObjectNode claim = claims.putObject("items");
         claim.put("type", "object");
         claim.put("additionalProperties", false);
@@ -456,17 +456,18 @@ public final class OpenAiResponsesModelAdapter implements ModelAdapter {
         enumValue(claimProperties.putObject("claimType"),
                 ClaimType.values());
         claimProperties.putObject("statement").put("type", "string")
-                .put("maxLength", 600);
+                .put("maxLength", 320);
         ObjectNode evidenceIds = claimProperties.putObject("evidenceIds");
         evidenceIds.put("type", "array");
         evidenceIds.put("uniqueItems", true);
+        evidenceIds.put("maxItems", 6);
         evidenceIds.putObject("items").put("type", "string");
         ObjectNode confidence = claimProperties.putObject("confidence");
         confidence.put("type", "number");
         confidence.put("minimum", 0);
         confidence.put("maximum", 1);
         properties.putObject("summary").put("type", "string")
-                .put("maxLength", 800);
+                .put("maxLength", 320);
         ObjectNode issueCodes = properties.putObject("issueCodes");
         enumArray(issueCodes, CriticIssueCode.values());
         if (!critic) {

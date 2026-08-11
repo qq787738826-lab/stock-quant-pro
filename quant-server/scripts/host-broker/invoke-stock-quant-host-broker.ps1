@@ -203,7 +203,7 @@ try {
             'provider.endpoint' =
                 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'
             'maximum.model.calls' = '13'
-            'maximum.output.tokens.per.call' = '600'
+            'maximum.output.tokens.per.call' = '900'
             'maximum.cost.cny' = '5.00'
             'retry.budget' = '0'
             'redirects' = 'NEVER'

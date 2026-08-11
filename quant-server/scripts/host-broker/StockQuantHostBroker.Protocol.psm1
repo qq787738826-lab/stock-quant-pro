@@ -853,7 +853,7 @@ function Read-StockQuantHostBrokerRequest {
             $values['provider.endpoint'] -ne
                 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions' -or
             $values['maximum.model.calls'] -ne '13' -or
-            $values['maximum.output.tokens.per.call'] -ne '600' -or
+            $values['maximum.output.tokens.per.call'] -ne '900' -or
             $values['maximum.cost.cny'] -ne '5.00' -or
             $values['retry.budget'] -ne '0' -or
             $values['redirects'] -ne 'NEVER' -or
