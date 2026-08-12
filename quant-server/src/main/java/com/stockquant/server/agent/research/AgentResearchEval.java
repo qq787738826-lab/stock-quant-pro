@@ -194,8 +194,14 @@ public final class AgentResearchEval {
                 claim, List.of(evidence.evidenceId()),
                 new BigDecimal("0.50"))), "Evaluation summary.", List.of(),
                 false, ModelUsage.zero());
-        return rejected(() -> AgentModelResponseValidator.validate(request,
-                response));
+        ModelAdapter.ModelResponse validated =
+                AgentModelResponseValidator.validate(request, response);
+        return validated.claims().size() == 1
+                && validated.claims().get(0).claimType() == ClaimType.UNKNOWN
+                && validated.claims().get(0).evidenceIds().isEmpty()
+                && validated.claims().get(0).statement().contains(
+                "was rejected")
+                && !validated.claims().get(0).statement().equals(claim);
     }
 
     private boolean missingDataRejected() {
