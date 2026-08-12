@@ -4,6 +4,7 @@
 
 - 长期任务分支：`codex/1.4.0-m4-shadow-research-ready`。
 - 冻结集成基线：`a8f82834878549051ce2300b08dfdb4ea188c202`。
+- 真实 smoke 代码、构建和运行资产 HEAD：`56f8bea91495381ca96646698fe1dcb105d592eb`。
 - M4 只交付研究型 Shadow/Paper 闭环；不连接券商，不读取交易密码，不产生真实订单，
   不接触真实资金，也不启动实盘或自动交易。
 - 真实开发预算固定为 Tushare 最多 20 次、阿里云百炼最多 CNY 10.00；请求重试为 0，
@@ -41,20 +42,44 @@
 
 ## 离线验收证据
 
-- Java 定向与真实 PostgreSQL 16 隔离测试覆盖 Paper 会计、Shadow 状态、不可变快照、
-  空仓、调度幂等、恢复、模型失败、Outcome 和 5/20/60 日 Replay；全部 0 failure/error，
-  临时活动状态、端口和目录残留均为 0。
+- Java 最终定向回归 `31/0/0/0`；真实 PostgreSQL 16 隔离组为 server `13/0/0/0`
+  与 core `3/0/0/0`，覆盖 Paper 会计、Shadow 状态、不可变快照、空仓、调度幂等、恢复、
+  模型失败、Outcome 和 5/20/60 日 Replay。后续新增的第 4 项时序回归也单独通过；临时活动
+  状态、端口和目录残留均为 0。
 - Broker M4 严格协议覆盖固定证券/Endpoint/预算/模型/URL、未知字段、命令注入、路径和预算
-  错配拒绝；Fake 协议不会读取真实凭据或调用真实 Provider。
+  错配拒绝，结果为 `15/0/0/0`；Fake 协议不会读取真实凭据或调用真实 Provider。
 - 打包 Fake M1→M2→M3→M4 E2E 使用正式 M4 Start-Class、隔离构建证明和临时 PostgreSQL
-  V1→V15；固定 Fake Tushare 6 次、Fake Model 13 次、真实 Provider 0。
-- Vue 类型检查和生产构建、PowerShell 5.1 语法、`git diff --check` 均必须在最终收口通过。
+  V1→V15，结果为 PASS；固定 Fake Tushare 6 次、Fake Model 13 次、真实 Provider 0，
+  RUNNING 状态和临时资源残留均为 0。
+- Vue 类型检查和生产构建通过（2297 modules）；PowerShell 5.1 语法、build proof、正式 JAR
+  Start-Class 和 `git diff --check` 均通过。
 
 ## 真实 Shadow smoke
 
-真实 smoke 的 request、HEAD、JAR SHA-256、数据窗口、七 Agent、Tushare/百炼调用、token、
-成本、快照、Paper 组合和输出审计证据将在本阶段最终冻结提交中填写。该 smoke 仍为
-RESEARCH/PAPER，不是交易指令，也不证明 alpha。
+- 正式 JAR：`quant-server/target/quant-server-1.3.1-m4-shadow-research-runner.jar`；SHA-256
+  `7bc641a03cb2d104560536095b71ab9ff2e8d5f99004611c28c6e9be3e4f1980`，Start-Class 为
+  `TushareM4ShadowResearchManualRunner`，sidecar/build proof 与 HEAD 绑定通过。
+- 成功 request 为 `SQHB_20260812T061537Z_38B78FF54D39`，executionId 为
+  `M4SHADOW_20260812T061537Z_38B78FF54D39`，Broker 状态链终结于 `SUCCEEDED/COMPLETED`；
+  真实运行约 87.5 秒，trade date 为 `2026-08-11`，as-of 数据窗口为
+  `2026-07-12` 至 `2026-08-11`。
+- Tushare 对两证券执行 `daily/adj_factor/trade_cal` 各一次，共 6 次、retry 0；M4 阶段使用
+  `6/20`，项目累计真实 Tushare 请求由 55 增至 61。
+- 百炼 `qwen3.7-plus` 完成 13 次真实模型调用：input/output/reasoning/total tokens 为
+  `22447/3806/0/26253`，保守记账 CNY `0.829540000000`，低于 CNY 10.00 阶段门限；API
+  未返回账单实际金额，13 次调用的 usage 均已脱敏持久化。
+- 七个角色全部执行，工具调用 4 次，Evidence 11 条；typed fact、SYSTEM_KNOWLEDGE、
+  formula-only QFQ、无未来数据泄漏和输出审计均通过。冻结 snapshot fingerprint 为
+  `c4a1c23b31e9bcb23240615a28724116ed5ce67dd77548c65620ad2b83fd4fe0`。
+- Critic 识别 `FUTURE_DATA_RISK`、`OVERFITTING_RISK`、`UNSUPPORTED_CLAIM` 和
+  `PIT_LINEAGE_LIMITATION`；最终按门禁冻结为 `INSUFFICIENT_EVIDENCE`、confidence 0、
+  MODERATE risk、空推荐。Paper 初始现金和权益均为 1,000,000，订单/成交均为 0、收益为 0；
+  这证明证据不足时系统选择合法空仓，而不是制造交易。
+- 首个已终结 request `SQHB_20260812T060740Z_5CF57460A909` 在 Provider 前因 Windows
+  PowerShell 5.1 不支持 `[decimal]::Min` 而失败，真实调用为 0；修复为显式 decimal 比较并增加
+  回归后才创建唯一成功 request。两个 request 均已终结，无 pending/claimed/RUNNING 残留。
+
+该 smoke 全程为 RESEARCH/PAPER，不连接券商、不产生真实订单或资金变动，也不证明 alpha。
 
 ## 已知限制与后续边界
 
