@@ -198,6 +198,7 @@ public final class TushareM4ShadowResearchManualRunner {
             JdbcTemplate jdbc = new JdbcTemplate(dataSource);
             Flyway flyway = Flyway.configure().dataSource(dataSource)
                     .locations("classpath:db/migration")
+                    .loggers("noop")
                     .load();
             if (launch.mode() == ExecutionMode.FORMAL) {
                 verifyDedicated(jdbc);
