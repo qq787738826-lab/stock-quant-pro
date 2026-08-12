@@ -196,10 +196,14 @@ public final class TushareM4ShadowResearchManualRunner {
                                      .DISABLE_LOCAL_ONLY,
                              password)) {
             JdbcTemplate jdbc = new JdbcTemplate(dataSource);
-            verifyDedicated(jdbc);
-            Flyway.configure().dataSource(dataSource)
+            Flyway flyway = Flyway.configure().dataSource(dataSource)
                     .locations("classpath:db/migration")
-                    .load().migrate();
+                    .load();
+            if (launch.mode() == ExecutionMode.FORMAL) {
+                verifyDedicated(jdbc);
+            }
+            flyway.migrate();
+            verifyDedicated(jdbc);
             requireM4Schema(jdbc);
             var components = launch.mode() == ExecutionMode.FAKE
                     ? TushareDedicatedResearchRuntimeComponents
