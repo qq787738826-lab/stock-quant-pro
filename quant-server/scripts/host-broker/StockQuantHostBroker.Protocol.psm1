@@ -15,6 +15,7 @@ $script:AllowedOperations = @(
     'RUN_M2_STRATEGY_RESEARCH_SMOKE'
     'CHECK_BAILIAN_CREDENTIAL_STATUS'
     'RUN_M3_AGENT_RESEARCH_SMOKE'
+    'RUN_M4_SHADOW_RESEARCH'
     'READ_SANITIZED_RESULT'
 )
 $script:RequiredKeys = @(
@@ -296,6 +297,61 @@ $script:M3RequiredKeys = @(
     'maximum.model.calls'
     'maximum.output.tokens.per.call'
     'maximum.cost.cny'
+    'retry.budget'
+    'redirects'
+    'user.approval.reference'
+    'created.at'
+    'expires.at'
+    'execution.source'
+    'no.retry'
+    'source.request.id'
+)
+
+$script:M4RequiredKeys = @(
+    'schema.version'
+    'request.id'
+    'operation'
+    'git.commit'
+    'jar.path'
+    'jar.sha256'
+    'authorization.file'
+    'm4.runtime'
+    'm4.scheduler'
+    'm4.snapshot'
+    'm4.paper.portfolio'
+    'm4.replay'
+    'm4.outcome'
+    'm3.agent.runtime'
+    'm3.agent.team'
+    'm3.tool.gateway'
+    'm2.strategy.engine'
+    'm2.backtest.engine'
+    'securities'
+    'range.start'
+    'trade.date'
+    'next.trade.date'
+    'capture.mode'
+    'trigger.mode'
+    'database.host'
+    'database.port'
+    'database.name'
+    'database.user'
+    'schema.name'
+    'tushare.provider'
+    'tushare.endpoints'
+    'endpoint.daily.requests'
+    'endpoint.adj_factor.requests'
+    'endpoint.trade_cal.requests'
+    'maximum.provider.requests'
+    'tushare.stage.limit'
+    'tushare.stage.calls.before'
+    'llm.provider'
+    'model'
+    'provider.endpoint'
+    'maximum.model.calls'
+    'maximum.output.tokens.per.call'
+    'maximum.cost.cny'
+    'llm.stage.limit.cny'
     'retry.budget'
     'redirects'
     'user.approval.reference'
@@ -754,6 +810,10 @@ function Read-StockQuantHostBrokerRequest {
                 $script:M3RequiredKeys
                 break
             }
+            'RUN_M4_SHADOW_RESEARCH' {
+                $script:M4RequiredKeys
+                break
+            }
             default { $script:RequiredKeys }
         }
     } else { $script:RequiredKeys }
@@ -864,6 +924,67 @@ function Read-StockQuantHostBrokerRequest {
             $values['no.retry'] -ne 'true') {
             throw 'STOCK_QUANT_HOST_BROKER_REQUEST_SCOPE_INVALID'
         }
+    } elseif ($values['operation'] -eq 'RUN_M4_SHADOW_RESEARCH') {
+        [int]$tushareCallsBefore = -1
+        [datetime]$rangeStart = [datetime]::MinValue
+        [datetime]$tradeDate = [datetime]::MinValue
+        if ($values['authorization.file'] -ne 'NONE' -or
+            $values['m4.runtime'] -ne 'SHADOW_RESEARCH_RUNTIME_V1' -or
+            $values['m4.scheduler'] -ne 'SHADOW_SCHEDULER_V1' -or
+            $values['m4.snapshot'] -ne 'SHADOW_SNAPSHOT_V1' -or
+            $values['m4.paper.portfolio'] -ne 'PAPER_PORTFOLIO_V1' -or
+            $values['m4.replay'] -ne 'SHADOW_REPLAY_V1' -or
+            $values['m4.outcome'] -ne 'SHADOW_OUTCOME_V1' -or
+            $values['m3.agent.runtime'] -ne 'AGENT_RUNTIME_V1' -or
+            $values['m3.agent.team'] -ne 'AGENT_RESEARCH_TEAM_V1' -or
+            $values['m3.tool.gateway'] -ne 'AGENT_TOOL_GATEWAY_V1' -or
+            $values['m2.strategy.engine'] -ne 'STRATEGY_ENGINE_V1' -or
+            $values['m2.backtest.engine'] -ne 'BACKTEST_ENGINE_V1' -or
+            $values['securities'] -ne '600000:SSE,000001:SZSE' -or
+            -not [datetime]::TryParseExact([string]$values['range.start'],
+                'yyyy-MM-dd', [Globalization.CultureInfo]::InvariantCulture,
+                [Globalization.DateTimeStyles]::None, [ref]$rangeStart) -or
+            -not [datetime]::TryParseExact([string]$values['trade.date'],
+                'yyyy-MM-dd', [Globalization.CultureInfo]::InvariantCulture,
+                [Globalization.DateTimeStyles]::None, [ref]$tradeDate) -or
+            $rangeStart -gt $tradeDate -or
+            ($tradeDate - $rangeStart).TotalDays -gt 30 -or
+            $values['next.trade.date'] -ne 'NONE' -or
+            $values['capture.mode'] -ne 'CAPTURE' -or
+            $values['trigger.mode'] -ne 'MANUAL' -or
+            $values['database.host'] -ne '127.0.0.1' -or
+            $values['database.port'] -ne '38432' -or
+            $values['database.name'] -ne 'stock_quant_research' -or
+            $values['database.user'] -ne 'stock_quant_research' -or
+            $values['schema.name'] -ne 'tushare_research' -or
+            $values['tushare.provider'] -ne 'TUSHARE' -or
+            $values['tushare.endpoints'] -ne
+                'daily,adj_factor,trade_cal' -or
+            $values['endpoint.daily.requests'] -ne '2' -or
+            $values['endpoint.adj_factor.requests'] -ne '2' -or
+            $values['endpoint.trade_cal.requests'] -ne '2' -or
+            $values['maximum.provider.requests'] -ne '6' -or
+            $values['tushare.stage.limit'] -ne '20' -or
+            -not [int]::TryParse([string]$values[
+                    'tushare.stage.calls.before'], [ref]$tushareCallsBefore) -or
+            $tushareCallsBefore -lt 0 -or $tushareCallsBefore + 6 -gt 20 -or
+            $values['llm.provider'] -ne 'BAILIAN' -or
+            $values['model'] -ne 'qwen3.7-plus' -or
+            $values['provider.endpoint'] -ne
+                'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions' -or
+            $values['maximum.model.calls'] -ne '13' -or
+            $values['maximum.output.tokens.per.call'] -ne '900' -or
+            $values['maximum.cost.cny'] -ne '5.00' -or
+            $values['llm.stage.limit.cny'] -ne '10.00' -or
+            $values['retry.budget'] -ne '0' -or
+            $values['redirects'] -ne 'NEVER' -or
+            $values['user.approval.reference'] -ne
+                'USER_APPROVED_M4_SHADOW_RESEARCH_CNY_10_TUSHARE_20' -or
+            $values['execution.source'] -ne
+                'M4_SHADOW_RESEARCH_REAL_SMOKE' -or
+            $values['no.retry'] -ne 'true') {
+            throw 'STOCK_QUANT_HOST_BROKER_REQUEST_SCOPE_INVALID'
+        }
     } elseif ($values['operation'] -eq 'RUN_M1_RESEARCH_DATA') {
         [int] $m1CallsBefore = -1
         if ($values['m1.mode'] -notin @(
@@ -956,6 +1077,10 @@ function Read-StockQuantHostBrokerRequest {
                 '^SQHB_[0-9]{8}T[0-9]{6}Z_[A-F0-9]{12}$') {
             throw 'STOCK_QUANT_HOST_BROKER_SOURCE_REQUEST_INVALID'
         }
+    } elseif ($values['operation'] -eq 'RUN_M4_SHADOW_RESEARCH') {
+        if ($values['source.request.id'] -ne 'NONE') {
+            throw 'STOCK_QUANT_HOST_BROKER_SOURCE_REQUEST_INVALID'
+        }
     } elseif ($values['source.request.id'] -ne 'NONE') {
         throw 'STOCK_QUANT_HOST_BROKER_SOURCE_REQUEST_INVALID'
     }
@@ -1036,6 +1161,12 @@ function Read-StockQuantHostBrokerRequest {
         }
         $authorizationStatus =
             'M3_USER_APPROVED_BAILIAN_SMOKE_TRANCHE_2_CNY_5_00'
+    } elseif ($values['operation'] -eq 'RUN_M4_SHADOW_RESEARCH') {
+        if ($values['authorization.file'] -ne 'NONE') {
+            throw 'STOCK_QUANT_HOST_BROKER_AUTHORIZATION_MODE_INVALID'
+        }
+        $authorizationStatus =
+            'M4_USER_APPROVED_CNY_10_TUSHARE_20'
     } elseif ($values['operation'] -eq 'DIAGNOSE_TUSHARE_CREDENTIAL') {
         if ($values['authorization.file'] -ne 'NONE') {
             throw 'STOCK_QUANT_HOST_BROKER_AUTHORIZATION_MODE_INVALID'
@@ -1159,6 +1290,7 @@ function Read-StockQuantHostBrokerRequest {
         BuildProofPath = $proof
         AuthorizationFile = $authorization
         AuthorizationStatus = $authorizationStatus
+        Values = $values
         CreatedAt = $created
         ExpiresAt = $expires
         SourceRequestId = $values['source.request.id']
@@ -1204,6 +1336,10 @@ function Write-StockQuantHostBrokerRequest {
             }
             'RUN_M3_AGENT_RESEARCH_SMOKE' {
                 $script:M3RequiredKeys
+                break
+            }
+            'RUN_M4_SHADOW_RESEARCH' {
+                $script:M4RequiredKeys
                 break
             }
             default { $script:RequiredKeys }

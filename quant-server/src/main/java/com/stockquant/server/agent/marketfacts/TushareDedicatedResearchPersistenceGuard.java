@@ -37,6 +37,9 @@ public final class TushareDedicatedResearchPersistenceGuard {
     public static final List<String> REQUIRED_MIGRATIONS = List.of(
             "1", "2", "3", "4", "5", "6", "7",
             "8", "9", "10", "11", "12", "13");
+    public static final List<String> M4_REQUIRED_MIGRATIONS = List.of(
+            "1", "2", "3", "4", "5", "6", "7",
+            "8", "9", "10", "11", "12", "13", "15");
 
     private final SchemaInspector inspector;
     private final DatabaseIdentityPolicy identityPolicy;
@@ -444,6 +447,10 @@ public final class TushareDedicatedResearchPersistenceGuard {
     }
 
     private static boolean supportedMigrations(List<String> migrations) {
-        return REQUIRED_MIGRATIONS.equals(migrations);
+        // V14 is intentionally absent from the main history: it remains the
+        // isolated controlled-acceptance governance migration. M4 extends the
+        // dedicated research history only with its exact V15 schema.
+        return REQUIRED_MIGRATIONS.equals(migrations)
+                || M4_REQUIRED_MIGRATIONS.equals(migrations);
     }
 }

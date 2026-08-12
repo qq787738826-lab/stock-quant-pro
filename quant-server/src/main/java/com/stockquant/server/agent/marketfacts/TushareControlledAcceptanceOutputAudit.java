@@ -91,6 +91,20 @@ public final class TushareControlledAcceptanceOutputAudit {
                 RegistryRequirement.M3_BAILIAN_RESEARCH);
     }
 
+    static <T> Captured<T> captureM4ShadowResearchProcess(
+            DynamicAction<T> action
+    ) throws Exception {
+        return captureDynamic(Objects.requireNonNull(action, "action"),
+                RegistryRequirement.M4_SHADOW_RESEARCH);
+    }
+
+    static <T> Captured<T> captureM4ShadowResearchE2eProcess(
+            DynamicAction<T> action
+    ) throws Exception {
+        return captureDynamic(Objects.requireNonNull(action, "action"),
+                RegistryRequirement.M4_SHADOW_RESEARCH);
+    }
+
     static <T> Captured<T> captureDatabasePreparationProcess(
             DynamicAction<T> action
     ) throws Exception {
@@ -287,6 +301,16 @@ public final class TushareControlledAcceptanceOutputAudit {
             }
         }
 
+        private void requireM4ShadowResearchRegistration() {
+            if (!kinds.equals(List.of(
+                    SensitiveKind.DATABASE_PASSWORD,
+                    SensitiveKind.TUSHARE_TOKEN,
+                    SensitiveKind.BAILIAN_API_KEY))) {
+                throw new IllegalStateException(
+                        "M4_SHADOW_SENSITIVE_REGISTRY_INCOMPLETE");
+            }
+        }
+
         private void requireCompleteDatabasePreparationRegistration() {
             if ((databasePreparationSecretsRequired
                     && !kinds.equals(List.of(
@@ -371,6 +395,13 @@ public final class TushareControlledAcceptanceOutputAudit {
             void validate(SensitiveRegistry registry) {
                 NONE.validate(registry);
                 registry.requireM3BailianResearchRegistration();
+            }
+        },
+        M4_SHADOW_RESEARCH {
+            @Override
+            void validate(SensitiveRegistry registry) {
+                NONE.validate(registry);
+                registry.requireM4ShadowResearchRegistration();
             }
         },
         DATABASE_PREPARATION {

@@ -11,6 +11,7 @@ param(
         'RUN_M2_STRATEGY_RESEARCH_SMOKE',
         'CHECK_BAILIAN_CREDENTIAL_STATUS',
         'RUN_M3_AGENT_RESEARCH_SMOKE',
+        'RUN_M4_SHADOW_RESEARCH',
         'READ_SANITIZED_RESULT'
     )]
     [string] $Operation,
@@ -20,6 +21,14 @@ param(
     [string] $ArtifactPath,
 
     [string] $SourceRequestId = 'NONE',
+
+    [ValidatePattern('^(AUTO|SQHB_[0-9]{8}T[0-9]{6}Z_[A-F0-9]{12})$')]
+    [string] $RequestId = 'AUTO',
+
+    [ValidatePattern('^(AUTO|20[0-9]{2}-[0-9]{2}-[0-9]{2})$')]
+    [string] $TradeDate = 'AUTO',
+
+    [switch] $SubmitOnly,
 
     [ValidateRange(5, 2700)]
     [int] $TimeoutSeconds = 2700
@@ -34,6 +43,11 @@ $paths = Initialize-StockQuantHostBrokerDirectories
 $identity = [Security.Principal.WindowsIdentity]::GetCurrent().Name
 $integrationBranch = 'feature/1.4.0-agent-team'
 
+if (($RequestId -ne 'AUTO' -or $TradeDate -ne 'AUTO' -or $SubmitOnly) -and
+    $Operation -ne 'RUN_M4_SHADOW_RESEARCH') {
+    throw 'STOCK_QUANT_HOST_BROKER_FIXED_DISPATCH_ARGUMENT_INVALID'
+}
+
 function Assert-StockQuantHostBrokerInvoker([object] $Heartbeat) {
     $isCodexSandbox = $identity -match '(?i)CodexSandbox'
     $isResidentUser = $identity -ceq [string]$Heartbeat.windowsUser
@@ -46,6 +60,8 @@ if ([string]::IsNullOrWhiteSpace($ArtifactPath)) {
             'CHECK_BAILIAN_CREDENTIAL_STATUS',
             'RUN_M3_AGENT_RESEARCH_SMOKE')) {
         'quant-server-1.3.1-m3-agent-research-runner.jar'
+    } elseif ($Operation -eq 'RUN_M4_SHADOW_RESEARCH') {
+        'quant-server-1.3.1-m4-shadow-research-runner.jar'
     } elseif ($Operation -eq
             'RUN_M2_STRATEGY_RESEARCH_SMOKE') {
         'quant-server-1.3.1-m2-strategy-research-runner.jar'
@@ -92,6 +108,9 @@ try {
             'RUN_M3_AGENT_RESEARCH_SMOKE') -and
         $branch -eq 'codex/1.4.0-m3-agent-research-ready') {
         'codex/1.4.0-m3-agent-research-ready'
+    } elseif ($Operation -eq 'RUN_M4_SHADOW_RESEARCH' -and
+        $branch -eq 'codex/1.4.0-m4-shadow-research-ready') {
+        'codex/1.4.0-m4-shadow-research-ready'
     } else { $integrationBranch }
     $remoteRef = "refs/heads/$requiredBranch"
     $remoteQuery = @(& git ls-remote --exit-code origin $remoteRef 2>&1 |
@@ -131,7 +150,8 @@ try {
             'DIAGNOSE_TUSHARE_CREDENTIAL',
             'RUN_M2_STRATEGY_RESEARCH_SMOKE',
             'CHECK_BAILIAN_CREDENTIAL_STATUS',
-            'RUN_M3_AGENT_RESEARCH_SMOKE')) {
+            'RUN_M3_AGENT_RESEARCH_SMOKE',
+            'RUN_M4_SHADOW_RESEARCH')) {
         if ($AuthorizationFile -ne 'NONE') {
             throw 'STOCK_QUANT_HOST_BROKER_AUTHORIZATION_MODE_INVALID'
         }
@@ -144,7 +164,9 @@ try {
     }
     $artifactHash = ((Get-FileHash -LiteralPath $artifact `
         -Algorithm SHA256).Hash).ToLowerInvariant()
-    $requestId = New-StockQuantHostBrokerRequestId
+    $requestId = if ($RequestId -eq 'AUTO') {
+        New-StockQuantHostBrokerRequestId
+    } else { $RequestId }
     $createdAt = [DateTimeOffset]::UtcNow
     $expiresAt = $createdAt.AddMinutes(10)
     if ($Operation -eq 'CHECK_BAILIAN_CREDENTIAL_STATUS') {
@@ -214,6 +236,87 @@ try {
             'execution.source' = 'M3_AGENT_RESEARCH_REAL_LLM_SMOKE'
             'no.retry' = 'true'
             'source.request.id' = $SourceRequestId
+        }
+    } elseif ($Operation -eq 'RUN_M4_SHADOW_RESEARCH') {
+        $tradeDate = if ($TradeDate -eq 'AUTO') {
+            [DateTime]::UtcNow.Date.AddDays(-1)
+        } else {
+            [DateTime]::ParseExact($TradeDate, 'yyyy-MM-dd',
+                [Globalization.CultureInfo]::InvariantCulture)
+        }
+        while ($TradeDate -eq 'AUTO' -and $tradeDate.DayOfWeek -in @(
+                [DayOfWeek]::Saturday, [DayOfWeek]::Sunday)) {
+            $tradeDate = $tradeDate.AddDays(-1)
+        }
+        $rangeStart = $tradeDate.AddDays(-30)
+        $priorTushare = 0
+        $m4Files = @(Get-ChildItem -LiteralPath $paths.Results -File `
+            -Filter 'SQHB_*.m4-shadow.json')
+        foreach ($file in $m4Files) {
+            $prior = Get-Content -LiteralPath $file.FullName -Raw `
+                -Encoding UTF8 | ConvertFrom-Json
+            if ($prior.schemaVersion -ne 'M4_SHADOW_RESEARCH_RESULT_V1' -or
+                [int]$prior.tushareProviderCallCount -lt 0 -or
+                [int]$prior.tushareProviderCallCount -gt 6) {
+                throw 'M4_STAGE_BUDGET_LEDGER_INVALID'
+            }
+            $priorTushare += [int]$prior.tushareProviderCallCount
+        }
+        $requestValues = [ordered]@{
+            'schema.version' = 'STOCK_QUANT_HOST_BROKER_REQUEST_V1'
+            'request.id' = $requestId
+            'operation' = $Operation
+            'git.commit' = $head
+            'jar.path' = $artifact
+            'jar.sha256' = $artifactHash
+            'authorization.file' = 'NONE'
+            'm4.runtime' = 'SHADOW_RESEARCH_RUNTIME_V1'
+            'm4.scheduler' = 'SHADOW_SCHEDULER_V1'
+            'm4.snapshot' = 'SHADOW_SNAPSHOT_V1'
+            'm4.paper.portfolio' = 'PAPER_PORTFOLIO_V1'
+            'm4.replay' = 'SHADOW_REPLAY_V1'
+            'm4.outcome' = 'SHADOW_OUTCOME_V1'
+            'm3.agent.runtime' = 'AGENT_RUNTIME_V1'
+            'm3.agent.team' = 'AGENT_RESEARCH_TEAM_V1'
+            'm3.tool.gateway' = 'AGENT_TOOL_GATEWAY_V1'
+            'm2.strategy.engine' = 'STRATEGY_ENGINE_V1'
+            'm2.backtest.engine' = 'BACKTEST_ENGINE_V1'
+            'securities' = '600000:SSE,000001:SZSE'
+            'range.start' = $rangeStart.ToString('yyyy-MM-dd')
+            'trade.date' = $tradeDate.ToString('yyyy-MM-dd')
+            'next.trade.date' = 'NONE'
+            'capture.mode' = 'CAPTURE'
+            'trigger.mode' = 'MANUAL'
+            'database.host' = '127.0.0.1'
+            'database.port' = '38432'
+            'database.name' = 'stock_quant_research'
+            'database.user' = 'stock_quant_research'
+            'schema.name' = 'tushare_research'
+            'tushare.provider' = 'TUSHARE'
+            'tushare.endpoints' = 'daily,adj_factor,trade_cal'
+            'endpoint.daily.requests' = '2'
+            'endpoint.adj_factor.requests' = '2'
+            'endpoint.trade_cal.requests' = '2'
+            'maximum.provider.requests' = '6'
+            'tushare.stage.limit' = '20'
+            'tushare.stage.calls.before' = [string]$priorTushare
+            'llm.provider' = 'BAILIAN'
+            'model' = 'qwen3.7-plus'
+            'provider.endpoint' =
+                'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'
+            'maximum.model.calls' = '13'
+            'maximum.output.tokens.per.call' = '900'
+            'maximum.cost.cny' = '5.00'
+            'llm.stage.limit.cny' = '10.00'
+            'retry.budget' = '0'
+            'redirects' = 'NEVER'
+            'user.approval.reference' =
+                'USER_APPROVED_M4_SHADOW_RESEARCH_CNY_10_TUSHARE_20'
+            'created.at' = $createdAt.ToString('o')
+            'expires.at' = $expiresAt.ToString('o')
+            'execution.source' = 'M4_SHADOW_RESEARCH_REAL_SMOKE'
+            'no.retry' = 'true'
+            'source.request.id' = 'NONE'
         }
     } elseif ($Operation -eq 'RUN_M2_STRATEGY_RESEARCH_SMOKE') {
         $requestValues = [ordered]@{
@@ -359,6 +462,13 @@ try {
         -ExpectedGitCommit $head -AllowAncestorGitCommit
     Assert-StockQuantHostBrokerInvoker -Heartbeat $heartbeat
     $requestFile = Write-StockQuantHostBrokerRequest -Values $requestValues
+
+    if ($SubmitOnly) {
+        Write-Output "STOCK_QUANT_HOST_BROKER_REQUEST_ID=$requestId"
+        Write-Output "STOCK_QUANT_HOST_BROKER_REQUEST=$requestFile"
+        Write-Output 'STOCK_QUANT_HOST_BROKER_STATUS=SUBMITTED'
+        exit 0
+    }
 
     $resultPath = Join-Path $paths.Results "$requestId.result.json"
     $deadline = [DateTimeOffset]::UtcNow.AddSeconds($TimeoutSeconds)

@@ -264,6 +264,7 @@ class StockQuantHostBrokerContractTest {
                 "CHECK_CREDENTIAL_STATUS", "RUN_FAKE_E2E", "RUN_DAY001",
                 "CHECK_BAILIAN_CREDENTIAL_STATUS",
                 "RUN_M3_AGENT_RESEARCH_SMOKE",
+                "RUN_M4_SHADOW_RESEARCH",
                 "READ_SANITIZED_RESULT")) {
             assertTrue(protocol.contains("'" + operation + "'"), operation);
         }
@@ -317,6 +318,7 @@ class StockQuantHostBrokerContractTest {
         assertTrue(script.contains("RUN_FAKE_E2E"));
         assertTrue(script.contains("CHECK_BAILIAN_CREDENTIAL_STATUS"));
         assertTrue(script.contains("RUN_M3_AGENT_RESEARCH_SMOKE"));
+        assertTrue(script.contains("RUN_M4_SHADOW_RESEARCH"));
         assertTrue(script.contains("BailianCredentialHealthProbe"));
         assertTrue(script.contains("qwen3.7-plus"));
         assertTrue(script.contains("Get-M3BailianStageBudget"));
@@ -326,6 +328,8 @@ class StockQuantHostBrokerContractTest {
         assertTrue(script.contains(
                 "ConvertTo-StockQuantM3CallTelemetrySummary"));
         assertTrue(script.contains("legacyFailureReserve"));
+        assertTrue(script.contains("Get-M4StageBudget"));
+        assertTrue(script.contains("run-m4-shadow-research.ps1"));
         assertTrue(script.contains("modelProviderMessageCategory"));
         assertFalse(script.contains("Invoke-Expression"));
         assertFalse(script.contains("Start-Process"));

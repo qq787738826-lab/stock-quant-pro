@@ -13,9 +13,11 @@
 - M1 最终集成 HEAD / M2 冻结集成基线：`3c73df6e38aa4e7d934dbf7a805ab7ec78eb9cbc`
 - M2 最终集成 HEAD / M3 冻结集成基线：`b041fbe807b817c4070781db33fbfca2d4f8bc4e`
 - M3 最终代码与测试证据 HEAD：`195746398fe60c1cdfc29f400dd404a144eab929`
+- M3 最终集成 HEAD / M4 冻结集成基线：`a8f82834878549051ce2300b08dfdb4ea188c202`
 - M1 长期任务分支：`codex/1.4.0-m1-research-data-ready`
 - M2 长期任务分支：`codex/1.4.0-m2-strategy-engine-ready`
 - M3 长期任务分支：`codex/1.4.0-m3-agent-research-ready`
+- M4 长期任务分支：`codex/1.4.0-m4-shadow-research-ready`
 - 1D-4 验收来源分支：`codex/1.4.0-1d4-acceptance`
 - 1D-4 验收基线：`5bc492a feat(agent): add safe local team runtime scripts`
 - 阶段 2A 验收来源分支：`codex/1.4.0-2a-readonly-context`

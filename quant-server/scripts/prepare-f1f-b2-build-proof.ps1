@@ -3,18 +3,21 @@ param(
     [ValidateSet('PREPARATION_ONLY', 'CONTROLLED_BUILD_ARTIFACT',
         'M1_STAGE_CONTROLLED_BUILD_ARTIFACT',
         'M2_STAGE_CONTROLLED_BUILD_ARTIFACT',
-        'M3_STAGE_CONTROLLED_BUILD_ARTIFACT', 'E2E_DRY_RUN')]
+        'M3_STAGE_CONTROLLED_BUILD_ARTIFACT',
+        'M4_STAGE_CONTROLLED_BUILD_ARTIFACT', 'E2E_DRY_RUN')]
     [string] $Mode = 'PREPARATION_ONLY',
 
     [ValidateSet('F1F_B2', 'REDUCED_RESEARCH_DAY001', 'M1_RESEARCH_DATA',
-        'M2_STRATEGY_RESEARCH', 'M3_AGENT_RESEARCH')]
+        'M2_STRATEGY_RESEARCH', 'M3_AGENT_RESEARCH', 'M4_SHADOW_RESEARCH')]
     [string] $RunnerProfile = 'F1F_B2'
 )
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $requiredBranch = 'feature/1.4.0-agent-team'
-$artifactName = if ($RunnerProfile -eq 'M3_AGENT_RESEARCH') {
+$artifactName = if ($RunnerProfile -eq 'M4_SHADOW_RESEARCH') {
+    'quant-server-1.3.1-m4-shadow-research-runner.jar'
+} elseif ($RunnerProfile -eq 'M3_AGENT_RESEARCH') {
     'quant-server-1.3.1-m3-agent-research-runner.jar'
 } elseif ($RunnerProfile -eq 'M2_STRATEGY_RESEARCH') {
     'quant-server-1.3.1-m2-strategy-research-runner.jar'
@@ -25,7 +28,9 @@ $artifactName = if ($RunnerProfile -eq 'M3_AGENT_RESEARCH') {
 } else {
     'quant-server-1.3.1-f1f-b2-runner.jar'
 }
-$runnerStartClass = if ($RunnerProfile -eq 'M3_AGENT_RESEARCH') {
+$runnerStartClass = if ($RunnerProfile -eq 'M4_SHADOW_RESEARCH') {
+    'com.stockquant.server.agent.marketfacts.TushareM4ShadowResearchManualRunner'
+} elseif ($RunnerProfile -eq 'M3_AGENT_RESEARCH') {
     'com.stockquant.server.agent.marketfacts.TushareM3AgentResearchManualRunner'
 } elseif ($RunnerProfile -eq 'M2_STRATEGY_RESEARCH') {
     'com.stockquant.server.agent.marketfacts.TushareM2StrategyResearchManualRunner'
@@ -120,6 +125,12 @@ try {
             $remoteCommit -ne $ExpectedCommit -or
             $RunnerProfile -ne 'M3_AGENT_RESEARCH') {
             throw 'STOCK_QUANT_M3_STAGE_BUILD_BASELINE_REQUIRED'
+        }
+    } elseif ($Mode -eq 'M4_STAGE_CONTROLLED_BUILD_ARTIFACT') {
+        if ($actualBranch -ne 'codex/1.4.0-m4-shadow-research-ready' -or
+            $remoteCommit -ne $ExpectedCommit -or
+            $RunnerProfile -ne 'M4_SHADOW_RESEARCH') {
+            throw 'STOCK_QUANT_M4_STAGE_BUILD_BASELINE_REQUIRED'
         }
     } elseif ($actualBranch -ne $requiredBranch -and
         -not $actualBranch.StartsWith('codex/')) {

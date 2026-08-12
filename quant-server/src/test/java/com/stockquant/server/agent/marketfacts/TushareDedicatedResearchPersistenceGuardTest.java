@@ -117,6 +117,31 @@ class TushareDedicatedResearchPersistenceGuardTest {
     }
 
     @Test
+    void acceptsExactM4HistoryButRejectsV14AndUnknownExtensions() {
+        var m4 = state("stock_quant_research", "stock_quant_research",
+                localUrl("stock_quant_research"), false,
+                TushareDedicatedResearchPersistenceGuard
+                        .M4_REQUIRED_MIGRATIONS);
+        assertEquals(TushareDedicatedResearchPersistenceGuard
+                        .M4_REQUIRED_MIGRATIONS,
+                guard(m4).verifyBeforeProvider().appliedMigrations());
+
+        java.util.ArrayList<String> governance =
+                new java.util.ArrayList<>(V1_TO_V13);
+        governance.add("14");
+        assertCode(state("stock_quant_research", "stock_quant_research",
+                        localUrl("stock_quant_research"), false, governance),
+                "TUSHARE_DEDICATED_RESEARCH_SCHEMA_VERSION_INVALID");
+        java.util.ArrayList<String> future = new java.util.ArrayList<>(
+                TushareDedicatedResearchPersistenceGuard
+                        .M4_REQUIRED_MIGRATIONS);
+        future.add("16");
+        assertCode(state("stock_quant_research", "stock_quant_research",
+                        localUrl("stock_quant_research"), false, future),
+                "TUSHARE_DEDICATED_RESEARCH_SCHEMA_VERSION_INVALID");
+    }
+
+    @Test
     void transactionGuardRequiresBoundConnectionAndStablePid() {
         assertEquals(
                 "TUSHARE_DEDICATED_RESEARCH_TRANSACTION_REQUIRED",

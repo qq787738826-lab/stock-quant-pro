@@ -145,8 +145,10 @@ public final class AgentResearchToolGateway {
             for (StrategySpec strategy : task.strategies()) {
                 ResearchResult result = researchApi.backtest(
                         new BacktestRequest(loaded.dataset(), strategy,
-                                backtestConfig, task.rangeStart(),
-                                task.rangeEnd()), task.benchmark());
+                                backtestConfig,
+                                loaded.dataset().firstSessionDate(),
+                                loaded.dataset().lastSessionDate()),
+                        task.benchmark());
                 var backtest = result.strategyResult();
                 BigDecimal maximumWeight = backtest.endingPositions().stream()
                         .map(value -> value.portfolioWeight().abs())

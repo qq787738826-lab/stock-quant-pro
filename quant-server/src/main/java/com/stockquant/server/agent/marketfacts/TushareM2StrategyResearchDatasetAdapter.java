@@ -44,7 +44,7 @@ public final class TushareM2StrategyResearchDatasetAdapter {
         return adapt(m1);
     }
 
-    static AdaptedDataset adapt(
+    public static AdaptedDataset adapt(
             TushareM1ResearchDataModels.ResearchDataset m1
     ) {
         Objects.requireNonNull(m1, "m1");

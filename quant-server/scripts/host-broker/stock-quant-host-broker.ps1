@@ -32,6 +32,8 @@ $m2RunnerScript = Join-Path $paths.RepositoryRoot `
     'quant-server\scripts\run-m2-strategy-research.ps1'
 $m3RunnerScript = Join-Path $paths.RepositoryRoot `
     'quant-server\scripts\run-m3-agent-research.ps1'
+$m4RunnerScript = Join-Path $paths.RepositoryRoot `
+    'quant-server\scripts\run-m4-shadow-research.ps1'
 $fakeE2eScript = Join-Path $paths.RepositoryRoot `
     'quant-server\scripts\run-reduced-research-day001-e2e-dry-run.ps1'
 $mutex = [Threading.Mutex]::new($false, 'Local\StockQuantLocalBroker')
@@ -123,7 +125,8 @@ function Assert-GitBinding {
                 'VERIFY_M1_TUSHARE_TOKEN',
                 'RUN_M2_STRATEGY_RESEARCH_SMOKE',
                 'CHECK_BAILIAN_CREDENTIAL_STATUS',
-                'RUN_M3_AGENT_RESEARCH_SMOKE')) {
+                'RUN_M3_AGENT_RESEARCH_SMOKE',
+                'RUN_M4_SHADOW_RESEARCH')) {
             $requiredBranch = if ($BrokerRequest.Operation -eq 'RUN_DAY001') {
                 $integrationBranch
             } elseif ($BrokerRequest.Operation -eq
@@ -147,6 +150,14 @@ function Assert-GitBinding {
                         'quant-server-1.3.1-m3-agent-research-runner.jar'),
                     [StringComparison]::OrdinalIgnoreCase)) {
                 'codex/1.4.0-m3-agent-research-ready'
+            } elseif ($BrokerRequest.Operation -eq
+                    'RUN_M4_SHADOW_RESEARCH' -and
+                $branch -eq 'codex/1.4.0-m4-shadow-research-ready' -and
+                [IO.Path]::GetFullPath($BrokerRequest.JarPath).Equals(
+                    (Join-Path $paths.TargetRoot `
+                        'quant-server-1.3.1-m4-shadow-research-runner.jar'),
+                    [StringComparison]::OrdinalIgnoreCase)) {
+                'codex/1.4.0-m4-shadow-research-ready'
             } elseif ($branch -eq 'codex/1.4.0-m1-research-data-ready') {
                 'codex/1.4.0-m1-research-data-ready'
             } else { $integrationBranch }
@@ -1104,6 +1115,186 @@ function Get-M3BailianStageBudget {
     }
 }
 
+function Get-M4StageBudget {
+    param([Parameter(Mandatory = $true)] [object] $BrokerRequest)
+    $operationMarker = 'RUN_M4_SHADOW_RESEARCH'
+    $approvalMarker =
+        'USER_APPROVED_M4_SHADOW_RESEARCH_CNY_10_TUSHARE_20'
+    [decimal]$llmLimit = [decimal]10.00
+    $tushareLimit = 20
+    [decimal]$llmUsed = [decimal]0.00
+    $tushareUsed = 0
+    $seen = @{}
+    $prior = @(Get-ChildItem -LiteralPath $paths.Requests -File |
+        Where-Object { $_.FullName -ne $processingPath } |
+        Where-Object {
+            if ($_.Length -le 0 -or $_.Length -gt 65536) { return $false }
+            $content = Get-Content -LiteralPath $_.FullName -Raw -Encoding UTF8
+            return $content -match "(?m)^operation=$operationMarker$" -and
+                $content -match ("(?m)^user\.approval\.reference=" +
+                    [regex]::Escape($approvalMarker) + '$')
+        })
+    foreach ($file in $prior) {
+        $content = Get-Content -LiteralPath $file.FullName -Raw -Encoding UTF8
+        $id = [regex]::Match($content,
+            '(?m)^request\.id=(SQHB_[0-9]{8}T[0-9]{6}Z_[A-F0-9]{12})$')
+        if (-not $id.Success -or $seen.ContainsKey($id.Groups[1].Value)) {
+            throw 'M4_STAGE_BUDGET_LEDGER_INVALID'
+        }
+        $requestId = $id.Groups[1].Value
+        $seen[$requestId] = $true
+        $runner = Join-Path $paths.Results "$requestId.m4-shadow.json"
+        if (-not (Test-Path -LiteralPath $runner -PathType Leaf)) {
+            $terminalPath = Join-Path $paths.Results "$requestId.result.json"
+            if (-not (Test-Path -LiteralPath $terminalPath -PathType Leaf)) {
+                throw 'M4_STAGE_BUDGET_LEDGER_INCOMPLETE'
+            }
+            $terminal = Get-Content -LiteralPath $terminalPath -Raw `
+                -Encoding UTF8 | ConvertFrom-Json
+            if ($terminal.operation -ne $operationMarker -or
+                $terminal.status -notin @('FAILED', 'REJECTED') -or
+                [int]$terminal.providerCallCount -ne 0) {
+                throw 'M4_STAGE_BUDGET_LEDGER_INVALID'
+            }
+            continue
+        }
+        $value = Get-Content -LiteralPath $runner -Raw -Encoding UTF8 |
+            ConvertFrom-Json
+        if ($value.schemaVersion -ne 'M4_SHADOW_RESEARCH_RESULT_V1' -or
+            $value.status -notin @('SUCCEEDED', 'FAILED') -or
+            [int]$value.tushareProviderCallCount -lt 0 -or
+            [int]$value.tushareProviderCallCount -gt 6 -or
+            [int]$value.retryCount -ne 0 -or
+            [int]$value.modelProviderRequestCount -lt 0 -or
+            [int]$value.modelProviderRequestCount -gt 13) {
+            throw 'M4_STAGE_BUDGET_LEDGER_INVALID'
+        }
+        [decimal]$cost = [decimal]::Parse(
+            [string]$value.conservativeCostCny,
+            [Globalization.NumberStyles]::Number,
+            [Globalization.CultureInfo]::InvariantCulture)
+        if ($cost -lt 0 -or $cost -gt [decimal]5.00) {
+            throw 'M4_STAGE_BUDGET_LEDGER_INVALID'
+        }
+        $llmUsed += $cost
+        $tushareUsed += [int]$value.tushareProviderCallCount
+    }
+    if ($llmUsed -ge $llmLimit -or $tushareUsed + 6 -gt $tushareLimit -or
+        $prior.Count -ge 4) {
+        throw 'M4_STAGE_BUDGET_EXHAUSTED'
+    }
+    [decimal]$llmRemaining = $llmLimit - $llmUsed
+    return [pscustomobject]@{
+        PriorRequestCount = $prior.Count
+        PriorLlmCostCny = $llmUsed.ToString(
+            [Globalization.CultureInfo]::InvariantCulture)
+        RemainingLlmCostCny = [decimal]::Min(
+            $llmRemaining, [decimal]5.00).ToString(
+            [Globalization.CultureInfo]::InvariantCulture)
+        PriorTushareCalls = $tushareUsed
+        RemainingTushareCalls = $tushareLimit - $tushareUsed
+    }
+}
+
+function Invoke-M4ShadowResearch {
+    param([Parameter(Mandatory = $true)] [object] $BrokerRequest)
+    if ($BrokerRequest.AuthorizationStatus -ne
+            'M4_USER_APPROVED_CNY_10_TUSHARE_20' -or
+        $null -ne $BrokerRequest.AuthorizationFile) {
+        throw 'STOCK_QUANT_HOST_BROKER_M4_SCOPE_INVALID'
+    }
+    $budget = Get-M4StageBudget -BrokerRequest $BrokerRequest
+    if ([int]$BrokerRequest.Values['tushare.stage.calls.before'] -ne
+            [int]$budget.PriorTushareCalls) {
+        throw 'M4_STAGE_BUDGET_BINDING_INVALID'
+    }
+    $runnerResult = Join-Path $paths.Results `
+        "$($BrokerRequest.RequestId).m4-shadow.json"
+    if (Test-Path -LiteralPath $runnerResult) {
+        throw 'STOCK_QUANT_HOST_BROKER_RUNNER_RESULT_ALREADY_EXISTS'
+    }
+    $executionId = $BrokerRequest.RequestId -replace '^SQHB_', 'M4SHADOW_'
+    $output = @(& $m4RunnerScript -ResultFile $runnerResult `
+        -ArtifactPath $BrokerRequest.JarPath -ExecutionId $executionId `
+        -DatabasePort 38432 -ExecutionMode FORMAL `
+        -Securities $BrokerRequest.Values['securities'] `
+        -RangeStart $BrokerRequest.Values['range.start'] `
+        -TradeDate $BrokerRequest.Values['trade.date'] `
+        -NextTradeDate $BrokerRequest.Values['next.trade.date'] `
+        -CaptureMode $BrokerRequest.Values['capture.mode'] `
+        -TriggerMode $BrokerRequest.Values['trigger.mode'] `
+        -MaximumCostCny $budget.RemainingLlmCostCny 2>&1 |
+        ForEach-Object { [string]$_ })
+    $runnerExitCode = $LASTEXITCODE
+    if (-not (Test-Path -LiteralPath $runnerResult -PathType Leaf)) {
+        throw 'STOCK_QUANT_HOST_BROKER_RUNNER_RESULT_MISSING'
+    }
+    $m4 = Get-Content -LiteralPath $runnerResult -Raw -Encoding UTF8 |
+        ConvertFrom-Json
+    [decimal]$cost = [decimal]::Parse(
+        [string]$m4.conservativeCostCny,
+        [Globalization.NumberStyles]::Number,
+        [Globalization.CultureInfo]::InvariantCulture)
+    $summary = [ordered]@{
+        executionId = [string]$m4.executionId
+        providerCallCount = [int]$m4.tushareProviderCallCount
+        retryCount = [int]$m4.retryCount
+        externalModelCallCount = [int]$m4.modelProviderRequestCount
+        modelInputUnits = [int]$m4.inputTokens
+        modelOutputUnits = [int]$m4.outputTokens
+        modelReasoningUnits = [int]$m4.reasoningTokens
+        modelTotalUnits = [int]$m4.totalTokens
+        accountedCostCny = $cost.ToString(
+            [Globalization.CultureInfo]::InvariantCulture)
+        stagePriorAccountedCostCny = [string]$budget.PriorLlmCostCny
+        stagePriorTushareCalls = [int]$budget.PriorTushareCalls
+        sanitizedResult = $runnerResult
+        outputAudit = $(if ($m4.outputAuditClean) { 'PASSED' } else { 'FAILED' })
+    }
+    if ($runnerExitCode -ne 0) {
+        $script:failureSummary = $summary
+        $reason = [string]$m4.failureReason
+        if ($reason -match '^[A-Z][A-Z0-9_]{3,127}$') { throw $reason }
+        throw 'STOCK_QUANT_HOST_BROKER_M4_FAILED'
+    }
+    if ($m4.status -ne 'SUCCEEDED' -or
+        [int]$m4.tushareProviderCallCount -ne 6 -or
+        [int]$m4.retryCount -ne 0 -or
+        [int]$m4.modelProviderRequestCount -ne 13 -or
+        [int]$m4.modelCallCount -ne 13 -or
+        [int]$m4.toolCallCount -ne 4 -or
+        @($m4.agentRoles | Sort-Object -Unique).Count -ne 7 -or
+        -not $m4.typedFactReadback -or
+        -not $m4.systemKnowledgeReadback -or
+        -not $m4.formulaOnlyQfq -or
+        -not $m4.noFutureDataLeakage -or
+        -not $m4.outputAuditClean -or -not $m4.researchOnly -or
+        $m4.brokerConnected -or $m4.realTradingStarted -or
+        $cost -le 0 -or $cost -gt [decimal]$budget.RemainingLlmCostCny) {
+        throw 'STOCK_QUANT_HOST_BROKER_M4_RESULT_INVALID'
+    }
+    $summary.shadowRunId = [long]$m4.shadowRunId
+    $summary.shadowRunKey = [string]$m4.shadowRunKey
+    $summary.tradeDate = [string]$m4.tradeDate
+    $summary.snapshotFingerprint = [string]$m4.snapshotFingerprint
+    $summary.decisionCode = [string]$m4.decisionCode
+    $summary.confidence = [string]$m4.confidence
+    $summary.riskLevel = [string]$m4.riskLevel
+    $summary.evidenceCount = [int]$m4.evidenceCount
+    $summary.paperOrderCount = [int]$m4.paperOrderCount
+    $summary.paperFillCount = [int]$m4.paperFillCount
+    $summary.paperCash = [string]$m4.paperCash
+    $summary.paperEquity = [string]$m4.paperEquity
+    $summary.paperTotalReturn = [string]$m4.paperTotalReturn
+    $summary.typedFactReadback = $true
+    $summary.systemKnowledgeReadback = $true
+    $summary.formulaOnlyQfq = $true
+    $summary.noFutureDataLeakage = $true
+    $summary.researchOnly = $true
+    $summary.realTradingStarted = $false
+    return $summary
+}
+
 function Read-SanitizedBrokerResult {
     param(
         [Parameter(Mandatory = $true)]
@@ -1301,6 +1492,10 @@ function Invoke-ClaimedRequest {
             }
             'RUN_M3_AGENT_RESEARCH_SMOKE' {
                 Invoke-M3AgentResearchSmoke -BrokerRequest $request
+                break
+            }
+            'RUN_M4_SHADOW_RESEARCH' {
+                Invoke-M4ShadowResearch -BrokerRequest $request
                 break
             }
             'READ_SANITIZED_RESULT' {
