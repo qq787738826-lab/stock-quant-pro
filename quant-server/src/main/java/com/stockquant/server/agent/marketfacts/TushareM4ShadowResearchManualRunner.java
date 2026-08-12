@@ -151,8 +151,9 @@ public final class TushareM4ShadowResearchManualRunner {
                                 password);
                         registry.register(SensitiveKind.TUSHARE_TOKEN, token);
                         registry.register(SensitiveKind.BAILIAN_API_KEY, key);
+                        Clock executionClock = factClock(launch, clock);
                         return execute(launch, password, token, null, clock,
-                                progress);
+                                progress, executionClock);
                     } finally {
                         Arrays.fill(password, '\0');
                         Arrays.fill(token, '\0');
@@ -204,6 +205,19 @@ public final class TushareM4ShadowResearchManualRunner {
             Clock clock,
             Progress progress
     ) {
+        return execute(launch, password, token, bailianKey, clock, progress,
+                clock);
+    }
+
+    private static Execution execute(
+            Arguments launch,
+            char[] password,
+            char[] token,
+            char[] bailianKey,
+            Clock clock,
+            Progress progress,
+            Clock factClock
+    ) {
         try (TushareControlledAcceptanceDataSource dataSource =
                      new TushareControlledAcceptanceDataSource(
                              launch.databasePort(),
@@ -223,7 +237,7 @@ public final class TushareM4ShadowResearchManualRunner {
             requireM4Schema(jdbc);
             var components = launch.mode() == ExecutionMode.FAKE
                     ? TushareDedicatedResearchRuntimeComponents
-                    .createE2eDryRun(dataSource, clock)
+                    .createE2eDryRun(dataSource, factClock)
                     : TushareDedicatedResearchRuntimeComponents
                     .create(dataSource, token.clone(), clock);
             TushareM1ResearchDataModels.RunEvidence captured;
@@ -340,6 +354,13 @@ public final class TushareM4ShadowResearchManualRunner {
                 ? com.stockquant.core.research.StrategyResearchModels
                 .closeInstant(launch.tradeDate())
                 : clock.instant();
+    }
+
+    static Clock factClock(Arguments launch, Clock clock) {
+        return launch.triggerMode() == TriggerMode.HISTORICAL_REPLAY
+                ? Clock.fixed(researchAsOf(launch, clock),
+                java.time.ZoneOffset.UTC)
+                : clock;
     }
 
     private static List<StrategySpec> strategies() {

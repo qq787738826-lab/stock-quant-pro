@@ -43,6 +43,12 @@ class TushareM4ShadowResearchManualRunnerTest {
         assertEquals(clock.instant(),
                 TushareM4ShadowResearchManualRunner.researchAsOf(
                         scheduled, clock));
+        assertEquals(com.stockquant.core.research.StrategyResearchModels
+                        .closeInstant(replay.tradeDate()),
+                TushareM4ShadowResearchManualRunner.factClock(replay, clock)
+                        .instant());
+        assertEquals(clock, TushareM4ShadowResearchManualRunner.factClock(
+                scheduled, clock));
     }
 
     private static String[] arguments(String nextDate, String triggerMode) {
