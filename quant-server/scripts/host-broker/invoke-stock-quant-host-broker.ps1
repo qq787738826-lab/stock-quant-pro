@@ -238,17 +238,17 @@ try {
             'source.request.id' = $SourceRequestId
         }
     } elseif ($Operation -eq 'RUN_M4_SHADOW_RESEARCH') {
-        $tradeDate = if ($TradeDate -eq 'AUTO') {
+        $resolvedM4TradeDate = if ($TradeDate -eq 'AUTO') {
             [DateTime]::UtcNow.Date.AddDays(-1)
         } else {
             [DateTime]::ParseExact($TradeDate, 'yyyy-MM-dd',
                 [Globalization.CultureInfo]::InvariantCulture)
         }
-        while ($TradeDate -eq 'AUTO' -and $tradeDate.DayOfWeek -in @(
+        while ($TradeDate -eq 'AUTO' -and $resolvedM4TradeDate.DayOfWeek -in @(
                 [DayOfWeek]::Saturday, [DayOfWeek]::Sunday)) {
-            $tradeDate = $tradeDate.AddDays(-1)
+            $resolvedM4TradeDate = $resolvedM4TradeDate.AddDays(-1)
         }
-        $rangeStart = $tradeDate.AddDays(-30)
+        $rangeStart = $resolvedM4TradeDate.AddDays(-30)
         $priorTushare = 0
         $m4Files = @(Get-ChildItem -LiteralPath $paths.Results -File `
             -Filter 'SQHB_*.m4-shadow.json')
@@ -283,7 +283,7 @@ try {
             'm2.backtest.engine' = 'BACKTEST_ENGINE_V1'
             'securities' = '600000:SSE,000001:SZSE'
             'range.start' = $rangeStart.ToString('yyyy-MM-dd')
-            'trade.date' = $tradeDate.ToString('yyyy-MM-dd')
+            'trade.date' = $resolvedM4TradeDate.ToString('yyyy-MM-dd')
             'next.trade.date' = 'NONE'
             'capture.mode' = 'CAPTURE'
             'trigger.mode' = 'MANUAL'
