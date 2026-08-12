@@ -86,6 +86,22 @@ public final class TushareM4ShadowResearchManualRunner {
                     true, progress.modelDiagnostics));
             System.out.println("M4_SHADOW_RESEARCH_STATUS=SUCCEEDED");
             return EXIT_SUCCESS;
+        } catch (TushareControlledAcceptanceOutputAudit
+                 .CapturedExecutionException capturedFailure) {
+            String reason = safeCode(capturedFailure.getCause());
+            if (resultFile != null) {
+                resultFile.write(TushareM4ShadowResearchResult.failure(
+                        launch == null ? "M4_UNKNOWN" : launch.executionId(),
+                        commit, started, clock.instant(),
+                        progress.providerCalls, progress.retryCount,
+                        progress.modelProviderRequests(),
+                        progress.inputTokens(), progress.outputTokens(),
+                        progress.reasoningTokens(), progress.totalTokens(),
+                        progress.accountedCost(), progress.modelDiagnostics,
+                        reason, false));
+            }
+            System.err.println("M4_SHADOW_RESEARCH_FAILURE_REASON=" + reason);
+            return EXIT_REJECTED;
         } catch (Throwable error) {
             String reason = safeCode(error);
             if (resultFile != null) {
