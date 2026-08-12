@@ -4,139 +4,88 @@
 
 - 长期任务分支：`codex/1.4.0-m3-agent-research-ready`
 - 冻结集成基线：`b041fbe807b817c4070781db33fbfca2d4f8bc4e`
-- 当前状态：`BAILIAN_REAL_LLM_SMOKE_BLOCKED_ADDITIONAL_BUDGET`
-- 外部门：`EXTERNAL_BAILIAN_BUDGET_REQUIRED`
-- 在真实 LLM smoke 通过前，不声明 `M3_AGENT_RESEARCH_READY=PASS`，不执行最终合并。
-- M3 新增 Tushare 调用 0；累计真实调用保持 55；百炼真实 smoke operation 共 4 个。前三个
-  operation 各 1 次 HTTP；最后一次运行在旧代码中未保留非 Provider 异常后的 usage telemetry，
-  因而该次 HTTP/已完成模型调用只能证明 1 至 13 次，阶段总 HTTP 为 4 至 16 次。CNY 5.00
-  阶段预算按 fail-closed 全额占账，永久研究库写入 0。
+- 最终代码与测试证据 HEAD：`195746398fe60c1cdfc29f400dd404a144eab929`
+- `M3_AGENT_RESEARCH_READY=PASS`：真实 M1 数据、M2 策略/回测工具、7 Agent 协作、
+  Evidence、Risk、Portfolio、Critic、结构化报告和真实百炼模型链路已经闭环。
+- M3 新增 Tushare 调用 0，累计真实调用保持 55；永久研究数据库写入 0；未启动 M4、
+  Shadow、业务 scheduler、真实订单、实盘或自动交易。
 
-## 交付契约
+## 交付能力
 
-- `AGENT_RUNTIME_V1`：有界的 7 Agent 协作运行时，限制 `maxRounds`、`maxToolCalls`、
-  `maxModelCalls` 和 timeout；Critic 最多触发一次返工。
+- `AGENT_RUNTIME_V1`：共享的有界运行时，限制 `maxRounds`、`maxToolCalls`、
+  `maxModelCalls` 和 timeout；Critic 最多触发一次返工，失败时保留已经产生的脱敏 usage。
 - `AGENT_RESEARCH_TEAM_V1`：Research Coordinator、Data Analyst、Market Technical、
-  Strategy Research、Risk、Portfolio、Critic Review 七个固定职责，共享同一运行时。
-- `AGENT_TOOL_GATEWAY_V1`：固定白名单 `ResearchDataset`、`MarketTechnical`、
-  `StrategyCompare`、`RiskMetrics`；行情、指标、回测和风险计算均由 M1/M2 确定性代码产生。
-- `RESEARCH_REPORT_V1`：结构化任务、数据、策略实验、风险、组合、Evidence、工具调用、
-  Agent finding、Critic、最终判断、指纹和成本字段；结论类型区分 FACT、INFERENCE、
-  HYPOTHESIS、RECOMMENDATION 和 UNKNOWN。
-- `AGENT_EVAL_V1`：固定对抗评测；报告文件原子写入 `target`，后端和现有页面只读展示，
-  不能从 API 启动 Agent、Shadow 或交易。
+  Strategy Research、Risk、Portfolio、Critic Review 七个固定职责。
+- `AGENT_TOOL_GATEWAY_V1`：白名单工具 `ResearchDataset`、`MarketTechnical`、
+  `StrategyCompare`、`RiskMetrics`；行情、指标、回测和风险计算由 M1/M2 确定性代码负责。
+- `RESEARCH_REPORT_V1`：结构化记录数据窗口、Evidence、策略实验、风险、组合、Agent finding、
+  Critic、最终判断、未知项、运行指纹和成本；声明类型严格区分 FACT、INFERENCE、HYPOTHESIS、
+  RECOMMENDATION 和 UNKNOWN。
+- `AGENT_EVAL_V1`：固定对抗评测覆盖虚假数值、未来数据、缺失证据、过拟合、高回撤、
+  Agent 冲突、prompt injection、Critic 修正、确定性重放和最终报告一致性。
+- ModelAdapter 与厂商解耦；离线使用 `DETERMINISTIC_FAKE_MODEL_V1`，正式 smoke 使用阿里云百炼
+  北京区域 OpenAI-compatible API、固定模型 `qwen3.7-plus`、redirects NEVER、retry 0。
 
-## 模型边界
+## 真实百炼研究证据
 
-- `ModelAdapter` 与业务逻辑解耦；默认测试使用 `DETERMINISTIC_FAKE_MODEL_V1`。
-- 正式真实适配器使用固定阿里云百炼 OpenAI-compatible Chat Completions endpoint、
-  `response_format=json_object`、客户端严格结构校验、redirects NEVER 和固定模型 `qwen3.7-plus`；
-  已完成的厂商无关 `ModelAdapter` 与 Responses 兼容实现继续保留。
-- 每次模型输出都经过工具白名单、Evidence ID、声明类型、置信度、数值引用和交易语言门禁；
-  task、Evidence 和前序摘要始终作为不可信数据。
-- 唯一固定 Credential Target 为 `StockQuant/BailianApiKey`。一次性脚本只从原生安全 Console
-  写入 Windows Credential Manager；适配器不会从环境变量、参数或明文文件降级。Broker 的
-  零网络可读性检查与真实 smoke 是两个固定 operation。
-- 百炼调用固定 `enable_thinking=false`，每次可见输出上限 600 tokens、单次研究最多 13 次模型调用；
-  每次网络调用前按 UTF-8 请求字节和最大输出作保守成本预留，任一未知结果终止适配器。当前
-  CNY 5.00 阶段预算已因旧结果 telemetry 不完整而保守全额占账；获得新增预算前 Broker 必须拒绝
-  新真实研究请求。
+- 成功 Broker request：`SQHB_20260811T235741Z_BCB57952F25D`；execution ID：
+  `M3SMOKE_20260811T235741Z_BCB57952F25D`；终态 `SUCCEEDED`。
+- 正式构建绑定 Git `c45ded2a7111fd2004dce3e7c8cab2cd61612e31`，JAR SHA-256：
+  `385a5cbd271b01e63fe0122e4d40f4775bdf16d6b1ea44fea0e9e9723df4206a`。
+- 13 次 Provider/model request 全部完成，retry 0；input 22,613、output 4,065、reasoning 0、
+  total 26,678 tokens；单次研究保守成本 CNY 0.858760000000。百炼 API 不返回账单金额，
+  `actualCostStatus=NOT_PROVIDED_BY_API`，因此不把估算值描述为实际账单。
+- 单次真实研究耗时 71.786 秒；输出审计 clean，结果脱敏，数据库只读快照不变，
+  Tushare 调用 0，永久数据库写入 0。
+- M1 只读输入覆盖 `600000/SSE`、`000001/SZSE` 的 7 个开市日；typed fact、
+  SYSTEM_KNOWLEDGE、formula-only QFQ、数据质量和无未来数据泄漏检查全部通过。
+- 运行时实际调用四种工具，形成 BUY_AND_HOLD、MOVING_AVERAGE_MOMENTUM、
+  MEAN_REVERSION、CROSS_SECTIONAL_MOMENTUM 四个 M2 策略实验；会计守恒和 look-ahead guard
+  全部通过。
+- Portfolio 的确定性排序首位为 `MEAN_REVERSION_V1`，风险等级 LOW，研究性建议总敞口上限
+  0.75、置信度上限 0.40；这不是交易指令。
+- Critic 识别 `OVERFITTING_RISK`、`METRIC_MISMATCH`、`DATA_QUALITY_GAP` 和
+  `PIT_LINEAGE_LIMITATION`，触发一次有界修正。由于真实窗口仅 7 日、无法形成有效 OOS，
+  Coordinator 最终正确输出 `INSUFFICIENT_EVIDENCE`、无策略偏好、confidence 0。
+- 最终报告含 11 条 Evidence、26 条 finding，其中 11 条为 UNKNOWN；研究指纹：
+  `36ca1bc07963f0b966bfaa4ac029ab51cf8681056938b051d5652d8b802c757d`。
 
-## Fake Model 与评测证据
+## 独立 CNY 5.00 预算账本
 
-- 百炼切换受影响定向回归 `48/0/0/0`：固定 endpoint/model、Chat Completions 请求、严格结构化
-  输出、CNY usage、HTTP/API 错误映射、零重试、7 Agent Fake Transport、Credential、Runner 与
-  Broker 合同均通过；Broker M3 协议 `11/0/0/0`，相关 PowerShell 5.1 语法错误 0。
-- 当前代码的打包 JAR + Fake Provider + PostgreSQL 16 临时实例 M1→M2→M3 E2E 再次 PASS；
-  Start-Class 为 `TushareM3AgentResearchManualRunner`，百炼/Tushare 真实调用 0、永久库写入 0、
-  临时残留 0；Vue/TypeScript production build PASS。
-- 最新受影响核心定向回归 `37/0/0/0`，包含动态结构契约、非 Critic 控制字段隔离、隐藏推理
-  usage 上限、运行时失败 telemetry、Agent Eval、Runner 与 Broker 合同；Broker M3 协议
-  `11/0/0/0`，百炼/Tushare 调用和永久库写入均为 0。
-- 4 证券 × 180 交易日 deterministic fixture 完成 4 个代表策略的 M1/M2 工具链研究。
-- 同输入、参数和固定时钟的完整 `ResearchReport` 与 SHA-256 指纹完全一致。
-- `AGENT_EVAL_V1` 15/15：数据引用、工具调用、回测引用、风险识别、未来数据拒绝、
-  虚假 Sharpe/收益拒绝、缺失数据拒绝、过拟合、高收益高回撤、Agent 冲突、Critic 修正、
-  prompt injection、deterministic replay 和最终报告一致性全部通过。
-- 打包 JAR + Fake Provider + PostgreSQL 16 临时实例完整 E2E 为 PASS：V1 至 V13、
-  M1 增量/幂等、M2 回测、M3 七 Agent、正式 Start-Class/build proof、Broker 兼容映射、
-  输出脱敏和临时残留 0；M1 Fake Provider 调用 18，M2/M3 Provider 调用 0。
-- 最终核心回归：`quant-core 16/0/0/0`、`quant-server 48/0/0/0`；后者包含 M3 Runtime、
-  validator、OpenAI-compatible adapter、Eval、报告/API、M1/M2 适配、正式 Runner、build proof 与本地自动化
-  合同。PowerShell 5.1 的 9 个相关脚本语法错误 0，Broker 协议 `7/0/0/0`，Vue/TypeScript
-  production build PASS，`git diff --check` PASS。
+- 新预算分 tranche `M3_BAILIAN_TRANCHE_2`，批准标记
+  `USER_APPROVED_M3_BAILIAN_SMOKE_TRANCHE_2_CNY_5_00`；与旧预算完全隔离。
+- 共 4 个真实研究 request、31 次 Provider request、29 次完整模型调用；已知 input 38,190、
+  output 8,059、reasoning 0、total 46,249 tokens。
+- 首次失败有 1 次已发请求未返回可用 usage；账本按最大输出和请求字节保守预留，不丢弃此前调用。
+- tranche 保守累计占账 CNY 1.777600000000，余额 CNY 3.222400000000；真实调用次数门限已经用尽，
+  不再为形式验证继续调用模型。
 
-## 真实 M1 数据只读 smoke
+## 最终验证
 
-- Broker request：`SQHB_20260811T071702Z_C8FB51E3D1FB`，终态 `SUCCEEDED`。
-- 输入：`M1_RESEARCH_DATASET_V1`，`600000/SSE`、`000001/SZSE`，
-  `2025-01-02` 至 `2025-01-10`。
-- 覆盖 7 个开市日、14 条 daily、14 条 adj_factor、18 条 trade_cal、14 条 formula-only QFQ；
-  typed fact、SYSTEM_KNOWLEDGE、数据质量和无未来数据泄漏均通过。
-- 4 个 M2 策略实验、4 次工具调用、9 次 Fake Model 调用、2 轮、7 个角色完整执行；
-  Critic 识别 `PIT_LINEAGE_LIMITATION` 与短窗口缺少样本外验证的 `OVERFITTING_RISK`，
-  并完成一次受限修正。
-- Portfolio 的机械排序首位为 `MEAN_REVERSION_V1`，但 7 日窗口不足以完成 train/test 和
-  walk-forward；最终判断正确降级为 `INSUFFICIENT_EVIDENCE`、confidence 0、无策略偏好。
-- 研究运行约 404 ms，打包 Runner 约 2.123 s；Fake Model token/cost 均为 0。
-- 输出审计 clean，Provider 调用 0；永久库前后五表计数快照相同，写入 0；请求无 pending/
-  processing 残留，结果与报告敏感模式命中 0。
+- M3 核心 Java 定向回归 `51/0/0/0`；`AGENT_EVAL_V1` 对抗场景 `15/15`。
+- 打包 JAR + Fake M1→M2→M3 + PostgreSQL 16 临时实例 E2E：PASS；V1 至 V13、M1 增量/幂等、
+  M2 回测、7 Agent、正式 Start-Class/build proof、Broker 映射、输出脱敏均通过。
+- Fake E2E 中 M1 Provider 调用 18，M2/M3 真实 Provider 调用 0，永久数据库写入 0，
+  临时 PostgreSQL 和请求状态残留 0。
+- 同输入、参数和固定时钟的 Fake Model 完整报告及 SHA-256 指纹可重复；PowerShell/Broker
+  协议受影响定向检查和 `git diff --check` 通过。
 
-## 阶段内自主修复
+## 阶段内自主解决的重要问题
 
-- 将模型工具调用从“运行时预先执行、模型事后描述”收口为 Coordinator 先规划、四个专业 Agent
-  分别选择白名单工具、运行时验证选择后才执行确定性工具；专业工作流在 Portfolio 综合前不接收
-  其他 Agent 摘要。当前完整流程为 13 次模型调用，Prompt 正式升级到 V2。
-- 新增固定百炼 Credential、输出审计注册、零网络探针、OpenAI-compatible API 成本/次数硬门禁和
-  Host Broker 固定 M3 operation；没有动态 Target、动态 URL、命令文本、环境变量密钥或重试。
+- 将模型工具调用收口为“Agent 选择 → 白名单/权限校验 → 确定性工具执行”，避免模型编造行情、
+  指标或回测结果。
+- 修复失败路径 usage 丢失、历史结果兼容、响应 token 上限、精确 JSON/tool 选择解析、
+  Critic 控制字段隔离和错误分类；所有真实调用均保留脱敏预算证据。
+- 对模型提出但 M1/M2 Evidence 不支持的数值或因果声明确定性降级为 UNKNOWN；动态命令、
+  越权工具、可执行交易语言和无效 Evidence 继续 fail-closed。
+- 百炼 Key 只由 Resident Broker 从固定 `StockQuant/BailianApiKey` 读取；未写入参数、环境变量、
+  文件、日志、request、result 或 Git。
 
-- 已运行 Resident Broker 进程只识别既有 M2 任务分支，首次 M3 请求在秘密读取前以
-  `STOCK_QUANT_HOST_BROKER_GIT_BINDING_INVALID` 安全拒绝。修复只允许固定 M3 分支、固定 M3 JAR
-  复用零 Provider、只读 M2 operation；没有增加 operation、动态命令、Credential Target 或网络权限。
-- 在 IDLE 且无待处理请求时终止旧 Broker；既有 PT1M watchdog 约 18 秒后以新 HEAD 恢复单实例
-  `IDLE`。随后真实 M1 只读 smoke 通过，证明该兼容边界有效。
+## 已知限制与下一阶段边界
 
-## 已知限制与外部前置条件
-
-- 真实 M1 窗口只有 7 个开市日，只证明工具、时序、证据和协作链路，不证明 alpha；较长窗口的
-  train/test、walk-forward、过拟合识别由 deterministic fixture 覆盖。
-- M1 仍是 SYSTEM_KNOWLEDGE 与 formula-only QFQ，`PROVIDER_PIT_VERIFIED=false`；完整 F1 十项
-  技术证据缺口不变。
-- 覆盖更新后的百炼 API Key 已通过 Broker 零网络可读性验证，并在北京官方 OpenAI-compatible
-  endpoint 得到 HTTP 200 合法 JSON；原外部 Key/地域绑定阻断已经解除。真实研究仍未完成，当前
-  唯一外部门是新增百炼预算，因为最后一次旧代码运行缺少可审计的累计 usage telemetry。
-- M3 不启动 M4、Shadow、业务 scheduler、真实订单、实盘或自动交易。
-
-## 真实百炼 smoke 阻断证据（2026-08-11）
-
-- 用户批准模型 `qwen3.7-plus` 与阶段总成本上限 CNY 5.00。Broker 零网络 Credential request
-  `SQHB_20260811T110240Z_6718DC513DAC` 成功，网络调用 0、输出审计通过。
-- 脱敏诊断 request `SQHB_20260811T110306Z_69BAAA58B4FC` 只发出 1 次 HTTP 请求，retry 0；
-  HTTP status 401，响应 Content-Type 为 JSON，JSON 解析成功，body error code 规范化为
-  `INVALID_API_KEY`，分类为 `AUTHENTICATION / INVALID_OR_UNBOUND_API_KEY`。模型完成调用 0，
-  token usage 0，保守占账 CNY 0.125；输出审计 clean，数据库写入 0，Tushare 调用 0。
-- 前一版缺少失败遥测的首个请求按 CNY 0.50 保守占账；一次 Runner 前账本兼容失败可证明模型调用 0。
-  在该历史 checkpoint，保守累计占账为 CNY 0.625；这不是当前剩余预算。
-- 阿里云官方错误码文档明确：`InvalidApiKey` 包括 Key 填写/删除、`sk-sp-` 套餐专属 Key 与通用
-  Base URL 混用、以及 Key 与 Base URL 地域不一致；官方模型卡同时为 `qwen3.7-plus` 列出带
-  `WorkspaceId` 的区域化 MaaS Base URL。该历史外部绑定阻断已由后续覆盖 Key 的 HTTP 200 证据解除。
-- 代码修复提交 `0bd0f030e3b8a8b0d24273a63d54ee86fe213906` 增加 HTTP status、body code、
-  Content-Type/JSON、调用数与成本的脱敏失败证据；`6214d739ccd6823b81a3b46bdb6e187512a54caf`
-  修复旧结果在 PowerShell StrictMode 下的预算账本兼容。打包 Fake M1→M2→M3 + 临时
-  PostgreSQL E2E 再次 PASS，临时残留 0。
-- Key 覆盖后，零网络检查 request `SQHB_20260811T112215Z_25694F644A9A` 成功；request
-  `SQHB_20260811T112254Z_471D88A6465D` 得到 HTTP 200、合法 JSON、无 Provider error，但百炼
-  混合 thinking usage 被旧的 600-token 可见输出门误判。提交
-  `702142381e495c16b9cb066cc38e318dfd5db637` 固定 `enable_thinking=false`，并把四个 usage
-  拒绝条件拆成独立脱敏 reason；Fake Transport 复现与定向回归通过。
-- 技术恢复 request `SQHB_20260811T113104Z_F5EF48861C2B` 通过 HTTP/JSON/usage 解析后，被本地
-  `M3_MODEL_CRITIC_AUTHORITY_REJECTED` 阻断，retry 0、Tushare 调用 0、永久库写入 0、输出审计
-  clean。该旧 Runner 只为 Provider 异常持久化 telemetry，未为后续本地 guard 保存累计调用与
-  usage；因此精确调用数和成本不可追溯，不能用运行时长或 reason 猜测。
-- 提交 `5c47cde5da6e52255f3dd050eda6954f4fbda99b` 将非 Critic 控制字段在官方 Adapter 边界
-  确定性隔离、生成按角色/阶段收窄的 JSON 契约，并在任意后续本地 guard 失败时持久化完整脱敏
-  telemetry。Broker 对历史缺失 telemetry 的真实运行按当时全部剩余预算占账；当前保守累计恰为
-  CNY 5.00，禁止继续真实请求。修复后的 37 项定向回归、11 项 Broker 协议及打包 Fake
-  M1→M2→M3 + 临时 PostgreSQL E2E 均 PASS，真实百炼新增调用 0、临时残留 0。
-- 当前结论：`EXTERNAL_BAILIAN_BUDGET_REQUIRED`。在用户批准一笔新的、明确隔离的真实百炼
-  预算前，不得再次调用百炼，不得声明 `M3_AGENT_RESEARCH_READY=PASS`，不得执行最终集成收口。
+- 真实 M1 样本只有 7 个开市日，只证明工具、时序、证据和协作链路，不证明 alpha；较长窗口、
+  train/test、walk-forward 和过拟合识别由 deterministic fixture 覆盖。
+- 当前仍为 SYSTEM_KNOWLEDGE 与 formula-only QFQ，`PROVIDER_PIT_VERIFIED=false`；完整 F1
+  十项技术证据缺口不变。
+- M3 达到进入 `M4_SHADOW_READY` 的技术前置条件，但 M4 尚未授权或启动；M3 PASS 不授权
+  Shadow、自动定时推荐、真实订单、实盘或自动交易。
