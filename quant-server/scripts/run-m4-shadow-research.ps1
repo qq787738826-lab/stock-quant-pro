@@ -78,19 +78,36 @@ try {
         ($ExecutionMode -eq 'FAKE' -and $DatabasePort -eq 38432)) {
         throw 'M4_SHADOW_RESEARCH_PATH_OR_MODE_INVALID'
     }
-    $output = @(& java "-Dloader.main=$runner" -cp $artifact `
-        'org.springframework.boot.loader.launch.PropertiesLauncher' `
-        "--result-file=$result" "--execution-id=$ExecutionId" `
-        "--database-port=$DatabasePort" `
-        "--execution-mode=$ExecutionMode" "--securities=$Securities" `
-        "--range-start=$RangeStart" "--trade-date=$TradeDate" `
-        "--next-trade-date=$NextTradeDate" `
-        "--capture-mode=$CaptureMode" "--trigger-mode=$TriggerMode" `
-        ("--maximum-cost-cny=" + $MaximumCostCny.ToString(
-            [Globalization.CultureInfo]::InvariantCulture)) 2>&1 |
-        ForEach-Object { [string]$_ })
-    if ($LASTEXITCODE -ne 0) {
-        Write-Output "M4_SHADOW_RESEARCH_FAILURE_REASON=$(Safe-Reason $output)"
+    $savedErrorAction = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        $output = @(& java "-Dloader.main=$runner" -cp $artifact `
+            'org.springframework.boot.loader.launch.PropertiesLauncher' `
+            "--result-file=$result" "--execution-id=$ExecutionId" `
+            "--database-port=$DatabasePort" `
+            "--execution-mode=$ExecutionMode" "--securities=$Securities" `
+            "--range-start=$RangeStart" "--trade-date=$TradeDate" `
+            "--next-trade-date=$NextTradeDate" `
+            "--capture-mode=$CaptureMode" "--trigger-mode=$TriggerMode" `
+            ("--maximum-cost-cny=" + $MaximumCostCny.ToString(
+                [Globalization.CultureInfo]::InvariantCulture)) 2>&1 |
+            ForEach-Object { [string]$_ })
+        $runnerExitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $savedErrorAction
+    }
+    if ($runnerExitCode -ne 0) {
+        $safeReason = Safe-Reason $output
+        if (Test-Path -LiteralPath $result -PathType Leaf) {
+            $failed = Get-Content -LiteralPath $result -Raw -Encoding UTF8 |
+                ConvertFrom-Json
+            if ($failed.schemaVersion -eq 'M4_SHADOW_RESEARCH_RESULT_V1' -and
+                [string]$failed.failureReason -match
+                    '^[A-Z][A-Z0-9_]{3,127}$') {
+                $safeReason = [string]$failed.failureReason
+            }
+        }
+        Write-Output "M4_SHADOW_RESEARCH_FAILURE_REASON=$safeReason"
         exit 20
     }
     if (-not (Test-Path -LiteralPath $result -PathType Leaf)) {
