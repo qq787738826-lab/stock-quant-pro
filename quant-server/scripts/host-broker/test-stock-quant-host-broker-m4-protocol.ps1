@@ -114,6 +114,14 @@ try {
     }
     $tests++
 
+    $invoker = Get-Content -LiteralPath (Join-Path $PSScriptRoot
+        'invoke-stock-quant-host-broker.ps1') -Raw -Encoding UTF8
+    if ($invoker -notmatch '\$resolvedM4TradeDate\s*=\s*if\s*\(\$TradeDate' -or
+        $invoker -match '(?im)^\s*\$tradeDate\s*=\s*if\s*\(') {
+        throw 'M4_PROTOCOL_TRADE_DATE_PARAMETER_COLLISION'
+    }
+    $tests++
+
     $mutations = @(
         @('maximum.provider.requests', '7'),
         @('retry.budget', '1'),
