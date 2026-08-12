@@ -50,9 +50,17 @@ public final class PowerShellShadowResearchDispatchGateway
     }
 
     @Override
-    public DispatchResult dispatch(LocalDate tradeDate, Instant researchAsOf) {
+    public DispatchResult dispatch(
+            LocalDate tradeDate,
+            Instant researchAsOf,
+            ShadowResearchRepository.CalendarState calendarState
+    ) {
         Objects.requireNonNull(tradeDate, "tradeDate");
         Objects.requireNonNull(researchAsOf, "researchAsOf");
+        Objects.requireNonNull(calendarState, "calendarState");
+        if (calendarState == ShadowResearchRepository.CalendarState.CLOSED) {
+            throw invalid("M4_SCHEDULER_CLOSED_DATE_DISPATCH_FORBIDDEN");
+        }
         String requestId = requestId(researchAsOf);
         if (!repository.claimScheduledDispatch(tradeDate, requestId,
                 researchAsOf)) {
@@ -75,7 +83,10 @@ public final class PowerShellShadowResearchDispatchGateway
                     script.toString(), "-Operation",
                     "RUN_M4_SHADOW_RESEARCH", "-ArtifactPath",
                     artifact.toString(), "-RequestId", requestId,
-                    "-TradeDate", tradeDate.toString(), "-SubmitOnly",
+                    "-TradeDate", tradeDate.toString(),
+                    "-CalendarAdmission", calendarState ==
+                    ShadowResearchRepository.CalendarState.OPEN
+                    ? "KNOWN_OPEN" : "UNKNOWN", "-SubmitOnly",
                     "-TimeoutSeconds", "5");
             Process process = new ProcessBuilder(command)
                     .directory(root.toFile()).redirectErrorStream(true)

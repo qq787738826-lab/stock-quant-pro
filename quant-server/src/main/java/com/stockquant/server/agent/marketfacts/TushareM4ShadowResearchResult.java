@@ -31,7 +31,8 @@ public final class TushareM4ShadowResearchResult {
             int retryCount,
             boolean fake,
             boolean auditClean,
-            FailureDiagnostics modelDiagnostics
+            FailureDiagnostics modelDiagnostics,
+            int maintainedPaperFillCount
     ) {
         var report = shadow.snapshot().report();
         return new Result(VERSION, "SUCCEEDED", executionId, gitCommit,
@@ -62,7 +63,8 @@ public final class TushareM4ShadowResearchResult {
                 report.dataset().systemKnowledgeReadback(),
                 report.dataset().formulaOnlyQfq(),
                 report.dataset().noFutureDataLeakage(),
-                shadow.orders().size(), shadow.fills().size(),
+                shadow.orders().size(),
+                shadow.fills().size() + maintainedPaperFillCount,
                 shadow.portfolio().cash(),
                 shadow.portfolioSnapshot().totalEquity(),
                 shadow.portfolioSnapshot().totalReturn(), auditClean, fake,
@@ -95,6 +97,26 @@ public final class TushareM4ShadowResearchResult {
                 null, null, null, false, false, false, false, 0, 0, null,
                 null, null, auditClean, false, true, false, false,
                 modelDiagnostics, reason);
+    }
+
+    static Result skippedNonTradingDay(
+            String executionId,
+            String gitCommit,
+            Instant startedAt,
+            Instant completedAt,
+            java.time.LocalDate tradeDate,
+            int providerCalls,
+            int retryCount,
+            boolean fake,
+            boolean auditClean
+    ) {
+        return new Result(VERSION, "SKIPPED_NON_TRADING_DAY", executionId,
+                gitCommit, startedAt, completedAt, providerCalls, retryCount,
+                0, 0, 0, 0, 0, java.math.BigDecimal.ZERO, "CNY",
+                null, null, tradeDate, null, null, null, null, null, null,
+                null, null, 0, 0, List.of(), null, null, null, List.of(), 0,
+                null, null, null, false, false, false, false, 0, 0, null,
+                null, null, auditClean, fake, true, false, false, null, null);
     }
 
     public record Result(

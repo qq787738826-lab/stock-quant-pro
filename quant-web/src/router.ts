@@ -17,6 +17,7 @@ export default createRouter({
     { path: '/agent-research', component: () => import('./views/AgentResearchWorkbench.vue') },
     { path: '/agent-shadow', component: () => import('./views/AgentShadowWorkbench.vue') },
     { path: '/shadow-research', component: () => import('./views/ShadowResearchWorkbench.vue') },
+    { path: '/agent-evaluation', component: () => import('./views/AgentEvaluationWorkbench.vue') },
     { path: '/market', component: () => import('./views/Market.vue') },
     { path: '/data', component: () => import('./views/DataCenter.vue') },
     { path: '/watchlist', component: placeholder('自选股') },

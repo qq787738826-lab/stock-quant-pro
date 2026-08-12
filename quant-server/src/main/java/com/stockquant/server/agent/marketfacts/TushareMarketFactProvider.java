@@ -662,6 +662,31 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
         return fetch(request, QueryMode.CONTROLLED_NO_RETRY, session);
     }
 
+    /** M4-only exchange calendar refresh; no price or factor endpoint. */
+    MarketFactResponse fetchForM4CalendarAdmission(
+            MarketFactRequest request,
+            TushareManualBoundedSession session
+    ) {
+        if (session == null || session.sessionProfile()
+                != TushareManualBoundedSession.SessionProfile
+                .M4_CALENDAR_ADMISSION
+                || session.maximumBusinessRequests() != 2
+                || !session.allowedEndpoints().equals(Set.of("trade_cal"))
+                || session.automaticRetryAllowed()) {
+            throw new IllegalArgumentException(
+                    "M4_CALENDAR_ADMISSION_SESSION_INVALID");
+        }
+        if (request == null
+                || !request.factTypes().equals(
+                Set.of(FactType.TRADING_CALENDAR))
+                || !request.rangeStart().equals(session.allowedStart())
+                || !request.rangeEnd().equals(session.allowedEnd())) {
+            throw new IllegalArgumentException(
+                    "M4_CALENDAR_ADMISSION_SCOPE_INVALID");
+        }
+        return fetch(request, QueryMode.CONTROLLED_NO_RETRY, session);
+    }
+
     /**
      * Performs exactly one daily request for an already user-approved M1
      * credential verification. No database component is involved.

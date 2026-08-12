@@ -27,8 +27,15 @@ param(
     [ValidatePattern('^20[0-9]{2}-[0-9]{2}-[0-9]{2}$')]
     [string] $TradeDate,
 
-    [ValidatePattern('^(NONE|20[0-9]{2}-[0-9]{2}-[0-9]{2})$')]
-    [string] $NextTradeDate = 'NONE',
+    [ValidateSet('INTERNAL_CALENDAR')]
+    [string] $NextTradeDate = 'INTERNAL_CALENDAR',
+
+    [ValidateSet('KNOWN_OPEN', 'UNKNOWN')]
+    [string] $CalendarAdmission = 'KNOWN_OPEN',
+
+    [Parameter(Mandatory = $true)]
+    [ValidatePattern('^20[0-9]{2}-[0-9]{2}-[0-9]{2}$')]
+    [string] $CalendarHorizonEnd,
 
     [ValidateSet('CAPTURE', 'IDEMPOTENCY_VERIFICATION')]
     [string] $CaptureMode = 'CAPTURE',
@@ -88,6 +95,8 @@ try {
             "--execution-mode=$ExecutionMode" "--securities=$Securities" `
             "--range-start=$RangeStart" "--trade-date=$TradeDate" `
             "--next-trade-date=$NextTradeDate" `
+            "--calendar-admission=$CalendarAdmission" `
+            "--calendar-horizon-end=$CalendarHorizonEnd" `
             "--capture-mode=$CaptureMode" "--trigger-mode=$TriggerMode" `
             ("--maximum-cost-cny=" + $MaximumCostCny.ToString(
                 [Globalization.CultureInfo]::InvariantCulture)) 2>&1 |
@@ -115,9 +124,33 @@ try {
     }
     $value = Get-Content -LiteralPath $result -Raw -Encoding UTF8 |
         ConvertFrom-Json
+    if ($value.schemaVersion -eq 'M4_SHADOW_RESEARCH_RESULT_V1' -and
+        $value.status -eq 'SKIPPED_NON_TRADING_DAY') {
+        if ($CalendarAdmission -ne 'UNKNOWN' -or
+            [int]$value.tushareProviderCallCount -ne 2 -or
+            [int]$value.retryCount -ne 0 -or
+            [int]$value.modelProviderRequestCount -ne 0 -or
+            [int]$value.modelCallCount -ne 0 -or
+            [int]$value.toolCallCount -ne 0 -or
+            @($value.agentRoles).Count -ne 0 -or
+            [decimal]$value.conservativeCostCny -ne [decimal]0 -or
+            -not $value.outputAuditClean -or
+            -not $value.researchOnly -or $value.brokerConnected -or
+            $value.realTradingStarted) {
+            throw 'M4_SHADOW_RESEARCH_NON_TRADING_SKIP_INVALID'
+        }
+        Write-Output `
+            'M4_SHADOW_RESEARCH_AUTOMATION_STATUS=SKIPPED_NON_TRADING_DAY'
+        Write-Output "M4_SHADOW_RESEARCH_EXECUTION_ID=$ExecutionId"
+        Write-Output "M4_SHADOW_RESEARCH_RESULT=$result"
+        exit 0
+    }
+    $expectedProviderCalls = if ($CalendarAdmission -eq 'UNKNOWN') {
+        8
+    } else { 6 }
     if ($value.schemaVersion -ne 'M4_SHADOW_RESEARCH_RESULT_V1' -or
         $value.status -ne 'SUCCEEDED' -or
-        [int]$value.tushareProviderCallCount -ne 6 -or
+        [int]$value.tushareProviderCallCount -ne $expectedProviderCalls -or
         [int]$value.retryCount -ne 0 -or
         [int]$value.modelCallCount -ne 13 -or
         [int]$value.toolCallCount -ne 4 -or

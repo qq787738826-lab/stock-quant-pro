@@ -29,6 +29,8 @@ final class TushareDedicatedResearchRuntimeComponents implements AutoCloseable {
     private final TushareMarketFactProperties properties;
     private final TushareDedicatedResearchBatchService batchService;
     private final TushareM1ResearchDataService m1ResearchDataService;
+    private final TushareM4TradingCalendarAdmissionService
+            m4CalendarAdmissionService;
     private final TushareM1ResearchDatasetService m1ResearchDatasetService;
     private final TushareControlledAcceptanceReadbackService readbackService;
 
@@ -37,6 +39,8 @@ final class TushareDedicatedResearchRuntimeComponents implements AutoCloseable {
             TushareMarketFactProperties properties,
             TushareDedicatedResearchBatchService batchService,
             TushareM1ResearchDataService m1ResearchDataService,
+            TushareM4TradingCalendarAdmissionService
+                    m4CalendarAdmissionService,
             TushareM1ResearchDatasetService m1ResearchDatasetService,
             TushareControlledAcceptanceReadbackService readbackService
     ) {
@@ -44,6 +48,7 @@ final class TushareDedicatedResearchRuntimeComponents implements AutoCloseable {
         this.properties = properties;
         this.batchService = batchService;
         this.m1ResearchDataService = m1ResearchDataService;
+        this.m4CalendarAdmissionService = m4CalendarAdmissionService;
         this.m1ResearchDatasetService = m1ResearchDatasetService;
         this.readbackService = readbackService;
     }
@@ -150,10 +155,16 @@ final class TushareDedicatedResearchRuntimeComponents implements AutoCloseable {
                 new TushareM1ResearchDatasetService(facts, jdbc);
         TushareM1ResearchDataService m1 = new TushareM1ResearchDataService(
                 provider, dedicatedGuard, capture, m1Dataset, clock);
+        TushareM4TradingCalendarAdmissionService m4Calendar =
+                new TushareM4TradingCalendarAdmissionService(provider,
+                        dedicatedGuard, capture,
+                        new org.springframework.transaction.support
+                                .TransactionTemplate(transactions), clock);
         TushareControlledAcceptanceReadbackService readback =
                 new TushareControlledAcceptanceReadbackService(jdbc, dedicatedGuard);
         return new TushareDedicatedResearchRuntimeComponents(
-                mapper, properties, batch, m1, m1Dataset, readback);
+                mapper, properties, batch, m1, m4Calendar, m1Dataset,
+                readback);
     }
 
     private static ObjectMapper mapper() {
@@ -183,6 +194,10 @@ final class TushareDedicatedResearchRuntimeComponents implements AutoCloseable {
 
     TushareM1ResearchDataService m1ResearchDataService() {
         return m1ResearchDataService;
+    }
+
+    TushareM4TradingCalendarAdmissionService m4CalendarAdmissionService() {
+        return m4CalendarAdmissionService;
     }
 
     TushareM1ResearchDatasetService m1ResearchDatasetService() {

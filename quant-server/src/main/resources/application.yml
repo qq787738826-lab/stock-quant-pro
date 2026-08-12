@@ -33,14 +33,17 @@ quant:
 stockquant:
   shadow-research:
     scheduler:
-      enabled: ${M4_SHADOW_SCHEDULER_ENABLED:false}
+      enabled: ${M4_SHADOW_SCHEDULER_ENABLED:true}
       cron: "0 20 17 * * MON-FRI"
       zone: Asia/Shanghai
       safe-window-start: "17:15"
       safe-window-end: "20:00"
-      maximum-tushare-requests: 6
+      maximum-tushare-requests: 8
       maximum-model-calls: 13
       submit-timeout-seconds: 30
+      monthly-tushare-request-limit: 150
+      monthly-bailian-cost-limit-cny: 30.00
+      project-monthly-api-cost-limit-cny: 200.00
   agent-team:
     enabled: ${AGENT_TEAM_ENABLED:false}
     base-url: ${AGENT_TEAM_BASE_URL:${quant.ai-service-url}}

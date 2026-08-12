@@ -28,6 +28,9 @@ param(
     [ValidatePattern('^(AUTO|20[0-9]{2}-[0-9]{2}-[0-9]{2})$')]
     [string] $TradeDate = 'AUTO',
 
+    [ValidateSet('KNOWN_OPEN', 'UNKNOWN')]
+    [string] $CalendarAdmission = 'KNOWN_OPEN',
+
     [switch] $SubmitOnly,
 
     [ValidateRange(5, 2700)]
@@ -238,8 +241,12 @@ try {
             'source.request.id' = $SourceRequestId
         }
     } elseif ($Operation -eq 'RUN_M4_SHADOW_RESEARCH') {
+        $chinaZone = [TimeZoneInfo]::FindSystemTimeZoneById(
+            'China Standard Time')
+        $chinaNow = [TimeZoneInfo]::ConvertTime(
+            [DateTimeOffset]::UtcNow, $chinaZone)
         $resolvedM4TradeDate = if ($TradeDate -eq 'AUTO') {
-            [DateTime]::UtcNow.Date.AddDays(-1)
+            $chinaNow.Date
         } else {
             [DateTime]::ParseExact($TradeDate, 'yyyy-MM-dd',
                 [Globalization.CultureInfo]::InvariantCulture)
@@ -249,18 +256,34 @@ try {
             $resolvedM4TradeDate = $resolvedM4TradeDate.AddDays(-1)
         }
         $rangeStart = $resolvedM4TradeDate.AddDays(-30)
-        $priorTushare = 0
-        $m4Files = @(Get-ChildItem -LiteralPath $paths.Results -File `
-            -Filter 'SQHB_*.m4-shadow.json')
-        foreach ($file in $m4Files) {
-            $prior = Get-Content -LiteralPath $file.FullName -Raw `
-                -Encoding UTF8 | ConvertFrom-Json
-            if ($prior.schemaVersion -ne 'M4_SHADOW_RESEARCH_RESULT_V1' -or
-                [int]$prior.tushareProviderCallCount -lt 0 -or
-                [int]$prior.tushareProviderCallCount -gt 6) {
-                throw 'M4_STAGE_BUDGET_LEDGER_INVALID'
-            }
-            $priorTushare += [int]$prior.tushareProviderCallCount
+        $calendarHorizonEnd = $resolvedM4TradeDate.AddDays(30)
+        $m4ProviderRequests = if ($CalendarAdmission -eq 'UNKNOWN') {
+            8
+        } else { 6 }
+        $m4CalendarRequests = if ($CalendarAdmission -eq 'UNKNOWN') {
+            4
+        } else { 2 }
+        $calendarMonth = $chinaNow.ToString('yyyy-MM')
+        $usage = Get-StockQuantM4MonthlyUsage `
+            -CalendarMonth $calendarMonth
+        [decimal]$shadowCost = [decimal]::Parse(
+            [string]$usage.ShadowCostCny,
+            [Globalization.NumberStyles]::Number,
+            [Globalization.CultureInfo]::InvariantCulture)
+        [decimal]$projectCost = [decimal]::Parse(
+            [string]$usage.ProjectCostCny,
+            [Globalization.NumberStyles]::Number,
+            [Globalization.CultureInfo]::InvariantCulture)
+        [decimal]$remainingCost = [decimal]5.00
+        if ([decimal]30.00 - $shadowCost -lt $remainingCost) {
+            $remainingCost = [decimal]30.00 - $shadowCost
+        }
+        if ([decimal]200.00 - $projectCost -lt $remainingCost) {
+            $remainingCost = [decimal]200.00 - $projectCost
+        }
+        if ($remainingCost -le 0 -or
+            [int]$usage.TushareCalls + $m4ProviderRequests -gt 150) {
+            throw 'M4_MONTHLY_BUDGET_EXHAUSTED'
         }
         $requestValues = [ordered]@{
             'schema.version' = 'STOCK_QUANT_HOST_BROKER_REQUEST_V1'
@@ -284,9 +307,15 @@ try {
             'securities' = '600000:SSE,000001:SZSE'
             'range.start' = $rangeStart.ToString('yyyy-MM-dd')
             'trade.date' = $resolvedM4TradeDate.ToString('yyyy-MM-dd')
-            'next.trade.date' = 'NONE'
+            # The fixed runner resolves the next common SSE/SZSE open date
+            # only from captured PIT calendar facts.  Requests cannot inject
+            # a dynamic execution date.
+            'next.trade.date' = 'INTERNAL_CALENDAR'
+            'calendar.admission' = $CalendarAdmission
+            'calendar.horizon.end' =
+                $calendarHorizonEnd.ToString('yyyy-MM-dd')
             'capture.mode' = 'CAPTURE'
-            'trigger.mode' = 'MANUAL'
+            'trigger.mode' = 'SCHEDULED'
             'database.host' = '127.0.0.1'
             'database.port' = '38432'
             'database.name' = 'stock_quant_research'
@@ -296,25 +325,34 @@ try {
             'tushare.endpoints' = 'daily,adj_factor,trade_cal'
             'endpoint.daily.requests' = '2'
             'endpoint.adj_factor.requests' = '2'
-            'endpoint.trade_cal.requests' = '2'
-            'maximum.provider.requests' = '6'
-            'tushare.stage.limit' = '20'
-            'tushare.stage.calls.before' = [string]$priorTushare
+            'endpoint.trade_cal.requests' = [string]$m4CalendarRequests
+            'maximum.provider.requests' = [string]$m4ProviderRequests
+            'budget.calendar.month' = $calendarMonth
+            'tushare.monthly.limit' = '150'
+            'tushare.monthly.calls.before' =
+                [string]$usage.TushareCalls
             'llm.provider' = 'BAILIAN'
             'model' = 'qwen3.7-plus'
             'provider.endpoint' =
                 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'
             'maximum.model.calls' = '13'
             'maximum.output.tokens.per.call' = '900'
-            'maximum.cost.cny' = '5.00'
-            'llm.stage.limit.cny' = '10.00'
+            'maximum.cost.cny' = $remainingCost.ToString(
+                [Globalization.CultureInfo]::InvariantCulture)
+            'llm.monthly.limit.cny' = '30.00'
+            'llm.monthly.cost.before.cny' =
+                [string]$usage.ShadowCostCny
+            'project.monthly.limit.cny' = '200.00'
+            'project.monthly.cost.before.cny' =
+                [string]$usage.ProjectCostCny
             'retry.budget' = '0'
             'redirects' = 'NEVER'
             'user.approval.reference' =
-                'USER_APPROVED_M4_SHADOW_RESEARCH_CNY_10_TUSHARE_20'
+                'USER_APPROVED_M4_CONTINUOUS_SHADOW_MONTHLY'
             'created.at' = $createdAt.ToString('o')
             'expires.at' = $expiresAt.ToString('o')
-            'execution.source' = 'M4_SHADOW_RESEARCH_REAL_SMOKE'
+            'execution.source' =
+                'M4_SHADOW_RESEARCH_CONTINUOUS_SCHEDULED'
             'no.retry' = 'true'
             'source.request.id' = 'NONE'
         }

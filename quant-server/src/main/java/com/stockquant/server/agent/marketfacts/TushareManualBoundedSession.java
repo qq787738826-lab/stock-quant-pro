@@ -33,6 +33,7 @@ public final class TushareManualBoundedSession {
     public static final int M1_MAX_SYMBOLS = 3;
     public static final int M1_MAX_NATURAL_DAYS = 31;
     public static final int M1_TOKEN_VERIFICATION_MAX_PROVIDER_REQUESTS = 1;
+    public static final int M4_CALENDAR_ADMISSION_MAX_PROVIDER_REQUESTS = 2;
     /**
      * Natural-day bound for daily, adj_factor and trade_cal only.
      * Reference endpoints have no date parameters and remain bounded by
@@ -273,6 +274,40 @@ public final class TushareManualBoundedSession {
                 SessionProfile.M1_TOKEN_VERIFICATION);
     }
 
+    /** Two exchange-scoped trade_cal calls for a bounded M4 horizon. */
+    public static TushareManualBoundedSession m4CalendarAdmission(
+            java.util.List<TushareDedicatedResearchBatchCommand
+                    .SecuritySelection> securities,
+            LocalDate rangeStart,
+            LocalDate rangeEnd
+    ) {
+        Objects.requireNonNull(securities, "securities");
+        Objects.requireNonNull(rangeStart, "rangeStart");
+        Objects.requireNonNull(rangeEnd, "rangeEnd");
+        if (securities.size() != 2 || rangeEnd.isBefore(rangeStart)
+                || ChronoUnit.DAYS.between(rangeStart, rangeEnd) + 1
+                > M1_MAX_NATURAL_DAYS) {
+            throw new IllegalArgumentException(
+                    "M4_CALENDAR_ADMISSION_SESSION_INVALID");
+        }
+        Set<String> symbols = new java.util.LinkedHashSet<>();
+        Set<String> exchanges = new java.util.LinkedHashSet<>();
+        securities.forEach(security -> {
+            symbols.add(security.providerInstrumentId());
+            exchanges.add(security.exchange());
+        });
+        if (!exchanges.equals(Set.of("SSE", "SZSE"))
+                || symbols.size() != 2) {
+            throw new IllegalArgumentException(
+                    "M4_CALENDAR_ADMISSION_SESSION_INVALID");
+        }
+        return new TushareManualBoundedSession(
+                M4_CALENDAR_ADMISSION_MAX_PROVIDER_REQUESTS,
+                Set.copyOf(symbols), Set.copyOf(exchanges), rangeStart,
+                rangeEnd, Set.of("trade_cal"), false, 0,
+                SessionProfile.M4_CALENDAR_ADMISSION);
+    }
+
     /**
      * Validates and atomically reserves one provider business request.
      * The budget failure happens before the HTTP strategy is invoked.
@@ -467,6 +502,21 @@ public final class TushareManualBoundedSession {
                     "TUSHARE_M1_TOKEN_VERIFICATION_IDENTITY_INVALID");
             return;
         }
+        if (sessionProfile == SessionProfile.M4_CALENDAR_ADMISSION) {
+            if (maximumBusinessRequests
+                    != M4_CALENDAR_ADMISSION_MAX_PROVIDER_REQUESTS
+                    || allowedSymbols.size() != 2
+                    || !allowedExchanges.equals(Set.of("SSE", "SZSE"))
+                    || !allowedEndpoints.equals(Set.of("trade_cal"))
+                    || automaticRetryAllowed
+                    || initiallyConsumedBusinessRequests != 0) {
+                throw new IllegalArgumentException(
+                        "M4_CALENDAR_ADMISSION_SESSION_INVALID");
+            }
+            validateSymbolIdentities(allowedSymbols, allowedExchanges,
+                    "M4_CALENDAR_ADMISSION_IDENTITY_INVALID");
+            return;
+        }
         if (sessionProfile != SessionProfile.F1E_DEDICATED_LOCAL_MANUAL
                 || maximumBusinessRequests != allowedSymbols.size() * 3
                 || maximumBusinessRequests
@@ -512,6 +562,7 @@ public final class TushareManualBoundedSession {
             case F1E_DEDICATED_LOCAL_MANUAL -> F1E_MAX_NATURAL_DAYS;
             case M1_RESEARCH_DATA_MANUAL -> M1_MAX_NATURAL_DAYS;
             case M1_TOKEN_VERIFICATION -> 1;
+            case M4_CALENDAR_ADMISSION -> M1_MAX_NATURAL_DAYS;
         };
     }
 
@@ -537,6 +588,7 @@ public final class TushareManualBoundedSession {
         F1C_ISOLATED_MANUAL,
         F1E_DEDICATED_LOCAL_MANUAL,
         M1_RESEARCH_DATA_MANUAL,
-        M1_TOKEN_VERIFICATION
+        M1_TOKEN_VERIFICATION,
+        M4_CALENDAR_ADMISSION
     }
 }

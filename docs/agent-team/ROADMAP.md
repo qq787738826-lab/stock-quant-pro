@@ -586,14 +586,18 @@ Codex 不得申请、激活或自动调用 iFinD。
 - 根据 15 天真实证据、书面许可和合同附件，唯一判定为 `PROVIDER_PIT_VERIFIED`、`PROVIDER_REVISION_UNVERIFIED`、`PROVIDER_REVISION_UNAVAILABLE`、`SYSTEM_KNOWLEDGE_PIT`，或许可不足/不批准接入。
 - 资格结论必须通过 ChatGPT 对实际 Git 提交和运行证据的验收并经用户批准，之后才能决定是否恢复 Day 002。试用完成本身不自动批准 Provider、完整 3A 或 3B。
 
-## 3B：评测集、版本管理和长期复盘（未开始）
+## 3B：评测集、版本管理和长期复盘（M5 任务分支已实现，待验收）
 
-- 目标：建立固定评测集、规则版本和长期复盘机制。
-- 输入：影子运行数据与人工标注。
-- 输出：回归基线、版本报告、偏差与失败案例库。
-- 依赖：3A。
+- 目标：建立固定评测集、七 Agent 职责差异化 Scorecard、版本登记、Shadow 后验评价、
+  confidence 校准和 Champion/Challenger 晋升门禁。
+- 输入：冻结的 M3 Eval、M4 5/20/60 日 Replay、不可变 Shadow run/outcome 与版本指纹。
+- 输出：`AGENT_SCORECARD_V1`、`AGENT_VERSION_REGISTRY_V1`、
+  `SHADOW_OUTCOME_EVAL_V1`、`CHAMPION_CHALLENGER_V1`、
+  `RESEARCH_PERFORMANCE_REPORT_V1` 和最小评测页面。
+- 依赖：已验收 M1—M4；长期实证仍依赖持续 Shadow 样本积累。
 - 禁止范围：用单一收益指标替代风险评估、删除失败样本。
-- 验收条件：可重复评测、版本可追溯、升级门槛明确。
+- 验收条件：可重复评测、版本可追溯、历史不可覆盖、后验严格晚于预测、校准可解释、
+  样本不足明确返回 `INSUFFICIENT_SAMPLE`、Challenger 不会绕过风险/未来函数/成本/样本门。
 
 ## 最后：评估 LLM 解释层（未开始）
 

@@ -118,7 +118,7 @@ class ShadowResearchRuntimePostgresTest {
                 run, recommendation, execution);
 
         var first = paper.executeDue(LocalDate.of(2025, 9, 11), execution,
-                ShadowResearchTestFixtures.dataset().dataset(), run.id());
+                ShadowResearchTestFixtures.dataset().dataset(), null);
         var second = paper.executeDue(LocalDate.of(2025, 9, 11), execution,
                 ShadowResearchTestFixtures.dataset().dataset(), null);
 
@@ -127,7 +127,48 @@ class ShadowResearchRuntimePostgresTest {
         assertEquals(0, second.fills().size());
         assertTrue(first.portfolio().cash().signum() >= 0);
         assertTrue(first.portfolio().totalFees().signum() > 0);
+        assertEquals(run.id(), first.snapshot().runId());
+        assertEquals(first.snapshot(), repository.portfolioSnapshot(
+                run.id()).orElseThrow());
         assertEquals(1, jdbc.queryForObject(
+                "SELECT count(*) FROM shadow_paper_fills WHERE run_id=?",
+                Integer.class, run.id()));
+    }
+
+    @Test
+    void dailyMaintenanceExecutesPriorIntentAndAppendsOutcomesOnly() {
+        org.junit.jupiter.api.Assumptions.assumeTrue(dataSource != null);
+        JdbcTemplate jdbc = new JdbcTemplate(dataSource);
+        var repository = repository(jdbc);
+        var paper = paper(repository);
+        var tx = new TransactionTemplate(
+                new DataSourceTransactionManager(dataSource));
+        var runtime = new ShadowResearchRuntime(repository,
+                ShadowResearchTestFixtures.source(), paper, tx,
+                Clock.fixed(ShadowResearchTestFixtures.AS_OF,
+                        ZoneOffset.UTC));
+        var frozen = runtime.run(request(),
+                new DeterministicFakeModelAdapter());
+        ShadowResearchModels.ShadowRun run = frozen.run();
+        var dataset = ShadowResearchTestFixtures.dataset().dataset();
+        int dueIntentCount = frozen.orders().size();
+        assertTrue(dueIntentCount > 0);
+        var service = new ShadowContinuousDailyMaintenanceService(repository,
+                paper, new ShadowOutcomeService(repository));
+
+        LocalDate currentDate = dataset.lastSessionDate();
+        var first = service.maintain(currentDate, dataset,
+                ShadowResearchTestFixtures.AS_OF);
+        var second = service.maintain(currentDate, dataset,
+                ShadowResearchTestFixtures.AS_OF);
+
+        assertEquals(dueIntentCount, first.paperExecution().fills().size());
+        assertEquals(0, second.paperExecution().fills().size());
+        assertEquals(3, repository.outcomes(run.id()).size());
+        assertTrue(first.historicalResearchUnchanged());
+        assertEquals("FROZEN", repository.run(run.id()).orElseThrow()
+                .status().name());
+        assertEquals(dueIntentCount, jdbc.queryForObject(
                 "SELECT count(*) FROM shadow_paper_fills WHERE run_id=?",
                 Integer.class, run.id()));
     }

@@ -328,7 +328,7 @@ class StockQuantHostBrokerContractTest {
         assertTrue(script.contains(
                 "ConvertTo-StockQuantM3CallTelemetrySummary"));
         assertTrue(script.contains("legacyFailureReserve"));
-        assertTrue(script.contains("Get-M4StageBudget"));
+        assertTrue(script.contains("Get-M4MonthlyBudget"));
         assertTrue(script.contains("run-m4-shadow-research.ps1"));
         assertTrue(script.contains("modelProviderMessageCategory"));
         assertFalse(script.contains("Invoke-Expression"));

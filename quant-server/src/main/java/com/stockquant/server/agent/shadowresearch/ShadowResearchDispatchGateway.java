@@ -5,7 +5,11 @@ import java.time.LocalDate;
 
 /** Narrow boundary between the business scheduler and the fixed host broker. */
 public interface ShadowResearchDispatchGateway {
-    DispatchResult dispatch(LocalDate tradeDate, Instant researchAsOf);
+    DispatchResult dispatch(
+            LocalDate tradeDate,
+            Instant researchAsOf,
+            ShadowResearchRepository.CalendarState calendarState
+    );
 
     record DispatchResult(String requestId, boolean accepted) {
         public DispatchResult {

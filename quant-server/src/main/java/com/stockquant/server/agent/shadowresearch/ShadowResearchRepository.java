@@ -93,8 +93,15 @@ public final class ShadowResearchRepository {
     }
 
     public boolean researchCalendarOpen(LocalDate date, Instant cutoff) {
-        List<Boolean> values = jdbc.query("""
-                SELECT DISTINCT c.is_open
+        return researchCalendarState(date, cutoff) == CalendarState.OPEN;
+    }
+
+    public CalendarState researchCalendarState(
+            LocalDate date,
+            Instant cutoff
+    ) {
+        List<CalendarFact> values = jdbc.query("""
+                SELECT c.exchange, c.is_open
                   FROM trading_calendar_facts_v1 c
                   JOIN pit_market_fact_observations o
                     ON o.id=c.observation_id
@@ -109,9 +116,94 @@ public final class ShadowResearchRepository {
                           AND newer.known_at<=?
                           AND (newer.known_at, newer.id)>(o.known_at, o.id)
                    )
-                """, (row, number) -> row.getBoolean(1), date,
+                """, (row, number) -> new CalendarFact(
+                        row.getString(1), row.getBoolean(2)), date,
                 Timestamp.from(cutoff), Timestamp.from(cutoff));
-        return values.size() == 1 && values.get(0);
+        if (values.size() != 2
+                || values.stream().map(CalendarFact::exchange).distinct()
+                .count() != 2
+                || !values.stream().map(CalendarFact::exchange).collect(
+                java.util.stream.Collectors.toSet())
+                .equals(java.util.Set.of("SSE", "SZSE"))
+                || values.stream().map(CalendarFact::open).distinct()
+                .count() != 1) {
+            return CalendarState.UNKNOWN;
+        }
+        return values.get(0).open() ? CalendarState.OPEN
+                : CalendarState.CLOSED;
+    }
+
+    public enum CalendarState { OPEN, CLOSED, UNKNOWN }
+
+    private record CalendarFact(String exchange, boolean open) {
+    }
+
+    /** True only when every natural date up to a common next open is known. */
+    public boolean nextCommonOpenKnown(LocalDate date, Instant cutoff) {
+        LocalDate from = date.plusDays(1);
+        LocalDate to = date.plusDays(30);
+        List<DatedCalendarFact> values = jdbc.query("""
+                SELECT c.calendar_date, c.exchange, c.is_open
+                  FROM trading_calendar_facts_v1 c
+                  JOIN pit_market_fact_observations o
+                    ON o.id=c.observation_id
+                 WHERE c.calendar_date BETWEEN ? AND ?
+                   AND c.exchange IN ('SSE','SZSE')
+                   AND o.source_code='TUSHARE_PRO'
+                   AND o.source_instrument_id=CASE c.exchange
+                       WHEN 'SSE' THEN 'TUSHARE:TRADE_CAL:SSE'
+                       WHEN 'SZSE' THEN 'TUSHARE:TRADE_CAL:SZSE'
+                   END
+                   AND o.known_at<=?
+                   AND NOT EXISTS (
+                       SELECT 1
+                         FROM pit_market_fact_observations newer
+                         JOIN trading_calendar_facts_v1 nc
+                           ON nc.observation_id=newer.id
+                        WHERE newer.fact_type='TRADING_CALENDAR'
+                          AND newer.source_code=o.source_code
+                          AND newer.source_instrument_id=
+                              o.source_instrument_id
+                          AND nc.exchange=c.exchange
+                          AND nc.calendar_date=c.calendar_date
+                          AND newer.known_at<=?
+                          AND (newer.known_at,newer.id)>(o.known_at,o.id)
+                   )
+                 ORDER BY c.calendar_date, c.exchange
+                """, (row, number) -> new DatedCalendarFact(
+                        row.getObject(1, LocalDate.class), row.getString(2),
+                        row.getBoolean(3)), from, to,
+                Timestamp.from(cutoff), Timestamp.from(cutoff));
+        java.util.Map<LocalDate, java.util.Map<String, Boolean>> byDate =
+                new java.util.LinkedHashMap<>();
+        for (DatedCalendarFact value : values) {
+            Boolean previous = byDate.computeIfAbsent(value.date(), ignored ->
+                    new java.util.LinkedHashMap<>()).put(value.exchange(),
+                    value.open());
+            if (previous != null) {
+                return false;
+            }
+        }
+        for (LocalDate candidate = from; !candidate.isAfter(to);
+                candidate = candidate.plusDays(1)) {
+            java.util.Map<String, Boolean> exchanges = byDate.get(candidate);
+            if (exchanges == null || !exchanges.keySet().equals(
+                    java.util.Set.of("SSE", "SZSE"))) {
+                return false;
+            }
+            if (Boolean.TRUE.equals(exchanges.get("SSE"))
+                    && Boolean.TRUE.equals(exchanges.get("SZSE"))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private record DatedCalendarFact(
+            LocalDate date,
+            String exchange,
+            boolean open
+    ) {
     }
 
     public boolean claimScheduledDispatch(
@@ -566,6 +658,46 @@ public final class ShadowResearchRepository {
                 this::mapRun, limit);
     }
 
+    /** Frozen snapshots only; terminal M4 evidence is never rewritten by M5. */
+    public List<FrozenSnapshot> frozenSnapshots(int limit) {
+        return jdbc.query("""
+                SELECT s.id, s.run_id, s.snapshot_fingerprint, s.frozen_at,
+                       s.report_json::text, s.recommendation_json::text
+                  FROM shadow_research_snapshots s
+                  JOIN shadow_research_runs r ON r.id=s.run_id
+                 WHERE r.status='FROZEN'
+                 ORDER BY s.run_id DESC LIMIT ?
+                """, (row, number) -> new FrozenSnapshot(
+                row.getLong("id"), row.getLong("run_id"),
+                row.getString("snapshot_fingerprint"),
+                instant(row, "frozen_at"),
+                read(row.getString("report_json"), ResearchReport.class),
+                read(row.getString("recommendation_json"),
+                        ShadowRecommendation.class)), limit);
+    }
+
+    public List<PortfolioSnapshot> portfolioSnapshots(int limit) {
+        return jdbc.query("""
+                SELECT id, portfolio_id, run_id, snapshot_date,
+                       snapshot_time, cash, market_value, total_equity,
+                       realized_pnl, unrealized_pnl, total_fees,
+                       total_return, position_count, snapshot_fingerprint
+                  FROM shadow_portfolio_snapshots
+                 ORDER BY id DESC LIMIT ?
+                """, this::mapPortfolioSnapshot, limit);
+    }
+
+    public List<PortfolioSnapshot> portfolioSnapshotsForRun(long runId) {
+        return jdbc.query("""
+                SELECT id, portfolio_id, run_id, snapshot_date,
+                       snapshot_time, cash, market_value, total_equity,
+                       realized_pnl, unrealized_pnl, total_fees,
+                       total_return, position_count, snapshot_fingerprint
+                  FROM shadow_portfolio_snapshots
+                 WHERE run_id=? ORDER BY snapshot_time, id
+                """, this::mapPortfolioSnapshot, runId);
+    }
+
     public Optional<PortfolioSnapshot> latestPortfolioSnapshot() {
         return jdbc.query("""
                 SELECT id, portfolio_id, run_id, snapshot_date,
@@ -582,8 +714,8 @@ public final class ShadowResearchRepository {
                        snapshot_time, cash, market_value, total_equity,
                        realized_pnl, unrealized_pnl, total_fees,
                        total_return, position_count, snapshot_fingerprint
-                  FROM shadow_portfolio_snapshots
-                 WHERE run_id=? ORDER BY id LIMIT 1
+                 FROM shadow_portfolio_snapshots
+                 WHERE run_id=? ORDER BY snapshot_time DESC, id DESC LIMIT 1
                 """, this::mapPortfolioSnapshot, runId).stream().findFirst();
     }
 

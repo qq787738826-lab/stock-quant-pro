@@ -1115,99 +1115,61 @@ function Get-M3BailianStageBudget {
     }
 }
 
-function Get-M4StageBudget {
+function Get-M4MonthlyBudget {
     param([Parameter(Mandatory = $true)] [object] $BrokerRequest)
-    $operationMarker = 'RUN_M4_SHADOW_RESEARCH'
-    $approvalMarker =
-        'USER_APPROVED_M4_SHADOW_RESEARCH_CNY_10_TUSHARE_20'
-    [decimal]$llmLimit = [decimal]10.00
-    $tushareLimit = 20
-    [decimal]$llmUsed = [decimal]0.00
-    $tushareUsed = 0
-    $seen = @{}
-    $prior = @(Get-ChildItem -LiteralPath $paths.Requests -File |
-        Where-Object { $_.FullName -ne $processingPath } |
-        Where-Object {
-            if ($_.Length -le 0 -or $_.Length -gt 65536) { return $false }
-            $content = Get-Content -LiteralPath $_.FullName -Raw -Encoding UTF8
-            return $content -match "(?m)^operation=$operationMarker$" -and
-                $content -match ("(?m)^user\.approval\.reference=" +
-                    [regex]::Escape($approvalMarker) + '$')
-        })
-    foreach ($file in $prior) {
-        $content = Get-Content -LiteralPath $file.FullName -Raw -Encoding UTF8
-        $id = [regex]::Match($content,
-            '(?m)^request\.id=(SQHB_[0-9]{8}T[0-9]{6}Z_[A-F0-9]{12})$')
-        if (-not $id.Success -or $seen.ContainsKey($id.Groups[1].Value)) {
-            throw 'M4_STAGE_BUDGET_LEDGER_INVALID'
-        }
-        $requestId = $id.Groups[1].Value
-        $seen[$requestId] = $true
-        $runner = Join-Path $paths.Results "$requestId.m4-shadow.json"
-        if (-not (Test-Path -LiteralPath $runner -PathType Leaf)) {
-            $terminalPath = Join-Path $paths.Results "$requestId.result.json"
-            if (-not (Test-Path -LiteralPath $terminalPath -PathType Leaf)) {
-                throw 'M4_STAGE_BUDGET_LEDGER_INCOMPLETE'
-            }
-            $terminal = Get-Content -LiteralPath $terminalPath -Raw `
-                -Encoding UTF8 | ConvertFrom-Json
-            if ($terminal.operation -ne $operationMarker -or
-                $terminal.status -notin @('FAILED', 'REJECTED') -or
-                [int]$terminal.providerCallCount -ne 0) {
-                throw 'M4_STAGE_BUDGET_LEDGER_INVALID'
-            }
-            continue
-        }
-        $value = Get-Content -LiteralPath $runner -Raw -Encoding UTF8 |
-            ConvertFrom-Json
-        if ($value.schemaVersion -ne 'M4_SHADOW_RESEARCH_RESULT_V1' -or
-            $value.status -notin @('SUCCEEDED', 'FAILED') -or
-            [int]$value.tushareProviderCallCount -lt 0 -or
-            [int]$value.tushareProviderCallCount -gt 6 -or
-            [int]$value.retryCount -ne 0 -or
-            [int]$value.modelProviderRequestCount -lt 0 -or
-            [int]$value.modelProviderRequestCount -gt 13) {
-            throw 'M4_STAGE_BUDGET_LEDGER_INVALID'
-        }
-        [decimal]$cost = [decimal]::Parse(
-            [string]$value.conservativeCostCny,
-            [Globalization.NumberStyles]::Number,
-            [Globalization.CultureInfo]::InvariantCulture)
-        if ($cost -lt 0 -or $cost -gt [decimal]5.00) {
-            throw 'M4_STAGE_BUDGET_LEDGER_INVALID'
-        }
-        $llmUsed += $cost
-        $tushareUsed += [int]$value.tushareProviderCallCount
+    $calendarMonth = [string]$BrokerRequest.Values['budget.calendar.month']
+    $usage = Get-StockQuantM4MonthlyUsage `
+        -CalendarMonth $calendarMonth `
+        -ExcludedRequestPath $processingPath
+    [decimal]$llmUsed = [decimal]::Parse(
+        [string]$usage.ShadowCostCny,
+        [Globalization.NumberStyles]::Number,
+        [Globalization.CultureInfo]::InvariantCulture)
+    [decimal]$projectUsed = [decimal]::Parse(
+        [string]$usage.ProjectCostCny,
+        [Globalization.NumberStyles]::Number,
+        [Globalization.CultureInfo]::InvariantCulture)
+    [decimal]$maximum = [decimal]::Parse(
+        [string]$BrokerRequest.Values['maximum.cost.cny'],
+        [Globalization.NumberStyles]::Number,
+        [Globalization.CultureInfo]::InvariantCulture)
+    [int]$admittedProviderCalls =
+        [int]$BrokerRequest.Values['maximum.provider.requests']
+    if ($admittedProviderCalls -notin @(6, 8) -or
+        [int]$usage.TushareCalls + $admittedProviderCalls -gt 150 -or
+        $llmUsed + $maximum -gt [decimal]30.00 -or
+        $projectUsed + $maximum -gt [decimal]200.00) {
+        throw 'M4_MONTHLY_BUDGET_EXHAUSTED'
     }
-    if ($llmUsed -ge $llmLimit -or $tushareUsed + 6 -gt $tushareLimit -or
-        $prior.Count -ge 4) {
-        throw 'M4_STAGE_BUDGET_EXHAUSTED'
-    }
-    [decimal]$llmRemaining = $llmLimit - $llmUsed
     return [pscustomobject]@{
-        PriorRequestCount = $prior.Count
+        CalendarMonth = $calendarMonth
+        PriorRequestCount = [int]$usage.RequestCount
         PriorLlmCostCny = $llmUsed.ToString(
             [Globalization.CultureInfo]::InvariantCulture)
-        RemainingLlmCostCny = $(if ($llmRemaining -lt [decimal]5.00) {
-            $llmRemaining
-        } else { [decimal]5.00 }).ToString(
+        PriorProjectCostCny = $projectUsed.ToString(
             [Globalization.CultureInfo]::InvariantCulture)
-        PriorTushareCalls = $tushareUsed
-        RemainingTushareCalls = $tushareLimit - $tushareUsed
+        AdmittedLlmCostCny = $maximum.ToString(
+            [Globalization.CultureInfo]::InvariantCulture)
+        PriorTushareCalls = [int]$usage.TushareCalls
+        RemainingTushareCalls = 150 - [int]$usage.TushareCalls
     }
 }
 
 function Invoke-M4ShadowResearch {
     param([Parameter(Mandatory = $true)] [object] $BrokerRequest)
     if ($BrokerRequest.AuthorizationStatus -ne
-            'M4_USER_APPROVED_CNY_10_TUSHARE_20' -or
+            'M4_USER_APPROVED_CONTINUOUS_MONTHLY' -or
         $null -ne $BrokerRequest.AuthorizationFile) {
         throw 'STOCK_QUANT_HOST_BROKER_M4_SCOPE_INVALID'
     }
-    $budget = Get-M4StageBudget -BrokerRequest $BrokerRequest
-    if ([int]$BrokerRequest.Values['tushare.stage.calls.before'] -ne
-            [int]$budget.PriorTushareCalls) {
-        throw 'M4_STAGE_BUDGET_BINDING_INVALID'
+    $budget = Get-M4MonthlyBudget -BrokerRequest $BrokerRequest
+    if ([int]$BrokerRequest.Values['tushare.monthly.calls.before'] -ne
+            [int]$budget.PriorTushareCalls -or
+        [decimal]$BrokerRequest.Values['llm.monthly.cost.before.cny'] -ne
+            [decimal]$budget.PriorLlmCostCny -or
+        [decimal]$BrokerRequest.Values['project.monthly.cost.before.cny'] -ne
+            [decimal]$budget.PriorProjectCostCny) {
+        throw 'M4_MONTHLY_BUDGET_BINDING_INVALID'
     }
     $runnerResult = Join-Path $paths.Results `
         "$($BrokerRequest.RequestId).m4-shadow.json"
@@ -1222,9 +1184,12 @@ function Invoke-M4ShadowResearch {
         -RangeStart $BrokerRequest.Values['range.start'] `
         -TradeDate $BrokerRequest.Values['trade.date'] `
         -NextTradeDate $BrokerRequest.Values['next.trade.date'] `
+        -CalendarAdmission $BrokerRequest.Values['calendar.admission'] `
+        -CalendarHorizonEnd `
+            $BrokerRequest.Values['calendar.horizon.end'] `
         -CaptureMode $BrokerRequest.Values['capture.mode'] `
         -TriggerMode $BrokerRequest.Values['trigger.mode'] `
-        -MaximumCostCny $budget.RemainingLlmCostCny 2>&1 |
+        -MaximumCostCny $budget.AdmittedLlmCostCny 2>&1 |
         ForEach-Object { [string]$_ })
     $runnerExitCode = $LASTEXITCODE
     if (-not (Test-Path -LiteralPath $runnerResult -PathType Leaf)) {
@@ -1247,8 +1212,11 @@ function Invoke-M4ShadowResearch {
         modelTotalUnits = [int]$m4.totalTokens
         accountedCostCny = $cost.ToString(
             [Globalization.CultureInfo]::InvariantCulture)
-        stagePriorAccountedCostCny = [string]$budget.PriorLlmCostCny
-        stagePriorTushareCalls = [int]$budget.PriorTushareCalls
+        calendarMonth = [string]$budget.CalendarMonth
+        monthlyPriorAccountedCostCny = [string]$budget.PriorLlmCostCny
+        monthlyPriorTushareCalls = [int]$budget.PriorTushareCalls
+        projectMonthlyPriorAccountedCostCny =
+            [string]$budget.PriorProjectCostCny
         sanitizedResult = $runnerResult
         outputAudit = $(if ($m4.outputAuditClean) { 'PASSED' } else { 'FAILED' })
     }
@@ -1258,8 +1226,29 @@ function Invoke-M4ShadowResearch {
         if ($reason -match '^[A-Z][A-Z0-9_]{3,127}$') { throw $reason }
         throw 'STOCK_QUANT_HOST_BROKER_M4_FAILED'
     }
+    [int]$expectedProviderCalls =
+        [int]$BrokerRequest.Values['maximum.provider.requests']
+    if ($m4.status -eq 'SKIPPED_NON_TRADING_DAY') {
+        if ($BrokerRequest.Values['calendar.admission'] -ne 'UNKNOWN' -or
+            [int]$m4.tushareProviderCallCount -ne 2 -or
+            [int]$m4.retryCount -ne 0 -or
+            [int]$m4.modelProviderRequestCount -ne 0 -or
+            [int]$m4.modelCallCount -ne 0 -or
+            [int]$m4.toolCallCount -ne 0 -or
+            @($m4.agentRoles).Count -ne 0 -or
+            $cost -ne [decimal]0 -or -not $m4.outputAuditClean -or
+            -not $m4.researchOnly -or $m4.brokerConnected -or
+            $m4.realTradingStarted) {
+            throw 'STOCK_QUANT_HOST_BROKER_M4_SKIP_RESULT_INVALID'
+        }
+        $summary.shadowStatus = 'SKIPPED_NON_TRADING_DAY'
+        $summary.tradeDate = [string]$m4.tradeDate
+        $summary.researchOnly = $true
+        $summary.realTradingStarted = $false
+        return $summary
+    }
     if ($m4.status -ne 'SUCCEEDED' -or
-        [int]$m4.tushareProviderCallCount -ne 6 -or
+        [int]$m4.tushareProviderCallCount -ne $expectedProviderCalls -or
         [int]$m4.retryCount -ne 0 -or
         [int]$m4.modelProviderRequestCount -ne 13 -or
         [int]$m4.modelCallCount -ne 13 -or
@@ -1271,7 +1260,7 @@ function Invoke-M4ShadowResearch {
         -not $m4.noFutureDataLeakage -or
         -not $m4.outputAuditClean -or -not $m4.researchOnly -or
         $m4.brokerConnected -or $m4.realTradingStarted -or
-        $cost -le 0 -or $cost -gt [decimal]$budget.RemainingLlmCostCny) {
+        $cost -le 0 -or $cost -gt [decimal]$budget.AdmittedLlmCostCny) {
         throw 'STOCK_QUANT_HOST_BROKER_M4_RESULT_INVALID'
     }
     $summary.shadowRunId = [long]$m4.shadowRunId

@@ -7,6 +7,7 @@ import org.springframework.stereotype.Component;
 
 import java.time.Clock;
 import java.time.DayOfWeek;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
@@ -43,14 +44,24 @@ public final class ShadowResearchScheduler {
         if (!eligibleWeekday(date) || !withinWindow(now.toLocalTime())
                 || repository.frozenSlot(date,
                 ShadowResearchModels.RESEARCH_SLOT,
-                ShadowResearchModels.STRATEGY_VERSION).isPresent()
-                || repository.activeRun().isPresent()) {
+                ShadowResearchModels.STRATEGY_VERSION).isPresent()) {
             return;
         }
-        if (!repository.researchCalendarOpen(date, clock.instant())) {
+        repository.interruptStaleRuns(clock.instant().minus(
+                Duration.ofHours(2)), clock.instant());
+        if (repository.activeRun().isPresent()) {
             return;
         }
-        dispatcher.dispatch(date, clock.instant());
+        var calendar = repository.researchCalendarState(date,
+                clock.instant());
+        if (calendar == ShadowResearchRepository.CalendarState.CLOSED) {
+            return;
+        }
+        if (calendar == ShadowResearchRepository.CalendarState.OPEN
+                && !repository.nextCommonOpenKnown(date, clock.instant())) {
+            calendar = ShadowResearchRepository.CalendarState.UNKNOWN;
+        }
+        dispatcher.dispatch(date, clock.instant(), calendar);
     }
 
     boolean withinWindow(LocalTime time) {

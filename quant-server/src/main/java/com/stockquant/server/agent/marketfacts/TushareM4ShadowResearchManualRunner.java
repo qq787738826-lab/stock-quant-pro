@@ -16,6 +16,8 @@ import com.stockquant.server.agent.research.ModelAdapter;
 import com.stockquant.server.agent.research.OpenAiResponsesModelAdapter;
 import com.stockquant.server.agent.research.OpenAiResponsesModelAdapter.FailureDiagnostics;
 import com.stockquant.server.agent.shadowresearch.M4AsOfAgentResearchDatasetSource;
+import com.stockquant.server.agent.shadowresearch.ShadowContinuousDailyMaintenanceService;
+import com.stockquant.server.agent.shadowresearch.ShadowOutcomeService;
 import com.stockquant.server.agent.shadowresearch.ShadowPaperPortfolioService;
 import com.stockquant.server.agent.shadowresearch.ShadowResearchModels;
 import com.stockquant.server.agent.shadowresearch.ShadowResearchModels.ShadowRequest;
@@ -78,12 +80,24 @@ public final class TushareM4ShadowResearchManualRunner {
                 throw invalid("M4_OUTPUT_AUDIT_FAILED");
             }
             var execution = captured.value();
-            validateResult(execution.shadow(), launch, progress);
+            if (execution.nonTradingDay()) {
+                validateNonTradingDaySkip(launch, progress);
+                resultFile.write(TushareM4ShadowResearchResult
+                        .skippedNonTradingDay(launch.executionId(), commit,
+                                started, clock.instant(), launch.tradeDate(),
+                                progress.providerCalls, progress.retryCount,
+                                launch.mode() == ExecutionMode.FAKE, true));
+                System.out.println(
+                        "M4_SHADOW_RESEARCH_STATUS=SKIPPED_NON_TRADING_DAY");
+                return EXIT_SUCCESS;
+            }
+            validateResult(execution, launch, progress);
             resultFile.write(TushareM4ShadowResearchResult.success(
                     launch.executionId(), commit, started, clock.instant(),
                     execution.shadow(), progress.providerCalls,
                     progress.retryCount, launch.mode() == ExecutionMode.FAKE,
-                    true, progress.modelDiagnostics));
+                    true, progress.modelDiagnostics,
+                    execution.maintenance().paperExecution().fills().size()));
             System.out.println("M4_SHADOW_RESEARCH_STATUS=SUCCEEDED");
             return EXIT_SUCCESS;
         } catch (TushareControlledAcceptanceOutputAudit
@@ -98,7 +112,8 @@ public final class TushareM4ShadowResearchManualRunner {
                         progress.inputTokens(), progress.outputTokens(),
                         progress.reasoningTokens(), progress.totalTokens(),
                         progress.accountedCost(), progress.modelDiagnostics,
-                        reason, false));
+                        reason, capturedFailure.auditResult() != null
+                                && capturedFailure.auditResult().clean()));
             }
             System.err.println("M4_SHADOW_RESEARCH_FAILURE_REASON=" + reason);
             return EXIT_REJECTED;
@@ -214,11 +229,31 @@ public final class TushareM4ShadowResearchManualRunner {
             TushareM1ResearchDataModels.RunEvidence captured;
             try (components) {
                 progress.providerPhase = true;
+                if (launch.calendarAdmission()
+                        == CalendarAdmission.UNKNOWN) {
+                    TushareM4TradingCalendarAdmissionService.Admission calendar;
+                    try {
+                        calendar = components.m4CalendarAdmissionService()
+                                .refresh(launch.tradeDate(),
+                                        launch.calendarHorizonEnd(),
+                                        Duration.ofSeconds(30));
+                    } catch (TushareM4TradingCalendarAdmissionService
+                             .CalendarAdmissionFailure error) {
+                        progress.providerCalls = error.providerCalls();
+                        progress.retryCount = error.retryCount();
+                        throw error;
+                    }
+                    progress.providerCalls = calendar.providerCalls();
+                    progress.retryCount = calendar.retryCount();
+                    if (!calendar.open()) {
+                        return Execution.skippedNonTradingDay();
+                    }
+                }
                 captured = components.m1ResearchDataService().run(
                         TushareDedicatedResearchBatchAuthorization
                                 .m1ResearchData(),
                         window(launch));
-                progress.retryCount = captured.retryCount();
+                progress.retryCount += captured.retryCount();
             } finally {
                 progress.providerCalls = Math.toIntExact(
                         components.totalProviderAttemptCount());
@@ -231,6 +266,16 @@ public final class TushareM4ShadowResearchManualRunner {
             var tx = new TransactionTemplate(
                     new DataSourceTransactionManager(dataSource));
             var paper = new ShadowPaperPortfolioService(repository, tx);
+            var observedDataset = TushareM2StrategyResearchDatasetAdapter
+                    .adapt(captured.dataset()).dataset();
+            var maintenance = new ShadowContinuousDailyMaintenanceService(
+                    repository, paper, new ShadowOutcomeService(repository))
+                    .maintain(launch.tradeDate(), observedDataset,
+                            clock.instant());
+            LocalDate nextTradeDate = new TushareM4NextOpenSessionResolver(
+                    facts).resolve(launch.tradeDate(),
+                    launch.calendarHorizonEnd(), clock.instant())
+                    .orElse(null);
             var runtime = new ShadowResearchRuntime(repository, source, paper,
                     tx, clock);
             OpenAiResponsesModelAdapter bailian = null;
@@ -245,12 +290,13 @@ public final class TushareM4ShadowResearchManualRunner {
                 model = bailian;
             }
             try {
-                var shadow = runtime.run(request(launch, captured, clock),
-                        model);
+                var shadow = runtime.run(request(launch, captured,
+                                nextTradeDate, clock), model);
                 if (bailian != null) {
                     progress.modelDiagnostics = bailian.diagnostics();
                 }
-                return new Execution(shadow);
+                return Execution.completed(shadow, maintenance,
+                        nextTradeDate);
             } catch (Throwable error) {
                 if (bailian != null) {
                     progress.modelDiagnostics = OpenAiResponsesModelAdapter
@@ -274,13 +320,13 @@ public final class TushareM4ShadowResearchManualRunner {
     private static ShadowRequest request(
             Arguments launch,
             TushareM1ResearchDataModels.RunEvidence captured,
+            LocalDate nextTradeDate,
             Clock clock
     ) {
         Instant asOf = clock.instant();
-        LocalDate next = launch.nextTradeDate();
-        Instant nextExecution = next == null ? null
+        Instant nextExecution = nextTradeDate == null ? null
                 : com.stockquant.core.research.StrategyResearchModels
-                .openInstant(next);
+                .openInstant(nextTradeDate);
         return new ShadowRequest(launch.triggerMode(), launch.tradeDate(),
                 launch.rangeStart(), asOf, launch.securities(),
                 launch.securities().get(0), strategies(), nextExecution,
@@ -307,11 +353,16 @@ public final class TushareM4ShadowResearchManualRunner {
     }
 
     private static void validateResult(
-            ShadowResearchModels.ShadowExecutionResult result,
+            Execution execution,
             Arguments launch,
             Progress progress
     ) {
-        if (progress.providerCalls != launch.securities().size() * 3
+        ShadowResearchModels.ShadowExecutionResult result =
+                execution.shadow();
+        int expectedProviderCalls = launch.securities().size() * 3
+                + (launch.calendarAdmission() == CalendarAdmission.UNKNOWN
+                ? 2 : 0);
+        if (progress.providerCalls != expectedProviderCalls
                 || progress.retryCount != 0
                 || !result.outputAuditClean()
                 || !result.noFutureDataLeakage()
@@ -321,9 +372,30 @@ public final class TushareM4ShadowResearchManualRunner {
                 || result.snapshot().report().tradingStarted()
                 || result.snapshot().report().providerCalled()
                 || result.portfolio().cash().signum() < 0
+                || !execution.maintenance().historicalResearchUnchanged()
+                || execution.maintenance().paperExecution().portfolio()
+                .cash().signum() < 0
+                || execution.nextTradeDate() != null
+                && !result.run().paperExecutionTime().equals(
+                com.stockquant.core.research.StrategyResearchModels
+                        .openInstant(execution.nextTradeDate()))
                 || result.conservativeCostCny().compareTo(
                 launch.maximumCostCny()) > 0) {
             throw invalid("M4_RESULT_NOT_ELIGIBLE");
+        }
+    }
+
+    private static void validateNonTradingDaySkip(
+            Arguments launch,
+            Progress progress
+    ) {
+        if (launch.calendarAdmission() != CalendarAdmission.UNKNOWN
+                || progress.providerCalls != 2
+                || progress.retryCount != 0
+                || progress.modelProviderRequests() != 0
+                || progress.totalTokens() != 0
+                || progress.accountedCost().signum() != 0) {
+            throw invalid("M4_NON_TRADING_DAY_SKIP_INVALID");
         }
     }
 
@@ -384,8 +456,26 @@ public final class TushareM4ShadowResearchManualRunner {
     }
 
     private record Execution(
-            ShadowResearchModels.ShadowExecutionResult shadow
+            ShadowResearchModels.ShadowExecutionResult shadow,
+            boolean nonTradingDay,
+            ShadowContinuousDailyMaintenanceService.MaintenanceResult
+                    maintenance,
+            LocalDate nextTradeDate
     ) {
+        private static Execution completed(
+                ShadowResearchModels.ShadowExecutionResult shadow,
+                ShadowContinuousDailyMaintenanceService.MaintenanceResult
+                        maintenance,
+                LocalDate nextTradeDate
+        ) {
+            return new Execution(Objects.requireNonNull(shadow, "shadow"),
+                    false, Objects.requireNonNull(maintenance,
+                    "maintenance"), nextTradeDate);
+        }
+
+        private static Execution skippedNonTradingDay() {
+            return new Execution(null, true, null, null);
+        }
     }
 
     private static final class Progress {
@@ -435,7 +525,8 @@ public final class TushareM4ShadowResearchManualRunner {
             List<Security> securities,
             LocalDate rangeStart,
             LocalDate tradeDate,
-            LocalDate nextTradeDate,
+            CalendarAdmission calendarAdmission,
+            LocalDate calendarHorizonEnd,
             TushareM1ResearchWindowCommand.Mode captureMode,
             TriggerMode triggerMode,
             BigDecimal maximumCostCny
@@ -454,7 +545,9 @@ public final class TushareM4ShadowResearchManualRunner {
                 if (!values.keySet().equals(java.util.Set.of(
                         "result-file", "execution-id", "database-port",
                         "execution-mode", "securities", "range-start",
-                        "trade-date", "next-trade-date", "capture-mode",
+                        "trade-date", "next-trade-date",
+                        "calendar-admission", "calendar-horizon-end",
+                        "capture-mode",
                         "trigger-mode", "maximum-cost-cny"))) {
                     throw invalid("M4_ARGUMENTS_INVALID");
                 }
@@ -478,12 +571,23 @@ public final class TushareM4ShadowResearchManualRunner {
                         || cost.compareTo(HARD_COST_CNY) > 0) {
                     throw invalid("M4_COST_LIMIT_INVALID");
                 }
+                CalendarAdmission admission = CalendarAdmission.valueOf(
+                        values.get("calendar-admission"));
+                LocalDate tradeDate = LocalDate.parse(
+                        values.get("trade-date"));
+                LocalDate horizon = LocalDate.parse(
+                        values.get("calendar-horizon-end"));
+                if (horizon.isBefore(tradeDate)
+                        || !horizon.equals(tradeDate.plusDays(30))
+                        || !"INTERNAL_CALENDAR".equals(next)) {
+                    throw invalid("M4_ARGUMENTS_INVALID");
+                }
                 return new Arguments(Path.of(values.get("result-file")), id,
                         Integer.parseInt(values.get("database-port")),
                         ExecutionMode.valueOf(values.get("execution-mode")),
                         securities, LocalDate.parse(values.get("range-start")),
-                        LocalDate.parse(values.get("trade-date")),
-                        "NONE".equals(next) ? null : LocalDate.parse(next),
+                        tradeDate,
+                        admission, horizon,
                         TushareM1ResearchWindowCommand.Mode.valueOf(
                                 values.get("capture-mode")),
                         TriggerMode.valueOf(values.get("trigger-mode")), cost);
@@ -496,4 +600,6 @@ public final class TushareM4ShadowResearchManualRunner {
             }
         }
     }
+
+    enum CalendarAdmission { KNOWN_OPEN, UNKNOWN }
 }

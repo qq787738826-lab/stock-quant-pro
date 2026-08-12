@@ -129,7 +129,11 @@ public final class ShadowPaperPortfolioService {
             Map<Security, BigDecimal> marks = marksAtExecution(asOfDataset,
                     executionDate);
             List<PaperFill> fills = new ArrayList<>();
-            for (PaperOrder order : repository.pendingOrders(executionTime)) {
+            List<PaperOrder> due = repository.pendingOrders(executionTime);
+            java.util.LinkedHashSet<Long> sourceRuns =
+                    new java.util.LinkedHashSet<>();
+            due.forEach(order -> sourceRuns.add(order.runId()));
+            for (PaperOrder order : due) {
                 BigDecimal reference = openingPrice(asOfDataset,
                         order.security(), executionDate);
                 if (reference == null) {
@@ -174,8 +178,20 @@ public final class ShadowPaperPortfolioService {
                 portfolio = repository.lockPortfolio();
             }
             PaperPortfolio after = repository.lockPortfolio();
-            PortfolioSnapshot snapshot = snapshot(after, snapshotRunId,
-                    executionDate, executionTime, marks);
+            PortfolioSnapshot snapshot;
+            if (snapshotRunId != null) {
+                snapshot = snapshot(after, snapshotRunId, executionDate,
+                        executionTime, marks);
+            } else if (!sourceRuns.isEmpty()) {
+                snapshot = null;
+                for (Long sourceRun : sourceRuns) {
+                    snapshot = snapshot(after, sourceRun, executionDate,
+                            executionTime, marks);
+                }
+            } else {
+                snapshot = snapshot(after, null, executionDate,
+                        executionTime, marks);
+            }
             return new Execution(List.copyOf(fills), after, snapshot);
         }), "paperExecution");
     }

@@ -10,7 +10,7 @@ import java.util.Map;
 
 /** Classpath-backed, immutable prompt catalog; no dynamic prompt platform. */
 public final class AgentPromptCatalog {
-    private static final Map<AgentRole, String> RESOURCES = Map.of(
+    private static final Map<AgentRole, String> CHAMPION_RESOURCES = Map.of(
             AgentRole.RESEARCH_COORDINATOR,
             "agent-research/prompts/research-coordinator-v2.txt",
             AgentRole.DATA_ANALYST,
@@ -29,14 +29,37 @@ public final class AgentPromptCatalog {
     private final Map<AgentRole, PromptDefinition> prompts;
 
     public AgentPromptCatalog() {
+        this(CHAMPION_RESOURCES);
+    }
+
+    private AgentPromptCatalog(Map<AgentRole, String> resources) {
         EnumMap<AgentRole, PromptDefinition> loaded = new EnumMap<>(
                 AgentRole.class);
-        RESOURCES.forEach((role, resource) -> loaded.put(role,
+        resources.forEach((role, resource) -> loaded.put(role,
                 load(role, resource)));
         if (loaded.size() != AgentRole.values().length) {
             throw new IllegalStateException("M3_PROMPT_CATALOG_INCOMPLETE");
         }
         prompts = Map.copyOf(loaded);
+    }
+
+    /**
+     * The one bounded M5 challenger.  It changes only Critic policy and is
+     * never substituted for the default Champion catalog.
+     */
+    public static AgentPromptCatalog m5CriticCalibrationChallenger() {
+        EnumMap<AgentRole, String> resources = new EnumMap<>(
+                CHAMPION_RESOURCES);
+        resources.put(AgentRole.CRITIC_REVIEW,
+                "agent-research/prompts/critic-review-v3.txt");
+        return new AgentPromptCatalog(Map.copyOf(resources));
+    }
+
+    public Map<AgentRole, String> versions() {
+        EnumMap<AgentRole, String> values = new EnumMap<>(AgentRole.class);
+        prompts.forEach((role, prompt) -> values.put(role,
+                prompt.version()));
+        return Map.copyOf(values);
     }
 
     public PromptDefinition prompt(AgentRole role) {

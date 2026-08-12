@@ -10,6 +10,7 @@ $prefix = 'stock-quant-m4-protocol-'
 $root = Join-Path $paths.TargetRoot ($prefix + [Guid]::NewGuid().ToString('N'))
 $artifact = Join-Path $root 'm4-protocol-test.jar'
 $tests = 0
+$ledgerFiles = @()
 
 function Write-Lines([string] $Path, [System.Collections.IDictionary] $Values) {
     $lines = foreach ($key in $Values.Keys) { "$key=$($Values[$key])" }
@@ -73,9 +74,11 @@ try {
         'securities' = '600000:SSE,000001:SZSE'
         'range.start' = '2026-07-12'
         'trade.date' = '2026-08-11'
-        'next.trade.date' = 'NONE'
+        'next.trade.date' = 'INTERNAL_CALENDAR'
+        'calendar.admission' = 'KNOWN_OPEN'
+        'calendar.horizon.end' = '2026-09-10'
         'capture.mode' = 'CAPTURE'
-        'trigger.mode' = 'MANUAL'
+        'trigger.mode' = 'SCHEDULED'
         'database.host' = '127.0.0.1'
         'database.port' = '38432'
         'database.name' = 'stock_quant_research'
@@ -87,8 +90,10 @@ try {
         'endpoint.adj_factor.requests' = '2'
         'endpoint.trade_cal.requests' = '2'
         'maximum.provider.requests' = '6'
-        'tushare.stage.limit' = '20'
-        'tushare.stage.calls.before' = '0'
+        'budget.calendar.month' = $created.ToOffset(
+            [TimeSpan]::FromHours(8)).ToString('yyyy-MM')
+        'tushare.monthly.limit' = '150'
+        'tushare.monthly.calls.before' = '0'
         'llm.provider' = 'BAILIAN'
         'model' = 'qwen3.7-plus'
         'provider.endpoint' =
@@ -96,23 +101,45 @@ try {
         'maximum.model.calls' = '13'
         'maximum.output.tokens.per.call' = '900'
         'maximum.cost.cny' = '5.00'
-        'llm.stage.limit.cny' = '10.00'
+        'llm.monthly.limit.cny' = '30.00'
+        'llm.monthly.cost.before.cny' = '0.00'
+        'project.monthly.limit.cny' = '200.00'
+        'project.monthly.cost.before.cny' = '6.777600000000'
         'retry.budget' = '0'
         'redirects' = 'NEVER'
         'user.approval.reference' =
-            'USER_APPROVED_M4_SHADOW_RESEARCH_CNY_10_TUSHARE_20'
+            'USER_APPROVED_M4_CONTINUOUS_SHADOW_MONTHLY'
         'created.at' = $created.ToString('o')
         'expires.at' = $created.AddMinutes(10).ToString('o')
-        'execution.source' = 'M4_SHADOW_RESEARCH_REAL_SMOKE'
+        'execution.source' = 'M4_SHADOW_RESEARCH_CONTINUOUS_SCHEDULED'
         'no.retry' = 'true'
         'source.request.id' = 'NONE'
     }
     $parsed = Read-Valid $request
     if ($parsed.Operation -ne 'RUN_M4_SHADOW_RESEARCH' -or
-        $parsed.AuthorizationStatus -ne 'M4_USER_APPROVED_CNY_10_TUSHARE_20') {
+        $parsed.AuthorizationStatus -ne
+            'M4_USER_APPROVED_CONTINUOUS_MONTHLY') {
         throw 'M4_PROTOCOL_VALID_REQUEST_REJECTED'
     }
     $tests++
+
+    $unknown = Copy-Values $request
+    $unknown['request.id'] = New-StockQuantHostBrokerRequestId
+    $unknown['calendar.admission'] = 'UNKNOWN'
+    $unknown['endpoint.trade_cal.requests'] = '4'
+    $unknown['maximum.provider.requests'] = '8'
+    $unknownParsed = Read-Valid $unknown
+    if ($unknownParsed.Values['calendar.admission'] -ne 'UNKNOWN' -or
+        $unknownParsed.Values['maximum.provider.requests'] -ne '8') {
+        throw 'M4_PROTOCOL_UNKNOWN_CALENDAR_REQUEST_REJECTED'
+    }
+    $tests++
+
+    $unknownBadBudget = Copy-Values $unknown
+    $unknownBadBudget['request.id'] = New-StockQuantHostBrokerRequestId
+    $unknownBadBudget['maximum.provider.requests'] = '6'
+    Reject $unknownBadBudget `
+        'STOCK_QUANT_HOST_BROKER_REQUEST_SCOPE_INVALID'
 
     $invokerPath = Join-Path $PSScriptRoot `
         'invoke-stock-quant-host-broker.ps1'
@@ -126,8 +153,61 @@ try {
     $brokerPath = Join-Path $PSScriptRoot 'stock-quant-host-broker.ps1'
     $broker = Get-Content -LiteralPath $brokerPath -Raw -Encoding UTF8
     if ($broker -match '\[decimal\]::Min\s*\(' -or
-        $broker -notmatch '\$llmRemaining\s+-lt\s+\[decimal\]5\.00') {
+        $broker -notmatch 'Get-M4MonthlyBudget') {
         throw 'M4_PROTOCOL_POWERSHELL_51_DECIMAL_COMPATIBILITY_INVALID'
+    }
+    $tests++
+
+    if ($null -eq (Get-Command Get-StockQuantM4MonthlyUsage `
+            -ErrorAction SilentlyContinue)) {
+        throw 'M4_MONTHLY_LEDGER_NOT_EXPORTED'
+    }
+    $ledgerCases = @(
+        [ordered]@{
+            id = 'SQHB_20990102T010203Z_A1B2C3D4E5F6'
+            admission = 'KNOWN_OPEN'; maximum = 6; status = 'SUCCEEDED'
+            calls = 6; model = 13; cost = '1.25'
+        },
+        [ordered]@{
+            id = 'SQHB_20990103T010203Z_A1B2C3D4E5F6'
+            admission = 'UNKNOWN'; maximum = 8
+            status = 'SKIPPED_NON_TRADING_DAY'; calls = 2
+            model = 0; cost = '0.00'
+        })
+    foreach ($ledgerCase in $ledgerCases) {
+        $ledgerRequest = Join-Path $paths.Requests `
+            "$($ledgerCase.id).processed.properties"
+        $ledgerResult = Join-Path $paths.Results `
+            "$($ledgerCase.id).m4-shadow.json"
+        Write-Lines $ledgerRequest ([ordered]@{
+            'operation' = 'RUN_M4_SHADOW_RESEARCH'
+            'request.id' = $ledgerCase.id
+            'created.at' = '2099-01-02T01:02:03Z'
+            'calendar.admission' = $ledgerCase.admission
+            'maximum.provider.requests' = [string]$ledgerCase.maximum
+        })
+        $runner = [ordered]@{
+            schemaVersion = 'M4_SHADOW_RESEARCH_RESULT_V1'
+            status = $ledgerCase.status
+            executionId = ($ledgerCase.id -replace '^SQHB_', 'M4SHADOW_')
+            tushareProviderCallCount = $ledgerCase.calls
+            retryCount = 0
+            modelProviderRequestCount = $ledgerCase.model
+            modelCallCount = $ledgerCase.model
+            conservativeCostCny = $ledgerCase.cost
+            outputAuditClean = $true
+        }
+        [IO.File]::WriteAllText($ledgerResult,
+            ($runner | ConvertTo-Json -Compress) + "`n",
+            [Text.UTF8Encoding]::new($false))
+        $ledgerFiles += $ledgerRequest, $ledgerResult
+    }
+    $usage = Get-StockQuantM4MonthlyUsage -CalendarMonth '2099-01'
+    if ([int]$usage.RequestCount -ne 2 -or
+        [int]$usage.TushareCalls -ne 8 -or
+        [decimal]$usage.ShadowCostCny -ne [decimal]1.25 -or
+        [decimal]$usage.ProjectCostCny -ne [decimal]1.25) {
+        throw 'M4_MONTHLY_LEDGER_ACCOUNTING_INVALID'
     }
     $tests++
 
@@ -138,8 +218,13 @@ try {
         @('model', 'qwen-plus'),
         @('provider.endpoint', 'https://example.invalid'),
         @('capture.mode', 'IDEMPOTENCY_VERIFICATION'),
-        @('next.trade.date', '2026-08-12'),
-        @('tushare.stage.calls.before', '15'))
+        @('next.trade.date', 'NONE'),
+        @('calendar.admission', 'INVALID'),
+        @('calendar.horizon.end', '2026-09-11'),
+        @('trigger.mode', 'MANUAL'),
+        @('tushare.monthly.calls.before', '145'),
+        @('llm.monthly.cost.before.cny', '29.50'),
+        @('project.monthly.cost.before.cny', '199.50'))
     foreach ($mutation in $mutations) {
         $copy = Copy-Values $request
         $copy['request.id'] = New-StockQuantHostBrokerRequestId
@@ -158,6 +243,10 @@ try {
     Write-Output 'STOCK_QUANT_M4_BROKER_REAL_PROVIDER_CALLS=0'
     Write-Output 'STOCK_QUANT_M4_BROKER_PERMANENT_DATABASE_WRITES=0'
 } finally {
+    foreach ($ledgerFile in $ledgerFiles) {
+        Remove-Item -LiteralPath $ledgerFile -Force `
+            -ErrorAction SilentlyContinue
+    }
     if (Test-Path -LiteralPath $root) {
         $full = [IO.Path]::GetFullPath($root).TrimEnd('\', '/')
         if ([IO.Path]::GetDirectoryName($full).TrimEnd('\', '/') -ne

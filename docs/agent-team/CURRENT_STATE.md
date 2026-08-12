@@ -15,10 +15,12 @@
 - M3 最终代码与测试证据 HEAD：`195746398fe60c1cdfc29f400dd404a144eab929`
 - M3 最终集成 HEAD / M4 冻结集成基线：`a8f82834878549051ce2300b08dfdb4ea188c202`
 - M4 真实 smoke 代码与运行资产 HEAD：`56f8bea91495381ca96646698fe1dcb105d592eb`
+- M4 最终集成 HEAD / M5 冻结集成基线：`8e5a283969416e19f1e36e42251c7dcf6007edb3`
 - M1 长期任务分支：`codex/1.4.0-m1-research-data-ready`
 - M2 长期任务分支：`codex/1.4.0-m2-strategy-engine-ready`
 - M3 长期任务分支：`codex/1.4.0-m3-agent-research-ready`
 - M4 长期任务分支：`codex/1.4.0-m4-shadow-research-ready`
+- M5 长期任务分支：`codex/1.4.0-m5-agent-evaluation-ready`
 - 1D-4 验收来源分支：`codex/1.4.0-1d4-acceptance`
 - 1D-4 验收基线：`5bc492a feat(agent): add safe local team runtime scripts`
 - 阶段 2A 验收来源分支：`codex/1.4.0-2a-readonly-context`
@@ -257,8 +259,19 @@
   模型失败空交易、Paper 守恒和未来数据拒绝均通过。真实 `2026-08-11` Shadow smoke 使用
   Tushare 6 次和百炼 `qwen3.7-plus` 13 次，最终因 Evidence 不足正确冻结空仓，未连接券商、
   未产生真实订单或真实资金操作。详细证据见
-  [M4 阶段记录](stage-m4-shadow-research-ready.md)。日级 scheduler 固定 Asia/Shanghai 17:20，
-  代码默认关闭，只有 M4 用户验收后才建议显式启用持续 Shadow；M4 不开放真实交易。
+  [M4 阶段记录](stage-m4-shadow-research-ready.md)。用户已批准持续 Shadow；M5 任务分支把日级
+  scheduler 固定为 Asia/Shanghai 17:20、仅交易日且同一 slot 最多一次，并在 Broker 侧按月执行
+  百炼 CNY 30、Tushare 150 请求及项目 CNY 200 总门禁。该配置只有合并部署并保持 Java 服务运行后
+  才会生效；它不开放真实交易。
+- `M5_AGENT_EVALUATION_READY=IMPLEMENTED_AWAITING_REVIEW`：M5 任务分支已经实现
+  `AGENT_SCORECARD_V1`、`AGENT_VERSION_REGISTRY_V1`、`SHADOW_OUTCOME_EVAL_V1`、
+  `CHAMPION_CHALLENGER_V1` 和 `RESEARCH_PERFORMANCE_REPORT_V1`。七 Agent 使用职责差异化权重，
+  评分不把收益作为 Agent 质量捷径；方向型预测才进入 Brier/ECE 校准，`UNKNOWN`、证据不足和空仓
+  不按错误推荐扣分。Shadow 结果严格绑定冻结 run 及后续 D1/D5/D20 观察，版本与报告 append-only。
+  Challenger 必须同时通过固定 Eval、60 日 Replay、确定性/防未来函数/风险门、成本延迟门和至少
+  20 个后验观察，才允许人工晋升；当前 Critic V3 Challenger 因真实样本和可绑定 Replay 证明不足
+  固定为 `WATCH/INSUFFICIENT_SAMPLE`，不会自动覆盖 Champion。详细边界见
+  [M5 阶段记录](stage-m5-agent-evaluation-ready.md)。M5 尚待实际提交验收和用户 merge 批准。
 - 3A-R3B-F2A 任务书 / 阶段记录：[tasks/3ar3b-f2a-research-preview-product.md](tasks/3ar3b-f2a-research-preview-product.md) / [stage-3ar3b-f2a-research-preview-product.md](stage-3ar3b-f2a-research-preview-product.md)。
 - 3A-R3B-F2A-R1 任务书 / 阶段记录：[tasks/3ar3b-f2a-r1-preview-ux-convergence.md](tasks/3ar3b-f2a-r1-preview-ux-convergence.md) / [stage-3ar3b-f2a-r1-preview-ux-convergence.md](stage-3ar3b-f2a-r1-preview-ux-convergence.md)。
 - 3A-R3B-F2A-R1A 任务书 / 阶段记录：[tasks/3ar3b-f2a-r1a-visual-semantics-fix.md](tasks/3ar3b-f2a-r1a-visual-semantics-fix.md) / [stage-3ar3b-f2a-r1a-visual-semantics-fix.md](stage-3ar3b-f2a-r1a-visual-semantics-fix.md)。
@@ -275,7 +288,7 @@
 - 3A-R3B-F1F-B2-RUNNER 任务书 / 阶段记录：[tasks/3ar3b-f1f-b2-controlled-runner.md](tasks/3ar3b-f1f-b2-controlled-runner.md) / [stage-3ar3b-f1f-b2-controlled-runner.md](stage-3ar3b-f1f-b2-controlled-runner.md)。
 - 3A-R3B-F1F-B2-DBPREP 任务书 / 阶段记录：[tasks/3ar3b-f1f-b2-database-preparation.md](tasks/3ar3b-f1f-b2-database-preparation.md) / [stage-3ar3b-f1f-b2-database-preparation.md](stage-3ar3b-f1f-b2-database-preparation.md)；首次冻结记录：[stage-3ar3b-f1f-b2-freeze.md](stage-3ar3b-f1f-b2-freeze.md)。
 - 3A-R3B-F1F-B2-E2E-CLOSEOUT 任务书 / 阶段记录：[tasks/3ar3b-f1f-b2-e2e-closeout.md](tasks/3ar3b-f1f-b2-e2e-closeout.md) / [stage-3ar3b-f1f-b2-e2e-closeout.md](stage-3ar3b-f1f-b2-e2e-closeout.md)。
-- 当前正式状态：`F0_AUDIT_RESULT=PARTIAL`、`FREE_IMPLEMENTATION_PATH=RESEARCH_PREVIEW_FIRST`、`FREE_PRODUCT_PREVIEW_GATE=PASS`、`FREE_PROVIDER_VALIDATION_GATE=BLOCKED`、`PAID_PROVIDER_UPGRADE_DECISION=PENDING`、`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`。Track A 的免费研究预览产品形态验证已经完成；该 PASS 不改变 Provider、PIT、付费数据或交易资格。F1A—F1E、F1F-A、F1F-B1、F1F-B2-RUNNER、DBPREP、事务、typed fact identity、SYSTEM_KNOWLEDGE 回读修复与 E2E-CLOSEOUT 均已验收合入。F1D 已把当前个人研究书面许可闭环为 PASS；最终真实 F1F-B2 已持久化为 `PASSED`，因此 `CONTROLLED_ACCEPTANCE_STATUS=PASSED`、`REDUCED_RESEARCH_OPERATIONAL_READY=true`。M1 缩减研究数据层、M2 个人研究策略与回测引擎、M3 七 Agent 研究团队和 M4 Shadow/Paper 研究闭环均已通过阶段验收证据。完整技术合同仍有十项阻断，所以 `F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE`、`fullF1EntryReady=false`；M1—M4 PASS 不等于生产、正常业务库、真实订单、实盘或自动交易就绪。Tushare 累计真实业务请求为 61，iFinD 真实调用数为 0；正常业务库 V13 未执行，M4 日级 scheduler 代码默认关闭，F2B/F3、3A-R3B-1 和 3B 均未开始。
+- 当前正式状态：`F0_AUDIT_RESULT=PARTIAL`、`FREE_IMPLEMENTATION_PATH=RESEARCH_PREVIEW_FIRST`、`FREE_PRODUCT_PREVIEW_GATE=PASS`、`FREE_PROVIDER_VALIDATION_GATE=BLOCKED`、`PAID_PROVIDER_UPGRADE_DECISION=PENDING`、`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`。Track A 的免费研究预览产品形态验证已经完成；该 PASS 不改变 Provider、PIT、付费数据或交易资格。F1A—F1E、F1F-A、F1F-B1、F1F-B2-RUNNER、DBPREP、事务、typed fact identity、SYSTEM_KNOWLEDGE 回读修复与 E2E-CLOSEOUT 均已验收合入。F1D 已把当前个人研究书面许可闭环为 PASS；最终真实 F1F-B2 已持久化为 `PASSED`，因此 `CONTROLLED_ACCEPTANCE_STATUS=PASSED`、`REDUCED_RESEARCH_OPERATIONAL_READY=true`。M1 缩减研究数据层、M2 个人研究策略与回测引擎、M3 七 Agent 研究团队和 M4 Shadow/Paper 研究闭环均已通过阶段验收证据；M5 评测能力只在任务分支实现，尚未成为正式 PASS。完整技术合同仍有十项阻断，所以 `F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE`、`fullF1EntryReady=false`；M1—M4 PASS 不等于生产、正常业务库、真实订单、实盘或自动交易就绪。Tushare 累计真实业务请求为 61，iFinD 真实调用数为 0；正常业务库 V13 未执行，持续 Shadow 需 M5 合并部署后生效，F2B/F3 与 3A-R3B-1 均未开始。
 - `master`：`27d9099 chore: checkpoint Stock Quant Pro 1.3.1 and remove tracked cache`
 - 版本号仍保持 `1.3.1`；尚未发布 `1.4.0`。
 

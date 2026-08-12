@@ -117,7 +117,7 @@ class TushareDedicatedResearchPersistenceGuardTest {
     }
 
     @Test
-    void acceptsExactM4HistoryButRejectsV14AndUnknownExtensions() {
+    void acceptsExactM4AndM5HistoryButRejectsV14AndUnknownExtensions() {
         var m4 = state("stock_quant_research", "stock_quant_research",
                 localUrl("stock_quant_research"), false,
                 TushareDedicatedResearchPersistenceGuard
@@ -132,10 +132,17 @@ class TushareDedicatedResearchPersistenceGuardTest {
         assertCode(state("stock_quant_research", "stock_quant_research",
                         localUrl("stock_quant_research"), false, governance),
                 "TUSHARE_DEDICATED_RESEARCH_SCHEMA_VERSION_INVALID");
+        var m5 = state("stock_quant_research", "stock_quant_research",
+                localUrl("stock_quant_research"), false,
+                TushareDedicatedResearchPersistenceGuard
+                        .M5_REQUIRED_MIGRATIONS);
+        assertEquals(TushareDedicatedResearchPersistenceGuard
+                        .M5_REQUIRED_MIGRATIONS,
+                guard(m5).verifyBeforeProvider().appliedMigrations());
         java.util.ArrayList<String> future = new java.util.ArrayList<>(
                 TushareDedicatedResearchPersistenceGuard
-                        .M4_REQUIRED_MIGRATIONS);
-        future.add("16");
+                        .M5_REQUIRED_MIGRATIONS);
+        future.add("17");
         assertCode(state("stock_quant_research", "stock_quant_research",
                         localUrl("stock_quant_research"), false, future),
                 "TUSHARE_DEDICATED_RESEARCH_SCHEMA_VERSION_INVALID");

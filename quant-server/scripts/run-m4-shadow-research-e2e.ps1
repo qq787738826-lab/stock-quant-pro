@@ -111,14 +111,16 @@ try {
         -ArtifactPath $artifact -ExecutionId $executionId `
         -DatabasePort $port -ExecutionMode FAKE `
         -RangeStart '2025-01-02' -TradeDate '2025-01-10' `
-        -NextTradeDate NONE -CaptureMode CAPTURE -TriggerMode MANUAL `
+        -NextTradeDate INTERNAL_CALENDAR -CalendarAdmission UNKNOWN `
+        -CalendarHorizonEnd '2025-02-09' `
+        -CaptureMode CAPTURE -TriggerMode SCHEDULED `
         -MaximumCostCny 5.00
     if ($LASTEXITCODE -ne 0) { throw 'M4_E2E_RUNNER_FAILED' }
     $value = Get-Content -LiteralPath $result -Raw -Encoding UTF8 |
         ConvertFrom-Json
     Exact $value.status 'SUCCEEDED' 'M4_E2E_STATUS_INVALID'
     Exact $value.gitCommit $ExpectedCommit 'M4_E2E_COMMIT_INVALID'
-    Exact $value.tushareProviderCallCount 6 'M4_E2E_TUSHARE_INVALID'
+    Exact $value.tushareProviderCallCount 8 'M4_E2E_TUSHARE_INVALID'
     Exact $value.retryCount 0 'M4_E2E_RETRY_INVALID'
     Exact $value.modelProviderRequestCount 0 'M4_E2E_MODEL_NETWORK_INVALID'
     Exact $value.modelCallCount 13 'M4_E2E_MODEL_CALLS_INVALID'
@@ -141,16 +143,20 @@ try {
         'M4_E2E_SNAPSHOT_INVALID'
     Exact (Scalar 'SELECT count(*) FROM shadow_paper_fills') 0 `
         'M4_E2E_UNEXPECTED_FILL'
+    Exact (Scalar "SELECT count(*) FROM shadow_research_runs WHERE paper_execution_time IS NOT NULL AND paper_execution_time::date>'2025-01-10'") 1 `
+        'M4_E2E_INTERNAL_NEXT_OPEN_NOT_RESOLVED'
+    Exact (Scalar 'SELECT count(*) FROM shadow_portfolio_snapshots WHERE run_id IS NULL') 1 `
+        'M4_E2E_DAILY_MAINTENANCE_SNAPSHOT_MISSING'
     Exact (Scalar 'SELECT count(*) FROM shadow_paper_portfolios') 1 `
         'M4_E2E_PORTFOLIO_INVALID'
     Exact (Scalar "SELECT string_agg(version, ',' ORDER BY installed_rank) FROM flyway_schema_history WHERE success") `
-        '1,2,3,4,5,6,7,8,9,10,11,12,13,15' `
+        '1,2,3,4,5,6,7,8,9,10,11,12,13,15,16' `
         'M4_E2E_MAIN_HISTORY_INVALID'
 
     Write-Output 'M4_PACKAGED_FAKE_E2E=PASS'
-    Write-Output 'M4_TEMP_POSTGRES_V1_V15=PASS'
+    Write-Output 'M4_TEMP_POSTGRES_V1_V16=PASS'
     Write-Output 'M4_M1_M2_M3_M4_CHAIN=PASS'
-    Write-Output 'M4_FAKE_TUSHARE_CALLS=6'
+    Write-Output 'M4_FAKE_TUSHARE_CALLS=8'
     Write-Output 'M4_REAL_TUSHARE_CALLS=0'
     Write-Output 'M4_REAL_BAILIAN_CALLS=0'
     Write-Output 'M4_ACTIVE_RUN_RESIDUALS=0'

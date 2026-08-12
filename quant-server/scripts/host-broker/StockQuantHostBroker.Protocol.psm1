@@ -330,6 +330,8 @@ $script:M4RequiredKeys = @(
     'range.start'
     'trade.date'
     'next.trade.date'
+    'calendar.admission'
+    'calendar.horizon.end'
     'capture.mode'
     'trigger.mode'
     'database.host'
@@ -343,15 +345,19 @@ $script:M4RequiredKeys = @(
     'endpoint.adj_factor.requests'
     'endpoint.trade_cal.requests'
     'maximum.provider.requests'
-    'tushare.stage.limit'
-    'tushare.stage.calls.before'
+    'budget.calendar.month'
+    'tushare.monthly.limit'
+    'tushare.monthly.calls.before'
     'llm.provider'
     'model'
     'provider.endpoint'
     'maximum.model.calls'
     'maximum.output.tokens.per.call'
     'maximum.cost.cny'
-    'llm.stage.limit.cny'
+    'llm.monthly.limit.cny'
+    'llm.monthly.cost.before.cny'
+    'project.monthly.limit.cny'
+    'project.monthly.cost.before.cny'
     'retry.budget'
     'redirects'
     'user.approval.reference'
@@ -387,6 +393,152 @@ function Initialize-StockQuantHostBrokerDirectories {
         }
     }
     return $paths
+}
+
+function Get-StockQuantM4MonthlyUsage {
+    param(
+        [Parameter(Mandatory = $true)]
+        [ValidatePattern('^20[0-9]{2}-(0[1-9]|1[0-2])$')]
+        [string] $CalendarMonth,
+        [string] $ExcludedRequestPath = 'NONE'
+    )
+    $paths = Initialize-StockQuantHostBrokerDirectories
+    $baselinePath = Join-Path $PSScriptRoot `
+        'StockQuantExternalApiBudgetBaseline.psd1'
+    if (-not (Test-Path -LiteralPath $baselinePath -PathType Leaf)) {
+        throw 'M4_MONTHLY_BUDGET_BASELINE_MISSING'
+    }
+    $baseline = Import-PowerShellDataFile -LiteralPath $baselinePath
+    if ($baseline.SchemaVersion -ne
+            'STOCK_QUANT_EXTERNAL_API_BUDGET_BASELINE_V1' -or
+        $null -eq $baseline.Months) {
+        throw 'M4_MONTHLY_BUDGET_BASELINE_INVALID'
+    }
+    [decimal]$nonShadowCost = [decimal]0.00
+    if ($baseline.Months.ContainsKey($CalendarMonth)) {
+        $monthBaseline = $baseline.Months[$CalendarMonth]
+        if ($null -eq $monthBaseline -or
+            -not $monthBaseline.ContainsKey('ProjectNonShadowCostCny') -or
+            -not [decimal]::TryParse(
+                [string]$monthBaseline.ProjectNonShadowCostCny,
+                [Globalization.NumberStyles]::Number,
+                [Globalization.CultureInfo]::InvariantCulture,
+                [ref]$nonShadowCost) -or $nonShadowCost -lt 0) {
+            throw 'M4_MONTHLY_BUDGET_BASELINE_INVALID'
+        }
+    }
+    [decimal]$shadowCost = [decimal]0.00
+    $tushareCalls = 0
+    $requestCount = 0
+    $seen = @{}
+    $excluded = if ($ExcludedRequestPath -eq 'NONE') { 'NONE' } else {
+        [IO.Path]::GetFullPath($ExcludedRequestPath)
+    }
+    $requestFiles = @(Get-ChildItem -LiteralPath $paths.Requests -File `
+        -Filter 'SQHB_*.properties' | Where-Object {
+            $ExcludedRequestPath -eq 'NONE' -or
+            -not $_.FullName.Equals($excluded,
+                [StringComparison]::OrdinalIgnoreCase)
+        })
+    foreach ($file in $requestFiles) {
+        if ($file.Length -lt 1 -or $file.Length -gt 65536) {
+            throw 'M4_MONTHLY_BUDGET_LEDGER_INVALID'
+        }
+        $values = Read-StrictStockQuantProperties -Path $file.FullName
+        if (-not $values.Contains('operation') -or
+            $values['operation'] -ne 'RUN_M4_SHADOW_RESEARCH') {
+            continue
+        }
+        if (-not $values.Contains('request.id') -or
+            -not $values.Contains('created.at')) {
+            throw 'M4_MONTHLY_BUDGET_LEDGER_INVALID'
+        }
+        $id = [string]$values['request.id']
+        if ($id -notmatch
+                '^SQHB_[0-9]{8}T[0-9]{6}Z_[A-F0-9]{12}$' -or
+            $seen.ContainsKey($id)) {
+            throw 'M4_MONTHLY_BUDGET_LEDGER_INVALID'
+        }
+        $seen[$id] = $true
+        $created = ConvertTo-StockQuantTimestamp `
+            ([string]$values['created.at'])
+        $china = [TimeZoneInfo]::ConvertTimeBySystemTimeZoneId(
+            $created, 'China Standard Time')
+        if ($china.ToString('yyyy-MM') -ne $CalendarMonth) { continue }
+        $requestCount++
+        $runnerPath = Join-Path $paths.Results "$id.m4-shadow.json"
+        if (Test-Path -LiteralPath $runnerPath -PathType Leaf) {
+            try {
+                $runner = Get-Content -LiteralPath $runnerPath -Raw `
+                    -Encoding UTF8 | ConvertFrom-Json
+                [decimal]$cost = [decimal]::Parse(
+                    [string]$runner.conservativeCostCny,
+                    [Globalization.NumberStyles]::Number,
+                    [Globalization.CultureInfo]::InvariantCulture)
+            } catch {
+                throw 'M4_MONTHLY_BUDGET_LEDGER_INVALID'
+            }
+            if ($runner.schemaVersion -ne
+                    'M4_SHADOW_RESEARCH_RESULT_V1' -or
+                $runner.status -notin @(
+                    'SUCCEEDED', 'SKIPPED_NON_TRADING_DAY', 'FAILED') -or
+                [int]$runner.tushareProviderCallCount -lt 0 -or
+                [int]$runner.tushareProviderCallCount -gt 8 -or
+                [int]$runner.retryCount -ne 0 -or
+                [int]$runner.modelProviderRequestCount -lt 0 -or
+                [int]$runner.modelProviderRequestCount -gt 13 -or
+                $cost -lt 0 -or $cost -gt [decimal]5.00) {
+                throw 'M4_MONTHLY_BUDGET_LEDGER_INVALID'
+            }
+            $expectedCalls = if ([string]$values[
+                    'calendar.admission'] -eq 'UNKNOWN') { 8 } else { 6 }
+            if ([string]$runner.executionId -ne
+                    ($id -replace '^SQHB_', 'M4SHADOW_') -or
+                [int]$values['maximum.provider.requests'] -ne
+                    $expectedCalls -or
+                ($runner.status -eq 'SUCCEEDED' -and (
+                    [int]$runner.tushareProviderCallCount -ne $expectedCalls -or
+                    [int]$runner.modelProviderRequestCount -ne 13 -or
+                    [int]$runner.modelCallCount -ne 13 -or
+                    $cost -le 0 -or -not $runner.outputAuditClean)) -or
+                ($runner.status -eq 'SKIPPED_NON_TRADING_DAY' -and (
+                    [string]$values['calendar.admission'] -ne 'UNKNOWN' -or
+                    [int]$runner.tushareProviderCallCount -ne 2 -or
+                    [int]$runner.modelProviderRequestCount -ne 0 -or
+                    [int]$runner.modelCallCount -ne 0 -or
+                    $cost -ne 0 -or -not $runner.outputAuditClean))) {
+                throw 'M4_MONTHLY_BUDGET_LEDGER_INVALID'
+            }
+            $shadowCost += $cost
+            $tushareCalls += [int]$runner.tushareProviderCallCount
+            continue
+        }
+        $terminalPath = Join-Path $paths.Results "$id.result.json"
+        if (-not (Test-Path -LiteralPath $terminalPath -PathType Leaf)) {
+            throw 'M4_MONTHLY_BUDGET_LEDGER_INCOMPLETE'
+        }
+        try {
+            $terminal = Get-Content -LiteralPath $terminalPath -Raw `
+                -Encoding UTF8 | ConvertFrom-Json
+        } catch {
+            throw 'M4_MONTHLY_BUDGET_LEDGER_INVALID'
+        }
+        if ($terminal.operation -ne 'RUN_M4_SHADOW_RESEARCH' -or
+            $terminal.status -notin @('FAILED', 'REJECTED') -or
+            [int]$terminal.providerCallCount -ne 0 -or
+            [int]$terminal.retryCount -ne 0) {
+            throw 'M4_MONTHLY_BUDGET_LEDGER_INVALID'
+        }
+    }
+    return [pscustomobject]@{
+        CalendarMonth = $CalendarMonth
+        RequestCount = $requestCount
+        ShadowCostCny = $shadowCost.ToString(
+            [Globalization.CultureInfo]::InvariantCulture)
+        TushareCalls = $tushareCalls
+        ProjectCostCny = ($nonShadowCost + $shadowCost).ToString(
+            [Globalization.CultureInfo]::InvariantCulture)
+    }
 }
 
 function ConvertTo-StockQuantSafeCode {
@@ -926,8 +1078,23 @@ function Read-StockQuantHostBrokerRequest {
         }
     } elseif ($values['operation'] -eq 'RUN_M4_SHADOW_RESEARCH') {
         [int]$tushareCallsBefore = -1
+        [decimal]$llmCostBefore = [decimal]-1.00
+        [decimal]$projectCostBefore = [decimal]-1.00
+        [decimal]$maximumCost = [decimal]-1.00
         [datetime]$rangeStart = [datetime]::MinValue
         [datetime]$tradeDate = [datetime]::MinValue
+        $requestCreated = ConvertTo-StockQuantTimestamp `
+            ([string]$values['created.at'])
+        $requestMonth = [TimeZoneInfo]::ConvertTimeBySystemTimeZoneId(
+            $requestCreated, 'China Standard Time').ToString('yyyy-MM')
+        [datetime]$calendarHorizonEnd = [datetime]::MinValue
+        $calendarAdmission = [string]$values['calendar.admission']
+        $expectedProviderRequests = if ($calendarAdmission -eq 'UNKNOWN') {
+            8
+        } else { 6 }
+        $expectedCalendarRequests = if ($calendarAdmission -eq 'UNKNOWN') {
+            4
+        } else { 2 }
         if ($values['authorization.file'] -ne 'NONE' -or
             $values['m4.runtime'] -ne 'SHADOW_RESEARCH_RUNTIME_V1' -or
             $values['m4.scheduler'] -ne 'SHADOW_SCHEDULER_V1' -or
@@ -949,9 +1116,16 @@ function Read-StockQuantHostBrokerRequest {
                 [Globalization.DateTimeStyles]::None, [ref]$tradeDate) -or
             $rangeStart -gt $tradeDate -or
             ($tradeDate - $rangeStart).TotalDays -gt 30 -or
-            $values['next.trade.date'] -ne 'NONE' -or
+            $values['next.trade.date'] -ne 'INTERNAL_CALENDAR' -or
+            $calendarAdmission -notin @('KNOWN_OPEN', 'UNKNOWN') -or
+            -not [datetime]::TryParseExact(
+                [string]$values['calendar.horizon.end'], 'yyyy-MM-dd',
+                [Globalization.CultureInfo]::InvariantCulture,
+                [Globalization.DateTimeStyles]::None,
+                [ref]$calendarHorizonEnd) -or
+            $calendarHorizonEnd -ne $tradeDate.AddDays(30) -or
             $values['capture.mode'] -ne 'CAPTURE' -or
-            $values['trigger.mode'] -ne 'MANUAL' -or
+            $values['trigger.mode'] -ne 'SCHEDULED' -or
             $values['database.host'] -ne '127.0.0.1' -or
             $values['database.port'] -ne '38432' -or
             $values['database.name'] -ne 'stock_quant_research' -or
@@ -962,26 +1136,50 @@ function Read-StockQuantHostBrokerRequest {
                 'daily,adj_factor,trade_cal' -or
             $values['endpoint.daily.requests'] -ne '2' -or
             $values['endpoint.adj_factor.requests'] -ne '2' -or
-            $values['endpoint.trade_cal.requests'] -ne '2' -or
-            $values['maximum.provider.requests'] -ne '6' -or
-            $values['tushare.stage.limit'] -ne '20' -or
+            [int]$values['endpoint.trade_cal.requests'] -ne
+                $expectedCalendarRequests -or
+            [int]$values['maximum.provider.requests'] -ne
+                $expectedProviderRequests -or
+            $values['budget.calendar.month'] -ne $requestMonth -or
+            $values['tushare.monthly.limit'] -ne '150' -or
             -not [int]::TryParse([string]$values[
-                    'tushare.stage.calls.before'], [ref]$tushareCallsBefore) -or
-            $tushareCallsBefore -lt 0 -or $tushareCallsBefore + 6 -gt 20 -or
+                    'tushare.monthly.calls.before'],
+                [Globalization.NumberStyles]::None,
+                [Globalization.CultureInfo]::InvariantCulture,
+                [ref]$tushareCallsBefore) -or
+            $tushareCallsBefore -lt 0 -or
+            $tushareCallsBefore + $expectedProviderRequests -gt 150 -or
             $values['llm.provider'] -ne 'BAILIAN' -or
             $values['model'] -ne 'qwen3.7-plus' -or
             $values['provider.endpoint'] -ne
                 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions' -or
             $values['maximum.model.calls'] -ne '13' -or
             $values['maximum.output.tokens.per.call'] -ne '900' -or
-            $values['maximum.cost.cny'] -ne '5.00' -or
-            $values['llm.stage.limit.cny'] -ne '10.00' -or
+            -not [decimal]::TryParse([string]$values['maximum.cost.cny'],
+                [Globalization.NumberStyles]::Number,
+                [Globalization.CultureInfo]::InvariantCulture,
+                [ref]$maximumCost) -or
+            $maximumCost -le 0 -or $maximumCost -gt [decimal]5.00 -or
+            $values['llm.monthly.limit.cny'] -ne '30.00' -or
+            -not [decimal]::TryParse(
+                [string]$values['llm.monthly.cost.before.cny'],
+                [Globalization.NumberStyles]::Number,
+                [Globalization.CultureInfo]::InvariantCulture,
+                [ref]$llmCostBefore) -or $llmCostBefore -lt 0 -or
+            $llmCostBefore + $maximumCost -gt [decimal]30.00 -or
+            $values['project.monthly.limit.cny'] -ne '200.00' -or
+            -not [decimal]::TryParse(
+                [string]$values['project.monthly.cost.before.cny'],
+                [Globalization.NumberStyles]::Number,
+                [Globalization.CultureInfo]::InvariantCulture,
+                [ref]$projectCostBefore) -or $projectCostBefore -lt 0 -or
+            $projectCostBefore + $maximumCost -gt [decimal]200.00 -or
             $values['retry.budget'] -ne '0' -or
             $values['redirects'] -ne 'NEVER' -or
             $values['user.approval.reference'] -ne
-                'USER_APPROVED_M4_SHADOW_RESEARCH_CNY_10_TUSHARE_20' -or
+                'USER_APPROVED_M4_CONTINUOUS_SHADOW_MONTHLY' -or
             $values['execution.source'] -ne
-                'M4_SHADOW_RESEARCH_REAL_SMOKE' -or
+                'M4_SHADOW_RESEARCH_CONTINUOUS_SCHEDULED' -or
             $values['no.retry'] -ne 'true') {
             throw 'STOCK_QUANT_HOST_BROKER_REQUEST_SCOPE_INVALID'
         }
@@ -1166,7 +1364,7 @@ function Read-StockQuantHostBrokerRequest {
             throw 'STOCK_QUANT_HOST_BROKER_AUTHORIZATION_MODE_INVALID'
         }
         $authorizationStatus =
-            'M4_USER_APPROVED_CNY_10_TUSHARE_20'
+            'M4_USER_APPROVED_CONTINUOUS_MONTHLY'
     } elseif ($values['operation'] -eq 'DIAGNOSE_TUSHARE_CREDENTIAL') {
         if ($values['authorization.file'] -ne 'NONE') {
             throw 'STOCK_QUANT_HOST_BROKER_AUTHORIZATION_MODE_INVALID'
@@ -1674,6 +1872,7 @@ function New-StockQuantHostBrokerRequestId {
 Export-ModuleMember -Function @(
     'Get-StockQuantHostBrokerPaths'
     'Initialize-StockQuantHostBrokerDirectories'
+    'Get-StockQuantM4MonthlyUsage'
     'ConvertTo-StockQuantSafeCode'
     'Assert-StockQuantPathInside'
     'Read-StockQuantHostBrokerRequest'
