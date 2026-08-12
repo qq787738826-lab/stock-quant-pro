@@ -2,6 +2,10 @@ package com.stockquant.server.agent.marketfacts;
 
 import org.junit.jupiter.api.Test;
 
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -9,7 +13,7 @@ class TushareM4ShadowResearchManualRunnerTest {
     @Test
     void nextExecutionDateCanOnlyBeResolvedInternally() {
         var parsed = TushareM4ShadowResearchManualRunner.Arguments.parse(
-                arguments("INTERNAL_CALENDAR"));
+                arguments("INTERNAL_CALENDAR", "SCHEDULED"));
 
         assertEquals(TushareM4ShadowResearchManualRunner.CalendarAdmission
                 .UNKNOWN, parsed.calendarAdmission());
@@ -17,13 +21,31 @@ class TushareM4ShadowResearchManualRunnerTest {
                 parsed.calendarHorizonEnd().toString());
         assertThrows(IllegalStateException.class, () ->
                 TushareM4ShadowResearchManualRunner.Arguments.parse(
-                        arguments("NONE")));
+                        arguments("NONE", "SCHEDULED")));
         assertThrows(IllegalStateException.class, () ->
                 TushareM4ShadowResearchManualRunner.Arguments.parse(
-                        arguments("2025-01-13")));
+                        arguments("2025-01-13", "SCHEDULED")));
     }
 
-    private static String[] arguments(String nextDate) {
+    @Test
+    void historicalReplayUsesHistoricalCloseWhileScheduledUsesWallClock() {
+        Clock clock = Clock.fixed(Instant.parse("2026-08-12T13:00:00Z"),
+                ZoneOffset.UTC);
+        var replay = TushareM4ShadowResearchManualRunner.Arguments.parse(
+                arguments("INTERNAL_CALENDAR", "HISTORICAL_REPLAY"));
+        var scheduled = TushareM4ShadowResearchManualRunner.Arguments.parse(
+                arguments("INTERNAL_CALENDAR", "SCHEDULED"));
+
+        assertEquals(com.stockquant.core.research.StrategyResearchModels
+                        .closeInstant(replay.tradeDate()),
+                TushareM4ShadowResearchManualRunner.researchAsOf(
+                        replay, clock));
+        assertEquals(clock.instant(),
+                TushareM4ShadowResearchManualRunner.researchAsOf(
+                        scheduled, clock));
+    }
+
+    private static String[] arguments(String nextDate, String triggerMode) {
         return new String[]{
                 "--result-file=target/m4-test.json",
                 "--execution-id=M4SHADOW_20260812T010203Z_A1B2C3D4E5F6",
@@ -33,7 +55,7 @@ class TushareM4ShadowResearchManualRunnerTest {
                 "--next-trade-date=" + nextDate,
                 "--calendar-admission=UNKNOWN",
                 "--calendar-horizon-end=2025-02-09",
-                "--capture-mode=CAPTURE", "--trigger-mode=SCHEDULED",
+                "--capture-mode=CAPTURE", "--trigger-mode=" + triggerMode,
                 "--maximum-cost-cny=5.00"
         };
     }

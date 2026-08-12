@@ -113,7 +113,7 @@ try {
         -RangeStart '2025-01-02' -TradeDate '2025-01-10' `
         -NextTradeDate INTERNAL_CALENDAR -CalendarAdmission UNKNOWN `
         -CalendarHorizonEnd '2025-02-09' `
-        -CaptureMode CAPTURE -TriggerMode SCHEDULED `
+        -CaptureMode CAPTURE -TriggerMode HISTORICAL_REPLAY `
         -MaximumCostCny 5.00
     if ($LASTEXITCODE -ne 0) { throw 'M4_E2E_RUNNER_FAILED' }
     $value = Get-Content -LiteralPath $result -Raw -Encoding UTF8 |

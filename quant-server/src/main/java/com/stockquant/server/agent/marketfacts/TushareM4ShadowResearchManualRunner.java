@@ -323,7 +323,7 @@ public final class TushareM4ShadowResearchManualRunner {
             LocalDate nextTradeDate,
             Clock clock
     ) {
-        Instant asOf = clock.instant();
+        Instant asOf = researchAsOf(launch, clock);
         Instant nextExecution = nextTradeDate == null ? null
                 : com.stockquant.core.research.StrategyResearchModels
                 .openInstant(nextTradeDate);
@@ -333,6 +333,13 @@ public final class TushareM4ShadowResearchManualRunner {
                 captured.providerCallCount(),
                 "Perform evidence-bound seven-agent shadow research; freeze "
                         + "the conclusion and permit an empty paper portfolio.");
+    }
+
+    static Instant researchAsOf(Arguments launch, Clock clock) {
+        return launch.triggerMode() == TriggerMode.HISTORICAL_REPLAY
+                ? com.stockquant.core.research.StrategyResearchModels
+                .closeInstant(launch.tradeDate())
+                : clock.instant();
     }
 
     private static List<StrategySpec> strategies() {
