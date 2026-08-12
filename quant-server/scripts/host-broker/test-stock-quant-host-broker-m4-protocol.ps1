@@ -123,6 +123,14 @@ try {
     }
     $tests++
 
+    $brokerPath = Join-Path $PSScriptRoot 'stock-quant-host-broker.ps1'
+    $broker = Get-Content -LiteralPath $brokerPath -Raw -Encoding UTF8
+    if ($broker -match '\[decimal\]::Min\s*\(' -or
+        $broker -notmatch '\$llmRemaining\s+-lt\s+\[decimal\]5\.00') {
+        throw 'M4_PROTOCOL_POWERSHELL_51_DECIMAL_COMPATIBILITY_INVALID'
+    }
+    $tests++
+
     $mutations = @(
         @('maximum.provider.requests', '7'),
         @('retry.budget', '1'),

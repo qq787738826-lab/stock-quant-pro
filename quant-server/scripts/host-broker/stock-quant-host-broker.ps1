@@ -1188,8 +1188,9 @@ function Get-M4StageBudget {
         PriorRequestCount = $prior.Count
         PriorLlmCostCny = $llmUsed.ToString(
             [Globalization.CultureInfo]::InvariantCulture)
-        RemainingLlmCostCny = [decimal]::Min(
-            $llmRemaining, [decimal]5.00).ToString(
+        RemainingLlmCostCny = $(if ($llmRemaining -lt [decimal]5.00) {
+            $llmRemaining
+        } else { [decimal]5.00 }).ToString(
             [Globalization.CultureInfo]::InvariantCulture)
         PriorTushareCalls = $tushareUsed
         RemainingTushareCalls = $tushareLimit - $tushareUsed
