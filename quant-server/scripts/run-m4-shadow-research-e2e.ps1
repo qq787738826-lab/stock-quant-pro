@@ -19,7 +19,8 @@ $data = Join-Path $root 'data'
 $log = Join-Path $root 'postgres.log'
 $artifact = Join-Path $target `
     'quant-server-1.3.1-m4-shadow-research-runner.jar'
-$result = Join-Path $root 'm4-shadow-result.json'
+$result = Join-Path $target (
+    'm4-shadow-e2e-' + [Guid]::NewGuid().ToString('N') + '.json')
 $port = 0
 $started = $false
 
@@ -158,6 +159,9 @@ try {
     if ($started -and (Test-Path -LiteralPath $data)) {
         & "$pgBin\pg_ctl.exe" -D $data -m immediate -w stop `
             2>$null | Out-Null
+    }
+    if (Test-Path -LiteralPath $result -PathType Leaf) {
+        Remove-Item -LiteralPath $result -Force
     }
     Remove-Root
     if (Test-Path -LiteralPath $root) {
