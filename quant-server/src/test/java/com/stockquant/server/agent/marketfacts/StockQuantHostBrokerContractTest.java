@@ -336,9 +336,14 @@ class StockQuantHostBrokerContractTest {
         assertTrue(script.contains("modelProviderMessageCategory"));
         assertFalse(script.contains("Invoke-Expression"));
         String production = section(script,
-                "function Start-ResearchProductionProcess",
+                "function Resolve-ResearchProductionJavaExecutable",
                 "function Read-SanitizedBrokerResult");
-        assertTrue(production.contains("Start-Process -FilePath 'java.exe'"));
+        assertTrue(production.contains(
+                "Resolve-ResearchProductionJavaExecutable"));
+        assertTrue(production.contains(
+                "Start-Process -FilePath $javaExecutable"));
+        assertTrue(production.contains("java\\.home"));
+        assertTrue(production.contains("M6_JAVA_17_RUNTIME_INVALID"));
         assertTrue(production.contains("-ArgumentList @('-jar'"));
         assertFalse(production.contains("Credential"));
         assertFalse(production.contains("Provider"));

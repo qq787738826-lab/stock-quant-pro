@@ -10,6 +10,8 @@ $root = Join-Path $paths.TargetRoot `
     ('stock-quant-m6-protocol-' + [Guid]::NewGuid().ToString('N'))
 $artifact = Join-Path $root 'quant-server-1.3.1-research-production.jar'
 $tests = 0
+$brokerScript = Get-Content -LiteralPath (
+    Join-Path $PSScriptRoot 'stock-quant-host-broker.ps1') -Raw
 
 function Write-Lines([string] $Path, [System.Collections.IDictionary] $Values) {
     $lines = foreach ($key in $Values.Keys) { "$key=$($Values[$key])" }
@@ -112,6 +114,16 @@ try {
     $path['jar.path'] = (Resolve-Path (Join-Path $paths.RepositoryRoot 'README.md')).Path
     $path['jar.sha256'] = ((Get-FileHash $path['jar.path'] -Algorithm SHA256).Hash).ToLowerInvariant()
     Reject $path 'STOCK_QUANT_HOST_BROKER_JAR_PATH_INVALID'
+
+    if ($brokerScript -notmatch
+            'function Resolve-ResearchProductionJavaExecutable' -or
+        $brokerScript -notmatch
+            "Start-Process -FilePath \`$javaExecutable" -or
+        $brokerScript -notmatch "java\\.home" -or
+        $brokerScript -notmatch 'M6_JAVA_17_RUNTIME_INVALID') {
+        throw 'M6_JAVA_PROCESS_BINDING_CONTRACT_FAILED'
+    }
+    $tests++
 
     Write-Output "M6_BROKER_PROTOCOL_TESTS=$tests"
     Write-Output 'M6_BROKER_PROVIDER_CALLS=0'

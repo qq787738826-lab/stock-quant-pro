@@ -1312,6 +1312,39 @@ function Invoke-M4ShadowResearch {
     return $summary
 }
 
+function Resolve-ResearchProductionJavaExecutable {
+    $command = 'java.exe'
+    $oldPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        $details = @(& $command '-XshowSettings:properties' '-version' 2>&1 |
+            ForEach-Object { [string]$_ })
+        $javaExitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $oldPreference
+    }
+    $homes = @()
+    $versions = @()
+    foreach ($line in $details) {
+        if ($line -match '^\s*java\.home\s*=\s*(.+?)\s*$') {
+            $homes += $Matches[1].Trim()
+        }
+        if ($line -match '^\s*java\.version\s*=\s*(.+?)\s*$') {
+            $versions += $Matches[1].Trim()
+        }
+    }
+    if ($javaExitCode -ne 0 -or $homes.Count -ne 1 -or
+        $versions.Count -ne 1 -or $versions[0] -notmatch '^17(?:\.|$)') {
+        throw 'M6_JAVA_17_RUNTIME_INVALID'
+    }
+    $java = [IO.Path]::GetFullPath(
+        (Join-Path $homes[0] 'bin\java.exe'))
+    if (-not (Test-Path -LiteralPath $java -PathType Leaf)) {
+        throw 'M6_JAVA_17_RUNTIME_INVALID'
+    }
+    return $java
+}
+
 function Get-ResearchProductionProcess {
     if (-not (Test-Path -LiteralPath $productionPidFile -PathType Leaf)) {
         return $null
@@ -1487,7 +1520,8 @@ function Start-ResearchProductionProcess {
                 "$log.$([DateTimeOffset]::UtcNow.ToUnixTimeSeconds()).previous"
         }
     }
-    $process = Start-Process -FilePath 'java.exe' `
+    $javaExecutable = Resolve-ResearchProductionJavaExecutable
+    $process = Start-Process -FilePath $javaExecutable `
         -ArgumentList @('-jar', ('"' + $Binding.JarPath + '"')) `
         -WorkingDirectory $paths.RepositoryRoot -WindowStyle Hidden -PassThru `
         -RedirectStandardOutput $productionStdout `
