@@ -56,16 +56,12 @@ public final class ShadowResearchScheduler {
         }
         if (repository.frozenSlot(date,
                 ShadowResearchModels.RESEARCH_SLOT,
-                ShadowResearchModels.STRATEGY_VERSION).isPresent()) {
+                ShadowResearchModels.SELECTION_STRATEGY_VERSION).isPresent()) {
             runtimeState.checked(clock.instant(), "SLOT_ALREADY_FROZEN");
             return;
         }
         repository.interruptStaleRuns(clock.instant().minus(
                 Duration.ofHours(2)), clock.instant());
-        if (repository.activeRun().isPresent()) {
-            runtimeState.checked(clock.instant(), "ACTIVE_RUN_PRESENT");
-            return;
-        }
         var calendar = repository.researchCalendarState(date,
                 clock.instant());
         if (calendar == ShadowResearchRepository.CalendarState.CLOSED) {

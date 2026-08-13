@@ -44,6 +44,9 @@ public final class TushareControlledAcceptanceBuildProof {
     public static final String M6_RUNNER_START_CLASS =
             "com.stockquant.server.production."
                     + "StockQuantResearchProductionRunner";
+    public static final String RESEARCH_SELECTION_RUNNER_START_CLASS =
+            "com.stockquant.server.agent.marketfacts."
+                    + "TushareResearchSelectionManualRunner";
     static final String M1_STAGE_BRANCH =
             "codex/1.4.0-m1-research-data-ready";
     private static final Set<String> REQUIRED_PROPERTIES = Set.of(
@@ -141,6 +144,9 @@ public final class TushareControlledAcceptanceBuildProof {
                     : buildMode
                     == BuildMode.M6_STAGE_CONTROLLED_BUILD_ARTIFACT
                     ? ProofSource.M6_STAGE_CONTROLLED_BUILD_ARTIFACT
+                    : buildMode
+                    == BuildMode.RESEARCH_SELECTION_CONTROLLED_BUILD_ARTIFACT
+                    ? ProofSource.RESEARCH_SELECTION_CONTROLLED_BUILD_ARTIFACT
                     : buildMode == BuildMode.E2E_DRY_RUN
                     ? ProofSource.E2E_DRY_RUN
                     : ProofSource.PREPARATION_ONLY;
@@ -283,7 +289,9 @@ public final class TushareControlledAcceptanceBuildProof {
                     M2_RUNNER_START_CLASS,
                     M3_RUNNER_START_CLASS,
                     M4_RUNNER_START_CLASS,
-                    M6_RUNNER_START_CLASS).contains(manifest.startClass())
+                    M6_RUNNER_START_CLASS,
+                    RESEARCH_SELECTION_RUNNER_START_CLASS).contains(
+                            manifest.startClass())
                     || !gitCommit.equals(manifest.gitCommit())
                     || !remoteGitCommit.equals(manifest.remoteGitCommit())
                     || !branchAllowedForMode(branchName, buildMode)
@@ -303,6 +311,9 @@ public final class TushareControlledAcceptanceBuildProof {
                     && !gitCommit.equals(remoteGitCommit)
                     || buildMode
                     == BuildMode.M6_STAGE_CONTROLLED_BUILD_ARTIFACT
+                    && !gitCommit.equals(remoteGitCommit)
+                    || buildMode
+                    == BuildMode.RESEARCH_SELECTION_CONTROLLED_BUILD_ARTIFACT
                     && !gitCommit.equals(remoteGitCommit)
                     || !branchName.equals(manifest.branchName())
                     || trackedWorkspaceClean != manifest.trackedWorkspaceClean()
@@ -391,6 +402,21 @@ public final class TushareControlledAcceptanceBuildProof {
                     && buildMode
                     == BuildMode.M6_STAGE_CONTROLLED_BUILD_ARTIFACT
                     || source == ProofSource.CONTROLLED_BUILD_ARTIFACT
+                    && buildMode == BuildMode.CONTROLLED_BUILD_ARTIFACT
+                    || source
+                    == ProofSource.RESEARCH_SELECTION_CONTROLLED_BUILD_ARTIFACT
+                    && buildMode
+                    == BuildMode.RESEARCH_SELECTION_CONTROLLED_BUILD_ARTIFACT);
+        }
+
+        public boolean researchSelectionEligible() {
+            validate();
+            return RESEARCH_SELECTION_RUNNER_START_CLASS.equals(
+                    runnerStartClass()) && (source
+                    == ProofSource.RESEARCH_SELECTION_CONTROLLED_BUILD_ARTIFACT
+                    && buildMode
+                    == BuildMode.RESEARCH_SELECTION_CONTROLLED_BUILD_ARTIFACT
+                    || source == ProofSource.CONTROLLED_BUILD_ARTIFACT
                     && buildMode == BuildMode.CONTROLLED_BUILD_ARTIFACT);
         }
 
@@ -471,6 +497,7 @@ public final class TushareControlledAcceptanceBuildProof {
         M3_STAGE_CONTROLLED_BUILD_ARTIFACT,
         M4_STAGE_CONTROLLED_BUILD_ARTIFACT,
         M6_STAGE_CONTROLLED_BUILD_ARTIFACT,
+        RESEARCH_SELECTION_CONTROLLED_BUILD_ARTIFACT,
         E2E_DRY_RUN,
         PREPARATION_ONLY,
         TEST_ONLY
@@ -484,6 +511,7 @@ public final class TushareControlledAcceptanceBuildProof {
         M3_STAGE_CONTROLLED_BUILD_ARTIFACT,
         M4_STAGE_CONTROLLED_BUILD_ARTIFACT,
         M6_STAGE_CONTROLLED_BUILD_ARTIFACT,
+        RESEARCH_SELECTION_CONTROLLED_BUILD_ARTIFACT,
         E2E_DRY_RUN
     }
 
@@ -577,6 +605,11 @@ public final class TushareControlledAcceptanceBuildProof {
         }
         if (buildMode == BuildMode.M6_STAGE_CONTROLLED_BUILD_ARTIFACT) {
             return "codex/1.4.0-m6-research-production-ready".equals(branchName);
+        }
+        if (buildMode
+                == BuildMode.RESEARCH_SELECTION_CONTROLLED_BUILD_ARTIFACT) {
+            return "codex/1.4.0-v1.0.1-research-selection-usability"
+                    .equals(branchName);
         }
         return REQUIRED_INTEGRATION_BRANCH.equals(branchName)
                 || branchName.startsWith("codex/");

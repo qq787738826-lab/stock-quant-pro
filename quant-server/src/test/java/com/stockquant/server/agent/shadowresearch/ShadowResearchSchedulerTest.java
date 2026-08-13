@@ -14,6 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -26,7 +27,7 @@ class ShadowResearchSchedulerTest {
         assertEquals(true, values.isEnabled());
         assertEquals("0 20 17 * * MON-FRI", values.getCron());
         assertEquals("Asia/Shanghai", values.getZone());
-        assertEquals(8, values.getMaximumTushareRequests());
+        assertEquals(52, values.getMaximumTushareRequests());
         assertEquals(13, values.getMaximumModelCalls());
         assertEquals(150, values.getMonthlyTushareRequestLimit());
         assertEquals("30.00",
@@ -68,6 +69,33 @@ class ShadowResearchSchedulerTest {
         assertEquals(1, calls.get());
         verify(repository).researchCalendarState(
                 LocalDate.of(2025, 9, 10), now);
+        verify(repository, never()).activeRun();
+    }
+
+    @Test
+    void activeOnDemandResearchDoesNotConsumeTheOnlyDailyShadowSlot() {
+        ShadowResearchRepository repository = mock(
+                ShadowResearchRepository.class);
+        AtomicInteger calls = new AtomicInteger();
+        ShadowResearchDispatchGateway gateway = (date, asOf, calendar) -> {
+            calls.incrementAndGet();
+            return new ShadowResearchDispatchGateway.DispatchResult(
+                    "SQHB_20250910T092000Z_A1B2C3D4E5F6", true);
+        };
+        Instant now = Instant.parse("2025-09-10T09:20:00Z");
+        when(repository.frozenSlot(any(), any(), any()))
+                .thenReturn(Optional.empty());
+        when(repository.researchCalendarState(any(), any()))
+                .thenReturn(ShadowResearchRepository.CalendarState.OPEN);
+        when(repository.nextCommonOpenKnown(any(), any())).thenReturn(true);
+
+        new ShadowResearchScheduler(repository, gateway,
+                new ShadowResearchScheduleProperties(),
+                Clock.fixed(now, ZoneOffset.UTC),
+                new ShadowSchedulerRuntimeState()).dispatchAfterClose();
+
+        assertEquals(1, calls.get());
+        verify(repository, never()).activeRun();
     }
 
     @Test

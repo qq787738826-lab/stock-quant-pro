@@ -12,6 +12,7 @@ param(
         'CHECK_BAILIAN_CREDENTIAL_STATUS',
         'RUN_M3_AGENT_RESEARCH_SMOKE',
         'RUN_M4_SHADOW_RESEARCH',
+        'RUN_RESEARCH_SELECTION',
         'START_RESEARCH_PRODUCTION',
         'STOP_RESEARCH_PRODUCTION',
         'CHECK_RESEARCH_PRODUCTION_STATUS',
@@ -37,6 +38,24 @@ param(
     [ValidateSet('AUTO', 'CONTROLLED_MANUAL')]
     [string] $ShadowDispatchMode = 'AUTO',
 
+    [ValidateRange(0, 9223372036854775807)]
+    [long] $SelectionRunId = 0,
+
+    [ValidatePattern('^(NONE|SELECT_[0-9]{8}T[0-9]{6}Z_[A-F0-9]{12})$')]
+    [string] $SelectionPublicRunId = 'NONE',
+
+    [ValidateSet('ON_DEMAND', 'SCHEDULED_SHADOW')]
+    [string] $SelectionTrigger = 'ON_DEMAND',
+
+    [ValidateSet(20, 60, 120, 250)]
+    [int] $PrimaryWindow = 20,
+
+    [ValidateSet(60, 120, 250)]
+    [int] $AuxiliaryWindow = 60,
+
+    [ValidateSet(0, 2, 52)]
+    [int] $MaximumProviderRequests = 52,
+
     [switch] $SubmitOnly,
 
     [ValidateRange(5, 2700)]
@@ -53,8 +72,10 @@ $identity = [Security.Principal.WindowsIdentity]::GetCurrent().Name
 $integrationBranch = 'feature/1.4.0-agent-team'
 
 if (($RequestId -ne 'AUTO' -or $TradeDate -ne 'AUTO' -or
-        $ShadowDispatchMode -ne 'AUTO' -or $SubmitOnly) -and
+        $ShadowDispatchMode -ne 'AUTO' -or $SelectionRunId -ne 0 -or
+        $SelectionPublicRunId -ne 'NONE' -or $SubmitOnly) -and
     $Operation -notin @('RUN_M4_SHADOW_RESEARCH',
+        'RUN_RESEARCH_SELECTION',
         'START_RESEARCH_PRODUCTION', 'STOP_RESEARCH_PRODUCTION',
         'CHECK_RESEARCH_PRODUCTION_STATUS')) {
     throw 'STOCK_QUANT_HOST_BROKER_FIXED_DISPATCH_ARGUMENT_INVALID'
@@ -76,6 +97,8 @@ if ([string]::IsNullOrWhiteSpace($ArtifactPath)) {
             'STOP_RESEARCH_PRODUCTION',
             'CHECK_RESEARCH_PRODUCTION_STATUS')) {
         'quant-server-1.3.1-research-production.jar'
+    } elseif ($Operation -eq 'RUN_RESEARCH_SELECTION') {
+        'quant-server-1.3.1-research-selection-runner.jar'
     } elseif ($Operation -eq 'RUN_M4_SHADOW_RESEARCH') {
         'quant-server-1.3.1-m4-shadow-research-runner.jar'
     } elseif ($Operation -eq
@@ -124,12 +147,22 @@ try {
             'RUN_M3_AGENT_RESEARCH_SMOKE') -and
         $branch -eq 'codex/1.4.0-m3-agent-research-ready') {
         'codex/1.4.0-m3-agent-research-ready'
+    } elseif ($Operation -eq 'RUN_RESEARCH_SELECTION' -and
+        $branch -eq
+            'codex/1.4.0-v1.0.1-research-selection-usability') {
+        'codex/1.4.0-v1.0.1-research-selection-usability'
     } elseif ($Operation -eq 'RUN_M4_SHADOW_RESEARCH' -and
         $branch -eq 'codex/1.4.0-m4-shadow-research-ready') {
         'codex/1.4.0-m4-shadow-research-ready'
     } elseif ($Operation -eq 'RUN_M4_SHADOW_RESEARCH' -and
         $branch -eq 'codex/1.4.0-m6-research-production-ready') {
         'codex/1.4.0-m6-research-production-ready'
+    } elseif ($Operation -in @('START_RESEARCH_PRODUCTION',
+            'STOP_RESEARCH_PRODUCTION',
+            'CHECK_RESEARCH_PRODUCTION_STATUS') -and
+        $branch -eq
+            'codex/1.4.0-v1.0.1-research-selection-usability') {
+        'codex/1.4.0-v1.0.1-research-selection-usability'
     } elseif ($Operation -in @('START_RESEARCH_PRODUCTION',
             'STOP_RESEARCH_PRODUCTION',
             'CHECK_RESEARCH_PRODUCTION_STATUS') -and
@@ -176,6 +209,7 @@ try {
             'CHECK_BAILIAN_CREDENTIAL_STATUS',
             'RUN_M3_AGENT_RESEARCH_SMOKE',
             'RUN_M4_SHADOW_RESEARCH',
+            'RUN_RESEARCH_SELECTION',
             'START_RESEARCH_PRODUCTION',
             'STOP_RESEARCH_PRODUCTION',
             'CHECK_RESEARCH_PRODUCTION_STATUS')) {
@@ -293,6 +327,85 @@ try {
             'no.retry' = 'true'
             'source.request.id' = $SourceRequestId
         }
+    } elseif ($Operation -eq 'RUN_RESEARCH_SELECTION') {
+        if ($SelectionRunId -lt 1 -or
+            $SelectionPublicRunId -eq 'NONE' -or
+            $AuxiliaryWindow -lt $PrimaryWindow) {
+            throw 'RESEARCH_SELECTION_FIXED_SCOPE_INVALID'
+        }
+        $chinaZone = [TimeZoneInfo]::FindSystemTimeZoneById(
+            'China Standard Time')
+        $chinaNow = [TimeZoneInfo]::ConvertTime(
+            [DateTimeOffset]::UtcNow, $chinaZone)
+        $calendarMonth = $chinaNow.ToString('yyyy-MM')
+        $usage = Get-StockQuantM4MonthlyUsage `
+            -CalendarMonth $calendarMonth
+        [decimal]$shadowCost = [decimal]$usage.CommittedShadowCostCny
+        [decimal]$projectCost = [decimal]$usage.CommittedProjectCostCny
+        [decimal]$remainingCost = [decimal]5.00
+        if ([decimal]30 - $shadowCost -lt $remainingCost) {
+            $remainingCost = [decimal]30 - $shadowCost
+        }
+        if ([decimal]200 - $projectCost -lt $remainingCost) {
+            $remainingCost = [decimal]200 - $projectCost
+        }
+        if ($remainingCost -le 0 -or [int]$usage.CommittedTushareCalls +
+                $MaximumProviderRequests -gt 150) {
+            throw 'RESEARCH_SELECTION_MONTHLY_BUDGET_EXHAUSTED'
+        }
+        $requestValues = [ordered]@{
+            'schema.version' = 'STOCK_QUANT_HOST_BROKER_REQUEST_V1'
+            'request.id' = $requestId
+            'operation' = $Operation
+            'git.commit' = $head
+            'jar.path' = $artifact
+            'jar.sha256' = $artifactHash
+            'authorization.file' = 'NONE'
+            'selection.run.id' = [string]$SelectionRunId
+            'selection.public.run.id' = $SelectionPublicRunId
+            'selection.trigger' = $SelectionTrigger
+            'selection.universe.version' = 'RESEARCH_UNIVERSE_V1'
+            'selection.primary.window' = [string]$PrimaryWindow
+            'selection.auxiliary.window' = [string]$AuxiliaryWindow
+            'selection.shortlist.limit' = '10'
+            'selection.final.limit' = '5'
+            'selection.paper.enabled' = 'true'
+            'database.host' = '127.0.0.1'
+            'database.port' = '38432'
+            'database.name' = 'stock_quant_research'
+            'database.user' = 'stock_quant_research'
+            'schema.name' = 'tushare_research'
+            'tushare.provider' = 'TUSHARE'
+            'tushare.endpoints' = 'daily,adj_factor,trade_cal'
+            'maximum.provider.requests' = [string]$MaximumProviderRequests
+            'budget.calendar.month' = $calendarMonth
+            'tushare.monthly.limit' = '150'
+            'tushare.monthly.calls.before' =
+                [string]$usage.CommittedTushareCalls
+            'llm.provider' = 'BAILIAN'
+            'model' = 'qwen3.7-plus'
+            'provider.endpoint' =
+                'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'
+            'maximum.model.calls' = '13'
+            'maximum.output.tokens.per.call' = '900'
+            'maximum.cost.cny' = $remainingCost.ToString(
+                [Globalization.CultureInfo]::InvariantCulture)
+            'llm.monthly.limit.cny' = '30.00'
+            'llm.monthly.cost.before.cny' =
+                [string]$usage.CommittedShadowCostCny
+            'project.monthly.limit.cny' = '200.00'
+            'project.monthly.cost.before.cny' =
+                [string]$usage.CommittedProjectCostCny
+            'retry.budget' = '0'
+            'redirects' = 'NEVER'
+            'user.approval.reference' =
+                'USER_APPROVED_STOCK_QUANT_PRO_V1_MONTHLY'
+            'created.at' = $createdAt.ToString('o')
+            'expires.at' = $expiresAt.ToString('o')
+            'execution.source' = 'CURRENT_AS_OF_RESEARCH_SELECTION'
+            'no.retry' = 'true'
+            'source.request.id' = 'NONE'
+        }
     } elseif ($Operation -eq 'RUN_M4_SHADOW_RESEARCH') {
         $chinaZone = [TimeZoneInfo]::FindSystemTimeZoneById(
             'China Standard Time')
@@ -348,11 +461,11 @@ try {
         $usage = Get-StockQuantM4MonthlyUsage `
             -CalendarMonth $calendarMonth
         [decimal]$shadowCost = [decimal]::Parse(
-            [string]$usage.ShadowCostCny,
+            [string]$usage.CommittedShadowCostCny,
             [Globalization.NumberStyles]::Number,
             [Globalization.CultureInfo]::InvariantCulture)
         [decimal]$projectCost = [decimal]::Parse(
-            [string]$usage.ProjectCostCny,
+            [string]$usage.CommittedProjectCostCny,
             [Globalization.NumberStyles]::Number,
             [Globalization.CultureInfo]::InvariantCulture)
         [decimal]$remainingCost = [decimal]5.00
@@ -363,7 +476,7 @@ try {
             $remainingCost = [decimal]200.00 - $projectCost
         }
         if ($remainingCost -le 0 -or
-            [int]$usage.TushareCalls + $m4ProviderRequests -gt 150) {
+            [int]$usage.CommittedTushareCalls + $m4ProviderRequests -gt 150) {
             throw 'M4_MONTHLY_BUDGET_EXHAUSTED'
         }
         $requestValues = [ordered]@{
@@ -411,7 +524,7 @@ try {
             'budget.calendar.month' = $calendarMonth
             'tushare.monthly.limit' = '150'
             'tushare.monthly.calls.before' =
-                [string]$usage.TushareCalls
+                [string]$usage.CommittedTushareCalls
             'llm.provider' = 'BAILIAN'
             'model' = 'qwen3.7-plus'
             'provider.endpoint' =
@@ -422,10 +535,10 @@ try {
                 [Globalization.CultureInfo]::InvariantCulture)
             'llm.monthly.limit.cny' = '30.00'
             'llm.monthly.cost.before.cny' =
-                [string]$usage.ShadowCostCny
+                [string]$usage.CommittedShadowCostCny
             'project.monthly.limit.cny' = '200.00'
             'project.monthly.cost.before.cny' =
-                [string]$usage.ProjectCostCny
+                [string]$usage.CommittedProjectCostCny
             'retry.budget' = '0'
             'redirects' = 'NEVER'
             'user.approval.reference' = $m4ApprovalReference

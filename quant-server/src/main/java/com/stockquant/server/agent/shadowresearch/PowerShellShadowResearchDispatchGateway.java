@@ -1,5 +1,11 @@
 package com.stockquant.server.agent.shadowresearch;
 
+import com.stockquant.server.agent.marketfacts.PitMarketFactRepository;
+import com.stockquant.server.agent.marketfacts.TushareResearchUniverseDatasetLoader;
+import com.stockquant.server.researchselection.ResearchSelectionModels;
+import com.stockquant.server.researchselection.ResearchSelectionRepository;
+import com.stockquant.server.researchselection.ResearchSelectionProviderBudgetPlanner;
+import com.stockquant.server.researchselection.ResearchUniverseV1;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
@@ -37,16 +43,23 @@ public final class PowerShellShadowResearchDispatchGateway
     private final ShadowResearchRepository repository;
     private final ShadowResearchScheduleProperties properties;
     private final java.time.Clock clock;
+    private final ResearchSelectionRepository selections;
+    private final TushareResearchUniverseDatasetLoader universeLoader;
 
     public PowerShellShadowResearchDispatchGateway(
             ShadowResearchRepository repository,
             ShadowResearchScheduleProperties properties,
+            org.springframework.jdbc.core.JdbcTemplate jdbc,
+            com.fasterxml.jackson.databind.ObjectMapper mapper,
             @org.springframework.beans.factory.annotation.Qualifier(
                     "agentTemporalClock") java.time.Clock clock
     ) {
         this.repository = Objects.requireNonNull(repository, "repository");
         this.properties = Objects.requireNonNull(properties, "properties");
         this.clock = Objects.requireNonNull(clock, "clock");
+        this.selections = new ResearchSelectionRepository(jdbc, mapper);
+        this.universeLoader = new TushareResearchUniverseDatasetLoader(
+                new PitMarketFactRepository(jdbc, mapper));
     }
 
     @Override
@@ -66,14 +79,24 @@ public final class PowerShellShadowResearchDispatchGateway
                 researchAsOf)) {
             return new DispatchResult(requestId, false);
         }
+        ResearchSelectionModels.RunSummary selection = null;
         try {
+            ResearchSelectionModels.SelectionRequest selectionRequest =
+                    new ResearchSelectionModels.SelectionRequest(
+                            ResearchSelectionModels.TriggerMode
+                                    .SCHEDULED_SHADOW,
+                            20, 60, 10, 5, true);
+            selection = selections.create(selectionPublicId(researchAsOf),
+                    selectionRequest, researchAsOf,
+                    com.stockquant.server.production.ProductionRuntimeState
+                            .require().gitCommit());
             Path root = repositoryRoot();
             Path script = fixedFile(root,
                     "quant-server/scripts/host-broker/"
                             + "invoke-stock-quant-host-broker.ps1");
             Path artifact = fixedFile(root,
                     "quant-server/target/"
-                            + "quant-server-1.3.1-m4-shadow-research-runner.jar");
+                            + "quant-server-1.3.1-research-selection-runner.jar");
             fixedFile(root, artifact.toString()
                     + ".f1f-b2-proof.properties");
             Path powershell = powershell();
@@ -81,13 +104,17 @@ public final class PowerShellShadowResearchDispatchGateway
                     powershell.toString(), "-NoProfile", "-NonInteractive",
                     "-ExecutionPolicy", "Bypass", "-File",
                     script.toString(), "-Operation",
-                    "RUN_M4_SHADOW_RESEARCH", "-ArtifactPath",
+                    "RUN_RESEARCH_SELECTION", "-ArtifactPath",
                     artifact.toString(), "-RequestId", requestId,
-                    "-TradeDate", tradeDate.toString(),
-                    "-CalendarAdmission", calendarState ==
-                    ShadowResearchRepository.CalendarState.OPEN
-                    ? "KNOWN_OPEN" : "UNKNOWN", "-SubmitOnly",
-                    "-TimeoutSeconds", "5");
+                    "-SelectionRunId", Long.toString(selection.runId()),
+                    "-SelectionPublicRunId", selection.publicRunId(),
+                    "-SelectionTrigger", "SCHEDULED_SHADOW",
+                    "-PrimaryWindow", "20", "-AuxiliaryWindow", "60",
+                    "-MaximumProviderRequests",
+                    Integer.toString(maximumProviderRequests(
+                            selectionRequest, researchAsOf)),
+                    "-SubmitOnly",
+                    "-TimeoutSeconds", "30");
             Process process = new ProcessBuilder(command)
                     .directory(root.toFile()).redirectErrorStream(true)
                     .start();
@@ -106,16 +133,20 @@ public final class PowerShellShadowResearchDispatchGateway
             if (!accepted) {
                 throw invalid("M4_SCHEDULER_BROKER_SUBMIT_REJECTED");
             }
+            selections.bindBrokerRequest(selection.runId(), requestId);
             repository.completeScheduledDispatch(requestId, true, null,
                     clock.instant());
             return new DispatchResult(requestId, true);
         } catch (InterruptedException error) {
             Thread.currentThread().interrupt();
+            terminalizeSelection(selection,
+                    "M4_SCHEDULER_SUBMIT_INTERRUPTED");
             repository.completeScheduledDispatch(requestId, false,
                     "M4_SCHEDULER_SUBMIT_INTERRUPTED", clock.instant());
             throw invalid("M4_SCHEDULER_SUBMIT_INTERRUPTED");
         } catch (RuntimeException | IOException error) {
             String code = safeCode(error);
+            terminalizeSelection(selection, code);
             repository.completeScheduledDispatch(requestId, false, code,
                     clock.instant());
             throw invalid(code);
@@ -139,11 +170,34 @@ public final class PowerShellShadowResearchDispatchGateway
         return List.copyOf(lines);
     }
 
+    private int maximumProviderRequests(
+            ResearchSelectionModels.SelectionRequest request,
+            Instant asOf
+    ) {
+        return ResearchSelectionProviderBudgetPlanner
+                .requiredProviderRequests(universeLoader, request, asOf);
+    }
+
+    private void terminalizeSelection(
+            ResearchSelectionModels.RunSummary selection,
+            String reason
+    ) {
+        if (selection == null) return;
+        try {
+            selections.fail(selection.runId(),
+                    ResearchSelectionModels.Status.QUEUED, "SCHEDULER",
+                    reason, clock.instant());
+        } catch (RuntimeException ignored) {
+            // Keep the dispatch reason; a concurrent terminal transition or
+            // stale recovery remains authoritative.
+        }
+    }
+
     private static Path repositoryRoot() {
         Path value = Path.of("").toAbsolutePath().normalize();
         for (int depth = 0; value != null && depth < 5;
                 depth++, value = value.getParent()) {
-            if (Files.isDirectory(value.resolve(".git"))
+            if (Files.exists(value.resolve(".git"))
                     && Files.isDirectory(value.resolve("quant-server"))) {
                 return value;
             }
@@ -184,6 +238,13 @@ public final class PowerShellShadowResearchDispatchGateway
         byte[] random = new byte[6];
         RANDOM.nextBytes(random);
         return "SQHB_" + REQUEST_TIME.format(at) + "_"
+                + HexFormat.of().withUpperCase().formatHex(random);
+    }
+
+    private static String selectionPublicId(Instant at) {
+        byte[] random = new byte[6];
+        RANDOM.nextBytes(random);
+        return "SELECT_" + REQUEST_TIME.format(at) + "_"
                 + HexFormat.of().withUpperCase().formatHex(random);
     }
 

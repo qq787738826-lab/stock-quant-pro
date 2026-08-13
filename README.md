@@ -56,3 +56,8 @@ V4__simulated_trading.sql
 M1—M5、Shadow scheduler、凭据存在状态及月度预算。它不读取或显示秘密，不连接券商，
 也不会执行真实交易。详细边界见
 [`docs/agent-team/stage-m6-research-production-ready.md`](docs/agent-team/stage-m6-research-production-ready.md)。
+
+启动成功后，在首页点击“立即选股”即可使用 `RESEARCH_UNIVERSE_V1`：系统先对固定的
+25 只沪深主板股票执行 20/60 交易日确定性扫描，再仅让量化 Top 10 进入 7-Agent、
+Risk、Portfolio 与 Critic 深度研究，最终显示 0—5 只证据合格候选。用户无需接触
+Broker、runId、Token、数据库密码或构建证明；“今日无合格候选”也是合法研究结果。

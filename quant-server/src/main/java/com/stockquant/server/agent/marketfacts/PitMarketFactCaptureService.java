@@ -254,6 +254,59 @@ public class PitMarketFactCaptureService {
                 "M1 research capture transaction result");
     }
 
+    /**
+     * V1.0.1 Universe capture. Every response is validated before the first
+     * write; all 25 securities and two calendars commit atomically.
+     */
+    public List<CaptureResult> captureAuthorizedResearchUniverse(
+            List<MarketFactResponse> responses,
+            Instant observedAt,
+            TushareDedicatedResearchPersistenceGuard.Verification
+                    preProviderVerification
+    ) {
+        List<MarketFactResponse> immutable = List.copyOf(
+                Objects.requireNonNull(responses, "responses"));
+        if (immutable.size()
+                != TushareManualBoundedSession.RESEARCH_UNIVERSE_MAX_SYMBOLS
+                && immutable.size()
+                != TushareManualBoundedSession.RESEARCH_UNIVERSE_MAX_SYMBOLS
+                + 2) {
+            throw new IllegalArgumentException(
+                    "RESEARCH_UNIVERSE_CAPTURE_SCOPE_INVALID");
+        }
+        LimitedPersonalFormalCaptureAuthorization authorization =
+                LimitedPersonalFormalCaptureAuthorization.tushareF1A();
+        List<PreparedCaptureInput> prepared = immutable.stream()
+                .map(response -> prepareCaptureInput(response, observedAt,
+                        authorization)).toList();
+        return List.copyOf(Objects.requireNonNull(transactionTemplate.execute(
+                status -> {
+                    var before = tushareDedicatedResearchPersistenceGuard
+                            .verifyTransactional();
+                    tushareDedicatedResearchPersistenceGuard.verifySameTarget(
+                            preProviderVerification, before);
+                    List<CaptureResult> results = new ArrayList<>();
+                    for (PreparedCaptureInput input : prepared) {
+                        CaptureResult result = capturePreparedWithinTransaction(
+                                input);
+                        if (!result.complete()
+                                || result.receivedCount() <= 0
+                                || result.appendedCount()
+                                + result.idempotentCount()
+                                != result.receivedCount()) {
+                            throw new IllegalStateException(
+                                    "RESEARCH_UNIVERSE_CAPTURE_RESULT_INVALID");
+                        }
+                        results.add(result);
+                    }
+                    var after = tushareDedicatedResearchPersistenceGuard
+                            .verifyTransactional();
+                    tushareDedicatedResearchPersistenceGuard
+                            .verifySameTransactionalConnection(before, after);
+                    return results;
+                }), "research universe capture result"));
+    }
+
     private M1ResearchCaptureResult
     captureAuthorizedM1ResearchBatchWithinTransaction(
             TushareM1ResearchCaptureContract captureContract,

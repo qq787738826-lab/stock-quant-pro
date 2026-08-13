@@ -52,13 +52,22 @@ final class TushareControlledAcceptanceE2eDryRunGateway
                     "TUSHARE_SYNTHETIC_PROVIDER_FAILURE",
                     1, 0, null);
         }
-        String date = parameters.path("start_date").asText("20250103");
-        String endDate = parameters.path("end_date").asText(date);
+        String date = parameters.has("trade_date")
+                ? parameters.path("trade_date").asText()
+                : parameters.path("start_date").asText("20250103");
+        String endDate = parameters.has("trade_date") ? date
+                : parameters.path("end_date").asText(date);
         String tsCode = parameters.path("ts_code").asText("600000.SH");
         String exchange = parameters.path("exchange").asText("SSE");
         List<List<JsonNode>> rows = switch (endpoint) {
-            case "daily" -> dailyWindow(tsCode, date, endDate);
-            case "adj_factor" -> factorWindow(tsCode, date, endDate);
+            case "daily" -> parameters.has("trade_date")
+                    ? dailyMarket(date) : parameters.has("ts_code")
+                    ? dailyWindow(tsCode, date, endDate)
+                    : dailyMarketWindow(date, endDate);
+            case "adj_factor" -> parameters.has("trade_date")
+                    ? factorMarket(date) : parameters.has("ts_code")
+                    ? factorWindow(tsCode, date, endDate)
+                    : factorMarketWindow(date, endDate);
             case "trade_cal" -> calendarWindow(exchange, date, endDate);
             default -> throw new IllegalArgumentException(
                     "TUSHARE_ENDPOINT_NOT_ALLOWED");
@@ -118,6 +127,48 @@ final class TushareControlledAcceptanceE2eDryRunGateway
         dates(start, end).stream().filter(
                 TushareControlledAcceptanceE2eDryRunGateway::isOpen)
                 .forEach(value -> result.add(factor(tsCode, value)));
+        return List.copyOf(result);
+    }
+
+    private static List<List<JsonNode>> dailyMarket(String date) {
+        List<List<JsonNode>> result = new ArrayList<>();
+        com.stockquant.server.researchselection.ResearchUniverseV1
+                .securities().forEach(value -> result.add(daily(
+                tsCode(value.symbol(), value.exchange()), date)));
+        return List.copyOf(result);
+    }
+
+    private static List<List<JsonNode>> factorMarket(String date) {
+        List<List<JsonNode>> result = new ArrayList<>();
+        com.stockquant.server.researchselection.ResearchUniverseV1
+                .securities().forEach(value -> result.add(factor(
+                tsCode(value.symbol(), value.exchange()), date)));
+        return List.copyOf(result);
+    }
+
+    private static String tsCode(String symbol, String exchange) {
+        return symbol + ("SSE".equals(exchange) ? ".SH" : ".SZ");
+    }
+
+    private static List<List<JsonNode>> dailyMarketWindow(
+            String start,
+            String end
+    ) {
+        List<List<JsonNode>> result = new ArrayList<>();
+        dates(start, end).stream().filter(
+                TushareControlledAcceptanceE2eDryRunGateway::isOpen)
+                .forEach(date -> result.addAll(dailyMarket(date)));
+        return List.copyOf(result);
+    }
+
+    private static List<List<JsonNode>> factorMarketWindow(
+            String start,
+            String end
+    ) {
+        List<List<JsonNode>> result = new ArrayList<>();
+        dates(start, end).stream().filter(
+                TushareControlledAcceptanceE2eDryRunGateway::isOpen)
+                .forEach(date -> result.addAll(factorMarket(date)));
         return List.copyOf(result);
     }
 

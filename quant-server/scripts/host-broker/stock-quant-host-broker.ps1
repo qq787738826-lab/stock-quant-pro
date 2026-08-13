@@ -34,6 +34,8 @@ $m3RunnerScript = Join-Path $paths.RepositoryRoot `
     'quant-server\scripts\run-m3-agent-research.ps1'
 $m4RunnerScript = Join-Path $paths.RepositoryRoot `
     'quant-server\scripts\run-m4-shadow-research.ps1'
+$researchSelectionRunnerScript = Join-Path $paths.RepositoryRoot `
+    'quant-server\scripts\run-research-selection.ps1'
 $productionRoot = Join-Path $paths.TargetRoot 'stock-quant-production'
 $productionPidFile = Join-Path $productionRoot 'backend.pid.json'
 $productionAutostartFile = Join-Path $productionRoot 'backend.autostart.json'
@@ -135,6 +137,7 @@ function Assert-GitBinding {
                 'CHECK_BAILIAN_CREDENTIAL_STATUS',
                 'RUN_M3_AGENT_RESEARCH_SMOKE',
                 'RUN_M4_SHADOW_RESEARCH',
+                'RUN_RESEARCH_SELECTION',
                 'START_RESEARCH_PRODUCTION',
                 'STOP_RESEARCH_PRODUCTION',
                 'CHECK_RESEARCH_PRODUCTION_STATUS')) {
@@ -177,6 +180,25 @@ function Assert-GitBinding {
                         'quant-server-1.3.1-m4-shadow-research-runner.jar'),
                     [StringComparison]::OrdinalIgnoreCase)) {
                 'codex/1.4.0-m6-research-production-ready'
+            } elseif ($BrokerRequest.Operation -eq
+                    'RUN_RESEARCH_SELECTION' -and $branch -eq
+                    'codex/1.4.0-v1.0.1-research-selection-usability' -and
+                [IO.Path]::GetFullPath($BrokerRequest.JarPath).Equals(
+                    (Join-Path $paths.TargetRoot `
+                        'quant-server-1.3.1-research-selection-runner.jar'),
+                    [StringComparison]::OrdinalIgnoreCase)) {
+                'codex/1.4.0-v1.0.1-research-selection-usability'
+            } elseif ($BrokerRequest.Operation -in @(
+                    'START_RESEARCH_PRODUCTION',
+                    'STOP_RESEARCH_PRODUCTION',
+                    'CHECK_RESEARCH_PRODUCTION_STATUS') -and
+                $branch -eq
+                    'codex/1.4.0-v1.0.1-research-selection-usability' -and
+                [IO.Path]::GetFullPath($BrokerRequest.JarPath).Equals(
+                    (Join-Path $paths.TargetRoot `
+                        'quant-server-1.3.1-research-production.jar'),
+                    [StringComparison]::OrdinalIgnoreCase)) {
+                'codex/1.4.0-v1.0.1-research-selection-usability'
             } elseif ($BrokerRequest.Operation -in @(
                     'START_RESEARCH_PRODUCTION',
                     'STOP_RESEARCH_PRODUCTION',
@@ -1151,11 +1173,11 @@ function Get-M4MonthlyBudget {
         -CalendarMonth $calendarMonth `
         -ExcludedRequestPath $processingPath
     [decimal]$llmUsed = [decimal]::Parse(
-        [string]$usage.ShadowCostCny,
+        [string]$usage.CommittedShadowCostCny,
         [Globalization.NumberStyles]::Number,
         [Globalization.CultureInfo]::InvariantCulture)
     [decimal]$projectUsed = [decimal]::Parse(
-        [string]$usage.ProjectCostCny,
+        [string]$usage.CommittedProjectCostCny,
         [Globalization.NumberStyles]::Number,
         [Globalization.CultureInfo]::InvariantCulture)
     [decimal]$maximum = [decimal]::Parse(
@@ -1165,7 +1187,7 @@ function Get-M4MonthlyBudget {
     [int]$admittedProviderCalls =
         [int]$BrokerRequest.Values['maximum.provider.requests']
     if ($admittedProviderCalls -notin @(6, 8) -or
-        [int]$usage.TushareCalls + $admittedProviderCalls -gt 150 -or
+        [int]$usage.CommittedTushareCalls + $admittedProviderCalls -gt 150 -or
         $llmUsed + $maximum -gt [decimal]30.00 -or
         $projectUsed + $maximum -gt [decimal]200.00) {
         throw 'M4_MONTHLY_BUDGET_EXHAUSTED'
@@ -1179,8 +1201,8 @@ function Get-M4MonthlyBudget {
             [Globalization.CultureInfo]::InvariantCulture)
         AdmittedLlmCostCny = $maximum.ToString(
             [Globalization.CultureInfo]::InvariantCulture)
-        PriorTushareCalls = [int]$usage.TushareCalls
-        RemainingTushareCalls = 150 - [int]$usage.TushareCalls
+        PriorTushareCalls = [int]$usage.CommittedTushareCalls
+        RemainingTushareCalls = 150 - [int]$usage.CommittedTushareCalls
     }
 }
 
@@ -1192,14 +1214,6 @@ function Invoke-M4ShadowResearch {
         throw 'STOCK_QUANT_HOST_BROKER_M4_SCOPE_INVALID'
     }
     $budget = Get-M4MonthlyBudget -BrokerRequest $BrokerRequest
-    if ([int]$BrokerRequest.Values['tushare.monthly.calls.before'] -ne
-            [int]$budget.PriorTushareCalls -or
-        [decimal]$BrokerRequest.Values['llm.monthly.cost.before.cny'] -ne
-            [decimal]$budget.PriorLlmCostCny -or
-        [decimal]$BrokerRequest.Values['project.monthly.cost.before.cny'] -ne
-            [decimal]$budget.PriorProjectCostCny) {
-        throw 'M4_MONTHLY_BUDGET_BINDING_INVALID'
-    }
     $runnerResult = Join-Path $paths.Results `
         "$($BrokerRequest.RequestId).m4-shadow.json"
     if (Test-Path -LiteralPath $runnerResult) {
@@ -1314,6 +1328,95 @@ function Invoke-M4ShadowResearch {
     return $summary
 }
 
+function Invoke-ResearchSelection {
+    param([Parameter(Mandatory = $true)] [object] $BrokerRequest)
+    if ($BrokerRequest.AuthorizationStatus -ne
+            'STOCK_QUANT_PRO_V1_MONTHLY_APPROVED' -or
+        $null -ne $BrokerRequest.AuthorizationFile) {
+        throw 'STOCK_QUANT_HOST_BROKER_SELECTION_SCOPE_INVALID'
+    }
+    $usage = Get-StockQuantM4MonthlyUsage `
+        -CalendarMonth $BrokerRequest.Values['budget.calendar.month'] `
+        -ExcludedRequestPath $processingPath
+    [int]$maximumProvider =
+        [int]$BrokerRequest.Values['maximum.provider.requests']
+    [decimal]$maximumCost = [decimal]$BrokerRequest.Values[
+        'maximum.cost.cny']
+    if ([int]$usage.CommittedTushareCalls + $maximumProvider -gt 150 -or
+        [decimal]$usage.CommittedShadowCostCny + $maximumCost -gt
+            [decimal]30 -or
+        [decimal]$usage.CommittedProjectCostCny + $maximumCost -gt
+            [decimal]200) {
+        throw 'RESEARCH_SELECTION_MONTHLY_BUDGET_BINDING_INVALID'
+    }
+    $runnerResult = Join-Path $paths.Results `
+        "$($BrokerRequest.RequestId).research-selection.json"
+    if (Test-Path -LiteralPath $runnerResult) {
+        throw 'STOCK_QUANT_HOST_BROKER_RUNNER_RESULT_ALREADY_EXISTS'
+    }
+    $executionId = $BrokerRequest.RequestId -replace '^SQHB_', 'SELECTEXEC_'
+    $output = @(& $researchSelectionRunnerScript `
+        -ResultFile $runnerResult -ArtifactPath $BrokerRequest.JarPath `
+        -ExecutionId $executionId `
+        -SelectionRunId ([long]$BrokerRequest.Values['selection.run.id']) `
+        -PublicRunId $BrokerRequest.Values['selection.public.run.id'] `
+        -GitCommit $BrokerRequest.GitCommit -DatabasePort 38432 `
+        -MaximumProviderRequests $maximumProvider `
+        -ExecutionMode FORMAL -MaximumCostCny $maximumCost 2>&1 |
+        ForEach-Object { [string]$_ })
+    $runnerExitCode = $LASTEXITCODE
+    if (-not (Test-Path -LiteralPath $runnerResult -PathType Leaf)) {
+        throw 'STOCK_QUANT_HOST_BROKER_RUNNER_RESULT_MISSING'
+    }
+    $selection = Get-Content -LiteralPath $runnerResult -Raw -Encoding UTF8 |
+        ConvertFrom-Json
+    [decimal]$cost = [decimal]$selection.conservativeCostCny
+    $summary = [ordered]@{
+        selectionRunId = [long]$selection.selectionRunId
+        publicRunId = [string]$selection.publicRunId
+        selectionStatus = [string]$selection.selectionStatus
+        providerCallCount = [int]$selection.tushareProviderCallCount
+        retryCount = [int]$selection.retryCount
+        externalModelCallCount = [int]$selection.modelProviderRequestCount
+        modelInputUnits = [int]$selection.inputTokens
+        modelOutputUnits = [int]$selection.outputTokens
+        modelReasoningUnits = [int]$selection.reasoningTokens
+        modelTotalUnits = [int]$selection.totalTokens
+        accountedCostCny = $cost.ToString(
+            [Globalization.CultureInfo]::InvariantCulture)
+        candidateCount = [int]$selection.candidateCount
+        decisionCode = [string]$selection.decisionCode
+        sanitizedResult = $runnerResult
+        outputAudit = $(if ($selection.outputAuditClean) {
+            'PASSED'
+        } else { 'FAILED' })
+    }
+    if ($runnerExitCode -ne 0) {
+        $script:failureSummary = $summary
+        $reason = [string]$selection.failureReason
+        if ($reason -match '^[A-Z][A-Z0-9_]{3,127}$') { throw $reason }
+        throw 'STOCK_QUANT_HOST_BROKER_SELECTION_FAILED'
+    }
+    if ($selection.status -ne 'SUCCEEDED' -or
+        [int]$selection.universeSize -ne 25 -or
+        [int]$selection.shortlistSize -ne 10 -or
+        [int]$selection.tushareProviderCallCount -gt $maximumProvider -or
+        [int]$selection.retryCount -ne 0 -or
+        [int]$selection.modelProviderRequestCount -ne 13 -or
+        [int]$selection.modelCallCount -ne 13 -or
+        @($selection.agentRoles | Sort-Object -Unique).Count -ne 7 -or
+        -not $selection.typedFactReadback -or
+        -not $selection.systemKnowledgeReadback -or
+        -not $selection.formulaOnlyQfq -or
+        -not $selection.noFutureDataLeakage -or
+        -not $selection.outputAuditClean -or
+        -not $selection.researchOnly -or $selection.realTradingStarted -or
+        $cost -le 0 -or $cost -gt $maximumCost) {
+        throw 'STOCK_QUANT_HOST_BROKER_SELECTION_RESULT_INVALID'
+    }
+    return $summary
+}
+
 function Resolve-ResearchProductionJavaExecutable {
     $command = 'java.exe'
     $oldPreference = $ErrorActionPreference
@@ -1410,6 +1513,7 @@ function Assert-ResearchProductionBinding {
     })
     $proofMode = @($proofLines | Where-Object {
         $_ -in @('build.mode=M6_STAGE_CONTROLLED_BUILD_ARTIFACT',
+            'build.mode=RESEARCH_SELECTION_CONTROLLED_BUILD_ARTIFACT',
             'build.mode=CONTROLLED_BUILD_ARTIFACT')
     })
     if ($proofGit.Count -ne 1 -or $proofHash.Count -ne 1 -or
@@ -1424,6 +1528,7 @@ function Assert-ResearchProductionBinding {
             Where-Object { $_ -and $_ -notmatch '^\?\? \.ai(?:/|$)' })
         if ($head -cne [string]$Binding.GitCommit -or
             $branch -notin @($integrationBranch,
+                'codex/1.4.0-v1.0.1-research-selection-usability',
                 'codex/1.4.0-m6-research-production-ready') -or
             $unexpected.Count -ne 0 -or
             @(git diff --cached --name-only).Count -ne 0) {
@@ -1968,6 +2073,10 @@ function Invoke-ClaimedRequest {
             }
             'RUN_M4_SHADOW_RESEARCH' {
                 Invoke-M4ShadowResearch -BrokerRequest $request
+                break
+            }
+            'RUN_RESEARCH_SELECTION' {
+                Invoke-ResearchSelection -BrokerRequest $request
                 break
             }
             'START_RESEARCH_PRODUCTION' {

@@ -30,6 +30,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.UnaryOperator;
 
 /** M1 -> M2 -> seven-agent M3 -> immutable M4 shadow coordinator. */
 public final class ShadowResearchRuntime {
@@ -38,6 +39,7 @@ public final class ShadowResearchRuntime {
     private final ShadowPaperPortfolioService paper;
     private final TransactionTemplate transaction;
     private final Clock clock;
+    private final UnaryOperator<ShadowRecommendation> recommendationPolicy;
 
     public ShadowResearchRuntime(
             ShadowResearchRepository repository,
@@ -46,12 +48,26 @@ public final class ShadowResearchRuntime {
             TransactionTemplate transaction,
             Clock clock
     ) {
+        this(repository, datasetSource, paper, transaction, clock,
+                UnaryOperator.identity());
+    }
+
+    public ShadowResearchRuntime(
+            ShadowResearchRepository repository,
+            ShadowResearchDatasetSource datasetSource,
+            ShadowPaperPortfolioService paper,
+            TransactionTemplate transaction,
+            Clock clock,
+            UnaryOperator<ShadowRecommendation> recommendationPolicy
+    ) {
         this.repository = Objects.requireNonNull(repository, "repository");
         this.datasetSource = Objects.requireNonNull(datasetSource,
                 "datasetSource");
         this.paper = Objects.requireNonNull(paper, "paper");
         this.transaction = Objects.requireNonNull(transaction, "transaction");
         this.clock = Objects.requireNonNull(clock, "clock");
+        this.recommendationPolicy = Objects.requireNonNull(
+                recommendationPolicy, "recommendationPolicy");
     }
 
     public ShadowExecutionResult run(
@@ -63,20 +79,17 @@ public final class ShadowResearchRuntime {
         try {
             Instant asOf = ShadowResearchCanonical.micros(
                     request.researchAsOf());
-            String slot = request.triggerMode()
-                    == ShadowResearchModels.TriggerMode.HISTORICAL_REPLAY
-                    ? "HISTORICAL_REPLAY"
-                    : ShadowResearchModels.RESEARCH_SLOT;
+            String slot = request.researchSlot();
             String runKey = ShadowResearchCanonical.runKey(
                     request.tradeDate(), slot,
-                    ShadowResearchModels.STRATEGY_VERSION);
+                    request.strategyVersion());
             String requestFingerprint = ShadowResearchCanonical.hash(Map.of(
                     "request", request, "slot", slot,
                     "runtime", ShadowResearchModels.RUNTIME_VERSION));
             var descriptor = model.descriptor();
             ShadowRun created = repository.createRun(runKey,
                     request.triggerMode(), request.tradeDate(), slot, asOf,
-                    ShadowResearchModels.STRATEGY_VERSION,
+                    request.strategyVersion(),
                     descriptor.provider(), descriptor.model(),
                     promptVersion(),
                     com.stockquant.server.agent.research.AgentResearchModels
@@ -125,6 +138,9 @@ public final class ShadowResearchRuntime {
                 }
                 ShadowRecommendation recommendation =
                         ShadowRecommendation.from(report);
+                recommendation = Objects.requireNonNull(
+                        recommendationPolicy.apply(recommendation),
+                        "recommendation");
                 if (request.nextPaperExecutionTime() == null) {
                     recommendation = recommendation.withoutPaperExecution(
                             "NEXT_OPEN_SESSION_NOT_YET_KNOWN_AS_OF");

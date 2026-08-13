@@ -16,6 +16,7 @@ $script:AllowedOperations = @(
     'CHECK_BAILIAN_CREDENTIAL_STATUS'
     'RUN_M3_AGENT_RESEARCH_SMOKE'
     'RUN_M4_SHADOW_RESEARCH'
+    'RUN_RESEARCH_SELECTION'
     'START_RESEARCH_PRODUCTION'
     'STOP_RESEARCH_PRODUCTION'
     'CHECK_RESEARCH_PRODUCTION_STATUS'
@@ -371,6 +372,54 @@ $script:M4RequiredKeys = @(
     'source.request.id'
 )
 
+$script:ResearchSelectionRequiredKeys = @(
+    'schema.version'
+    'request.id'
+    'operation'
+    'git.commit'
+    'jar.path'
+    'jar.sha256'
+    'authorization.file'
+    'selection.run.id'
+    'selection.public.run.id'
+    'selection.trigger'
+    'selection.universe.version'
+    'selection.primary.window'
+    'selection.auxiliary.window'
+    'selection.shortlist.limit'
+    'selection.final.limit'
+    'selection.paper.enabled'
+    'database.host'
+    'database.port'
+    'database.name'
+    'database.user'
+    'schema.name'
+    'tushare.provider'
+    'tushare.endpoints'
+    'maximum.provider.requests'
+    'budget.calendar.month'
+    'tushare.monthly.limit'
+    'tushare.monthly.calls.before'
+    'llm.provider'
+    'model'
+    'provider.endpoint'
+    'maximum.model.calls'
+    'maximum.output.tokens.per.call'
+    'maximum.cost.cny'
+    'llm.monthly.limit.cny'
+    'llm.monthly.cost.before.cny'
+    'project.monthly.limit.cny'
+    'project.monthly.cost.before.cny'
+    'retry.budget'
+    'redirects'
+    'user.approval.reference'
+    'created.at'
+    'expires.at'
+    'execution.source'
+    'no.retry'
+    'source.request.id'
+)
+
 $script:M6RequiredKeys = @(
     'schema.version'
     'request.id'
@@ -458,7 +507,9 @@ function Get-StockQuantM4MonthlyUsage {
         }
     }
     [decimal]$shadowCost = [decimal]0.00
+    [decimal]$reservedShadowCost = [decimal]0.00
     $tushareCalls = 0
+    $reservedTushareCalls = 0
     $requestCount = 0
     $seen = @{}
     $excluded = if ($ExcludedRequestPath -eq 'NONE') { 'NONE' } else {
@@ -476,7 +527,8 @@ function Get-StockQuantM4MonthlyUsage {
         }
         $values = Read-StrictStockQuantProperties -Path $file.FullName
         if (-not $values.Contains('operation') -or
-            $values['operation'] -ne 'RUN_M4_SHADOW_RESEARCH') {
+            $values['operation'] -notin @(
+                'RUN_M4_SHADOW_RESEARCH', 'RUN_RESEARCH_SELECTION')) {
             continue
         }
         if (-not $values.Contains('request.id') -or
@@ -496,7 +548,10 @@ function Get-StockQuantM4MonthlyUsage {
             $created, 'China Standard Time')
         if ($china.ToString('yyyy-MM') -ne $CalendarMonth) { continue }
         $requestCount++
-        $runnerPath = Join-Path $paths.Results "$id.m4-shadow.json"
+        $selection = $values['operation'] -eq 'RUN_RESEARCH_SELECTION'
+        $runnerPath = Join-Path $paths.Results $(if ($selection) {
+                "$id.research-selection.json"
+            } else { "$id.m4-shadow.json" })
         if (Test-Path -LiteralPath $runnerPath -PathType Leaf) {
             try {
                 $runner = Get-Content -LiteralPath $runnerPath -Raw `
@@ -508,36 +563,65 @@ function Get-StockQuantM4MonthlyUsage {
             } catch {
                 throw 'M4_MONTHLY_BUDGET_LEDGER_INVALID'
             }
-            if ($runner.schemaVersion -ne
-                    'M4_SHADOW_RESEARCH_RESULT_V1' -or
-                $runner.status -notin @(
-                    'SUCCEEDED', 'SKIPPED_NON_TRADING_DAY', 'FAILED') -or
-                [int]$runner.tushareProviderCallCount -lt 0 -or
-                [int]$runner.tushareProviderCallCount -gt 8 -or
-                [int]$runner.retryCount -ne 0 -or
-                [int]$runner.modelProviderRequestCount -lt 0 -or
-                [int]$runner.modelProviderRequestCount -gt 13 -or
-                $cost -lt 0 -or $cost -gt [decimal]5.00) {
-                throw 'M4_MONTHLY_BUDGET_LEDGER_INVALID'
-            }
-            $expectedCalls = if ([string]$values[
-                    'calendar.admission'] -eq 'UNKNOWN') { 8 } else { 6 }
-            if ([string]$runner.executionId -ne
-                    ($id -replace '^SQHB_', 'M4SHADOW_') -or
-                [int]$values['maximum.provider.requests'] -ne
-                    $expectedCalls -or
-                ($runner.status -eq 'SUCCEEDED' -and (
-                    [int]$runner.tushareProviderCallCount -ne $expectedCalls -or
-                    [int]$runner.modelProviderRequestCount -ne 13 -or
-                    [int]$runner.modelCallCount -ne 13 -or
-                    $cost -le 0 -or -not $runner.outputAuditClean)) -or
-                ($runner.status -eq 'SKIPPED_NON_TRADING_DAY' -and (
-                    [string]$values['calendar.admission'] -ne 'UNKNOWN' -or
-                    [int]$runner.tushareProviderCallCount -ne 2 -or
-                    [int]$runner.modelProviderRequestCount -ne 0 -or
-                    [int]$runner.modelCallCount -ne 0 -or
-                    $cost -ne 0 -or -not $runner.outputAuditClean))) {
-                throw 'M4_MONTHLY_BUDGET_LEDGER_INVALID'
+            if ($selection) {
+                [int]$maximumCalls = [int]$values[
+                    'maximum.provider.requests']
+                if ($runner.schemaVersion -ne
+                        'RESEARCH_SELECTION_RUNNER_RESULT_V1' -or
+                    $runner.status -notin @('SUCCEEDED', 'FAILED') -or
+                    [string]$runner.executionId -ne
+                        ($id -replace '^SQHB_', 'SELECTEXEC_') -or
+                    [long]$runner.selectionRunId -ne
+                        [long]$values['selection.run.id'] -or
+                    [string]$runner.publicRunId -ne
+                        [string]$values['selection.public.run.id'] -or
+                    [int]$runner.tushareProviderCallCount -lt 0 -or
+                    [int]$runner.tushareProviderCallCount -gt $maximumCalls -or
+                    [int]$runner.retryCount -ne 0 -or
+                    [int]$runner.modelProviderRequestCount -lt 0 -or
+                    [int]$runner.modelProviderRequestCount -gt 13 -or
+                    $cost -lt 0 -or $cost -gt [decimal]5.00 -or
+                    ($runner.status -eq 'SUCCEEDED' -and (
+                        [int]$runner.universeSize -ne 25 -or
+                        [int]$runner.shortlistSize -ne 10 -or
+                        [int]$runner.modelProviderRequestCount -ne 13 -or
+                        [int]$runner.modelCallCount -ne 13 -or
+                        $cost -le 0 -or -not $runner.outputAuditClean))) {
+                    throw 'M4_MONTHLY_BUDGET_LEDGER_INVALID'
+                }
+            } else {
+                if ($runner.schemaVersion -ne
+                        'M4_SHADOW_RESEARCH_RESULT_V1' -or
+                    $runner.status -notin @(
+                        'SUCCEEDED', 'SKIPPED_NON_TRADING_DAY', 'FAILED') -or
+                    [int]$runner.tushareProviderCallCount -lt 0 -or
+                    [int]$runner.tushareProviderCallCount -gt 8 -or
+                    [int]$runner.retryCount -ne 0 -or
+                    [int]$runner.modelProviderRequestCount -lt 0 -or
+                    [int]$runner.modelProviderRequestCount -gt 13 -or
+                    $cost -lt 0 -or $cost -gt [decimal]5.00) {
+                    throw 'M4_MONTHLY_BUDGET_LEDGER_INVALID'
+                }
+                $expectedCalls = if ([string]$values[
+                        'calendar.admission'] -eq 'UNKNOWN') { 8 } else { 6 }
+                if ([string]$runner.executionId -ne
+                        ($id -replace '^SQHB_', 'M4SHADOW_') -or
+                    [int]$values['maximum.provider.requests'] -ne
+                        $expectedCalls -or
+                    ($runner.status -eq 'SUCCEEDED' -and (
+                        [int]$runner.tushareProviderCallCount -ne
+                            $expectedCalls -or
+                        [int]$runner.modelProviderRequestCount -ne 13 -or
+                        [int]$runner.modelCallCount -ne 13 -or
+                        $cost -le 0 -or -not $runner.outputAuditClean)) -or
+                    ($runner.status -eq 'SKIPPED_NON_TRADING_DAY' -and (
+                        [string]$values['calendar.admission'] -ne 'UNKNOWN' -or
+                        [int]$runner.tushareProviderCallCount -ne 2 -or
+                        [int]$runner.modelProviderRequestCount -ne 0 -or
+                        [int]$runner.modelCallCount -ne 0 -or
+                        $cost -ne 0 -or -not $runner.outputAuditClean))) {
+                    throw 'M4_MONTHLY_BUDGET_LEDGER_INVALID'
+                }
             }
             $shadowCost += $cost
             $tushareCalls += [int]$runner.tushareProviderCallCount
@@ -545,7 +629,31 @@ function Get-StockQuantM4MonthlyUsage {
         }
         $terminalPath = Join-Path $paths.Results "$id.result.json"
         if (-not (Test-Path -LiteralPath $terminalPath -PathType Leaf)) {
-            throw 'M4_MONTHLY_BUDGET_LEDGER_INCOMPLETE'
+            if ($file.Name -notmatch
+                    '\.(request|processing)\.properties$' -or
+                -not $values.Contains('maximum.provider.requests') -or
+                -not $values.Contains('maximum.cost.cny')) {
+                throw 'M4_MONTHLY_BUDGET_LEDGER_INCOMPLETE'
+            }
+            [int]$reservedProvider = -1
+            [decimal]$reservedCost = [decimal]-1
+            if (-not [int]::TryParse(
+                    [string]$values['maximum.provider.requests'],
+                    [Globalization.NumberStyles]::None,
+                    [Globalization.CultureInfo]::InvariantCulture,
+                    [ref]$reservedProvider) -or
+                -not [decimal]::TryParse(
+                    [string]$values['maximum.cost.cny'],
+                    [Globalization.NumberStyles]::Number,
+                    [Globalization.CultureInfo]::InvariantCulture,
+                    [ref]$reservedCost) -or
+                $reservedProvider -lt 0 -or $reservedProvider -gt 150 -or
+                $reservedCost -le 0 -or $reservedCost -gt [decimal]5.00) {
+                throw 'M4_MONTHLY_BUDGET_LEDGER_INVALID'
+            }
+            $reservedTushareCalls += $reservedProvider
+            $reservedShadowCost += $reservedCost
+            continue
         }
         try {
             $terminal = Get-Content -LiteralPath $terminalPath -Raw `
@@ -553,7 +661,7 @@ function Get-StockQuantM4MonthlyUsage {
         } catch {
             throw 'M4_MONTHLY_BUDGET_LEDGER_INVALID'
         }
-        if ($terminal.operation -ne 'RUN_M4_SHADOW_RESEARCH' -or
+        if ($terminal.operation -ne $values['operation'] -or
             $terminal.status -notin @('FAILED', 'REJECTED') -or
             [int]$terminal.providerCallCount -ne 0 -or
             [int]$terminal.retryCount -ne 0) {
@@ -566,7 +674,16 @@ function Get-StockQuantM4MonthlyUsage {
         ShadowCostCny = $shadowCost.ToString(
             [Globalization.CultureInfo]::InvariantCulture)
         TushareCalls = $tushareCalls
+        ReservedShadowCostCny = $reservedShadowCost.ToString(
+            [Globalization.CultureInfo]::InvariantCulture)
+        ReservedTushareCalls = $reservedTushareCalls
+        CommittedShadowCostCny = ($shadowCost + $reservedShadowCost).ToString(
+            [Globalization.CultureInfo]::InvariantCulture)
+        CommittedTushareCalls = $tushareCalls + $reservedTushareCalls
         ProjectCostCny = ($nonShadowCost + $shadowCost).ToString(
+            [Globalization.CultureInfo]::InvariantCulture)
+        CommittedProjectCostCny = (
+            $nonShadowCost + $shadowCost + $reservedShadowCost).ToString(
             [Globalization.CultureInfo]::InvariantCulture)
     }
 }
@@ -996,6 +1113,10 @@ function Read-StockQuantHostBrokerRequest {
                 $script:M4RequiredKeys
                 break
             }
+            'RUN_RESEARCH_SELECTION' {
+                $script:ResearchSelectionRequiredKeys
+                break
+            }
             { $_ -in @('START_RESEARCH_PRODUCTION',
                     'STOP_RESEARCH_PRODUCTION',
                     'CHECK_RESEARCH_PRODUCTION_STATUS') } {
@@ -1109,6 +1230,85 @@ function Read-StockQuantHostBrokerRequest {
                 'USER_APPROVED_M3_BAILIAN_SMOKE_TRANCHE_2_CNY_5_00' -or
             $values['execution.source'] -ne
                 'M3_AGENT_RESEARCH_REAL_LLM_SMOKE' -or
+            $values['no.retry'] -ne 'true') {
+            throw 'STOCK_QUANT_HOST_BROKER_REQUEST_SCOPE_INVALID'
+        }
+    } elseif ($values['operation'] -eq 'RUN_RESEARCH_SELECTION') {
+        [int]$providerBefore = -1
+        [decimal]$llmBefore = [decimal]-1
+        [decimal]$projectBefore = [decimal]-1
+        [decimal]$maximumCost = [decimal]-1
+        $createdSelection = ConvertTo-StockQuantTimestamp `
+            ([string]$values['created.at'])
+        $selectionMonth = [TimeZoneInfo]::ConvertTimeBySystemTimeZoneId(
+            $createdSelection, 'China Standard Time').ToString('yyyy-MM')
+        if ($values['authorization.file'] -ne 'NONE' -or
+            $values['selection.run.id'] -notmatch '^[1-9][0-9]{0,18}$' -or
+            $values['selection.public.run.id'] -notmatch
+                '^SELECT_[0-9]{8}T[0-9]{6}Z_[A-F0-9]{12}$' -or
+            $values['selection.trigger'] -notin @(
+                'ON_DEMAND', 'SCHEDULED_SHADOW') -or
+            $values['selection.universe.version'] -ne
+                'RESEARCH_UNIVERSE_V1' -or
+            $values['selection.primary.window'] -notin @(
+                '20', '60', '120', '250') -or
+            $values['selection.auxiliary.window'] -notin @(
+                '60', '120', '250') -or
+            [int]$values['selection.auxiliary.window'] -lt
+                [int]$values['selection.primary.window'] -or
+            $values['selection.shortlist.limit'] -ne '10' -or
+            $values['selection.final.limit'] -ne '5' -or
+            $values['selection.paper.enabled'] -ne 'true' -or
+            $values['database.host'] -ne '127.0.0.1' -or
+            $values['database.port'] -ne '38432' -or
+            $values['database.name'] -ne 'stock_quant_research' -or
+            $values['database.user'] -ne 'stock_quant_research' -or
+            $values['schema.name'] -ne 'tushare_research' -or
+            $values['tushare.provider'] -ne 'TUSHARE' -or
+            $values['tushare.endpoints'] -ne
+                'daily,adj_factor,trade_cal' -or
+            $values['maximum.provider.requests'] -notin @('0', '2', '52') -or
+            $values['budget.calendar.month'] -ne $selectionMonth -or
+            $values['tushare.monthly.limit'] -ne '150' -or
+            -not [int]::TryParse(
+                [string]$values['tushare.monthly.calls.before'],
+                [Globalization.NumberStyles]::None,
+                [Globalization.CultureInfo]::InvariantCulture,
+                [ref]$providerBefore) -or $providerBefore -lt 0 -or
+            $providerBefore + [int]$values['maximum.provider.requests'] -gt
+                150 -or
+            $values['llm.provider'] -ne 'BAILIAN' -or
+            $values['model'] -ne 'qwen3.7-plus' -or
+            $values['provider.endpoint'] -ne
+                'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions' -or
+            $values['maximum.model.calls'] -ne '13' -or
+            $values['maximum.output.tokens.per.call'] -ne '900' -or
+            -not [decimal]::TryParse(
+                [string]$values['maximum.cost.cny'],
+                [Globalization.NumberStyles]::Number,
+                [Globalization.CultureInfo]::InvariantCulture,
+                [ref]$maximumCost) -or $maximumCost -le 0 -or
+            $maximumCost -gt [decimal]5 -or
+            $values['llm.monthly.limit.cny'] -ne '30.00' -or
+            -not [decimal]::TryParse(
+                [string]$values['llm.monthly.cost.before.cny'],
+                [Globalization.NumberStyles]::Number,
+                [Globalization.CultureInfo]::InvariantCulture,
+                [ref]$llmBefore) -or $llmBefore -lt 0 -or
+            $llmBefore + $maximumCost -gt [decimal]30 -or
+            $values['project.monthly.limit.cny'] -ne '200.00' -or
+            -not [decimal]::TryParse(
+                [string]$values['project.monthly.cost.before.cny'],
+                [Globalization.NumberStyles]::Number,
+                [Globalization.CultureInfo]::InvariantCulture,
+                [ref]$projectBefore) -or $projectBefore -lt 0 -or
+            $projectBefore + $maximumCost -gt [decimal]200 -or
+            $values['retry.budget'] -ne '0' -or
+            $values['redirects'] -ne 'NEVER' -or
+            $values['user.approval.reference'] -ne
+                'USER_APPROVED_STOCK_QUANT_PRO_V1_MONTHLY' -or
+            $values['execution.source'] -ne
+                'CURRENT_AS_OF_RESEARCH_SELECTION' -or
             $values['no.retry'] -ne 'true') {
             throw 'STOCK_QUANT_HOST_BROKER_REQUEST_SCOPE_INVALID'
         }
@@ -1353,7 +1553,8 @@ function Read-StockQuantHostBrokerRequest {
                 '^SQHB_[0-9]{8}T[0-9]{6}Z_[A-F0-9]{12}$') {
             throw 'STOCK_QUANT_HOST_BROKER_SOURCE_REQUEST_INVALID'
         }
-    } elseif ($values['operation'] -eq 'RUN_M4_SHADOW_RESEARCH') {
+    } elseif ($values['operation'] -in @(
+            'RUN_M4_SHADOW_RESEARCH', 'RUN_RESEARCH_SELECTION')) {
         if ($values['source.request.id'] -ne 'NONE') {
             throw 'STOCK_QUANT_HOST_BROKER_SOURCE_REQUEST_INVALID'
         }
@@ -1384,15 +1585,21 @@ function Read-StockQuantHostBrokerRequest {
         throw 'STOCK_QUANT_HOST_BROKER_BUILD_PROOF_MISSING'
     }
     if ($values['operation'] -in @('RUN_M4_SHADOW_RESEARCH',
+            'RUN_RESEARCH_SELECTION',
             'START_RESEARCH_PRODUCTION', 'STOP_RESEARCH_PRODUCTION',
             'CHECK_RESEARCH_PRODUCTION_STATUS')) {
         $proofValues = Read-StrictStockQuantProperties -Path $proof
         $allowedModes = if ($values['operation'] -eq
+                'RUN_RESEARCH_SELECTION') {
+            @('RESEARCH_SELECTION_CONTROLLED_BUILD_ARTIFACT',
+                'CONTROLLED_BUILD_ARTIFACT')
+        } elseif ($values['operation'] -eq
                 'RUN_M4_SHADOW_RESEARCH') {
             @('M4_STAGE_CONTROLLED_BUILD_ARTIFACT',
                 'M6_STAGE_CONTROLLED_BUILD_ARTIFACT',
                 'CONTROLLED_BUILD_ARTIFACT')
         } else { @('M6_STAGE_CONTROLLED_BUILD_ARTIFACT',
+                'RESEARCH_SELECTION_CONTROLLED_BUILD_ARTIFACT',
                 'CONTROLLED_BUILD_ARTIFACT') }
         if ($proofValues['git.commit'] -cne $values['git.commit'] -or
             $proofValues['artifact.sha256'] -cne
@@ -1455,6 +1662,11 @@ function Read-StockQuantHostBrokerRequest {
         }
         $authorizationStatus =
             'M3_USER_APPROVED_BAILIAN_SMOKE_TRANCHE_2_CNY_5_00'
+    } elseif ($values['operation'] -eq 'RUN_RESEARCH_SELECTION') {
+        if ($values['authorization.file'] -ne 'NONE') {
+            throw 'STOCK_QUANT_HOST_BROKER_AUTHORIZATION_MODE_INVALID'
+        }
+        $authorizationStatus = 'STOCK_QUANT_PRO_V1_MONTHLY_APPROVED'
     } elseif ($values['operation'] -eq 'RUN_M4_SHADOW_RESEARCH') {
         if ($values['authorization.file'] -ne 'NONE') {
             throw 'STOCK_QUANT_HOST_BROKER_AUTHORIZATION_MODE_INVALID'
@@ -1641,6 +1853,10 @@ function Write-StockQuantHostBrokerRequest {
             }
             'RUN_M4_SHADOW_RESEARCH' {
                 $script:M4RequiredKeys
+                break
+            }
+            'RUN_RESEARCH_SELECTION' {
+                $script:ResearchSelectionRequiredKeys
                 break
             }
             { $_ -in @('START_RESEARCH_PRODUCTION',

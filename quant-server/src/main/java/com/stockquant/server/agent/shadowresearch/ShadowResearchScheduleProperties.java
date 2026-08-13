@@ -22,7 +22,7 @@ public class ShadowResearchScheduleProperties {
     private LocalTime safeWindowEnd = LocalTime.of(20, 0);
     @Min(1)
     @Max(20)
-    private int maximumTushareRequests = 8;
+    private int maximumTushareRequests = 52;
     @Min(1)
     @Max(13)
     private int maximumModelCalls = 13;
@@ -128,7 +128,7 @@ public class ShadowResearchScheduleProperties {
         if (!"Asia/Shanghai".equals(zone)
                 || !enabled
                 || !"0 20 17 * * MON-FRI".equals(cron)
-                || maximumTushareRequests != 8
+                || maximumTushareRequests != 52
                 || maximumModelCalls != 13
                 || safeWindowStart == null || safeWindowEnd == null
                 || !safeWindowStart.isBefore(safeWindowEnd)

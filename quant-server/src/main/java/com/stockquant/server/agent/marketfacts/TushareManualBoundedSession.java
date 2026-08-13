@@ -34,6 +34,18 @@ public final class TushareManualBoundedSession {
     public static final int M1_MAX_NATURAL_DAYS = 31;
     public static final int M1_TOKEN_VERIFICATION_MAX_PROVIDER_REQUESTS = 1;
     public static final int M4_CALENDAR_ADMISSION_MAX_PROVIDER_REQUESTS = 2;
+    public static final int RESEARCH_UNIVERSE_MAX_SYMBOLS = 25;
+    /**
+     * One daily and one adj_factor window per fixed security, plus one
+     * trade_cal window per represented exchange. Tushare does not expose a
+     * bounded multi-security window parameter and an unfiltered market-wide
+     * window can be truncated by the provider row limit.
+     */
+    public static final int RESEARCH_UNIVERSE_MAX_PROVIDER_REQUESTS = 52;
+    public static final int RESEARCH_UNIVERSE_MAX_MARKET_FACT_NATURAL_DAYS =
+            400;
+    public static final int RESEARCH_UNIVERSE_MAX_NATURAL_DAYS = 431;
+    public static final int RESEARCH_UNIVERSE_CALENDAR_FORWARD_DAYS = 31;
     /**
      * Natural-day bound for daily, adj_factor and trade_cal only.
      * Reference endpoints have no date parameters and remain bounded by
@@ -102,9 +114,12 @@ public final class TushareManualBoundedSession {
             int initiallyConsumedBusinessRequests,
             SessionProfile sessionProfile
     ) {
+        int profileMaximumRequests = sessionProfile
+                == SessionProfile.RESEARCH_UNIVERSE_V1
+                ? RESEARCH_UNIVERSE_MAX_PROVIDER_REQUESTS
+                : MAX_PROVIDER_BUSINESS_REQUESTS;
         if (maximumBusinessRequests <= 0
-                || maximumBusinessRequests
-                > MAX_PROVIDER_BUSINESS_REQUESTS) {
+                || maximumBusinessRequests > profileMaximumRequests) {
             throw new IllegalArgumentException(
                     "invalid Tushare maximumBusinessRequests");
         }
@@ -121,8 +136,13 @@ public final class TushareManualBoundedSession {
         this.sessionProfile = Objects.requireNonNull(
                 sessionProfile, "sessionProfile");
         this.maximumNaturalDays = maximumNaturalDays(sessionProfile);
+        int profileMaximumSymbols = (sessionProfile
+                == SessionProfile.RESEARCH_UNIVERSE_V1
+                || sessionProfile
+                == SessionProfile.RESEARCH_UNIVERSE_DAILY_INCREMENT)
+                ? RESEARCH_UNIVERSE_MAX_SYMBOLS : MAX_SESSION_SYMBOLS;
         if (this.allowedSymbols.isEmpty()
-                || this.allowedSymbols.size() > MAX_SESSION_SYMBOLS
+                || this.allowedSymbols.size() > profileMaximumSymbols
                 || this.allowedExchanges.isEmpty()
                 || !F1A_ALLOWED_EXCHANGES.containsAll(
                 this.allowedExchanges)
@@ -308,6 +328,70 @@ public final class TushareManualBoundedSession {
                 SessionProfile.M4_CALENDAR_ADMISSION);
     }
 
+    /** One bounded V1.0.1 fixed-universe history session; never retries. */
+    public static TushareManualBoundedSession researchUniverse(
+            java.util.List<TushareDedicatedResearchBatchCommand
+                    .SecuritySelection> securities,
+            LocalDate rangeStart,
+            LocalDate priceRangeEnd,
+            LocalDate calendarRangeEnd
+    ) {
+        Objects.requireNonNull(securities, "securities");
+        Objects.requireNonNull(rangeStart, "rangeStart");
+        Objects.requireNonNull(priceRangeEnd, "priceRangeEnd");
+        Objects.requireNonNull(calendarRangeEnd, "calendarRangeEnd");
+        Set<String> symbols = new java.util.LinkedHashSet<>();
+        Set<String> exchanges = new java.util.LinkedHashSet<>();
+        securities.forEach(security -> {
+            Objects.requireNonNull(security, "security");
+            symbols.add(security.providerInstrumentId());
+            exchanges.add(security.exchange());
+        });
+        int requests = securities.size() * 2 + exchanges.size();
+        if (securities.size() != RESEARCH_UNIVERSE_MAX_SYMBOLS
+                || symbols.size() != securities.size()
+                || !exchanges.equals(Set.of("SSE", "SZSE"))
+                || priceRangeEnd.isBefore(rangeStart)
+                || calendarRangeEnd.isBefore(priceRangeEnd)
+                || ChronoUnit.DAYS.between(rangeStart, calendarRangeEnd) + 1
+                > RESEARCH_UNIVERSE_MAX_NATURAL_DAYS
+                || requests != RESEARCH_UNIVERSE_MAX_PROVIDER_REQUESTS) {
+            throw new IllegalArgumentException(
+                    "RESEARCH_UNIVERSE_SESSION_INVALID");
+        }
+        return new TushareManualBoundedSession(requests, Set.copyOf(symbols),
+                Set.copyOf(exchanges), rangeStart, calendarRangeEnd,
+                F1E_ALLOWED_ENDPOINTS, false, 0,
+                SessionProfile.RESEARCH_UNIVERSE_V1);
+    }
+
+    /** Two market-wide trade_date requests for one incremental open day. */
+    public static TushareManualBoundedSession researchUniverseDailyIncrement(
+            java.util.List<TushareDedicatedResearchBatchCommand
+                    .SecuritySelection> securities,
+            LocalDate tradeDate
+    ) {
+        Objects.requireNonNull(securities, "securities");
+        Objects.requireNonNull(tradeDate, "tradeDate");
+        Set<String> symbols = securities.stream().map(
+                        TushareDedicatedResearchBatchCommand.SecuritySelection
+                                ::providerInstrumentId)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        Set<String> exchanges = securities.stream().map(
+                        TushareDedicatedResearchBatchCommand.SecuritySelection
+                                ::exchange)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        if (securities.size() != RESEARCH_UNIVERSE_MAX_SYMBOLS
+                || symbols.size() != securities.size()
+                || !exchanges.equals(Set.of("SSE", "SZSE"))) {
+            throw new IllegalArgumentException(
+                    "RESEARCH_UNIVERSE_BULK_SESSION_INVALID");
+        }
+        return new TushareManualBoundedSession(2, symbols, exchanges,
+                tradeDate, tradeDate, Set.of("daily", "adj_factor"),
+                false, 0, SessionProfile.RESEARCH_UNIVERSE_DAILY_INCREMENT);
+    }
+
     /**
      * Validates and atomically reserves one provider business request.
      * The budget failure happens before the HTTP strategy is invoked.
@@ -346,6 +430,37 @@ public final class TushareManualBoundedSession {
             }
             validateDates(parameters);
             return;
+        }
+
+        if (sessionProfile
+                == SessionProfile.RESEARCH_UNIVERSE_DAILY_INCREMENT
+                && ("daily".equals(endpoint)
+                || "adj_factor".equals(endpoint))
+                && parameters.has("trade_date")) {
+            if (parameters.size() != 1) {
+                throw new IllegalArgumentException(
+                        "RESEARCH_UNIVERSE_BULK_PARAMETERS_INVALID");
+            }
+            LocalDate date = providerDate(requiredText(parameters,
+                    "trade_date"));
+            if (date.isBefore(allowedStart)
+                    || date.isAfter(allowedEnd)) {
+                throw new IllegalArgumentException(
+                        "Tushare dates are outside MANUAL_BOUNDED session");
+            }
+            return;
+        }
+
+        if (sessionProfile == SessionProfile.RESEARCH_UNIVERSE_V1
+                && ("daily".equals(endpoint)
+                || "adj_factor".equals(endpoint))) {
+            LocalDate end = providerDate(requiredText(parameters,
+                    "end_date"));
+            if (end.isAfter(allowedEnd.minusDays(
+                    RESEARCH_UNIVERSE_CALENDAR_FORWARD_DAYS))) {
+                throw new IllegalArgumentException(
+                        "RESEARCH_UNIVERSE_FUTURE_MARKET_FACT_FORBIDDEN");
+            }
         }
 
         String tsCode = requiredText(parameters, "ts_code");
@@ -517,6 +632,39 @@ public final class TushareManualBoundedSession {
                     "M4_CALENDAR_ADMISSION_IDENTITY_INVALID");
             return;
         }
+
+        if (sessionProfile == SessionProfile.RESEARCH_UNIVERSE_V1) {
+            if (maximumBusinessRequests
+                    != RESEARCH_UNIVERSE_MAX_PROVIDER_REQUESTS
+                    || allowedSymbols.size() != RESEARCH_UNIVERSE_MAX_SYMBOLS
+                    || !allowedExchanges.equals(Set.of("SSE", "SZSE"))
+                    || !allowedEndpoints.equals(F1E_ALLOWED_ENDPOINTS)
+                    || automaticRetryAllowed
+                    || initiallyConsumedBusinessRequests != 0) {
+                throw new IllegalArgumentException(
+                        "RESEARCH_UNIVERSE_SESSION_INVALID");
+            }
+            validateSymbolIdentities(allowedSymbols, allowedExchanges,
+                    "RESEARCH_UNIVERSE_SECURITY_IDENTITY_INVALID");
+            return;
+        }
+        if (sessionProfile
+                == SessionProfile.RESEARCH_UNIVERSE_DAILY_INCREMENT) {
+            if (maximumBusinessRequests != 2
+                    || allowedSymbols.size()
+                    != RESEARCH_UNIVERSE_MAX_SYMBOLS
+                    || !allowedExchanges.equals(Set.of("SSE", "SZSE"))
+                    || !allowedEndpoints.equals(
+                    Set.of("daily", "adj_factor"))
+                    || automaticRetryAllowed
+                    || initiallyConsumedBusinessRequests != 0) {
+                throw new IllegalArgumentException(
+                        "RESEARCH_UNIVERSE_BULK_SESSION_INVALID");
+            }
+            validateSymbolIdentities(allowedSymbols, allowedExchanges,
+                    "RESEARCH_UNIVERSE_SECURITY_IDENTITY_INVALID");
+            return;
+        }
         if (sessionProfile != SessionProfile.F1E_DEDICATED_LOCAL_MANUAL
                 || maximumBusinessRequests != allowedSymbols.size() * 3
                 || maximumBusinessRequests
@@ -563,6 +711,9 @@ public final class TushareManualBoundedSession {
             case M1_RESEARCH_DATA_MANUAL -> M1_MAX_NATURAL_DAYS;
             case M1_TOKEN_VERIFICATION -> 1;
             case M4_CALENDAR_ADMISSION -> M1_MAX_NATURAL_DAYS;
+            case RESEARCH_UNIVERSE_V1 ->
+                    RESEARCH_UNIVERSE_MAX_NATURAL_DAYS;
+            case RESEARCH_UNIVERSE_DAILY_INCREMENT -> 1;
         };
     }
 
@@ -589,6 +740,8 @@ public final class TushareManualBoundedSession {
         F1E_DEDICATED_LOCAL_MANUAL,
         M1_RESEARCH_DATA_MANUAL,
         M1_TOKEN_VERIFICATION,
-        M4_CALENDAR_ADMISSION
+        M4_CALENDAR_ADMISSION,
+        RESEARCH_UNIVERSE_V1,
+        RESEARCH_UNIVERSE_DAILY_INCREMENT
     }
 }

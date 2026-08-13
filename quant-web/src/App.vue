@@ -7,6 +7,7 @@ const route = useRoute()
 const health = ref('CHECKING')
 const menus = [
   ['/', '总览'],
+  ['/research-selection', '立即选股'],
   ['/agent-research', 'Research'],
   ['/backtest', 'Strategy'],
   ['/shadow-research', 'Shadow'],

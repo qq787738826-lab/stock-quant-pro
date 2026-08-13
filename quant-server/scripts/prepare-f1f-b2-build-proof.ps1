@@ -5,19 +5,22 @@ param(
         'M2_STAGE_CONTROLLED_BUILD_ARTIFACT',
         'M3_STAGE_CONTROLLED_BUILD_ARTIFACT',
         'M4_STAGE_CONTROLLED_BUILD_ARTIFACT',
-        'M6_STAGE_CONTROLLED_BUILD_ARTIFACT', 'E2E_DRY_RUN')]
+        'M6_STAGE_CONTROLLED_BUILD_ARTIFACT',
+        'RESEARCH_SELECTION_CONTROLLED_BUILD_ARTIFACT', 'E2E_DRY_RUN')]
     [string] $Mode = 'PREPARATION_ONLY',
 
     [ValidateSet('F1F_B2', 'REDUCED_RESEARCH_DAY001', 'M1_RESEARCH_DATA',
         'M2_STRATEGY_RESEARCH', 'M3_AGENT_RESEARCH', 'M4_SHADOW_RESEARCH',
-        'M6_RESEARCH_PRODUCTION')]
+        'M6_RESEARCH_PRODUCTION', 'RESEARCH_SELECTION')]
     [string] $RunnerProfile = 'F1F_B2'
 )
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $requiredBranch = 'feature/1.4.0-agent-team'
-$artifactName = if ($RunnerProfile -eq 'M6_RESEARCH_PRODUCTION') {
+$artifactName = if ($RunnerProfile -eq 'RESEARCH_SELECTION') {
+    'quant-server-1.3.1-research-selection-runner.jar'
+} elseif ($RunnerProfile -eq 'M6_RESEARCH_PRODUCTION') {
     'quant-server-1.3.1-research-production.jar'
 } elseif ($RunnerProfile -eq 'M4_SHADOW_RESEARCH') {
     'quant-server-1.3.1-m4-shadow-research-runner.jar'
@@ -32,7 +35,9 @@ $artifactName = if ($RunnerProfile -eq 'M6_RESEARCH_PRODUCTION') {
 } else {
     'quant-server-1.3.1-f1f-b2-runner.jar'
 }
-$runnerStartClass = if ($RunnerProfile -eq 'M6_RESEARCH_PRODUCTION') {
+$runnerStartClass = if ($RunnerProfile -eq 'RESEARCH_SELECTION') {
+    'com.stockquant.server.agent.marketfacts.TushareResearchSelectionManualRunner'
+} elseif ($RunnerProfile -eq 'M6_RESEARCH_PRODUCTION') {
     'com.stockquant.server.production.StockQuantResearchProductionRunner'
 } elseif ($RunnerProfile -eq 'M4_SHADOW_RESEARCH') {
     'com.stockquant.server.agent.marketfacts.TushareM4ShadowResearchManualRunner'
@@ -144,6 +149,14 @@ try {
             $RunnerProfile -notin @(
                 'M6_RESEARCH_PRODUCTION', 'M4_SHADOW_RESEARCH')) {
             throw 'STOCK_QUANT_M6_STAGE_BUILD_BASELINE_REQUIRED'
+        }
+    } elseif ($Mode -eq 'RESEARCH_SELECTION_CONTROLLED_BUILD_ARTIFACT') {
+        if ($actualBranch -ne
+                'codex/1.4.0-v1.0.1-research-selection-usability' -or
+            $remoteCommit -ne $ExpectedCommit -or
+            $RunnerProfile -notin @(
+                'RESEARCH_SELECTION', 'M6_RESEARCH_PRODUCTION')) {
+            throw 'RESEARCH_SELECTION_BUILD_BASELINE_REQUIRED'
         }
     } elseif ($actualBranch -ne $requiredBranch -and
         -not $actualBranch.StartsWith('codex/')) {

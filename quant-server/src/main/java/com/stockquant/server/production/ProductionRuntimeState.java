@@ -47,7 +47,8 @@ public final class ProductionRuntimeState {
                     || artifactSha256 == null
                     || !artifactSha256.matches("[0-9a-f]{64}")
                     || startedAt == null || databasePort != 38_432
-                    || schemaVersion != 16 || !outputAuditInstalled) {
+                    || schemaVersion < 16 || schemaVersion > 17
+                    || !outputAuditInstalled) {
                 throw new IllegalArgumentException("M6_RUNTIME_STATE_INVALID");
             }
         }

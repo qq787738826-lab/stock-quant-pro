@@ -38,7 +38,7 @@ stockquant:
       zone: Asia/Shanghai
       safe-window-start: "17:15"
       safe-window-end: "20:00"
-      maximum-tushare-requests: 8
+      maximum-tushare-requests: 52
       maximum-model-calls: 13
       submit-timeout-seconds: 30
       monthly-tushare-request-limit: 150

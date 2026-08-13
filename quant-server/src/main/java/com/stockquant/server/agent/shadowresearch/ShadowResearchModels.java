@@ -23,6 +23,8 @@ public final class ShadowResearchModels {
     public static final String OUTCOME_VERSION = "SHADOW_OUTCOME_V1";
     public static final String UI_VERSION = "SHADOW_UI_V1";
     public static final String STRATEGY_VERSION = "M4_SHADOW_STRATEGY_V1";
+    public static final String SELECTION_STRATEGY_VERSION =
+            "RESEARCH_SELECTION_STRATEGY_V1";
     public static final String RESEARCH_SLOT = "AFTER_CLOSE";
     public static final String PAPER_PORTFOLIO = "M4_SHADOW_PAPER";
 
@@ -38,7 +40,7 @@ public final class ShadowResearchModels {
     }
 
     public enum TriggerMode {
-        SCHEDULED, MANUAL, HISTORICAL_REPLAY
+        SCHEDULED, MANUAL, HISTORICAL_REPLAY, ON_DEMAND_SELECTION
     }
 
     public enum PaperOrderStatus {
@@ -161,8 +163,30 @@ public final class ShadowResearchModels {
             List<StrategySpec> strategies,
             Instant nextPaperExecutionTime,
             int tushareProviderRequests,
-            String objective
+            String objective,
+            String researchSlot,
+            String strategyVersion
     ) {
+        public ShadowRequest(
+                TriggerMode triggerMode,
+                LocalDate tradeDate,
+                LocalDate rangeStart,
+                Instant researchAsOf,
+                List<Security> securities,
+                Security benchmark,
+                List<StrategySpec> strategies,
+                Instant nextPaperExecutionTime,
+                int tushareProviderRequests,
+                String objective
+        ) {
+            this(triggerMode, tradeDate, rangeStart, researchAsOf,
+                    securities, benchmark, strategies,
+                    nextPaperExecutionTime, tushareProviderRequests,
+                    objective, triggerMode == TriggerMode.HISTORICAL_REPLAY
+                    ? "HISTORICAL_REPLAY" : RESEARCH_SLOT,
+                    STRATEGY_VERSION);
+        }
+
         public ShadowRequest {
             Objects.requireNonNull(triggerMode, "triggerMode");
             Objects.requireNonNull(tradeDate, "tradeDate");
@@ -172,17 +196,35 @@ public final class ShadowResearchModels {
             securities = List.copyOf(securities);
             strategies = List.copyOf(strategies);
             objective = required(objective);
+            researchSlot = required(researchSlot);
+            strategyVersion = required(strategyVersion);
             if (rangeStart.isAfter(tradeDate) || securities.size() < 1
                     || securities.size() > 20
                     || !securities.contains(benchmark)
                     || strategies.size() < 2 || strategies.size() > 8
                     || tushareProviderRequests < 0
-                    || tushareProviderRequests > 20
+                    || tushareProviderRequests > 52
                     || researchAsOf.isBefore(com.stockquant.core.research
                     .StrategyResearchModels.closeInstant(tradeDate))
                     || nextPaperExecutionTime != null
                     && !nextPaperExecutionTime.isAfter(researchAsOf)) {
                 throw invalid("M4_SHADOW_REQUEST_INVALID");
+            }
+            boolean selection = SELECTION_STRATEGY_VERSION.equals(
+                    strategyVersion) && (triggerMode
+                    == TriggerMode.ON_DEMAND_SELECTION
+                    && researchSlot.matches("ON_DEMAND_[A-F0-9]{12}")
+                    || triggerMode == TriggerMode.SCHEDULED
+                    && RESEARCH_SLOT.equals(researchSlot));
+            boolean ordinary = !SELECTION_STRATEGY_VERSION.equals(
+                    strategyVersion) && triggerMode
+                    != TriggerMode.ON_DEMAND_SELECTION
+                    && (triggerMode == TriggerMode.HISTORICAL_REPLAY
+                    ? "HISTORICAL_REPLAY" : RESEARCH_SLOT)
+                    .equals(researchSlot)
+                    && STRATEGY_VERSION.equals(strategyVersion);
+            if (!selection && !ordinary) {
+                throw invalid("M4_SHADOW_REQUEST_LINEAGE_INVALID");
             }
         }
     }

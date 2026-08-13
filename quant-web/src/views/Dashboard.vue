@@ -5,6 +5,7 @@ import { api } from '../api'
 const health = ref<any>(null)
 const error = ref('')
 const loading = ref(false)
+const selectionStarting = ref(false)
 const budgetRatio = computed(() => health.value
   ? Number(health.value.budget.projectCostCny) / Number(health.value.budget.projectLimitCny) * 100 : 0)
 
@@ -16,6 +17,25 @@ async function refresh() {
   finally { loading.value = false }
 }
 
+async function selectNow() {
+  selectionStarting.value = true
+  try {
+    const started: any = await api.post('/research-selection/runs', {
+      primaryWindow: 20
+    })
+    window.location.hash = `#/research-selection?run=${started.run.runId}`
+  } catch (cause) {
+    const message = cause instanceof Error ? cause.message : ''
+    error.value = message.includes('RESEARCH_SELECTION_ALREADY_RUNNING')
+      ? '已有一次立即选股正在进行，请在选股页查看进度。'
+      : message.startsWith('BUDGET:')
+      ? 'API预算不足，本次未启动。'
+      : message.startsWith('BROKER:') || message.startsWith('BUILD:')
+        ? '本地研究服务暂不可用，请等待系统自动恢复。'
+        : '选股启动失败，系统未产生真实交易。'
+  } finally { selectionStarting.value = false }
+}
+
 onMounted(refresh)
 </script>
 
@@ -25,6 +45,12 @@ onMounted(refresh)
       <div><p>RESEARCH_PRODUCTION_V1 · LOCAL / PAPER ONLY</p><h1>研究生产总览</h1><span>日常健康、Shadow、Agent、策略与预算的统一只读入口。</span></div>
       <el-button @click="refresh">刷新</el-button>
     </header>
+    <section class="selection-launch">
+      <div><small>RESEARCH_UNIVERSE_V1 · 25只沪深主板</small>
+        <h2>今天关注哪些股票？</h2>
+        <p>过去20/60交易日量化扫描 → Top 10 → 7 Agent → Critic → 最终候选。</p></div>
+      <el-button type="primary" size="large" :loading="selectionStarting" @click="selectNow">立即选股</el-button>
+    </section>
     <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon />
     <template v-if="health">
       <section class="health-metrics">
@@ -61,5 +87,5 @@ onMounted(refresh)
 </template>
 
 <style scoped>
-.production-home{display:grid;gap:18px}.production-hero{height:auto;display:flex;justify-content:space-between;background:transparent;border:0;padding:0}.production-hero p{color:#56b6ff;font-size:12px;letter-spacing:.12em}.production-hero h1{margin:4px 0 8px}.production-hero span,.production-panel p,.production-footer{color:#8795aa}.health-metrics,.production-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.health-metrics article,.production-panel{background:#0f1b2c;border:1px solid #28374b;border-radius:10px;padding:17px}.health-metrics span,.health-metrics small{display:block;color:#7f8da2}.health-metrics strong{display:block;font-size:20px;margin:8px 0}.production-grid{grid-template-columns:2fr 1fr}.production-panel h2{font-size:16px;margin:0 0 14px}.component-row{display:grid;grid-template-columns:170px 100px 1fr;gap:12px;padding:8px 0;border-bottom:1px solid #1e2d40}.component-row small{color:#7f8da2}.healthy{color:#4fd19a}.degraded{color:#e4b45f}.blocked{color:#ff6875}.production-panel a{color:#56b6ff}.production-footer{font-size:11px}@media(max-width:1000px){.health-metrics,.production-grid{grid-template-columns:1fr}.component-row{grid-template-columns:1fr}}
+.production-home{display:grid;gap:18px}.production-hero{height:auto;display:flex;justify-content:space-between;background:transparent;border:0;padding:0}.production-hero p{color:#56b6ff;font-size:12px;letter-spacing:.12em}.production-hero h1{margin:4px 0 8px}.production-hero span,.production-panel p,.production-footer{color:#8795aa}.selection-launch{display:flex;align-items:center;justify-content:space-between;padding:22px;border:1px solid #315a80;border-radius:12px;background:linear-gradient(135deg,#102b48,#101c2d)}.selection-launch small{color:#63b7ff;letter-spacing:.08em}.selection-launch h2{font-size:24px;margin:6px 0}.selection-launch p{margin:0;color:#90a2b8}.health-metrics,.production-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.health-metrics article,.production-panel{background:#0f1b2c;border:1px solid #28374b;border-radius:10px;padding:17px}.health-metrics span,.health-metrics small{display:block;color:#7f8da2}.health-metrics strong{display:block;font-size:20px;margin:8px 0}.production-grid{grid-template-columns:2fr 1fr}.production-panel h2{font-size:16px;margin:0 0 14px}.component-row{display:grid;grid-template-columns:170px 100px 1fr;gap:12px;padding:8px 0;border-bottom:1px solid #1e2d40}.component-row small{color:#7f8da2}.healthy{color:#4fd19a}.degraded{color:#e4b45f}.blocked{color:#ff6875}.production-panel a{color:#56b6ff}.production-footer{font-size:11px}@media(max-width:1000px){.health-metrics,.production-grid{grid-template-columns:1fr}.component-row{grid-template-columns:1fr}}
 </style>

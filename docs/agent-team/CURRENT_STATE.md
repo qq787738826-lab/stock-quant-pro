@@ -617,6 +617,11 @@ DATA_QUALITY 只作门禁和 confidence 上限，MARKET_REGIME V1 权重为 0 �
   SYSTEM_KNOWLEDGE、formula-only QFQ、防未来和输出审计均通过，run `4` 冻结为空仓。M6 开发中的
   五个受控尝试合计 Tushare 36 次，因此历史累计从 61 增至 97；当前月账本为 Tushare `42/150`、
   Shadow CNY `3.104280000000/30`、项目 CNY `9.881880000000/200`。
+- V1.0.1_RESEARCH_SELECTION_USABILITY 在独立任务分支实现 `RESEARCH_UNIVERSE_V1` 固定 25 股、
+  20/60 日确定性 Ranking、Top 10 复用 M2/M3、Critic 后 0—5 候选、V17 不可变选股历史、
+  首页“立即选股”和选股结果页。PIT/knownAt 与 Historical Live Shadow 边界不变；新结果记录
+  Universe/Ranking/Agent/Prompt/Model/Strategy/Git 血缘。17:20 正式 Shadow 改用同一 Universe，
+  与手工选股通过 Broker 单实例串行，旧冻结历史不修改。当前为任务分支待用户验收，尚未合并。
 
 ## 当前后续入口与阻断
 
@@ -643,3 +648,6 @@ fail-closed。该生产运行仍不授权完整 FORMAL/正常业务库资格、�
 3A-R3B-1、3B 或其他阶段。
 
 阻断项包括稳定 source instrument ID、完整公司行动、revision 语义以及 published/effective 时间语义。当前免费聚合源和 `securities` 当前态投影均不得被视为正式来源；2G 的研究级 AKShare/CNINFO 公告来源同样不得用于解除这些门禁。当前仍未实现 `PROVIDER_PIT_VERIFIED`、`SECURITY_STATUS_EVENT_V2`、`security_status_history` 正式投影、Universe snapshot、`MARKET_BREADTH_V2`、完整 MARKET_REGIME、公告 PDF 语义分析或生产扫描切换。M1 只扩展 `PROVIDER_CAPTURE/RESEARCH_ONLY/formalEligible=false` 的 Tushare raw/factor/calendar 有限个人研究路径及其只读数据集；M2 只在该边界内提供研究策略/回测能力，M3 只在同一研究边界内编排有证据的 Agent 研究，M4 只在相同研究边界内冻结 Shadow 判断并维护 Paper 账本；四者均不等于完整 FORMAL、生产运行或正常业务库资格。正常业务库尚未执行 V13；完整 F1 当前只受 `BLOCKED_TECHNICAL_EVIDENCE` 阻断，生产摄取、F2B、F3、3A-R3B-1 至 R3B-3 均未开始。M4 的单次真实 Shadow smoke 不满足长期效果观察规模门槛，因此不证明 alpha 或长期稳定性，完整 3A 未完成，3B 未开始。阶段 2D-2B 禁止外部行情补数、LLM 权威决策、投资建议和交易写操作。
+
+POST_V1_BACKLOG：只有在 V1.0.1 的真实成本、延迟与数据完整性证据支持时，才评估将固定研究池扩至
+30—50 或 100 只；不得在当前小版本建设全市场股票池平台、模型路由、新 Provider 或实盘能力。

@@ -662,6 +662,118 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
         return fetch(request, QueryMode.CONTROLLED_NO_RETRY, session);
     }
 
+    /**
+     * Fetches one fixed Universe security with two bounded window requests.
+     * This avoids the provider's market-wide row limit while keeping the
+     * endpoint/date/security allow-list explicit and zero-retry.
+     */
+    MarketFactResponse fetchForResearchUniverseSecurity(
+            MarketFactRequest request,
+            TushareManualBoundedSession session
+    ) {
+        if (session == null || session.sessionProfile()
+                != TushareManualBoundedSession.SessionProfile
+                .RESEARCH_UNIVERSE_V1
+                || session.maximumBusinessRequests()
+                != TushareManualBoundedSession
+                .RESEARCH_UNIVERSE_MAX_PROVIDER_REQUESTS
+                || !session.allowedEndpoints().equals(
+                TushareManualBoundedSession.F1E_ALLOWED_ENDPOINTS)
+                || session.automaticRetryAllowed()) {
+            throw new IllegalArgumentException(
+                    "RESEARCH_UNIVERSE_SESSION_INVALID");
+        }
+        if (request == null
+                || !request.rangeStart().equals(session.allowedStart())
+                || !request.rangeEnd().equals(session.allowedEnd().minusDays(
+                TushareManualBoundedSession
+                        .RESEARCH_UNIVERSE_CALENDAR_FORWARD_DAYS))
+                || !request.factTypes().equals(Set.of(
+                FactType.RAW_DAILY_BAR,
+                FactType.ADJUSTMENT_FACTOR))) {
+            throw new IllegalArgumentException(
+                    "RESEARCH_UNIVERSE_SECURITY_SCOPE_INVALID");
+        }
+        return fetch(request, QueryMode.CONTROLLED_NO_RETRY, session);
+    }
+
+    /** V1.0.1 calendar query, exactly once for each represented exchange. */
+    MarketFactResponse fetchForResearchUniverseCalendar(
+            MarketFactRequest request,
+            TushareManualBoundedSession session
+    ) {
+        if (session == null || session.sessionProfile()
+                != TushareManualBoundedSession.SessionProfile
+                .RESEARCH_UNIVERSE_V1
+                || session.maximumBusinessRequests()
+                != TushareManualBoundedSession
+                .RESEARCH_UNIVERSE_MAX_PROVIDER_REQUESTS
+                || session.automaticRetryAllowed()) {
+            throw new IllegalArgumentException(
+                    "RESEARCH_UNIVERSE_SESSION_INVALID");
+        }
+        if (request == null || !request.factTypes().equals(
+                Set.of(FactType.TRADING_CALENDAR))
+                || !request.rangeStart().equals(session.allowedStart())
+                || !request.rangeEnd().equals(session.allowedEnd())) {
+            throw new IllegalArgumentException(
+                    "RESEARCH_UNIVERSE_CALENDAR_SCOPE_INVALID");
+        }
+        return fetch(request, QueryMode.CONTROLLED_NO_RETRY, session);
+    }
+
+    /**
+     * A single trade_date request can return a legal market-wide superset.
+     * Mapping strictly retains the fixed allow-listed Universe identities.
+     */
+    List<MarketFactResponse> fetchResearchUniverseDateBulk(
+            List<MarketFactRequest> requests,
+            TushareManualBoundedSession session
+    ) {
+        List<MarketFactRequest> scope = List.copyOf(requests);
+        if (session == null || session.sessionProfile()
+                != TushareManualBoundedSession.SessionProfile
+                .RESEARCH_UNIVERSE_DAILY_INCREMENT
+                || scope.size()
+                != TushareManualBoundedSession.RESEARCH_UNIVERSE_MAX_SYMBOLS
+                || scope.stream().map(MarketFactRequest::rangeStart)
+                .distinct().count() != 1
+                || scope.stream().anyMatch(request ->
+                !request.rangeStart().equals(request.rangeEnd())
+                        || !request.factTypes().equals(Set.of(
+                        FactType.RAW_DAILY_BAR,
+                        FactType.ADJUSTMENT_FACTOR)))) {
+            throw new IllegalArgumentException(
+                    "RESEARCH_UNIVERSE_BULK_SCOPE_INVALID");
+        }
+        LocalDate date = scope.get(0).rangeStart();
+        ObjectNode parameters = objectMapper.createObjectNode();
+        parameters.put("trade_date", providerDate(date));
+        QueryResult daily = gateway.query("daily", parameters,
+                DAILY_FIELDS, scope.get(0).timeout(),
+                QueryMode.CONTROLLED_NO_RETRY, session);
+        QueryResult factors = gateway.query("adj_factor", parameters,
+                FACTOR_FIELDS, scope.get(0).timeout(),
+                QueryMode.CONTROLLED_NO_RETRY, session);
+        List<MarketFactResponse> results = new ArrayList<>();
+        for (MarketFactRequest request : scope) {
+            List<RawDailyBar> bars = mapDaily(request, daily.table());
+            List<AdjustmentFactor> mappedFactors = mapFactors(request,
+                    factors.table());
+            boolean complete = bars.size() == 1
+                    && mappedFactors.size() == 1;
+            List<ProviderError> errors = complete ? List.of()
+                    : List.of(new ProviderError(
+                    ProviderErrorType.UNAVAILABLE,
+                    "RESEARCH_UNIVERSE_BULK_TARGET_MISSING",
+                    "Fixed universe target row is missing", false, null));
+            results.add(response(request, complete, bars, mappedFactors,
+                    List.of(), errors, 0, 0,
+                    QueryMode.CONTROLLED_NO_RETRY, session));
+        }
+        return List.copyOf(results);
+    }
+
     /** M4-only exchange calendar refresh; no price or factor endpoint. */
     MarketFactResponse fetchForM4CalendarAdmission(
             MarketFactRequest request,
@@ -713,7 +825,7 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
             throw new IllegalArgumentException(
                     "TUSHARE_M1_TOKEN_VERIFICATION_SCOPE_INVALID");
         }
-        validateRequest(request);
+        validateRequest(request, session);
         properties.requireManualBoundedToken();
         QueryResult result = queryDaily(
                 request, QueryMode.CONTROLLED_NO_RETRY, session);
@@ -751,7 +863,7 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
             QueryMode mode,
             TushareManualBoundedSession session
     ) {
-        validateRequest(request);
+        validateRequest(request, session);
         properties.requireManualBoundedToken();
         if (session == null) {
             throw new IllegalArgumentException(
@@ -1292,6 +1404,13 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
     }
 
     private void validateRequest(MarketFactRequest request) {
+        validateRequest(request, null);
+    }
+
+    private void validateRequest(
+            MarketFactRequest request,
+            TushareManualBoundedSession session
+    ) {
         if (request == null) {
             throw new IllegalArgumentException(
                     "Tushare request is required");
@@ -1320,7 +1439,13 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
         }
         long naturalDays = ChronoUnit.DAYS.between(
                 request.rangeStart(), request.rangeEnd()) + 1;
-        if (naturalDays > MAXIMUM_NATURAL_DAYS) {
+        long maximumDays = session != null && session.sessionProfile()
+                == TushareManualBoundedSession.SessionProfile
+                .RESEARCH_UNIVERSE_V1
+                ? TushareManualBoundedSession
+                .RESEARCH_UNIVERSE_MAX_NATURAL_DAYS
+                : MAXIMUM_NATURAL_DAYS;
+        if (naturalDays > maximumDays) {
             throw new IllegalArgumentException(
                     "Tushare request range exceeds F1A limit");
         }

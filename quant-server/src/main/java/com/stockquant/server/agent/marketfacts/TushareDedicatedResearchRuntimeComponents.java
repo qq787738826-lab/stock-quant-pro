@@ -32,6 +32,8 @@ final class TushareDedicatedResearchRuntimeComponents implements AutoCloseable {
     private final TushareM4TradingCalendarAdmissionService
             m4CalendarAdmissionService;
     private final TushareM1ResearchDatasetService m1ResearchDatasetService;
+    private final TushareResearchUniverseCaptureService
+            researchUniverseCaptureService;
     private final TushareControlledAcceptanceReadbackService readbackService;
 
     private TushareDedicatedResearchRuntimeComponents(
@@ -42,6 +44,8 @@ final class TushareDedicatedResearchRuntimeComponents implements AutoCloseable {
             TushareM4TradingCalendarAdmissionService
                     m4CalendarAdmissionService,
             TushareM1ResearchDatasetService m1ResearchDatasetService,
+            TushareResearchUniverseCaptureService
+                    researchUniverseCaptureService,
             TushareControlledAcceptanceReadbackService readbackService
     ) {
         this.mapper = mapper;
@@ -50,6 +54,7 @@ final class TushareDedicatedResearchRuntimeComponents implements AutoCloseable {
         this.m1ResearchDataService = m1ResearchDataService;
         this.m4CalendarAdmissionService = m4CalendarAdmissionService;
         this.m1ResearchDatasetService = m1ResearchDatasetService;
+        this.researchUniverseCaptureService = researchUniverseCaptureService;
         this.readbackService = readbackService;
     }
 
@@ -162,8 +167,12 @@ final class TushareDedicatedResearchRuntimeComponents implements AutoCloseable {
                                 .TransactionTemplate(transactions), clock);
         TushareControlledAcceptanceReadbackService readback =
                 new TushareControlledAcceptanceReadbackService(jdbc, dedicatedGuard);
+        TushareResearchUniverseCaptureService universe =
+                new TushareResearchUniverseCaptureService(provider,
+                        dedicatedGuard, capture, clock);
         return new TushareDedicatedResearchRuntimeComponents(
                 mapper, properties, batch, m1, m4Calendar, m1Dataset,
+                universe,
                 readback);
     }
 
@@ -202,6 +211,10 @@ final class TushareDedicatedResearchRuntimeComponents implements AutoCloseable {
 
     TushareM1ResearchDatasetService m1ResearchDatasetService() {
         return m1ResearchDatasetService;
+    }
+
+    TushareResearchUniverseCaptureService researchUniverseCaptureService() {
+        return researchUniverseCaptureService;
     }
 
     long totalProviderAttemptCount() {

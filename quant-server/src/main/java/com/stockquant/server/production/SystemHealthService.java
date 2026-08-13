@@ -146,13 +146,13 @@ public final class SystemHealthService {
     private void database(List<ComponentHealth> components) {
         Integer one = jdbc.queryForObject("SELECT 1", Integer.class);
         int version = StockQuantResearchProductionRunner.schemaVersion(jdbc);
-        if (!Integer.valueOf(1).equals(one) || version != 16) {
+        if (!Integer.valueOf(1).equals(one) || version != 17) {
             components.add(new ComponentHealth("Database",
-                    HealthStatus.BLOCKED, "DATABASE_V16_REQUIRED",
+                    HealthStatus.BLOCKED, "DATABASE_V17_REQUIRED",
                     Map.of("schemaVersion", version)));
             return;
         }
-        components.add(healthy("Database", "POSTGRESQL_V16_READY",
+        components.add(healthy("Database", "POSTGRESQL_V17_READY",
                 Map.of("port", 38_432, "schemaVersion", version,
                         "database", "stock_quant_research",
                         "schema", "tushare_research")));
@@ -233,7 +233,8 @@ public final class SystemHealthService {
                         .toString().endsWith(".result.json")).toList()) {
                     try {
                         JsonNode node = mapper.readTree(file.toFile());
-                        if (!"RUN_M4_SHADOW_RESEARCH".equals(
+                        if (!List.of("RUN_M4_SHADOW_RESEARCH",
+                                "RUN_RESEARCH_SELECTION").contains(
                                 node.path("operation").asText())) {
                             continue;
                         }

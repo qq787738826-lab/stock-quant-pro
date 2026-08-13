@@ -108,11 +108,16 @@ public class ShadowResearchRepository {
                  WHERE c.calendar_date=? AND c.exchange IN ('SSE','SZSE')
                    AND o.known_at<=?
                    AND NOT EXISTS (
-                       SELECT 1 FROM pit_market_fact_observations newer
-                        WHERE newer.provider_code=o.provider_code
-                          AND newer.fact_type=o.fact_type
-                          AND newer.source_identity=o.source_identity
-                          AND newer.valid_time=o.valid_time
+                       SELECT 1
+                         FROM pit_market_fact_observations newer
+                         JOIN trading_calendar_facts_v1 nc
+                           ON nc.observation_id=newer.id
+                        WHERE newer.fact_type=o.fact_type
+                          AND newer.source_code=o.source_code
+                          AND newer.source_instrument_id=
+                              o.source_instrument_id
+                          AND nc.exchange=c.exchange
+                          AND nc.calendar_date=c.calendar_date
                           AND newer.known_at<=?
                           AND (newer.known_at, newer.id)>(o.known_at, o.id)
                    )

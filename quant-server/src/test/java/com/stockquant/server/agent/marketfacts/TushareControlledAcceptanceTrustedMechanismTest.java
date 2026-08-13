@@ -177,6 +177,41 @@ class TushareControlledAcceptanceTrustedMechanismTest {
     }
 
     @Test
+    void researchSelectionStageProofBindsBothFixedSelectionAndProductionRunners(
+            @TempDir Path temp
+    ) throws Exception {
+        String branch =
+                "codex/1.4.0-v1.0.1-research-selection-usability";
+        String mode = "RESEARCH_SELECTION_CONTROLLED_BUILD_ARTIFACT";
+        Path selectionJar = temp.resolve("research-selection.jar");
+        writeJarWithStartClass(selectionJar, COMMIT, branch, mode,
+                TushareControlledAcceptanceBuildProof
+                        .RESEARCH_SELECTION_RUNNER_START_CLASS);
+        Path selectionProof = Path.of(selectionJar
+                + TushareControlledAcceptanceBuildProof.SIDECAR_SUFFIX);
+        writeSidecar(selectionProof, COMMIT, COMMIT, sha256(selectionJar),
+                branch, mode);
+        VerifiedBuildProof selection = TushareControlledAcceptanceBuildProof
+                .loadBoundPreparationArtifactForTest(selectionJar,
+                        selectionProof);
+        assertTrue(selection.researchSelectionEligible());
+        assertFalse(selection.m6ProductionEligible());
+
+        Path productionJar = temp.resolve("research-production.jar");
+        writeJarWithStartClass(productionJar, COMMIT, branch, mode,
+                TushareControlledAcceptanceBuildProof.M6_RUNNER_START_CLASS);
+        Path productionProof = Path.of(productionJar
+                + TushareControlledAcceptanceBuildProof.SIDECAR_SUFFIX);
+        writeSidecar(productionProof, COMMIT, COMMIT, sha256(productionJar),
+                branch, mode);
+        VerifiedBuildProof production = TushareControlledAcceptanceBuildProof
+                .loadBoundPreparationArtifactForTest(productionJar,
+                        productionProof);
+        assertTrue(production.m6ProductionEligible());
+        assertFalse(production.researchSelectionEligible());
+    }
+
+    @Test
     void auditFindsExactPrefixSuffixEncodedHeadersQueryAndEnvironmentForms() {
         String secret = "fake-token-0123456789";
         AuditResult result = TushareControlledAcceptanceOutputAudit.audit(
@@ -590,13 +625,38 @@ class TushareControlledAcceptanceTrustedMechanismTest {
             String buildMode,
             String javaVersion
     ) throws IOException {
+        writeJarWithStartClass(jar, commit, remoteCommit, branch, buildMode,
+                javaVersion, TushareControlledAcceptanceBuildProof
+                        .F1F_B2_RUNNER_START_CLASS);
+    }
+
+    private static void writeJarWithStartClass(
+            Path jar,
+            String commit,
+            String branch,
+            String buildMode,
+            String startClass
+    ) throws IOException {
+        writeJarWithStartClass(jar, commit, commit, branch, buildMode,
+                TushareControlledAcceptanceBuildProof.currentJavaVersion(),
+                startClass);
+    }
+
+    private static void writeJarWithStartClass(
+            Path jar,
+            String commit,
+            String remoteCommit,
+            String branch,
+            String buildMode,
+            String javaVersion,
+            String startClass
+    ) throws IOException {
         Manifest manifest = new Manifest();
         Attributes attributes = manifest.getMainAttributes();
         attributes.put(Attributes.Name.MANIFEST_VERSION, "1.0");
         attributes.putValue("Main-Class",
                 TushareControlledAcceptanceBuildProof.BOOT_MAIN_CLASS);
-        attributes.putValue("Start-Class",
-                TushareControlledAcceptanceBuildProof.F1F_B2_RUNNER_START_CLASS);
+        attributes.putValue("Start-Class", startClass);
         attributes.putValue("Stock-Quant-Git-Commit", commit);
         attributes.putValue("Stock-Quant-Git-Remote-Commit", remoteCommit);
         attributes.putValue("Stock-Quant-Git-Branch", branch);

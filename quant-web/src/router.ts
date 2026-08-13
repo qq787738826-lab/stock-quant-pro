@@ -8,6 +8,7 @@ export default createRouter({
   history: createWebHashHistory(),
   routes: [
     { path: '/', component: Dashboard },
+    { path: '/research-selection', component: () => import('./views/ResearchSelectionWorkbench.vue') },
     { path: '/signals', component: () => import('./views/Signals.vue') },
     { path: '/portfolio', component: () => import('./views/Portfolio.vue') },
     { path: '/backtest', component: () => import('./views/Backtest.vue') },
