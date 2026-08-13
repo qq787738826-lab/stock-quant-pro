@@ -181,7 +181,7 @@ public final class SystemHealthService {
     ) {
         Path base = repositoryRoot.resolve(
                 "quant-server/target/stock-quant-host-broker");
-        Path heartbeat = base.resolve("health/heartbeat.json");
+        Path heartbeat = base.resolve("heartbeat.json");
         int pending = fileCount(base.resolve("requests"),
                 "*.request.properties");
         int claimed = fileCount(base.resolve("requests"),

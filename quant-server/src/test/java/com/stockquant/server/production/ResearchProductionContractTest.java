@@ -73,6 +73,14 @@ class ResearchProductionContractTest {
         assertFalse(runner.contains(".properties("));
     }
 
+    @Test
+    void systemHealthUsesTheResidentBrokerHeartbeatContract() throws Exception {
+        String health = read("src/main/java/com/stockquant/server/production/"
+                + "SystemHealthService.java");
+        assertTrue(health.contains("base.resolve(\"heartbeat.json\")"));
+        assertFalse(health.contains("health/heartbeat.json"));
+    }
+
     private static String read(String path) throws Exception {
         return Files.readString(Path.of(path));
     }
