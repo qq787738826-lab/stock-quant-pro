@@ -1123,6 +1123,8 @@ function Read-StockQuantHostBrokerRequest {
             ([string]$values['created.at'])
         $requestMonth = [TimeZoneInfo]::ConvertTimeBySystemTimeZoneId(
             $requestCreated, 'China Standard Time').ToString('yyyy-MM')
+        $requestChinaDate = [TimeZoneInfo]::ConvertTimeBySystemTimeZoneId(
+            $requestCreated, 'China Standard Time').Date
         [datetime]$calendarHorizonEnd = [datetime]::MinValue
         $calendarAdmission = [string]$values['calendar.admission']
         $expectedProviderRequests = if ($calendarAdmission -eq 'UNKNOWN') {
@@ -1131,6 +1133,17 @@ function Read-StockQuantHostBrokerRequest {
         $expectedCalendarRequests = if ($calendarAdmission -eq 'UNKNOWN') {
             4
         } else { 2 }
+        $scheduledScope = $values['trigger.mode'] -eq 'SCHEDULED' -and
+            $values['user.approval.reference'] -eq
+                'USER_APPROVED_M4_CONTINUOUS_SHADOW_MONTHLY' -and
+            $values['execution.source'] -eq
+                'M4_SHADOW_RESEARCH_CONTINUOUS_SCHEDULED'
+        $historicalScope = $values['trigger.mode'] -eq
+                'HISTORICAL_REPLAY' -and
+            $values['user.approval.reference'] -eq
+                'USER_APPROVED_M6_CONTROLLED_SHADOW_SMOKE' -and
+            $values['execution.source'] -eq
+                'M6_RESEARCH_PRODUCTION_CONTROLLED_REPLAY'
         if ($values['authorization.file'] -ne 'NONE' -or
             $values['m4.runtime'] -ne 'SHADOW_RESEARCH_RUNTIME_V1' -or
             $values['m4.scheduler'] -ne 'SHADOW_SCHEDULER_V1' -or
@@ -1161,7 +1174,11 @@ function Read-StockQuantHostBrokerRequest {
                 [ref]$calendarHorizonEnd) -or
             $calendarHorizonEnd -ne $tradeDate.AddDays(30) -or
             $values['capture.mode'] -ne 'CAPTURE' -or
-            $values['trigger.mode'] -ne 'SCHEDULED' -or
+            -not ($scheduledScope -or $historicalScope) -or
+            ($scheduledScope -and
+                $tradeDate.Date -ne $requestChinaDate) -or
+            ($historicalScope -and
+                $tradeDate.Date -ge $requestChinaDate) -or
             $values['database.host'] -ne '127.0.0.1' -or
             $values['database.port'] -ne '38432' -or
             $values['database.name'] -ne 'stock_quant_research' -or
@@ -1212,10 +1229,6 @@ function Read-StockQuantHostBrokerRequest {
             $projectCostBefore + $maximumCost -gt [decimal]200.00 -or
             $values['retry.budget'] -ne '0' -or
             $values['redirects'] -ne 'NEVER' -or
-            $values['user.approval.reference'] -ne
-                'USER_APPROVED_M4_CONTINUOUS_SHADOW_MONTHLY' -or
-            $values['execution.source'] -ne
-                'M4_SHADOW_RESEARCH_CONTINUOUS_SCHEDULED' -or
             $values['no.retry'] -ne 'true') {
             throw 'STOCK_QUANT_HOST_BROKER_REQUEST_SCOPE_INVALID'
         }

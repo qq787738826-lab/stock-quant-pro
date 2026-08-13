@@ -34,11 +34,13 @@ function Read-Valid([System.Collections.IDictionary] $Values) {
 
 function Reject(
     [System.Collections.IDictionary] $Values,
-    [string] $Reason
+    [string] $Reason,
+    [string] $Case = 'UNLABELED'
 ) {
     try {
         Read-Valid $Values | Out-Null
-        throw 'M4_PROTOCOL_EXPECTED_REJECTION_MISSING'
+        $safeCase = $Case.ToUpperInvariant() -replace '[^A-Z0-9_]', '_'
+        throw "M4_PROTOCOL_EXPECTED_REJECTION_MISSING_$safeCase"
     } catch {
         if ($_.Exception.Message -ne $Reason) { throw }
     }
@@ -50,6 +52,9 @@ try {
     [IO.File]::WriteAllBytes($artifact, [byte[]](1, 2, 3, 4))
     $hash = ((Get-FileHash $artifact -Algorithm SHA256).Hash).ToLowerInvariant()
     $created = [DateTimeOffset]::UtcNow
+    $chinaZone = [TimeZoneInfo]::FindSystemTimeZoneById(
+        'China Standard Time')
+    $scheduledDate = [TimeZoneInfo]::ConvertTime($created, $chinaZone).Date
     $request = [ordered]@{
         'schema.version' = 'STOCK_QUANT_HOST_BROKER_REQUEST_V1'
         'request.id' = New-StockQuantHostBrokerRequestId
@@ -70,11 +75,12 @@ try {
         'm2.strategy.engine' = 'STRATEGY_ENGINE_V1'
         'm2.backtest.engine' = 'BACKTEST_ENGINE_V1'
         'securities' = '600000:SSE,000001:SZSE'
-        'range.start' = '2026-07-12'
-        'trade.date' = '2026-08-11'
+        'range.start' = $scheduledDate.AddDays(-30).ToString('yyyy-MM-dd')
+        'trade.date' = $scheduledDate.ToString('yyyy-MM-dd')
         'next.trade.date' = 'INTERNAL_CALENDAR'
         'calendar.admission' = 'KNOWN_OPEN'
-        'calendar.horizon.end' = '2026-09-10'
+        'calendar.horizon.end' =
+            $scheduledDate.AddDays(30).ToString('yyyy-MM-dd')
         'capture.mode' = 'CAPTURE'
         'trigger.mode' = 'SCHEDULED'
         'database.host' = '127.0.0.1'
@@ -138,17 +144,53 @@ try {
     }
     $tests++
 
+    $historical = Copy-Values $unknown
+    $historical['request.id'] = New-StockQuantHostBrokerRequestId
+    $historicalDate = $scheduledDate.AddDays(-1)
+    $historical['range.start'] =
+        $historicalDate.AddDays(-30).ToString('yyyy-MM-dd')
+    $historical['trade.date'] = $historicalDate.ToString('yyyy-MM-dd')
+    $historical['calendar.horizon.end'] =
+        $historicalDate.AddDays(30).ToString('yyyy-MM-dd')
+    $historical['trigger.mode'] = 'HISTORICAL_REPLAY'
+    $historical['user.approval.reference'] =
+        'USER_APPROVED_M6_CONTROLLED_SHADOW_SMOKE'
+    $historical['execution.source'] =
+        'M6_RESEARCH_PRODUCTION_CONTROLLED_REPLAY'
+    $historicalParsed = Read-Valid $historical
+    if ($historicalParsed.Values['trigger.mode'] -ne
+            'HISTORICAL_REPLAY') {
+        throw 'M4_PROTOCOL_HISTORICAL_REPLAY_REJECTED'
+    }
+    $tests++
+
+    $historicalAsScheduled = Copy-Values $historical
+    $historicalAsScheduled['request.id'] =
+        New-StockQuantHostBrokerRequestId
+    $historicalAsScheduled['trigger.mode'] = 'SCHEDULED'
+    $historicalAsScheduled['user.approval.reference'] =
+        'USER_APPROVED_M4_CONTINUOUS_SHADOW_MONTHLY'
+    $historicalAsScheduled['execution.source'] =
+        'M4_SHADOW_RESEARCH_CONTINUOUS_SCHEDULED'
+    Reject $historicalAsScheduled `
+        'STOCK_QUANT_HOST_BROKER_REQUEST_SCOPE_INVALID' `
+        'HISTORICAL_AS_SCHEDULED'
+
     $unknownBadBudget = Copy-Values $unknown
     $unknownBadBudget['request.id'] = New-StockQuantHostBrokerRequestId
     $unknownBadBudget['maximum.provider.requests'] = '6'
     Reject $unknownBadBudget `
-        'STOCK_QUANT_HOST_BROKER_REQUEST_SCOPE_INVALID'
+        'STOCK_QUANT_HOST_BROKER_REQUEST_SCOPE_INVALID' `
+        'UNKNOWN_BAD_BUDGET'
 
     $invokerPath = Join-Path $PSScriptRoot `
         'invoke-stock-quant-host-broker.ps1'
     $invoker = Get-Content -LiteralPath $invokerPath -Raw -Encoding UTF8
     if ($invoker -notmatch '\$resolvedM4TradeDate\s*=\s*if\s*\(\$TradeDate' -or
-        $invoker -match '(?im)^\s*\$tradeDate\s*=\s*if\s*\(') {
+        $invoker -match '(?im)^\s*\$tradeDate\s*=\s*if\s*\(' -or
+        $invoker -notmatch 'M4_FUTURE_TRADE_DATE_FORBIDDEN' -or
+        $invoker -notmatch 'M4_MARKET_CLOSE_NOT_AVAILABLE' -or
+        $invoker -notmatch 'M6_RESEARCH_PRODUCTION_CONTROLLED_REPLAY') {
         throw 'M4_PROTOCOL_TRADE_DATE_PARAMETER_COLLISION'
     }
     $tests++
@@ -232,13 +274,15 @@ try {
         $copy = Copy-Values $request
         $copy['request.id'] = New-StockQuantHostBrokerRequestId
         $copy[$mutation[0]] = $mutation[1]
-        Reject $copy 'STOCK_QUANT_HOST_BROKER_REQUEST_SCOPE_INVALID'
+        Reject $copy 'STOCK_QUANT_HOST_BROKER_REQUEST_SCOPE_INVALID' `
+            "MUTATION_$($mutation[0])"
     }
     foreach ($field in @('command.text', 'script.path', 'api.key', 'token')) {
         $copy = Copy-Values $request
         $copy['request.id'] = New-StockQuantHostBrokerRequestId
         $copy[$field] = 'forbidden'
-        Reject $copy 'STOCK_QUANT_HOST_BROKER_REQUEST_FIELDS_INVALID'
+        Reject $copy 'STOCK_QUANT_HOST_BROKER_REQUEST_FIELDS_INVALID' `
+            "FIELD_$field"
     }
 
     Write-Output "STOCK_QUANT_M4_BROKER_PROTOCOL_TESTS=$tests"

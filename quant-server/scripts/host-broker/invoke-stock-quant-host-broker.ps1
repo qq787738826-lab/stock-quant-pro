@@ -304,6 +304,23 @@ try {
                 [DayOfWeek]::Saturday, [DayOfWeek]::Sunday)) {
             $resolvedM4TradeDate = $resolvedM4TradeDate.AddDays(-1)
         }
+        if ($resolvedM4TradeDate.Date -gt $chinaNow.Date) {
+            throw 'M4_FUTURE_TRADE_DATE_FORBIDDEN'
+        }
+        $m4HistoricalReplay = $resolvedM4TradeDate.Date -lt $chinaNow.Date
+        if (-not $m4HistoricalReplay -and
+            $chinaNow.TimeOfDay -lt [TimeSpan]::FromHours(15)) {
+            throw 'M4_MARKET_CLOSE_NOT_AVAILABLE'
+        }
+        $m4TriggerMode = if ($m4HistoricalReplay) {
+            'HISTORICAL_REPLAY'
+        } else { 'SCHEDULED' }
+        $m4ApprovalReference = if ($m4HistoricalReplay) {
+            'USER_APPROVED_M6_CONTROLLED_SHADOW_SMOKE'
+        } else { 'USER_APPROVED_M4_CONTINUOUS_SHADOW_MONTHLY' }
+        $m4ExecutionSource = if ($m4HistoricalReplay) {
+            'M6_RESEARCH_PRODUCTION_CONTROLLED_REPLAY'
+        } else { 'M4_SHADOW_RESEARCH_CONTINUOUS_SCHEDULED' }
         $rangeStart = $resolvedM4TradeDate.AddDays(-30)
         $calendarHorizonEnd = $resolvedM4TradeDate.AddDays(30)
         $m4ProviderRequests = if ($CalendarAdmission -eq 'UNKNOWN') {
@@ -364,7 +381,7 @@ try {
             'calendar.horizon.end' =
                 $calendarHorizonEnd.ToString('yyyy-MM-dd')
             'capture.mode' = 'CAPTURE'
-            'trigger.mode' = 'SCHEDULED'
+            'trigger.mode' = $m4TriggerMode
             'database.host' = '127.0.0.1'
             'database.port' = '38432'
             'database.name' = 'stock_quant_research'
@@ -396,12 +413,10 @@ try {
                 [string]$usage.ProjectCostCny
             'retry.budget' = '0'
             'redirects' = 'NEVER'
-            'user.approval.reference' =
-                'USER_APPROVED_M4_CONTINUOUS_SHADOW_MONTHLY'
+            'user.approval.reference' = $m4ApprovalReference
             'created.at' = $createdAt.ToString('o')
             'expires.at' = $expiresAt.ToString('o')
-            'execution.source' =
-                'M4_SHADOW_RESEARCH_CONTINUOUS_SCHEDULED'
+            'execution.source' = $m4ExecutionSource
             'no.retry' = 'true'
             'source.request.id' = 'NONE'
         }
