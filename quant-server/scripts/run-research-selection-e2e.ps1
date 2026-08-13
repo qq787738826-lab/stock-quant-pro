@@ -125,6 +125,11 @@ try {
     Exact $value.universeSize 25 'RESEARCH_SELECTION_E2E_UNIVERSE_INVALID'
     Exact $value.shortlistSize 10 `
         'RESEARCH_SELECTION_E2E_SHORTLIST_INVALID'
+    if ([int]$value.candidateCount -lt 1 -or
+        [int]$value.candidateCount -gt 5 -or $value.emptyResult -or
+        $value.decisionCode -ne 'RESEARCH_PREFERENCE') {
+        throw 'RESEARCH_SELECTION_E2E_CANDIDATES_INVALID'
+    }
     Exact $value.tushareProviderCallCount 52 `
         'RESEARCH_SELECTION_E2E_TUSHARE_INVALID'
     Exact $value.retryCount 0 'RESEARCH_SELECTION_E2E_RETRY_INVALID'
@@ -176,6 +181,11 @@ try {
         'RESEARCH_SELECTION_E2E_REUSE_PROVIDER_INVALID'
     Exact $repeat.retryCount 0 `
         'RESEARCH_SELECTION_E2E_REUSE_RETRY_INVALID'
+    if ([int]$repeat.candidateCount -lt 1 -or
+        [int]$repeat.candidateCount -gt 5 -or $repeat.emptyResult -or
+        $repeat.decisionCode -ne 'RESEARCH_PREFERENCE') {
+        throw 'RESEARCH_SELECTION_E2E_REUSE_CANDIDATES_INVALID'
+    }
     Exact $repeat.modelProviderRequestCount 0 `
         'RESEARCH_SELECTION_E2E_REUSE_MODEL_NETWORK_INVALID'
     Exact (Scalar 'SELECT count(*) FROM pit_market_fact_observations') `

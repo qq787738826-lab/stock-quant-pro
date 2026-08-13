@@ -466,7 +466,7 @@ public final class AgentResearchToolGateway {
         ) {
             List<TradingSession> open = loaded.dataset().sessions().stream()
                     .filter(TradingSession::anyOpen).toList();
-            if (open.size() < 80) {
+            if (open.size() < 60) {
                 return OutOfSampleResult.notEvaluated();
             }
             int splitIndex = Math.max(40, open.size() * 2 / 3);

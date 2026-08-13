@@ -28,12 +28,16 @@ final class AgentResearchTestFixtures {
     }
 
     static LoadedDataset loadedDataset() {
+        return loadedDataset(180);
+    }
+
+    static LoadedDataset loadedDataset(int sessionCount) {
         List<Security> securities = List.of(
                 new Security("600000", "SSE"),
                 new Security("600001", "SSE"),
                 new Security("000001", "SZSE"),
                 new Security("000002", "SZSE")).stream().sorted().toList();
-        List<TradingSession> sessions = sessions(180);
+        List<TradingSession> sessions = sessions(sessionCount);
         List<DailyBar> bars = new ArrayList<>();
         for (int securityIndex = 0; securityIndex < securities.size();
                 securityIndex++) {
@@ -72,7 +76,10 @@ final class AgentResearchTestFixtures {
     }
 
     static ResearchTask task(String objective) {
-        LoadedDataset loaded = loadedDataset();
+        return task(loadedDataset(), objective);
+    }
+
+    static ResearchTask task(LoadedDataset loaded, String objective) {
         return new ResearchTask("M3TASK_FIXTURE_RESEARCH_001", objective,
                 loaded.dataset().securities(),
                 loaded.dataset().firstSessionDate(),

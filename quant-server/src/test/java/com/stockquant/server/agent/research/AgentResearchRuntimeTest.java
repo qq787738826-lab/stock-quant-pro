@@ -64,6 +64,44 @@ class AgentResearchRuntimeTest {
     }
 
     @Test
+    void sixtySessionSelectionWindowReceivesStrictOutOfSampleEvidence() {
+        AgentResearchDatasetSource.LoadedDataset loaded =
+                AgentResearchTestFixtures.loadedDataset(60);
+        ResearchReport report = runtime(loaded).run(
+                AgentResearchTestFixtures.task(loaded,
+                        "Select current candidates from a sixty-session "
+                                + "research window."));
+
+        assertEquals(ResearchStatus.SUCCEEDED, report.status());
+        assertEquals(DecisionCode.RESEARCH_PREFERENCE,
+                report.finalDecision().code());
+        assertTrue(report.strategyExperiments().experiments().stream()
+                .allMatch(value -> value.outOfSampleEvaluated()
+                        && value.strictTrainTestIsolation()
+                        && value.walkForwardFolds() == 1
+                        && value.walkForwardOutOfSampleOnly()));
+    }
+
+    @Test
+    void shorterSelectionWindowRemainsInsufficientEvidence() {
+        AgentResearchDatasetSource.LoadedDataset loaded =
+                AgentResearchTestFixtures.loadedDataset(59);
+        ResearchReport report = runtime(loaded).run(
+                AgentResearchTestFixtures.task(loaded,
+                        "Reject current candidates without the minimum "
+                                + "out-of-sample window."));
+
+        assertEquals(ResearchStatus.INSUFFICIENT_EVIDENCE, report.status());
+        assertEquals(DecisionCode.INSUFFICIENT_EVIDENCE,
+                report.finalDecision().code());
+        assertTrue(report.strategyExperiments().experiments().stream()
+                .noneMatch(value -> value.outOfSampleEvaluated()
+                        || value.strictTrainTestIsolation()
+                        || value.walkForwardFolds() != 0
+                        || value.walkForwardOutOfSampleOnly()));
+    }
+
+    @Test
     void fixedInputAndClockProduceIdenticalStructuredReplay() {
         ResearchReport first = runtime().run(AgentResearchTestFixtures.task());
         ResearchReport second = runtime().run(AgentResearchTestFixtures.task());
@@ -182,8 +220,13 @@ class AgentResearchRuntimeTest {
     }
 
     private static AgentResearchRuntime runtime() {
-        var source = (AgentResearchDatasetSource) ignored ->
-                AgentResearchTestFixtures.loadedDataset();
+        return runtime(AgentResearchTestFixtures.loadedDataset());
+    }
+
+    private static AgentResearchRuntime runtime(
+            AgentResearchDatasetSource.LoadedDataset loaded
+    ) {
+        var source = (AgentResearchDatasetSource) ignored -> loaded;
         AgentResearchToolGateway gateway = new AgentResearchToolGateway(
                 source, new DefaultStrategyResearchApi(),
                 BacktestConfig.standard(), CLOCK);
