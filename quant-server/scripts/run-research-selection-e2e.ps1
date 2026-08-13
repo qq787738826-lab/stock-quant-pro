@@ -133,13 +133,14 @@ try {
         ([bool]$value.emptyResult).ToString().ToLowerInvariant())
     $experimentSql = @'
 SELECT string_agg(
-           item->>'strategyCode' || ':oos=' ||
-           item->>'outOfSampleEvaluated' || ':overfit=' ||
-           item->>'overfittingFlag', ',' ORDER BY item->>'strategyCode')
+           (item.value->>'strategyCode') || ':oos=' ||
+           (item.value->>'outOfSampleEvaluated') || ':overfit=' ||
+           (item.value->>'overfittingFlag'), ','
+           ORDER BY (item.value->>'strategyCode'))
   FROM research_selection_runs,
        LATERAL jsonb_array_elements(
            result_json->'agentReport'->'strategyExperiments'->'experiments'
-       ) item
+       ) item(value)
  WHERE id=1
 '@
     Write-Output ("RESEARCH_SELECTION_E2E_EXPERIMENTS={0}" -f `
@@ -149,7 +150,7 @@ SELECT COALESCE(string_agg(value, ',' ORDER BY value), 'NONE')
   FROM research_selection_runs,
        LATERAL jsonb_array_elements_text(
            result_json->'agentReport'->'finalDecision'->'unknowns'
-       ) value
+       ) unknown(value)
  WHERE id=1
 '@
     Write-Output ("RESEARCH_SELECTION_E2E_UNKNOWNS={0}" -f `
