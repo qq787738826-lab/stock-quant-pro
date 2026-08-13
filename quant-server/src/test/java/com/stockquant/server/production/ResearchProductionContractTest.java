@@ -19,6 +19,8 @@ class ResearchProductionContractTest {
         assertTrue(launcher.contains("START_RESEARCH_PRODUCTION"));
         assertTrue(launcher.contains("127.0.0.1:8080/api/system/health"));
         assertTrue(launcher.contains("$Action -eq 'Backup'"));
+        assertTrue(launcher.contains("$ErrorActionPreference = 'Continue'"));
+        assertTrue(launcher.contains("$javaExitCode = $LASTEXITCODE"));
         assertFalse(launcher.contains("schtasks"));
         assertFalse(launcher.contains("DB_PASSWORD"));
         assertFalse(launcher.contains("TUSHARE_TOKEN"));

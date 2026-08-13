@@ -40,8 +40,15 @@ try {
         throw 'M6_FORMAL_ARTIFACT_MISSING'
     }
     if ($Action -eq 'Start') {
-        $java = @(& java -version 2>&1)
-        if ($LASTEXITCODE -ne 0 -or ($java -join "`n") -notmatch
+        $oldPreference = $ErrorActionPreference
+        try {
+            $ErrorActionPreference = 'Continue'
+            $java = @(& java -version 2>&1 | ForEach-Object { [string]$_ })
+            $javaExitCode = $LASTEXITCODE
+        } finally {
+            $ErrorActionPreference = $oldPreference
+        }
+        if ($javaExitCode -ne 0 -or ($java -join "`n") -notmatch
                 'version "17(?:\.|\")') {
             throw 'M6_JAVA_17_REQUIRED'
         }
