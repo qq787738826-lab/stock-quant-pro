@@ -33,6 +33,9 @@ class ResearchProductionContractTest {
         assertTrue(broker.contains("backend.autostart.json"));
         assertTrue(broker.contains("backend.recovery-status.json"));
         assertTrue(broker.contains("M6_PRODUCTION_RECOVERED"));
+        assertTrue(broker.contains("M6_PRODUCTION_AUTOSTART_WRITE_FAILED"));
+        assertFalse(broker.contains(
+                "[IO.File]::Replace($temporary, $productionAutostartFile, $null)"));
         assertTrue(broker.contains("/api/system/lifecycle/stop"));
         assertFalse(broker.contains("-Command"));
         assertFalse(broker.contains("Invoke-Expression"));

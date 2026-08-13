@@ -1451,17 +1451,26 @@ function Write-ResearchProductionAutostart {
         lastRestartAt = $LastRestartAt
     }
     $temporary = "$productionAutostartFile.$PID.tmp"
+    $backup = "$productionAutostartFile.$PID.backup"
     try {
         [IO.File]::WriteAllText($temporary,
             ($state | ConvertTo-Json -Depth 3) + "`n",
             [Text.UTF8Encoding]::new($false))
         if (Test-Path -LiteralPath $productionAutostartFile) {
-            [IO.File]::Replace($temporary, $productionAutostartFile, $null)
+            Remove-Item -LiteralPath $backup -Force `
+                -ErrorAction SilentlyContinue
+            [IO.File]::Replace($temporary, $productionAutostartFile, $backup)
         } else {
             [IO.File]::Move($temporary, $productionAutostartFile)
         }
+    } catch {
+        throw 'M6_PRODUCTION_AUTOSTART_WRITE_FAILED'
     } finally {
         Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue
+        if (Test-Path -LiteralPath $productionAutostartFile) {
+            Remove-Item -LiteralPath $backup -Force `
+                -ErrorAction SilentlyContinue
+        }
     }
 }
 

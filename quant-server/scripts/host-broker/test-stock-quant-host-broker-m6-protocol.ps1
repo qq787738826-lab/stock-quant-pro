@@ -122,9 +122,29 @@ try {
         $brokerScript -notmatch "java\\.home" -or
         $brokerScript -notmatch 'M6_JAVA_17_RUNTIME_INVALID' -or
         $brokerScript -notmatch 'backend\.recovery-status\.json' -or
-        $brokerScript -notmatch 'M6_PRODUCTION_RECOVERED') {
+        $brokerScript -notmatch 'M6_PRODUCTION_RECOVERED' -or
+        $brokerScript -notmatch 'M6_PRODUCTION_AUTOSTART_WRITE_FAILED' -or
+        $brokerScript -match
+            '\[IO\.File\]::Replace\(\$temporary, \$productionAutostartFile, \$null\)') {
         throw 'M6_JAVA_PROCESS_BINDING_CONTRACT_FAILED'
     }
+    $tests++
+
+    $replaceRoot = Join-Path $paths.TargetRoot 'm6-file-replace-roundtrip'
+    New-Item -ItemType Directory -Path $replaceRoot -Force | Out-Null
+    $replaceSource = Join-Path $replaceRoot 'source.tmp'
+    $replaceDestination = Join-Path $replaceRoot 'destination.json'
+    $replaceBackup = Join-Path $replaceRoot 'destination.backup'
+    [IO.File]::WriteAllText($replaceSource, 'new',
+        [Text.UTF8Encoding]::new($false))
+    [IO.File]::WriteAllText($replaceDestination, 'old',
+        [Text.UTF8Encoding]::new($false))
+    [IO.File]::Replace($replaceSource, $replaceDestination, $replaceBackup)
+    if ([IO.File]::ReadAllText($replaceDestination) -cne 'new' -or
+        [IO.File]::ReadAllText($replaceBackup) -cne 'old') {
+        throw 'M6_WINDOWS_FILE_REPLACE_ROUNDTRIP_FAILED'
+    }
+    Remove-Item -LiteralPath $replaceRoot -Recurse -Force
     $tests++
 
     Write-Output "M6_BROKER_PROTOCOL_TESTS=$tests"
