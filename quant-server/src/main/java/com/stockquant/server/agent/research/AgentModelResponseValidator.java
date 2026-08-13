@@ -27,6 +27,11 @@ final class AgentModelResponseValidator {
     private static final Map<AgentRole, Set<ClaimType>> CLAIM_TYPES =
             claimTypes();
     private static final Set<String> DOWNGRADE_TO_UNKNOWN = Set.of(
+            "M3_MODEL_CLAIM_TYPE_REJECTED",
+            "M3_MODEL_CLAIM_LENGTH_REJECTED",
+            "M3_MODEL_CLAIM_CONTROL_REJECTED",
+            "M3_MODEL_CLAIM_TRADING_ACTION_REJECTED",
+            "M3_MODEL_CLAIM_CONFIDENCE_REJECTED",
             "M3_MODEL_EVIDENCE_REFERENCE_REJECTED",
             "M3_UNSUPPORTED_MODEL_CLAIM",
             "M3_UNKNOWN_CONFIDENCE_REJECTED",
@@ -133,12 +138,25 @@ final class AgentModelResponseValidator {
             ModelAdapter.ModelClaim claim,
             Map<String, Evidence> knownEvidence
     ) {
-        if (!CLAIM_TYPES.get(request.agentRole()).contains(claim.claimType())
-                || claim.statement().length() > 600
-                || containsControl(claim.statement())
-                || FORBIDDEN_ACTION.matcher(claim.statement()).find()
-                || claim.confidence().compareTo(request.confidenceCap()) > 0) {
-            throw AgentResearchModels.invalid("M3_MODEL_CLAIM_REJECTED");
+        if (!CLAIM_TYPES.get(request.agentRole()).contains(claim.claimType())) {
+            throw AgentResearchModels.invalid(
+                    "M3_MODEL_CLAIM_TYPE_REJECTED");
+        }
+        if (claim.statement().length() > 600) {
+            throw AgentResearchModels.invalid(
+                    "M3_MODEL_CLAIM_LENGTH_REJECTED");
+        }
+        if (containsControl(claim.statement())) {
+            throw AgentResearchModels.invalid(
+                    "M3_MODEL_CLAIM_CONTROL_REJECTED");
+        }
+        if (FORBIDDEN_ACTION.matcher(claim.statement()).find()) {
+            throw AgentResearchModels.invalid(
+                    "M3_MODEL_CLAIM_TRADING_ACTION_REJECTED");
+        }
+        if (claim.confidence().compareTo(request.confidenceCap()) > 0) {
+            throw AgentResearchModels.invalid(
+                    "M3_MODEL_CLAIM_CONFIDENCE_REJECTED");
         }
         Set<String> citations = new HashSet<>();
         StringBuilder citedText = new StringBuilder();

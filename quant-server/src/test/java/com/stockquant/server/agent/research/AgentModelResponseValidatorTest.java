@@ -60,7 +60,7 @@ class AgentModelResponseValidatorTest {
     }
 
     @Test
-    void rejectsExecutableTradingInstruction() {
+    void discardsExecutableTradingInstructionAsStaticUnknown() {
         var request = request(List.of(ToolCode.STRATEGY_COMPARE));
         var response = new ModelAdapter.ModelResponse(List.of(), List.of(
                 new ModelAdapter.ModelClaim(ClaimType.FACT,
@@ -69,8 +69,50 @@ class AgentModelResponseValidatorTest {
                         new BigDecimal("0.30"))),
                 "Structured summary.", List.of(), false, ModelUsage.zero());
 
-        assertThrows(IllegalArgumentException.class, () ->
-                AgentModelResponseValidator.validate(request, response));
+        var validated = AgentModelResponseValidator.validate(request,
+                response);
+
+        assertEquals(ClaimType.UNKNOWN,
+                validated.claims().get(0).claimType());
+        assertTrue(validated.claims().get(0).evidenceIds().isEmpty());
+        assertTrue(!validated.claims().get(0).statement().contains(
+                "Execute a trade"));
+    }
+
+    @Test
+    void discardsWrongRoleAndExcessConfidenceWithoutPropagatingText() {
+        var criticRequest = new ModelAdapter.ModelRequest(
+                "MC_11_CRITIC_REVIEW", AgentRole.CRITIC_REVIEW,
+                "CRITIC_CHALLENGE", "M3_CRITIC_REVIEW_V3",
+                "System rules are fixed.", "Untrusted objective.",
+                List.of(), List.of(EVIDENCE), List.of(), false,
+                new BigDecimal("0.70"), HASH);
+        var wrongRole = new ModelAdapter.ModelResponse(List.of(), List.of(
+                new ModelAdapter.ModelClaim(ClaimType.RECOMMENDATION,
+                        "The model supplied an invalid recommendation.",
+                        List.of(EVIDENCE.evidenceId()),
+                        new BigDecimal("0.50"))), "Structured summary.",
+                List.of(), false, ModelUsage.zero());
+        var excessive = new ModelAdapter.ModelResponse(List.of(), List.of(
+                new ModelAdapter.ModelClaim(ClaimType.INFERENCE,
+                        "The model supplied excessive confidence.",
+                        List.of(EVIDENCE.evidenceId()),
+                        new BigDecimal("0.90"))), "Structured summary.",
+                List.of(), false, ModelUsage.zero());
+
+        for (var response : List.of(wrongRole, excessive)) {
+            var validated = AgentModelResponseValidator.validate(
+                    criticRequest, response);
+            assertEquals(ClaimType.UNKNOWN,
+                    validated.claims().get(0).claimType());
+            assertTrue(validated.claims().get(0).evidenceIds().isEmpty());
+            assertTrue(validated.claims().get(0).statement().contains(
+                    "was rejected"));
+            assertTrue(!validated.claims().get(0).statement().contains(
+                    "recommendation"));
+            assertTrue(!validated.claims().get(0).statement().contains(
+                    "excessive confidence"));
+        }
     }
 
     @Test
