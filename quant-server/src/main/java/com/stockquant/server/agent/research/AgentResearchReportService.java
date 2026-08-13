@@ -2,6 +2,7 @@ package com.stockquant.server.agent.research;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stockquant.server.agent.research.AgentResearchModels.ResearchReport;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.nio.file.Files;
@@ -13,6 +14,7 @@ import java.util.List;
 public final class AgentResearchReportService {
     private final AgentResearchReportFiles files;
 
+    @Autowired
     public AgentResearchReportService(ObjectMapper mapper) {
         this(defaultRoot(), mapper);
     }

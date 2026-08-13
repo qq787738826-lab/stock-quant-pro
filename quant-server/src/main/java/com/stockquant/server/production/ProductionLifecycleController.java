@@ -3,6 +3,7 @@ package com.stockquant.server.production;
 import com.stockquant.server.api.ApiResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -20,6 +21,7 @@ public final class ProductionLifecycleController {
     private final Consumer<Integer> exit;
     private final AtomicBoolean stopping = new AtomicBoolean();
 
+    @Autowired
     public ProductionLifecycleController(
             org.springframework.context.ConfigurableApplicationContext context
     ) {

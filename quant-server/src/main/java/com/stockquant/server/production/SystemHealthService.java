@@ -11,6 +11,7 @@ import com.stockquant.server.production.SystemHealthModels.ComponentHealth;
 import com.stockquant.server.production.SystemHealthModels.HealthStatus;
 import com.stockquant.server.production.SystemHealthModels.SchedulerHealth;
 import com.stockquant.server.production.SystemHealthModels.SystemHealth;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
@@ -54,6 +55,7 @@ public final class SystemHealthService {
     private final Clock clock;
     private final Path repositoryRoot;
 
+    @Autowired
     public SystemHealthService(
             JdbcTemplate jdbc,
             ShadowResearchQueryService shadows,

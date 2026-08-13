@@ -2,6 +2,7 @@ package com.stockquant.server.production;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stockquant.server.production.SystemHealthModels.BackupManifest;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
@@ -58,6 +59,7 @@ public class LocalResearchBackupService {
     private final ObjectMapper mapper;
     private final Path backupRoot;
 
+    @Autowired
     public LocalResearchBackupService(JdbcTemplate jdbc, ObjectMapper mapper) {
         this(jdbc, mapper, repositoryRoot().resolve(
                 "quant-server/target/stock-quant-production/backups"));
