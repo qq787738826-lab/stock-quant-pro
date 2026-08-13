@@ -3,9 +3,11 @@ package com.stockquant.server.researchselection;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -16,6 +18,18 @@ class ResearchSelectionBrokerResultReconcilerTest {
 
     @TempDir
     Path temporary;
+
+    @Test
+    void productionConstructorIsExplicitlySelectedForSpring() {
+        var constructors = Arrays.stream(
+                        ResearchSelectionBrokerResultReconciler.class
+                                .getDeclaredConstructors())
+                .filter(value -> value.isAnnotationPresent(Autowired.class))
+                .toList();
+
+        assertEquals(1, constructors.size());
+        assertEquals(3, constructors.get(0).getParameterCount());
+    }
 
     @Test
     void acceptsOnlySanitizedZeroCallPreRunnerFailure() throws Exception {

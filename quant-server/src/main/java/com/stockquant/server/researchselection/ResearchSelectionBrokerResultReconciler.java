@@ -2,6 +2,7 @@ package com.stockquant.server.researchselection;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -23,6 +24,7 @@ public final class ResearchSelectionBrokerResultReconciler {
     private final Clock clock;
     private final Path resultsDirectory;
 
+    @Autowired
     public ResearchSelectionBrokerResultReconciler(
             org.springframework.jdbc.core.JdbcTemplate jdbc,
             ObjectMapper mapper,
