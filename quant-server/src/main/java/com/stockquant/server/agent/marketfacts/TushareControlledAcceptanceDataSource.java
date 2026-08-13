@@ -12,7 +12,7 @@ import java.util.Properties;
 import java.util.logging.Logger;
 
 /** Single-purpose, non-pooling DataSource for trusted one-shot processes. */
-final class TushareControlledAcceptanceDataSource
+public final class TushareControlledAcceptanceDataSource
         implements DataSource, AutoCloseable {
     private final String jdbcUrl;
     private final String databaseUser;
@@ -21,7 +21,7 @@ final class TushareControlledAcceptanceDataSource
     private PrintWriter logWriter;
     private int loginTimeout;
 
-    TushareControlledAcceptanceDataSource(
+    public TushareControlledAcceptanceDataSource(
             int port,
             SslMode sslMode,
             char[] password
@@ -121,7 +121,7 @@ final class TushareControlledAcceptanceDataSource
         logWriter = null;
     }
 
-    boolean closed() {
+    public boolean closed() {
         return closed;
     }
 
@@ -137,7 +137,7 @@ final class TushareControlledAcceptanceDataSource
         return "TushareControlledAcceptanceDataSource[REDACTED]";
     }
 
-    enum SslMode {
+    public enum SslMode {
         REQUIRE("require"),
         DISABLE_LOCAL_ONLY("disable");
 

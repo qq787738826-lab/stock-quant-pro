@@ -43,3 +43,16 @@ V4__simulated_trading.sql
 ```
 
 本系统只进行本地研究和模拟交易，不保存券商密码，也不会自动控制券商客户端。
+
+## 1.4.0 研究生产入口（开发分支）
+
+完成一次本机 Credential/Broker 配置后，研究版统一从仓库根目录启动：
+
+```powershell
+& .\quant-server\scripts\start-stock-quant-pro.ps1
+```
+
+入口会受控迁移研究库、启动 127.0.0.1 后端与内嵌 Web UI，并显示数据库、Broker、
+M1—M5、Shadow scheduler、凭据存在状态及月度预算。它不读取或显示秘密，不连接券商，
+也不会执行真实交易。详细边界见
+[`docs/agent-team/stage-m6-research-production-ready.md`](docs/agent-team/stage-m6-research-production-ready.md)。

@@ -433,7 +433,8 @@ public final class TushareM4ShadowResearchManualRunner {
     ) {
         boolean eligible = launch.mode() == ExecutionMode.FAKE
                 ? proof.e2eDryRunEligible()
-                : proof.m4StageEligible() || proof.governanceEligible();
+                : proof.m4StageEligible() || proof.m6ShadowStageEligible()
+                || proof.governanceEligible();
         if (!eligible || !TushareControlledAcceptanceBuildProof
                 .M4_RUNNER_START_CLASS.equals(proof.runnerStartClass())
                 || launch.mode() == ExecutionMode.FORMAL

@@ -33,7 +33,7 @@ quant:
 stockquant:
   shadow-research:
     scheduler:
-      enabled: ${M4_SHADOW_SCHEDULER_ENABLED:true}
+      enabled: ${M4_SHADOW_SCHEDULER_ENABLED:false}
       cron: "0 20 17 * * MON-FRI"
       zone: Asia/Shanghai
       safe-window-start: "17:15"
@@ -93,6 +93,6 @@ stockquant:
       retry-backoff: 1s
 logging:
   file:
-    name: logs/quant-server.log
+    name: quant-server/target/stock-quant-production/logs/stock-quant-production.log
   level:
     com.stockquant: INFO

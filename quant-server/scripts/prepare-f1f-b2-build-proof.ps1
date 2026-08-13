@@ -4,18 +4,22 @@ param(
         'M1_STAGE_CONTROLLED_BUILD_ARTIFACT',
         'M2_STAGE_CONTROLLED_BUILD_ARTIFACT',
         'M3_STAGE_CONTROLLED_BUILD_ARTIFACT',
-        'M4_STAGE_CONTROLLED_BUILD_ARTIFACT', 'E2E_DRY_RUN')]
+        'M4_STAGE_CONTROLLED_BUILD_ARTIFACT',
+        'M6_STAGE_CONTROLLED_BUILD_ARTIFACT', 'E2E_DRY_RUN')]
     [string] $Mode = 'PREPARATION_ONLY',
 
     [ValidateSet('F1F_B2', 'REDUCED_RESEARCH_DAY001', 'M1_RESEARCH_DATA',
-        'M2_STRATEGY_RESEARCH', 'M3_AGENT_RESEARCH', 'M4_SHADOW_RESEARCH')]
+        'M2_STRATEGY_RESEARCH', 'M3_AGENT_RESEARCH', 'M4_SHADOW_RESEARCH',
+        'M6_RESEARCH_PRODUCTION')]
     [string] $RunnerProfile = 'F1F_B2'
 )
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $requiredBranch = 'feature/1.4.0-agent-team'
-$artifactName = if ($RunnerProfile -eq 'M4_SHADOW_RESEARCH') {
+$artifactName = if ($RunnerProfile -eq 'M6_RESEARCH_PRODUCTION') {
+    'quant-server-1.3.1-research-production.jar'
+} elseif ($RunnerProfile -eq 'M4_SHADOW_RESEARCH') {
     'quant-server-1.3.1-m4-shadow-research-runner.jar'
 } elseif ($RunnerProfile -eq 'M3_AGENT_RESEARCH') {
     'quant-server-1.3.1-m3-agent-research-runner.jar'
@@ -28,7 +32,9 @@ $artifactName = if ($RunnerProfile -eq 'M4_SHADOW_RESEARCH') {
 } else {
     'quant-server-1.3.1-f1f-b2-runner.jar'
 }
-$runnerStartClass = if ($RunnerProfile -eq 'M4_SHADOW_RESEARCH') {
+$runnerStartClass = if ($RunnerProfile -eq 'M6_RESEARCH_PRODUCTION') {
+    'com.stockquant.server.production.StockQuantResearchProductionRunner'
+} elseif ($RunnerProfile -eq 'M4_SHADOW_RESEARCH') {
     'com.stockquant.server.agent.marketfacts.TushareM4ShadowResearchManualRunner'
 } elseif ($RunnerProfile -eq 'M3_AGENT_RESEARCH') {
     'com.stockquant.server.agent.marketfacts.TushareM3AgentResearchManualRunner'
@@ -132,6 +138,13 @@ try {
             $RunnerProfile -ne 'M4_SHADOW_RESEARCH') {
             throw 'STOCK_QUANT_M4_STAGE_BUILD_BASELINE_REQUIRED'
         }
+    } elseif ($Mode -eq 'M6_STAGE_CONTROLLED_BUILD_ARTIFACT') {
+        if ($actualBranch -ne 'codex/1.4.0-m6-research-production-ready' -or
+            $remoteCommit -ne $ExpectedCommit -or
+            $RunnerProfile -notin @(
+                'M6_RESEARCH_PRODUCTION', 'M4_SHADOW_RESEARCH')) {
+            throw 'STOCK_QUANT_M6_STAGE_BUILD_BASELINE_REQUIRED'
+        }
     } elseif ($actualBranch -ne $requiredBranch -and
         -not $actualBranch.StartsWith('codex/')) {
         throw 'TUSHARE_CONTROLLED_ACCEPTANCE_PREPARATION_BRANCH_INVALID'
@@ -166,6 +179,19 @@ try {
     }
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     [IO.Compression.ZipFile]::ExtractToDirectory($archivePath, $sourceRoot)
+
+    if ($RunnerProfile -eq 'M6_RESEARCH_PRODUCTION') {
+        $webDist = Join-Path $repoRoot 'quant-web\dist'
+        $generatedWeb = Join-Path $sourceRoot `
+            'quant-server\target\generated-resources\production-web'
+        if (-not (Test-Path -LiteralPath (Join-Path $webDist 'index.html') `
+                -PathType Leaf)) {
+            throw 'STOCK_QUANT_M6_PRODUCTION_WEB_BUILD_MISSING'
+        }
+        New-Item -ItemType Directory -Path $generatedWeb -Force | Out-Null
+        Copy-Item -Path (Join-Path $webDist '*') `
+            -Destination $generatedWeb -Recurse -Force
+    }
 
     $mavenWrapper = if ([Environment]::OSVersion.Platform -eq
             [PlatformID]::Win32NT) {

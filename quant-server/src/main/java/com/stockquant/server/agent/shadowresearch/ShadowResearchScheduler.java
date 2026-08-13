@@ -4,6 +4,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import com.stockquant.server.production.ShadowSchedulerRuntimeState;
 
 import java.time.Clock;
 import java.time.DayOfWeek;
@@ -22,17 +23,21 @@ public final class ShadowResearchScheduler {
     private final ShadowResearchDispatchGateway dispatcher;
     private final ShadowResearchScheduleProperties properties;
     private final Clock clock;
+    private final ShadowSchedulerRuntimeState runtimeState;
 
     public ShadowResearchScheduler(
             ShadowResearchRepository repository,
             ShadowResearchDispatchGateway dispatcher,
             ShadowResearchScheduleProperties properties,
-            @Qualifier("agentTemporalClock") Clock clock
+            @Qualifier("agentTemporalClock") Clock clock,
+            ShadowSchedulerRuntimeState runtimeState
     ) {
         this.repository = Objects.requireNonNull(repository, "repository");
         this.dispatcher = Objects.requireNonNull(dispatcher, "dispatcher");
         this.properties = Objects.requireNonNull(properties, "properties");
         this.clock = Objects.requireNonNull(clock, "clock");
+        this.runtimeState = Objects.requireNonNull(runtimeState,
+                "runtimeState");
         properties.validate();
     }
 
@@ -41,27 +46,42 @@ public final class ShadowResearchScheduler {
     public void dispatchAfterClose() {
         var now = clock.instant().atZone(ZoneId.of(properties.getZone()));
         LocalDate date = now.toLocalDate();
-        if (!eligibleWeekday(date) || !withinWindow(now.toLocalTime())
-                || repository.frozenSlot(date,
+        if (!eligibleWeekday(date)) {
+            runtimeState.checked(clock.instant(), "NON_TRADING_WEEKEND");
+            return;
+        }
+        if (!withinWindow(now.toLocalTime())) {
+            runtimeState.checked(clock.instant(), "OUTSIDE_SAFE_WINDOW");
+            return;
+        }
+        if (repository.frozenSlot(date,
                 ShadowResearchModels.RESEARCH_SLOT,
                 ShadowResearchModels.STRATEGY_VERSION).isPresent()) {
+            runtimeState.checked(clock.instant(), "SLOT_ALREADY_FROZEN");
             return;
         }
         repository.interruptStaleRuns(clock.instant().minus(
                 Duration.ofHours(2)), clock.instant());
         if (repository.activeRun().isPresent()) {
+            runtimeState.checked(clock.instant(), "ACTIVE_RUN_PRESENT");
             return;
         }
         var calendar = repository.researchCalendarState(date,
                 clock.instant());
         if (calendar == ShadowResearchRepository.CalendarState.CLOSED) {
+            runtimeState.checked(clock.instant(), "MARKET_CLOSED");
             return;
         }
         if (calendar == ShadowResearchRepository.CalendarState.OPEN
                 && !repository.nextCommonOpenKnown(date, clock.instant())) {
             calendar = ShadowResearchRepository.CalendarState.UNKNOWN;
         }
-        dispatcher.dispatch(date, clock.instant(), calendar);
+        var result = dispatcher.dispatch(date, clock.instant(), calendar);
+        if (result.accepted()) {
+            runtimeState.dispatched(clock.instant());
+        } else {
+            runtimeState.checked(clock.instant(), "DISPATCH_IDEMPOTENT");
+        }
     }
 
     boolean withinWindow(LocalTime time) {

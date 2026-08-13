@@ -53,13 +53,14 @@ try {
     $env:STOCK_QUANT_M5_TEST_DB_USER = 'stock_quant_research'
     $env:STOCK_QUANT_M5_TEST_DB_PASSWORD = 'M5_TEMP_TEST_ONLY'
     & "$repoRoot\mvnw.cmd" -pl quant-server -am `
-        '-Dtest=AgentEvaluationPostgresIntegrationTest,TushareM4TradingCalendarAdmissionPostgresTest' `
+        '-Dtest=AgentEvaluationPostgresIntegrationTest,TushareM4TradingCalendarAdmissionPostgresTest,ResearchProductionPostgresIntegrationTest' `
         '-Dsurefire.failIfNoSpecifiedTests=false' test
     if ($LASTEXITCODE -ne 0) { throw 'M5_POSTGRES_TEST_FAILED' }
     Write-Output 'M5_POSTGRES_V1_V16=PASS'
     Write-Output 'M5_VERSION_IMMUTABILITY=PASS'
     Write-Output 'M5_MONTHLY_LEDGER_IMMUTABILITY=PASS'
     Write-Output 'M4_CALENDAR_ADMISSION_POSTGRES=4/0/0/0'
+    Write-Output 'M6_PRODUCTION_BACKUP_POSTGRES=1/0/0/0'
 } finally {
     $env:STOCK_QUANT_M5_TEST_JDBC_URL = $oldUrl
     $env:STOCK_QUANT_M5_TEST_DB_USER = $oldUser

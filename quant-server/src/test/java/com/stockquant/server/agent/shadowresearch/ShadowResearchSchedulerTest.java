@@ -1,6 +1,7 @@
 package com.stockquant.server.agent.shadowresearch;
 
 import org.junit.jupiter.api.Test;
+import com.stockquant.server.production.ShadowSchedulerRuntimeState;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -59,7 +60,8 @@ class ShadowResearchSchedulerTest {
                 .thenReturn(true);
         var scheduler = new ShadowResearchScheduler(repository, gateway,
                 new ShadowResearchScheduleProperties(),
-                Clock.fixed(now, ZoneOffset.UTC));
+                Clock.fixed(now, ZoneOffset.UTC),
+                new ShadowSchedulerRuntimeState());
 
         scheduler.dispatchAfterClose();
 
@@ -86,7 +88,8 @@ class ShadowResearchSchedulerTest {
                 .thenReturn(ShadowResearchRepository.CalendarState.CLOSED);
         var scheduler = new ShadowResearchScheduler(repository, gateway,
                 new ShadowResearchScheduleProperties(),
-                Clock.fixed(now, ZoneOffset.UTC));
+                Clock.fixed(now, ZoneOffset.UTC),
+                new ShadowSchedulerRuntimeState());
 
         scheduler.dispatchAfterClose();
         scheduler.dispatchAfterClose();
@@ -115,7 +118,8 @@ class ShadowResearchSchedulerTest {
 
         new ShadowResearchScheduler(repository, gateway,
                 new ShadowResearchScheduleProperties(),
-                Clock.fixed(now, ZoneOffset.UTC)).dispatchAfterClose();
+                Clock.fixed(now, ZoneOffset.UTC),
+                new ShadowSchedulerRuntimeState()).dispatchAfterClose();
 
         assertEquals(1, calls.get());
     }
@@ -142,7 +146,8 @@ class ShadowResearchSchedulerTest {
 
         new ShadowResearchScheduler(repository, gateway,
                 new ShadowResearchScheduleProperties(),
-                Clock.fixed(now, ZoneOffset.UTC)).dispatchAfterClose();
+                Clock.fixed(now, ZoneOffset.UTC),
+                new ShadowSchedulerRuntimeState()).dispatchAfterClose();
 
         assertEquals(1, calls.get());
     }

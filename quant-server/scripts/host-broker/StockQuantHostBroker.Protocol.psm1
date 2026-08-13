@@ -16,6 +16,9 @@ $script:AllowedOperations = @(
     'CHECK_BAILIAN_CREDENTIAL_STATUS'
     'RUN_M3_AGENT_RESEARCH_SMOKE'
     'RUN_M4_SHADOW_RESEARCH'
+    'START_RESEARCH_PRODUCTION'
+    'STOP_RESEARCH_PRODUCTION'
+    'CHECK_RESEARCH_PRODUCTION_STATUS'
     'READ_SANITIZED_RESULT'
 )
 $script:RequiredKeys = @(
@@ -361,6 +364,33 @@ $script:M4RequiredKeys = @(
     'retry.budget'
     'redirects'
     'user.approval.reference'
+    'created.at'
+    'expires.at'
+    'execution.source'
+    'no.retry'
+    'source.request.id'
+)
+
+$script:M6RequiredKeys = @(
+    'schema.version'
+    'request.id'
+    'operation'
+    'git.commit'
+    'jar.path'
+    'jar.sha256'
+    'authorization.file'
+    'm6.production'
+    'database.host'
+    'database.port'
+    'database.name'
+    'database.user'
+    'schema.name'
+    'backend.host'
+    'backend.port'
+    'provider'
+    'maximum.provider.requests'
+    'retry.budget'
+    'redirects'
     'created.at'
     'expires.at'
     'execution.source'
@@ -966,6 +996,12 @@ function Read-StockQuantHostBrokerRequest {
                 $script:M4RequiredKeys
                 break
             }
+            { $_ -in @('START_RESEARCH_PRODUCTION',
+                    'STOP_RESEARCH_PRODUCTION',
+                    'CHECK_RESEARCH_PRODUCTION_STATUS') } {
+                $script:M6RequiredKeys
+                break
+            }
             default { $script:RequiredKeys }
         }
     } else { $script:RequiredKeys }
@@ -1183,6 +1219,28 @@ function Read-StockQuantHostBrokerRequest {
             $values['no.retry'] -ne 'true') {
             throw 'STOCK_QUANT_HOST_BROKER_REQUEST_SCOPE_INVALID'
         }
+    } elseif ($values['operation'] -in @(
+            'START_RESEARCH_PRODUCTION', 'STOP_RESEARCH_PRODUCTION',
+            'CHECK_RESEARCH_PRODUCTION_STATUS')) {
+        if ($values['authorization.file'] -ne 'NONE' -or
+            $values['m6.production'] -ne 'RESEARCH_PRODUCTION_V1' -or
+            $values['database.host'] -ne '127.0.0.1' -or
+            $values['database.port'] -ne '38432' -or
+            $values['database.name'] -ne 'stock_quant_research' -or
+            $values['database.user'] -ne 'stock_quant_research' -or
+            $values['schema.name'] -ne 'tushare_research' -or
+            $values['backend.host'] -ne '127.0.0.1' -or
+            $values['backend.port'] -ne '8080' -or
+            $values['provider'] -ne 'NONE' -or
+            $values['maximum.provider.requests'] -ne '0' -or
+            $values['retry.budget'] -ne '0' -or
+            $values['redirects'] -ne 'NEVER' -or
+            $values['execution.source'] -ne
+                'M6_RESEARCH_PRODUCTION_LOCAL' -or
+            $values['no.retry'] -ne 'true' -or
+            $values['source.request.id'] -ne 'NONE') {
+            throw 'STOCK_QUANT_HOST_BROKER_REQUEST_SCOPE_INVALID'
+        }
     } elseif ($values['operation'] -eq 'RUN_M1_RESEARCH_DATA') {
         [int] $m1CallsBefore = -1
         if ($values['m1.mode'] -notin @(
@@ -1305,6 +1363,24 @@ function Read-StockQuantHostBrokerRequest {
     if (-not (Test-Path -LiteralPath $proof -PathType Leaf)) {
         throw 'STOCK_QUANT_HOST_BROKER_BUILD_PROOF_MISSING'
     }
+    if ($values['operation'] -in @('RUN_M4_SHADOW_RESEARCH',
+            'START_RESEARCH_PRODUCTION', 'STOP_RESEARCH_PRODUCTION',
+            'CHECK_RESEARCH_PRODUCTION_STATUS')) {
+        $proofValues = Read-StrictStockQuantProperties -Path $proof
+        $allowedModes = if ($values['operation'] -eq
+                'RUN_M4_SHADOW_RESEARCH') {
+            @('M4_STAGE_CONTROLLED_BUILD_ARTIFACT',
+                'M6_STAGE_CONTROLLED_BUILD_ARTIFACT',
+                'CONTROLLED_BUILD_ARTIFACT')
+        } else { @('M6_STAGE_CONTROLLED_BUILD_ARTIFACT',
+                'CONTROLLED_BUILD_ARTIFACT') }
+        if ($proofValues['git.commit'] -cne $values['git.commit'] -or
+            $proofValues['artifact.sha256'] -cne
+                $values['jar.sha256'] -or
+            $proofValues['build.mode'] -notin $allowedModes) {
+            throw 'STOCK_QUANT_HOST_BROKER_BUILD_PROOF_BINDING_INVALID'
+        }
+    }
     $authorization = $null
     $authorizationStatus = 'NOT_REQUIRED_ZERO_PROVIDER_DIAGNOSTIC'
     if ($values['operation'] -eq 'RUN_M2_STRATEGY_RESEARCH_SMOKE') {
@@ -1365,6 +1441,13 @@ function Read-StockQuantHostBrokerRequest {
         }
         $authorizationStatus =
             'M4_USER_APPROVED_CONTINUOUS_MONTHLY'
+    } elseif ($values['operation'] -in @(
+            'START_RESEARCH_PRODUCTION', 'STOP_RESEARCH_PRODUCTION',
+            'CHECK_RESEARCH_PRODUCTION_STATUS')) {
+        if ($values['authorization.file'] -ne 'NONE') {
+            throw 'STOCK_QUANT_HOST_BROKER_AUTHORIZATION_MODE_INVALID'
+        }
+        $authorizationStatus = 'M6_LOCAL_PRODUCTION_APPROVED'
     } elseif ($values['operation'] -eq 'DIAGNOSE_TUSHARE_CREDENTIAL') {
         if ($values['authorization.file'] -ne 'NONE') {
             throw 'STOCK_QUANT_HOST_BROKER_AUTHORIZATION_MODE_INVALID'
@@ -1538,6 +1621,12 @@ function Write-StockQuantHostBrokerRequest {
             }
             'RUN_M4_SHADOW_RESEARCH' {
                 $script:M4RequiredKeys
+                break
+            }
+            { $_ -in @('START_RESEARCH_PRODUCTION',
+                    'STOP_RESEARCH_PRODUCTION',
+                    'CHECK_RESEARCH_PRODUCTION_STATUS') } {
+                $script:M6RequiredKeys
                 break
             }
             default { $script:RequiredKeys }

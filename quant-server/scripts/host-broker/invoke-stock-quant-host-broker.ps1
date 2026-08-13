@@ -12,6 +12,9 @@ param(
         'CHECK_BAILIAN_CREDENTIAL_STATUS',
         'RUN_M3_AGENT_RESEARCH_SMOKE',
         'RUN_M4_SHADOW_RESEARCH',
+        'START_RESEARCH_PRODUCTION',
+        'STOP_RESEARCH_PRODUCTION',
+        'CHECK_RESEARCH_PRODUCTION_STATUS',
         'READ_SANITIZED_RESULT'
     )]
     [string] $Operation,
@@ -47,7 +50,9 @@ $identity = [Security.Principal.WindowsIdentity]::GetCurrent().Name
 $integrationBranch = 'feature/1.4.0-agent-team'
 
 if (($RequestId -ne 'AUTO' -or $TradeDate -ne 'AUTO' -or $SubmitOnly) -and
-    $Operation -ne 'RUN_M4_SHADOW_RESEARCH') {
+    $Operation -notin @('RUN_M4_SHADOW_RESEARCH',
+        'START_RESEARCH_PRODUCTION', 'STOP_RESEARCH_PRODUCTION',
+        'CHECK_RESEARCH_PRODUCTION_STATUS')) {
     throw 'STOCK_QUANT_HOST_BROKER_FIXED_DISPATCH_ARGUMENT_INVALID'
 }
 
@@ -63,6 +68,10 @@ if ([string]::IsNullOrWhiteSpace($ArtifactPath)) {
             'CHECK_BAILIAN_CREDENTIAL_STATUS',
             'RUN_M3_AGENT_RESEARCH_SMOKE')) {
         'quant-server-1.3.1-m3-agent-research-runner.jar'
+    } elseif ($Operation -in @('START_RESEARCH_PRODUCTION',
+            'STOP_RESEARCH_PRODUCTION',
+            'CHECK_RESEARCH_PRODUCTION_STATUS')) {
+        'quant-server-1.3.1-research-production.jar'
     } elseif ($Operation -eq 'RUN_M4_SHADOW_RESEARCH') {
         'quant-server-1.3.1-m4-shadow-research-runner.jar'
     } elseif ($Operation -eq
@@ -114,6 +123,14 @@ try {
     } elseif ($Operation -eq 'RUN_M4_SHADOW_RESEARCH' -and
         $branch -eq 'codex/1.4.0-m4-shadow-research-ready') {
         'codex/1.4.0-m4-shadow-research-ready'
+    } elseif ($Operation -eq 'RUN_M4_SHADOW_RESEARCH' -and
+        $branch -eq 'codex/1.4.0-m6-research-production-ready') {
+        'codex/1.4.0-m6-research-production-ready'
+    } elseif ($Operation -in @('START_RESEARCH_PRODUCTION',
+            'STOP_RESEARCH_PRODUCTION',
+            'CHECK_RESEARCH_PRODUCTION_STATUS') -and
+        $branch -eq 'codex/1.4.0-m6-research-production-ready') {
+        'codex/1.4.0-m6-research-production-ready'
     } else { $integrationBranch }
     $remoteRef = "refs/heads/$requiredBranch"
     $remoteQuery = @(& git ls-remote --exit-code origin $remoteRef 2>&1 |
@@ -154,7 +171,10 @@ try {
             'RUN_M2_STRATEGY_RESEARCH_SMOKE',
             'CHECK_BAILIAN_CREDENTIAL_STATUS',
             'RUN_M3_AGENT_RESEARCH_SMOKE',
-            'RUN_M4_SHADOW_RESEARCH')) {
+            'RUN_M4_SHADOW_RESEARCH',
+            'START_RESEARCH_PRODUCTION',
+            'STOP_RESEARCH_PRODUCTION',
+            'CHECK_RESEARCH_PRODUCTION_STATUS')) {
         if ($AuthorizationFile -ne 'NONE') {
             throw 'STOCK_QUANT_HOST_BROKER_AUTHORIZATION_MODE_INVALID'
         }
@@ -172,7 +192,36 @@ try {
     } else { $RequestId }
     $createdAt = [DateTimeOffset]::UtcNow
     $expiresAt = $createdAt.AddMinutes(10)
-    if ($Operation -eq 'CHECK_BAILIAN_CREDENTIAL_STATUS') {
+    if ($Operation -in @('START_RESEARCH_PRODUCTION',
+            'STOP_RESEARCH_PRODUCTION',
+            'CHECK_RESEARCH_PRODUCTION_STATUS')) {
+        $requestValues = [ordered]@{
+            'schema.version' = 'STOCK_QUANT_HOST_BROKER_REQUEST_V1'
+            'request.id' = $requestId
+            'operation' = $Operation
+            'git.commit' = $head
+            'jar.path' = $artifact
+            'jar.sha256' = $artifactHash
+            'authorization.file' = 'NONE'
+            'm6.production' = 'RESEARCH_PRODUCTION_V1'
+            'database.host' = '127.0.0.1'
+            'database.port' = '38432'
+            'database.name' = 'stock_quant_research'
+            'database.user' = 'stock_quant_research'
+            'schema.name' = 'tushare_research'
+            'backend.host' = '127.0.0.1'
+            'backend.port' = '8080'
+            'provider' = 'NONE'
+            'maximum.provider.requests' = '0'
+            'retry.budget' = '0'
+            'redirects' = 'NEVER'
+            'created.at' = $createdAt.ToString('o')
+            'expires.at' = $expiresAt.ToString('o')
+            'execution.source' = 'M6_RESEARCH_PRODUCTION_LOCAL'
+            'no.retry' = 'true'
+            'source.request.id' = 'NONE'
+        }
+    } elseif ($Operation -eq 'CHECK_BAILIAN_CREDENTIAL_STATUS') {
         $requestValues = [ordered]@{
             'schema.version' = 'STOCK_QUANT_HOST_BROKER_REQUEST_V1'
             'request.id' = $requestId

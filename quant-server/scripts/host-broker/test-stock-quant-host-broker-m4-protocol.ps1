@@ -48,8 +48,6 @@ function Reject(
 try {
     New-Item -ItemType Directory -Path $root | Out-Null
     [IO.File]::WriteAllBytes($artifact, [byte[]](1, 2, 3, 4))
-    [IO.File]::WriteAllText("$artifact.f1f-b2-proof.properties", "test=true`n",
-        [Text.UTF8Encoding]::new($false))
     $hash = ((Get-FileHash $artifact -Algorithm SHA256).Hash).ToLowerInvariant()
     $created = [DateTimeOffset]::UtcNow
     $request = [ordered]@{
@@ -115,6 +113,11 @@ try {
         'no.retry' = 'true'
         'source.request.id' = 'NONE'
     }
+    [IO.File]::WriteAllText("$artifact.f1f-b2-proof.properties", (@(
+        "git.commit=$($request['git.commit'])"
+        "artifact.sha256=$hash"
+        'build.mode=M4_STAGE_CONTROLLED_BUILD_ARTIFACT'
+    ) -join "`n") + "`n", [Text.UTF8Encoding]::new($false))
     $parsed = Read-Valid $request
     if ($parsed.Operation -ne 'RUN_M4_SHADOW_RESEARCH' -or
         $parsed.AuthorizationStatus -ne

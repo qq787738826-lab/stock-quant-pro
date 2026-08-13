@@ -34,6 +34,12 @@ $m3RunnerScript = Join-Path $paths.RepositoryRoot `
     'quant-server\scripts\run-m3-agent-research.ps1'
 $m4RunnerScript = Join-Path $paths.RepositoryRoot `
     'quant-server\scripts\run-m4-shadow-research.ps1'
+$productionRoot = Join-Path $paths.TargetRoot 'stock-quant-production'
+$productionPidFile = Join-Path $productionRoot 'backend.pid.json'
+$productionAutostartFile = Join-Path $productionRoot 'backend.autostart.json'
+$productionStdout = Join-Path $productionRoot 'logs\backend.stdout.log'
+$productionStderr = Join-Path $productionRoot 'logs\backend.stderr.log'
+$productionMaximumRestarts = 3
 $fakeE2eScript = Join-Path $paths.RepositoryRoot `
     'quant-server\scripts\run-reduced-research-day001-e2e-dry-run.ps1'
 $mutex = [Threading.Mutex]::new($false, 'Local\StockQuantLocalBroker')
@@ -126,7 +132,10 @@ function Assert-GitBinding {
                 'RUN_M2_STRATEGY_RESEARCH_SMOKE',
                 'CHECK_BAILIAN_CREDENTIAL_STATUS',
                 'RUN_M3_AGENT_RESEARCH_SMOKE',
-                'RUN_M4_SHADOW_RESEARCH')) {
+                'RUN_M4_SHADOW_RESEARCH',
+                'START_RESEARCH_PRODUCTION',
+                'STOP_RESEARCH_PRODUCTION',
+                'CHECK_RESEARCH_PRODUCTION_STATUS')) {
             $requiredBranch = if ($BrokerRequest.Operation -eq 'RUN_DAY001') {
                 $integrationBranch
             } elseif ($BrokerRequest.Operation -eq
@@ -158,6 +167,24 @@ function Assert-GitBinding {
                         'quant-server-1.3.1-m4-shadow-research-runner.jar'),
                     [StringComparison]::OrdinalIgnoreCase)) {
                 'codex/1.4.0-m4-shadow-research-ready'
+            } elseif ($BrokerRequest.Operation -eq
+                    'RUN_M4_SHADOW_RESEARCH' -and
+                $branch -eq 'codex/1.4.0-m6-research-production-ready' -and
+                [IO.Path]::GetFullPath($BrokerRequest.JarPath).Equals(
+                    (Join-Path $paths.TargetRoot `
+                        'quant-server-1.3.1-m4-shadow-research-runner.jar'),
+                    [StringComparison]::OrdinalIgnoreCase)) {
+                'codex/1.4.0-m6-research-production-ready'
+            } elseif ($BrokerRequest.Operation -in @(
+                    'START_RESEARCH_PRODUCTION',
+                    'STOP_RESEARCH_PRODUCTION',
+                    'CHECK_RESEARCH_PRODUCTION_STATUS') -and
+                $branch -eq 'codex/1.4.0-m6-research-production-ready' -and
+                [IO.Path]::GetFullPath($BrokerRequest.JarPath).Equals(
+                    (Join-Path $paths.TargetRoot `
+                        'quant-server-1.3.1-research-production.jar'),
+                    [StringComparison]::OrdinalIgnoreCase)) {
+                'codex/1.4.0-m6-research-production-ready'
             } elseif ($branch -eq 'codex/1.4.0-m1-research-data-ready') {
                 'codex/1.4.0-m1-research-data-ready'
             } else { $integrationBranch }
@@ -1285,6 +1312,391 @@ function Invoke-M4ShadowResearch {
     return $summary
 }
 
+function Get-ResearchProductionProcess {
+    if (-not (Test-Path -LiteralPath $productionPidFile -PathType Leaf)) {
+        return $null
+    }
+    try {
+        $state = Get-Content -LiteralPath $productionPidFile -Raw `
+            -Encoding UTF8 | ConvertFrom-Json
+        if ([int]$state.processId -le 0 -or
+            [string]$state.gitCommit -notmatch '^[0-9a-f]{40}$' -or
+            [string]$state.jarSha256 -notmatch '^[0-9a-f]{64}$') {
+            throw 'M6_PRODUCTION_PROCESS_STATE_INVALID'
+        }
+        $process = Get-CimInstance Win32_Process -Filter `
+            "ProcessId=$([int]$state.processId)" -ErrorAction SilentlyContinue
+        if ($null -eq $process) { return $null }
+        $fixedJar = [IO.Path]::GetFullPath(
+            (Join-Path $paths.TargetRoot `
+                'quant-server-1.3.1-research-production.jar'))
+        if ($process.Name -ne 'java.exe' -or
+            -not [IO.Path]::GetFullPath([string]$state.jarPath).Equals(
+                $fixedJar, [StringComparison]::OrdinalIgnoreCase) -or
+            [string]$process.CommandLine -notmatch
+                [regex]::Escape(' -jar "' + $fixedJar + '"') -or
+            [string]$process.CommandLine -match '(?i)(password|token|api.?key)') {
+            throw 'M6_PRODUCTION_PROCESS_IDENTITY_INVALID'
+        }
+        return [pscustomobject]@{ Process = $process; State = $state }
+    } catch {
+        throw 'M6_PRODUCTION_PROCESS_STATE_INVALID'
+    }
+}
+
+function Assert-ResearchProductionBinding {
+    param([Parameter(Mandatory = $true)] [object] $Binding)
+    $fixedJar = [IO.Path]::GetFullPath((Join-Path $paths.TargetRoot `
+        'quant-server-1.3.1-research-production.jar'))
+    $jar = [IO.Path]::GetFullPath([string]$Binding.JarPath)
+    if (-not $jar.Equals($fixedJar,
+            [StringComparison]::OrdinalIgnoreCase) -or
+        -not (Test-Path -LiteralPath $jar -PathType Leaf) -or
+        [string]$Binding.GitCommit -notmatch '^[0-9a-f]{40}$' -or
+        [string]$Binding.JarSha256 -notmatch '^[0-9a-f]{64}$' -or
+        ((Get-FileHash -LiteralPath $jar -Algorithm SHA256).Hash
+            ).ToLowerInvariant() -cne [string]$Binding.JarSha256) {
+        throw 'M6_PRODUCTION_AUTOSTART_BINDING_INVALID'
+    }
+    $proof = "$jar.f1f-b2-proof.properties"
+    if (-not (Test-Path -LiteralPath $proof -PathType Leaf)) {
+        throw 'M6_PRODUCTION_AUTOSTART_BINDING_INVALID'
+    }
+    $proofLines = @(Get-Content -LiteralPath $proof -Encoding UTF8)
+    $proofGit = @($proofLines | Where-Object {
+        $_ -ceq "git.commit=$($Binding.GitCommit)"
+    })
+    $proofHash = @($proofLines | Where-Object {
+        $_ -ceq "artifact.sha256=$($Binding.JarSha256)"
+    })
+    $proofMode = @($proofLines | Where-Object {
+        $_ -in @('build.mode=M6_STAGE_CONTROLLED_BUILD_ARTIFACT',
+            'build.mode=CONTROLLED_BUILD_ARTIFACT')
+    })
+    if ($proofGit.Count -ne 1 -or $proofHash.Count -ne 1 -or
+        $proofMode.Count -ne 1) {
+        throw 'M6_PRODUCTION_AUTOSTART_BINDING_INVALID'
+    }
+    Push-Location $paths.RepositoryRoot
+    try {
+        $head = (git rev-parse HEAD).Trim()
+        $branch = (git branch --show-current).Trim()
+        $unexpected = @(git status --porcelain=v1 --untracked-files=normal |
+            Where-Object { $_ -and $_ -notmatch '^\?\? \.ai(?:/|$)' })
+        if ($head -cne [string]$Binding.GitCommit -or
+            $branch -notin @($integrationBranch,
+                'codex/1.4.0-m6-research-production-ready') -or
+            $unexpected.Count -ne 0 -or
+            @(git diff --cached --name-only).Count -ne 0) {
+            throw 'M6_PRODUCTION_AUTOSTART_BINDING_INVALID'
+        }
+    } finally {
+        Pop-Location
+    }
+}
+
+function Write-ResearchProductionAutostart {
+    param(
+        [Parameter(Mandatory = $true)] [object] $Binding,
+        [Parameter(Mandatory = $true)] [int] $RestartCount,
+        [Parameter(Mandatory = $true)] [string] $LastRestartAt
+    )
+    New-Item -ItemType Directory -Path $productionRoot -Force | Out-Null
+    $state = [ordered]@{
+        schemaVersion = 'STOCK_QUANT_RESEARCH_PRODUCTION_AUTOSTART_V1'
+        enabled = $true
+        gitCommit = [string]$Binding.GitCommit
+        jarPath = [IO.Path]::GetFullPath([string]$Binding.JarPath)
+        jarSha256 = [string]$Binding.JarSha256
+        restartCount = $RestartCount
+        lastRestartAt = $LastRestartAt
+    }
+    $temporary = "$productionAutostartFile.$PID.tmp"
+    try {
+        [IO.File]::WriteAllText($temporary,
+            ($state | ConvertTo-Json -Depth 3) + "`n",
+            [Text.UTF8Encoding]::new($false))
+        if (Test-Path -LiteralPath $productionAutostartFile) {
+            [IO.File]::Replace($temporary, $productionAutostartFile, $null)
+        } else {
+            [IO.File]::Move($temporary, $productionAutostartFile)
+        }
+    } finally {
+        Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Read-ResearchProductionAutostart {
+    if (-not (Test-Path -LiteralPath $productionAutostartFile `
+            -PathType Leaf)) { return $null }
+    try {
+        $state = Get-Content -LiteralPath $productionAutostartFile -Raw `
+            -Encoding UTF8 | ConvertFrom-Json
+        $expected = @('schemaVersion', 'enabled', 'gitCommit', 'jarPath',
+            'jarSha256', 'restartCount', 'lastRestartAt')
+        $actual = @($state.PSObject.Properties.Name)
+        $lastRestartValid = $true
+        if ([string]$state.lastRestartAt -cne 'NONE') {
+            [DateTimeOffset]$parsedRestart = [DateTimeOffset]::MinValue
+            $lastRestartValid = [DateTimeOffset]::TryParse(
+                [string]$state.lastRestartAt,
+                [Globalization.CultureInfo]::InvariantCulture,
+                [Globalization.DateTimeStyles]::RoundtripKind,
+                [ref]$parsedRestart) -and
+                $parsedRestart.Offset -eq [TimeSpan]::Zero
+        }
+        if ($actual.Count -ne $expected.Count -or
+            @($expected | Where-Object { $_ -notin $actual }).Count -ne 0 -or
+            $state.schemaVersion -cne
+                'STOCK_QUANT_RESEARCH_PRODUCTION_AUTOSTART_V1' -or
+            $state.enabled -ne $true -or [int]$state.restartCount -lt 0 -or
+            [int]$state.restartCount -gt $productionMaximumRestarts -or
+            -not $lastRestartValid) {
+            throw 'M6_PRODUCTION_AUTOSTART_STATE_INVALID'
+        }
+        $binding = [pscustomobject]@{
+            GitCommit = [string]$state.gitCommit
+            JarPath = [string]$state.jarPath
+            JarSha256 = [string]$state.jarSha256
+        }
+        Assert-ResearchProductionBinding -Binding $binding
+        return [pscustomobject]@{
+            Binding = $binding
+            RestartCount = [int]$state.restartCount
+            LastRestartAt = [string]$state.lastRestartAt
+        }
+    } catch {
+        throw 'M6_PRODUCTION_AUTOSTART_STATE_INVALID'
+    }
+}
+
+function Start-ResearchProductionProcess {
+    param(
+        [Parameter(Mandatory = $true)] [object] $Binding,
+        [switch] $Recovery
+    )
+    Assert-ResearchProductionBinding -Binding $Binding
+    if (Test-Path -LiteralPath $productionPidFile) {
+        Remove-Item -LiteralPath $productionPidFile -Force
+    }
+    New-Item -ItemType Directory -Path (
+        Split-Path -Parent $productionStdout) -Force | Out-Null
+    foreach ($log in @($productionStdout, $productionStderr)) {
+        if (Test-Path -LiteralPath $log) {
+            Move-Item -LiteralPath $log -Destination `
+                "$log.$([DateTimeOffset]::UtcNow.ToUnixTimeSeconds()).previous"
+        }
+    }
+    $process = Start-Process -FilePath 'java.exe' `
+        -ArgumentList @('-jar', ('"' + $Binding.JarPath + '"')) `
+        -WorkingDirectory $paths.RepositoryRoot -WindowStyle Hidden -PassThru `
+        -RedirectStandardOutput $productionStdout `
+        -RedirectStandardError $productionStderr
+    $state = [ordered]@{
+        schemaVersion = 'STOCK_QUANT_RESEARCH_PRODUCTION_PROCESS_V1'
+        processId = $process.Id
+        gitCommit = $Binding.GitCommit
+        jarPath = $Binding.JarPath
+        jarSha256 = $Binding.JarSha256
+        startedAt = [DateTimeOffset]::UtcNow.ToString('o')
+    }
+    [IO.File]::WriteAllText($productionPidFile,
+        ($state | ConvertTo-Json -Depth 3) + "`n",
+        [Text.UTF8Encoding]::new($false))
+    $deadline = [DateTimeOffset]::UtcNow.AddSeconds(90)
+    $health = $null
+    while ([DateTimeOffset]::UtcNow -lt $deadline) {
+        if ($Recovery) { Write-BrokerHeartbeat -State IDLE }
+        if ($process.HasExited) {
+            Remove-Item -LiteralPath $productionPidFile -Force `
+                -ErrorAction SilentlyContinue
+            throw 'M6_PRODUCTION_BACKEND_EXITED'
+        }
+        try {
+            $health = Invoke-RestMethod -Uri `
+                'http://127.0.0.1:8080/api/system/health' `
+                -Method Get -TimeoutSec 3
+            if ($health.success -and
+                $health.data.gitCommit -eq $Binding.GitCommit) {
+                break
+            }
+        } catch { }
+        Start-Sleep -Milliseconds 500
+    }
+    if ($null -eq $health -or -not $health.success -or
+        $health.data.gitCommit -ne $Binding.GitCommit) {
+        Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $productionPidFile -Force `
+            -ErrorAction SilentlyContinue
+        throw 'M6_PRODUCTION_HEALTH_TIMEOUT'
+    }
+    return [ordered]@{
+        backendState = 'RUNNING'
+        processId = $process.Id
+        schemaVersion = [int](
+            $health.data.components | Where-Object component -eq 'Database'
+        ).details.schemaVersion
+        schedulerState = [string]$health.data.scheduler.state
+        overallHealth = [string]$health.data.status
+        providerCallCount = 0
+        retryCount = 0
+    }
+}
+
+function Invoke-ResearchProductionStart {
+    param([Parameter(Mandatory = $true)] [object] $BrokerRequest)
+    if ($BrokerRequest.AuthorizationStatus -ne
+            'M6_LOCAL_PRODUCTION_APPROVED') {
+        throw 'M6_PRODUCTION_SCOPE_INVALID'
+    }
+    $binding = [pscustomobject]@{
+        GitCommit = $BrokerRequest.GitCommit
+        JarPath = $BrokerRequest.JarPath
+        JarSha256 = $BrokerRequest.JarSha256
+    }
+    Assert-ResearchProductionBinding -Binding $binding
+    $existing = Get-ResearchProductionProcess
+    if ($null -ne $existing) {
+        if ([string]$existing.State.gitCommit -cne $binding.GitCommit -or
+            [string]$existing.State.jarSha256 -cne $binding.JarSha256) {
+            throw 'M6_PRODUCTION_RUNNING_VERSION_MISMATCH'
+        }
+        Write-ResearchProductionAutostart -Binding $binding `
+            -RestartCount 0 -LastRestartAt 'NONE'
+        return [ordered]@{
+            backendState = 'ALREADY_RUNNING'
+            processId = [int]$existing.Process.ProcessId
+            migrationTarget = 16
+            autoRecovery = 'ARMED'
+            providerCallCount = 0
+            retryCount = 0
+        }
+    }
+    $summary = Start-ResearchProductionProcess -Binding $binding
+    try {
+        Write-ResearchProductionAutostart -Binding $binding `
+            -RestartCount 0 -LastRestartAt 'NONE'
+    } catch {
+        Stop-Process -Id ([int]$summary.processId) -Force `
+            -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $productionPidFile -Force `
+            -ErrorAction SilentlyContinue
+        throw 'M6_PRODUCTION_AUTOSTART_ARM_FAILED'
+    }
+    $summary['autoRecovery'] = 'ARMED'
+    return $summary
+}
+
+function Invoke-ResearchProductionRecovery {
+    try {
+        if (-not (Test-Path -LiteralPath $productionAutostartFile `
+                -PathType Leaf) -or
+            $null -ne (Get-ResearchProductionProcess)) { return }
+        $autostart = Read-ResearchProductionAutostart
+        if ($autostart.RestartCount -ge $productionMaximumRestarts) { return }
+        if ($autostart.LastRestartAt -cne 'NONE') {
+            $last = [DateTimeOffset]::Parse($autostart.LastRestartAt)
+            if ([DateTimeOffset]::UtcNow - $last -lt
+                    [TimeSpan]::FromSeconds(15)) { return }
+        }
+        $nextCount = $autostart.RestartCount + 1
+        $now = [DateTimeOffset]::UtcNow.ToString('o')
+        Write-ResearchProductionAutostart -Binding $autostart.Binding `
+            -RestartCount $nextCount -LastRestartAt $now
+        Start-ResearchProductionProcess -Binding $autostart.Binding `
+            -Recovery | Out-Null
+    } catch {
+        # Recovery is bounded by the persisted counter and never kills Broker.
+    }
+}
+
+function Invoke-ResearchProductionStatus {
+    param([Parameter(Mandatory = $true)] [object] $BrokerRequest)
+    $process = Get-ResearchProductionProcess
+    if ($null -eq $process) {
+        $autostart = Read-ResearchProductionAutostart
+        return [ordered]@{
+            backendState = 'STOPPED'
+            processId = 0
+            autoRecovery = $(if ($null -eq $autostart) { 'DISARMED' }
+                elseif ($autostart.RestartCount -ge
+                    $productionMaximumRestarts) { 'EXHAUSTED' }
+                else { 'ARMED' })
+            providerCallCount = 0
+            retryCount = 0
+        }
+    }
+    try {
+        $health = Invoke-RestMethod -Uri `
+            'http://127.0.0.1:8080/api/system/health' -Method Get -TimeoutSec 5
+    } catch {
+        throw 'M6_PRODUCTION_HEALTH_UNAVAILABLE'
+    }
+    if ($health.data.gitCommit -cne $BrokerRequest.GitCommit -or
+        [string]$process.State.gitCommit -cne $BrokerRequest.GitCommit -or
+        [string]$process.State.jarSha256 -cne $BrokerRequest.JarSha256) {
+        throw 'M6_PRODUCTION_RUNNING_VERSION_MISMATCH'
+    }
+    return [ordered]@{
+        backendState = 'RUNNING'
+        processId = [int]$process.Process.ProcessId
+        overallHealth = [string]$health.data.status
+        schedulerState = [string]$health.data.scheduler.state
+        autoRecovery = 'ARMED'
+        providerCallCount = 0
+        retryCount = 0
+    }
+}
+
+function Invoke-ResearchProductionStop {
+    param([Parameter(Mandatory = $true)] [object] $BrokerRequest)
+    Remove-Item -LiteralPath $productionAutostartFile -Force `
+        -ErrorAction SilentlyContinue
+    $process = Get-ResearchProductionProcess
+    if ($null -eq $process) {
+        if (Test-Path -LiteralPath $productionPidFile) {
+            Remove-Item -LiteralPath $productionPidFile -Force
+        }
+        return [ordered]@{
+            backendState = 'ALREADY_STOPPED'
+            processId = 0
+            autoRecovery = 'DISARMED'
+            providerCallCount = 0
+            retryCount = 0
+        }
+    }
+    $graceful = $false
+    try {
+        $response = Invoke-RestMethod -Uri `
+            'http://127.0.0.1:8080/api/system/lifecycle/stop' `
+            -Method Post -TimeoutSec 5
+        $graceful = $response.success -eq $true
+    } catch { }
+    $deadline = [DateTimeOffset]::UtcNow.AddSeconds(15)
+    do {
+        Start-Sleep -Milliseconds 250
+        $alive = Get-Process -Id ([int]$process.Process.ProcessId) `
+            -ErrorAction SilentlyContinue
+    } while ($null -ne $alive -and [DateTimeOffset]::UtcNow -lt $deadline)
+    if ($null -ne $alive) {
+        Stop-Process -Id ([int]$process.Process.ProcessId) -Force
+        $graceful = $false
+        Start-Sleep -Milliseconds 500
+        $alive = Get-Process -Id ([int]$process.Process.ProcessId) `
+            -ErrorAction SilentlyContinue
+    }
+    if ($null -ne $alive) { throw 'M6_PRODUCTION_STOP_FAILED' }
+    Remove-Item -LiteralPath $productionPidFile -Force
+    return [ordered]@{
+        backendState = 'STOPPED'
+        processId = [int]$process.Process.ProcessId
+        graceful = $graceful
+        autoRecovery = 'DISARMED'
+        providerCallCount = 0
+        retryCount = 0
+    }
+}
+
 function Read-SanitizedBrokerResult {
     param(
         [Parameter(Mandatory = $true)]
@@ -1488,6 +1900,18 @@ function Invoke-ClaimedRequest {
                 Invoke-M4ShadowResearch -BrokerRequest $request
                 break
             }
+            'START_RESEARCH_PRODUCTION' {
+                Invoke-ResearchProductionStart -BrokerRequest $request
+                break
+            }
+            'STOP_RESEARCH_PRODUCTION' {
+                Invoke-ResearchProductionStop -BrokerRequest $request
+                break
+            }
+            'CHECK_RESEARCH_PRODUCTION_STATUS' {
+                Invoke-ResearchProductionStatus -BrokerRequest $request
+                break
+            }
             'READ_SANITIZED_RESULT' {
                 Read-SanitizedBrokerResult -BrokerRequest $request
                 break
@@ -1557,6 +1981,7 @@ try {
             -Filter 'SQHB_*.request.properties' |
             Sort-Object LastWriteTimeUtc, Name)
         if ($pending.Count -eq 0) {
+            Invoke-ResearchProductionRecovery
             Start-Sleep -Milliseconds $pollIntervalMilliseconds
             continue
         }

@@ -265,6 +265,9 @@ class StockQuantHostBrokerContractTest {
                 "CHECK_BAILIAN_CREDENTIAL_STATUS",
                 "RUN_M3_AGENT_RESEARCH_SMOKE",
                 "RUN_M4_SHADOW_RESEARCH",
+                "START_RESEARCH_PRODUCTION",
+                "STOP_RESEARCH_PRODUCTION",
+                "CHECK_RESEARCH_PRODUCTION_STATUS",
                 "READ_SANITIZED_RESULT")) {
             assertTrue(protocol.contains("'" + operation + "'"), operation);
         }
@@ -332,7 +335,13 @@ class StockQuantHostBrokerContractTest {
         assertTrue(script.contains("run-m4-shadow-research.ps1"));
         assertTrue(script.contains("modelProviderMessageCategory"));
         assertFalse(script.contains("Invoke-Expression"));
-        assertFalse(script.contains("Start-Process"));
+        String production = section(script,
+                "function Start-ResearchProductionProcess",
+                "function Read-SanitizedBrokerResult");
+        assertTrue(production.contains("Start-Process -FilePath 'java.exe'"));
+        assertTrue(production.contains("-ArgumentList @('-jar'"));
+        assertFalse(production.contains("Credential"));
+        assertFalse(production.contains("Provider"));
         assertFalse(script.contains("ScriptBlock]::Create"));
         assertFalse(script.contains("-Command"));
     }
