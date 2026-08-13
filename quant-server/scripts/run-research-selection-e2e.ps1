@@ -125,6 +125,12 @@ try {
     Exact $value.universeSize 25 'RESEARCH_SELECTION_E2E_UNIVERSE_INVALID'
     Exact $value.shortlistSize 10 `
         'RESEARCH_SELECTION_E2E_SHORTLIST_INVALID'
+    Write-Output ("RESEARCH_SELECTION_E2E_CANDIDATES={0}" -f `
+        [int]$value.candidateCount)
+    Write-Output ("RESEARCH_SELECTION_E2E_DECISION={0}" -f `
+        [string]$value.decisionCode)
+    Write-Output ("RESEARCH_SELECTION_E2E_EMPTY_RESULT={0}" -f `
+        ([bool]$value.emptyResult).ToString().ToLowerInvariant())
     if ([int]$value.candidateCount -lt 1 -or
         [int]$value.candidateCount -gt 5 -or $value.emptyResult -or
         $value.decisionCode -ne 'RESEARCH_PREFERENCE') {
