@@ -2,6 +2,7 @@ package com.stockquant.server.production;
 
 import com.stockquant.server.agent.evaluation.AgentEvaluationRepository;
 import com.stockquant.server.agent.evaluation.AgentEvaluationService;
+import com.stockquant.server.agent.shadowresearch.ShadowResearchRepository;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Modifier;
@@ -15,6 +16,7 @@ class ProductionSpringProxyCompatibilityTest {
     void advisedProductionBeansRemainSubclassable() {
         assertSubclassable(AgentEvaluationRepository.class);
         assertSubclassable(AgentEvaluationService.class);
+        assertSubclassable(ShadowResearchRepository.class);
         assertSubclassable(LocalResearchBackupService.class);
     }
 

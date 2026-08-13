@@ -34,7 +34,7 @@ import java.util.Optional;
 
 /** PostgreSQL persistence for immutable M4 shadow facts and paper accounting. */
 @org.springframework.stereotype.Repository
-public final class ShadowResearchRepository {
+public class ShadowResearchRepository {
     private static final String RUN_COLUMNS = """
             id, run_key, attempt, status, trigger_mode, trade_date,
             research_slot, research_as_of, signal_time,
