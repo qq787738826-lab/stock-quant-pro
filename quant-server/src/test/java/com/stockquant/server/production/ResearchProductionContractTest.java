@@ -31,6 +31,8 @@ class ResearchProductionContractTest {
         assertTrue(broker.contains("productionMaximumRestarts = 3"));
         assertTrue(broker.contains("Invoke-ResearchProductionRecovery"));
         assertTrue(broker.contains("backend.autostart.json"));
+        assertTrue(broker.contains("backend.recovery-status.json"));
+        assertTrue(broker.contains("M6_PRODUCTION_RECOVERED"));
         assertTrue(broker.contains("/api/system/lifecycle/stop"));
         assertFalse(broker.contains("-Command"));
         assertFalse(broker.contains("Invoke-Expression"));

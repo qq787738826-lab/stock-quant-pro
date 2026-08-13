@@ -37,6 +37,8 @@ $m4RunnerScript = Join-Path $paths.RepositoryRoot `
 $productionRoot = Join-Path $paths.TargetRoot 'stock-quant-production'
 $productionPidFile = Join-Path $productionRoot 'backend.pid.json'
 $productionAutostartFile = Join-Path $productionRoot 'backend.autostart.json'
+$productionRecoveryStatusFile = Join-Path $productionRoot `
+    'backend.recovery-status.json'
 $productionStdout = Join-Path $productionRoot 'logs\backend.stdout.log'
 $productionStderr = Join-Path $productionRoot 'logs\backend.stderr.log'
 $productionMaximumRestarts = 3
@@ -1359,7 +1361,11 @@ function Get-ResearchProductionProcess {
         }
         $process = Get-CimInstance Win32_Process -Filter `
             "ProcessId=$([int]$state.processId)" -ErrorAction SilentlyContinue
-        if ($null -eq $process) { return $null }
+        if ($null -eq $process) {
+            Remove-Item -LiteralPath $productionPidFile -Force `
+                -ErrorAction SilentlyContinue
+            return $null
+        }
         $fixedJar = [IO.Path]::GetFullPath(
             (Join-Path $paths.TargetRoot `
                 'quant-server-1.3.1-research-production.jar'))
@@ -1639,7 +1645,26 @@ function Invoke-ResearchProductionRecovery {
             -RestartCount $nextCount -LastRestartAt $now
         Start-ResearchProductionProcess -Binding $autostart.Binding `
             -Recovery | Out-Null
+        $status = [ordered]@{
+            schemaVersion = 'STOCK_QUANT_RESEARCH_PRODUCTION_RECOVERY_V1'
+            status = 'SUCCEEDED'
+            reason = 'M6_PRODUCTION_RECOVERED'
+            completedAt = [DateTimeOffset]::UtcNow.ToString('o')
+        }
+        [IO.File]::WriteAllText($productionRecoveryStatusFile,
+            ($status | ConvertTo-Json -Depth 3) + "`n",
+            [Text.UTF8Encoding]::new($false))
     } catch {
+        $reason = ConvertTo-StockQuantSafeCode -ErrorValue $_
+        $status = [ordered]@{
+            schemaVersion = 'STOCK_QUANT_RESEARCH_PRODUCTION_RECOVERY_V1'
+            status = 'FAILED'
+            reason = $reason
+            completedAt = [DateTimeOffset]::UtcNow.ToString('o')
+        }
+        [IO.File]::WriteAllText($productionRecoveryStatusFile,
+            ($status | ConvertTo-Json -Depth 3) + "`n",
+            [Text.UTF8Encoding]::new($false))
         # Recovery is bounded by the persisted counter and never kills Broker.
     }
 }
@@ -1685,6 +1710,8 @@ function Invoke-ResearchProductionStatus {
 function Invoke-ResearchProductionStop {
     param([Parameter(Mandatory = $true)] [object] $BrokerRequest)
     Remove-Item -LiteralPath $productionAutostartFile -Force `
+        -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $productionRecoveryStatusFile -Force `
         -ErrorAction SilentlyContinue
     $process = Get-ResearchProductionProcess
     if ($null -eq $process) {

@@ -120,7 +120,9 @@ try {
         $brokerScript -notmatch
             "Start-Process -FilePath \`$javaExecutable" -or
         $brokerScript -notmatch "java\\.home" -or
-        $brokerScript -notmatch 'M6_JAVA_17_RUNTIME_INVALID') {
+        $brokerScript -notmatch 'M6_JAVA_17_RUNTIME_INVALID' -or
+        $brokerScript -notmatch 'backend\.recovery-status\.json' -or
+        $brokerScript -notmatch 'M6_PRODUCTION_RECOVERED') {
         throw 'M6_JAVA_PROCESS_BINDING_CONTRACT_FAILED'
     }
     $tests++
