@@ -143,8 +143,9 @@ SELECT string_agg(
        ) item(value)
  WHERE id=1
 '@
+    $experiments = Scalar $experimentSql
     Write-Output ("RESEARCH_SELECTION_E2E_EXPERIMENTS={0}" -f `
-        (Scalar $experimentSql))
+        $experiments)
     $unknownsSql = @'
 SELECT COALESCE(string_agg(value, ',' ORDER BY value), 'NONE')
   FROM research_selection_runs,
@@ -153,11 +154,18 @@ SELECT COALESCE(string_agg(value, ',' ORDER BY value), 'NONE')
        ) unknown(value)
  WHERE id=1
 '@
+    $unknowns = Scalar $unknownsSql
     Write-Output ("RESEARCH_SELECTION_E2E_UNKNOWNS={0}" -f `
-        (Scalar $unknownsSql))
-    if ([int]$value.candidateCount -lt 1 -or
-        [int]$value.candidateCount -gt 5 -or $value.emptyResult -or
-        $value.decisionCode -ne 'RESEARCH_PREFERENCE') {
+        $unknowns)
+    if ([int]$value.candidateCount -gt 5 -or
+        ([int]$value.candidateCount -gt 0 -and
+            ($value.emptyResult -or
+             $value.decisionCode -ne 'RESEARCH_PREFERENCE')) -or
+        ([int]$value.candidateCount -eq 0 -and
+            (-not $value.emptyResult -or
+             $value.decisionCode -ne 'INSUFFICIENT_EVIDENCE' -or
+             $unknowns -notmatch 'OVERFITTING_RISK_DETECTED')) -or
+        $experiments -match 'oos=false') {
         throw 'RESEARCH_SELECTION_E2E_CANDIDATES_INVALID'
     }
     Exact $value.tushareProviderCallCount 52 `
@@ -211,9 +219,9 @@ SELECT COALESCE(string_agg(value, ',' ORDER BY value), 'NONE')
         'RESEARCH_SELECTION_E2E_REUSE_PROVIDER_INVALID'
     Exact $repeat.retryCount 0 `
         'RESEARCH_SELECTION_E2E_REUSE_RETRY_INVALID'
-    if ([int]$repeat.candidateCount -lt 1 -or
-        [int]$repeat.candidateCount -gt 5 -or $repeat.emptyResult -or
-        $repeat.decisionCode -ne 'RESEARCH_PREFERENCE') {
+    if ([int]$repeat.candidateCount -ne [int]$value.candidateCount -or
+        [bool]$repeat.emptyResult -ne [bool]$value.emptyResult -or
+        [string]$repeat.decisionCode -ne [string]$value.decisionCode) {
         throw 'RESEARCH_SELECTION_E2E_REUSE_CANDIDATES_INVALID'
     }
     Exact $repeat.modelProviderRequestCount 0 `
