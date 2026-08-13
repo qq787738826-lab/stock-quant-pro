@@ -42,5 +42,13 @@ M6 将已验收的 M1—M5 收口为单机个人日常研究软件，不新增�
 
 ## 验收状态
 
-当前为 `M6_RESEARCH_PRODUCTION_READY=IN_PROGRESS`。最终任务提交验收前仍需完成正式 artifact、
-永久研究库 V16、启动/重启恢复、本地备份、生产 UI、一次受控真实整链 smoke 及最终 Git 证据。
+`M6_RESEARCH_PRODUCTION_READY=PASS`。正式真实整链运行资产 HEAD 为
+`6f6a5c10678589c6d967ef381d48a9230518629c`；永久研究库已到 V16，Backend、Broker、生产 UI 和
+Scheduler 为 `HEALTHY/IDLE/HEALTHY/ACTIVE`。打包 Fake E2E、临时 PostgreSQL V1—V16、后端与
+Broker forced-kill 恢复、备份和重启均通过。
+
+正式受控整链 request `SQHB_20260813T064259Z_0AD08453B039` 以 Tushare 6 次、百炼 13 次、
+retry 0 成功冻结 Shadow run `4`；模型 token 为 `22530/3858/0/26388`，保守成本 CNY
+`0.836400000000`。typed fact、SYSTEM_KNOWLEDGE、formula-only QFQ、防未来和输出审计通过；
+证据不足被 Critic 正确冻结为 `INSUFFICIENT_EVIDENCE`，Paper 订单/成交为 0。历史 Shadow 不变，
+真实交易、券商和真实资金仍全部关闭。
