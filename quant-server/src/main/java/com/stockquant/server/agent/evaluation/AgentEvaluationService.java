@@ -32,7 +32,7 @@ import java.util.Set;
 
 /** M5 read/evaluate/persist facade. It never mutates an M4 decision. */
 @Service
-public final class AgentEvaluationService {
+public class AgentEvaluationService {
     private final AgentEvaluationRepository evaluations;
     private final ShadowResearchRepository shadows;
     private final Clock clock;

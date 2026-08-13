@@ -33,7 +33,7 @@ import java.util.zip.ZipOutputStream;
 @Service
 @ConditionalOnProperty(prefix = "stockquant.production", name = "enabled",
         havingValue = "true")
-public final class LocalResearchBackupService {
+public class LocalResearchBackupService {
     private static final DateTimeFormatter ID = DateTimeFormatter
             .ofPattern("yyyyMMdd'T'HHmmss'Z'").withZone(ZoneOffset.UTC);
     private static final List<String> TABLES = List.of(

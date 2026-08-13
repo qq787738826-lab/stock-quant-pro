@@ -20,7 +20,7 @@ import java.util.Optional;
 
 /** Append-only persistence for M5 versions and score reports. */
 @Repository
-public final class AgentEvaluationRepository {
+public class AgentEvaluationRepository {
     private final JdbcTemplate jdbc;
     private final ObjectMapper mapper;
 
