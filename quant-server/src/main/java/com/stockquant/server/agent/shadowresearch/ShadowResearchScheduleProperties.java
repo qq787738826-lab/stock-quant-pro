@@ -21,7 +21,7 @@ public class ShadowResearchScheduleProperties {
     private LocalTime safeWindowStart = LocalTime.of(17, 15);
     private LocalTime safeWindowEnd = LocalTime.of(20, 0);
     @Min(1)
-    @Max(20)
+    @Max(52)
     private int maximumTushareRequests = 52;
     @Min(1)
     @Max(13)

@@ -1,5 +1,6 @@
 package com.stockquant.server.agent.shadowresearch;
 
+import jakarta.validation.Validation;
 import org.junit.jupiter.api.Test;
 import com.stockquant.server.production.ShadowSchedulerRuntimeState;
 
@@ -11,7 +12,9 @@ import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -37,6 +40,18 @@ class ShadowResearchSchedulerTest {
 
         values.setMonthlyTushareRequestLimit(149);
         assertThrows(IllegalStateException.class, values::validate);
+    }
+
+    @Test
+    void productionConfigurationAcceptsOnlyTheFixedUniverseRequestEnvelope() {
+        var values = new ShadowResearchScheduleProperties();
+        try (var factory = Validation.buildDefaultValidatorFactory()) {
+            var validator = factory.getValidator();
+            assertTrue(validator.validate(values).isEmpty());
+
+            values.setMaximumTushareRequests(53);
+            assertFalse(validator.validate(values).isEmpty());
+        }
     }
 
     @Test
