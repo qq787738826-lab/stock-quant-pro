@@ -131,6 +131,29 @@ try {
         [string]$value.decisionCode)
     Write-Output ("RESEARCH_SELECTION_E2E_EMPTY_RESULT={0}" -f `
         ([bool]$value.emptyResult).ToString().ToLowerInvariant())
+    $experimentSql = @'
+SELECT string_agg(
+           item->>'strategyCode' || ':oos=' ||
+           item->>'outOfSampleEvaluated' || ':overfit=' ||
+           item->>'overfittingFlag', ',' ORDER BY item->>'strategyCode')
+  FROM research_selection_runs,
+       LATERAL jsonb_array_elements(
+           result_json->'agentReport'->'strategyExperiments'->'experiments'
+       ) item
+ WHERE id=1
+'@
+    Write-Output ("RESEARCH_SELECTION_E2E_EXPERIMENTS={0}" -f `
+        (Scalar $experimentSql))
+    $unknownsSql = @'
+SELECT COALESCE(string_agg(value, ',' ORDER BY value), 'NONE')
+  FROM research_selection_runs,
+       LATERAL jsonb_array_elements_text(
+           result_json->'agentReport'->'finalDecision'->'unknowns'
+       ) value
+ WHERE id=1
+'@
+    Write-Output ("RESEARCH_SELECTION_E2E_UNKNOWNS={0}" -f `
+        (Scalar $unknownsSql))
     if ([int]$value.candidateCount -lt 1 -or
         [int]$value.candidateCount -gt 5 -or $value.emptyResult -or
         $value.decisionCode -ne 'RESEARCH_PREFERENCE') {
