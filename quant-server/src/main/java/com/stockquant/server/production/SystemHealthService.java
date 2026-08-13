@@ -44,7 +44,7 @@ import java.util.regex.Pattern;
         havingValue = "true")
 public final class SystemHealthService {
     private static final Pattern NON_SHADOW_BASELINE = Pattern.compile(
-            "NonShadowProjectCostCny\\s*=\\s*'([0-9]+(?:\\.[0-9]+)?)'");
+            "ProjectNonShadowCostCny\\s*=\\s*'([0-9]+(?:\\.[0-9]+)?)'");
 
     private final JdbcTemplate jdbc;
     private final ShadowResearchQueryService shadows;

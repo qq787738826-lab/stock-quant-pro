@@ -79,6 +79,7 @@ class ResearchProductionContractTest {
                 + "SystemHealthService.java");
         assertTrue(health.contains("base.resolve(\"heartbeat.json\")"));
         assertFalse(health.contains("health/heartbeat.json"));
+        assertTrue(health.contains("ProjectNonShadowCostCny"));
     }
 
     private static String read(String path) throws Exception {
