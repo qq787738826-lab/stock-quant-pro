@@ -1144,6 +1144,11 @@ function Read-StockQuantHostBrokerRequest {
                 'USER_APPROVED_M6_CONTROLLED_SHADOW_SMOKE' -and
             $values['execution.source'] -eq
                 'M6_RESEARCH_PRODUCTION_CONTROLLED_REPLAY'
+        $manualScope = $values['trigger.mode'] -eq 'MANUAL' -and
+            $values['user.approval.reference'] -eq
+                'USER_APPROVED_M6_CONTROLLED_SHADOW_SMOKE' -and
+            $values['execution.source'] -eq
+                'M6_RESEARCH_PRODUCTION_CONTROLLED_MANUAL'
         if ($values['authorization.file'] -ne 'NONE' -or
             $values['m4.runtime'] -ne 'SHADOW_RESEARCH_RUNTIME_V1' -or
             $values['m4.scheduler'] -ne 'SHADOW_SCHEDULER_V1' -or
@@ -1174,10 +1179,12 @@ function Read-StockQuantHostBrokerRequest {
                 [ref]$calendarHorizonEnd) -or
             $calendarHorizonEnd -ne $tradeDate.AddDays(30) -or
             $values['capture.mode'] -ne 'CAPTURE_OR_IDEMPOTENT' -or
-            -not ($scheduledScope -or $historicalScope) -or
+            -not ($scheduledScope -or $historicalScope -or $manualScope) -or
             ($scheduledScope -and
                 $tradeDate.Date -ne $requestChinaDate) -or
             ($historicalScope -and
+                $tradeDate.Date -ge $requestChinaDate) -or
+            ($manualScope -and
                 $tradeDate.Date -ge $requestChinaDate) -or
             $values['database.host'] -ne '127.0.0.1' -or
             $values['database.port'] -ne '38432' -or

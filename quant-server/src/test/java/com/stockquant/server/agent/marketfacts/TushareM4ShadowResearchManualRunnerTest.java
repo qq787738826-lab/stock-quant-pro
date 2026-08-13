@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.ZoneOffset;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -28,13 +29,15 @@ class TushareM4ShadowResearchManualRunnerTest {
     }
 
     @Test
-    void historicalReplayUsesHistoricalCloseWhileScheduledUsesWallClock() {
+    void replayUsesHistoricalCloseWhileLiveModesUseWallClock() {
         Clock clock = Clock.fixed(Instant.parse("2026-08-12T13:00:00Z"),
                 ZoneOffset.UTC);
         var replay = TushareM4ShadowResearchManualRunner.Arguments.parse(
                 arguments("INTERNAL_CALENDAR", "HISTORICAL_REPLAY"));
         var scheduled = TushareM4ShadowResearchManualRunner.Arguments.parse(
                 arguments("INTERNAL_CALENDAR", "SCHEDULED"));
+        var manual = TushareM4ShadowResearchManualRunner.Arguments.parse(
+                arguments("INTERNAL_CALENDAR", "MANUAL"));
 
         assertEquals(com.stockquant.core.research.StrategyResearchModels
                         .closeInstant(replay.tradeDate()),
@@ -43,12 +46,29 @@ class TushareM4ShadowResearchManualRunnerTest {
         assertEquals(clock.instant(),
                 TushareM4ShadowResearchManualRunner.researchAsOf(
                         scheduled, clock));
+        assertEquals(clock.instant(),
+                TushareM4ShadowResearchManualRunner.researchAsOf(
+                        manual, clock));
         assertEquals(com.stockquant.core.research.StrategyResearchModels
                         .closeInstant(replay.tradeDate()),
                 TushareM4ShadowResearchManualRunner.factClock(replay, clock)
                         .instant());
         assertEquals(clock, TushareM4ShadowResearchManualRunner.factClock(
                 scheduled, clock));
+        assertEquals(clock, TushareM4ShadowResearchManualRunner.factClock(
+                manual, clock));
+    }
+
+    @Test
+    void manualResearchNeverBackdatesANewPaperExecution() {
+        LocalDate next = LocalDate.of(2026, 8, 13);
+
+        assertEquals(null,
+                TushareM4ShadowResearchManualRunner.paperExecutionDate(next,
+                        Instant.parse("2026-08-13T06:00:00Z")));
+        assertEquals(next,
+                TushareM4ShadowResearchManualRunner.paperExecutionDate(next,
+                        Instant.parse("2026-08-12T07:00:00Z")));
     }
 
     private static String[] arguments(String nextDate, String triggerMode) {

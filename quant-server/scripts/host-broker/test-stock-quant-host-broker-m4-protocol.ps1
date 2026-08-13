@@ -164,6 +164,26 @@ try {
     }
     $tests++
 
+    $manual = Copy-Values $historical
+    $manual['request.id'] = New-StockQuantHostBrokerRequestId
+    $manual['trigger.mode'] = 'MANUAL'
+    $manual['execution.source'] =
+        'M6_RESEARCH_PRODUCTION_CONTROLLED_MANUAL'
+    $manualParsed = Read-Valid $manual
+    if ($manualParsed.Values['trigger.mode'] -ne 'MANUAL') {
+        throw 'M4_PROTOCOL_CONTROLLED_MANUAL_REJECTED'
+    }
+    $tests++
+
+    $manualWithScheduledApproval = Copy-Values $manual
+    $manualWithScheduledApproval['request.id'] =
+        New-StockQuantHostBrokerRequestId
+    $manualWithScheduledApproval['user.approval.reference'] =
+        'USER_APPROVED_M4_CONTINUOUS_SHADOW_MONTHLY'
+    Reject $manualWithScheduledApproval `
+        'STOCK_QUANT_HOST_BROKER_REQUEST_SCOPE_INVALID' `
+        'MANUAL_WITH_SCHEDULED_APPROVAL'
+
     $historicalAsScheduled = Copy-Values $historical
     $historicalAsScheduled['request.id'] =
         New-StockQuantHostBrokerRequestId
@@ -190,7 +210,9 @@ try {
         $invoker -match '(?im)^\s*\$tradeDate\s*=\s*if\s*\(' -or
         $invoker -notmatch 'M4_FUTURE_TRADE_DATE_FORBIDDEN' -or
         $invoker -notmatch 'M4_MARKET_CLOSE_NOT_AVAILABLE' -or
-        $invoker -notmatch 'M6_RESEARCH_PRODUCTION_CONTROLLED_REPLAY') {
+        $invoker -notmatch 'M6_RESEARCH_PRODUCTION_CONTROLLED_REPLAY' -or
+        $invoker -notmatch 'M6_RESEARCH_PRODUCTION_CONTROLLED_MANUAL' -or
+        $invoker -notmatch 'ShadowDispatchMode') {
         throw 'M4_PROTOCOL_TRADE_DATE_PARAMETER_COLLISION'
     }
     $tests++

@@ -4,6 +4,7 @@ import com.stockquant.core.research.DefaultStrategyResearchApi;
 import com.stockquant.core.research.StrategyResearchModels.BacktestConfig;
 import com.stockquant.core.research.StrategyResearchModels.ResearchDataset;
 import com.stockquant.server.agent.research.AgentPromptCatalog;
+import com.stockquant.server.agent.research.AgentResearchDatasetSource.LoadedDataset;
 import com.stockquant.server.agent.research.AgentResearchModels.ResearchReport;
 import com.stockquant.server.agent.research.AgentResearchModels.ResearchTask;
 import com.stockquant.server.agent.research.AgentResearchModels.RuntimeLimits;
@@ -28,6 +29,7 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /** M1 -> M2 -> seven-agent M3 -> immutable M4 shadow coordinator. */
 public final class ShadowResearchRuntime {
@@ -58,124 +60,134 @@ public final class ShadowResearchRuntime {
     ) {
         Objects.requireNonNull(request, "request");
         Objects.requireNonNull(model, "model");
-        Instant asOf = ShadowResearchCanonical.micros(request.researchAsOf());
-        String slot = request.triggerMode()
-                == ShadowResearchModels.TriggerMode.HISTORICAL_REPLAY
-                ? "HISTORICAL_REPLAY"
-                : ShadowResearchModels.RESEARCH_SLOT;
-        String runKey = ShadowResearchCanonical.runKey(request.tradeDate(),
-                slot, ShadowResearchModels.STRATEGY_VERSION);
-        String requestFingerprint = ShadowResearchCanonical.hash(Map.of(
-                "request", request, "slot", slot,
-                "runtime", ShadowResearchModels.RUNTIME_VERSION));
-        var descriptor = model.descriptor();
-        ShadowRun created = repository.createRun(runKey,
-                request.triggerMode(), request.tradeDate(), slot, asOf,
-                ShadowResearchModels.STRATEGY_VERSION,
-                descriptor.provider(), descriptor.model(),
-                promptVersion(),
-                com.stockquant.server.agent.research.AgentResearchModels
-                        .RUNTIME_VERSION,
-                requestFingerprint);
-        if (created.status() == RunStatus.FROZEN) {
-            try {
-                return existing(created, request.tushareProviderRequests());
-            } finally {
-                model.close();
-            }
-        }
-        if (created.status() != RunStatus.QUEUED) {
-            throw new IllegalStateException("M4_SHADOW_SLOT_ALREADY_ACTIVE");
-        }
-        ShadowRun running = repository.start(created.id(), clock.instant());
         try {
-            ResearchTask task = task(request, running, asOf);
-            Clock researchClock = request.triggerMode()
+            Instant asOf = ShadowResearchCanonical.micros(
+                    request.researchAsOf());
+            String slot = request.triggerMode()
                     == ShadowResearchModels.TriggerMode.HISTORICAL_REPLAY
-                    ? Clock.fixed(asOf, ZoneOffset.UTC) : clock;
-            AgentResearchToolGateway gateway = new AgentResearchToolGateway(
-                    datasetSource, new DefaultStrategyResearchApi(),
-                    BacktestConfig.standard(), researchClock);
-            ResearchReport report;
-            try (AgentResearchRuntime runtime = new AgentResearchRuntime(
-                    gateway, model, new AgentPromptCatalog(),
-                    researchClock)) {
-                report = runtime.run(task);
+                    ? "HISTORICAL_REPLAY"
+                    : ShadowResearchModels.RESEARCH_SLOT;
+            String runKey = ShadowResearchCanonical.runKey(
+                    request.tradeDate(), slot,
+                    ShadowResearchModels.STRATEGY_VERSION);
+            String requestFingerprint = ShadowResearchCanonical.hash(Map.of(
+                    "request", request, "slot", slot,
+                    "runtime", ShadowResearchModels.RUNTIME_VERSION));
+            var descriptor = model.descriptor();
+            ShadowRun created = repository.createRun(runKey,
+                    request.triggerMode(), request.tradeDate(), slot, asOf,
+                    ShadowResearchModels.STRATEGY_VERSION,
+                    descriptor.provider(), descriptor.model(),
+                    promptVersion(),
+                    com.stockquant.server.agent.research.AgentResearchModels
+                            .RUNTIME_VERSION,
+                    requestFingerprint);
+            if (created.status() == RunStatus.FROZEN) {
+                return existing(created, request.tushareProviderRequests());
             }
-            ResearchDataset dataset = datasetSource.requireLastLoaded()
-                    .dataset();
-            validate(report, dataset, request, asOf);
-            Instant marketClose = com.stockquant.core.research
-                    .StrategyResearchModels.closeInstant(request.tradeDate());
-            if (marketClose.isAfter(asOf)) {
+            if (created.status() != RunStatus.QUEUED) {
                 throw new IllegalStateException(
-                        "M4_RESEARCH_BEFORE_MARKET_CLOSE_FORBIDDEN");
+                        "M4_SHADOW_SLOT_ALREADY_ACTIVE");
             }
-            // Research cannot be frozen before its as-of cut-off.  A fixed
-            // historical replay clock may equal the cut-off; live execution
-            // must be at or after it.
-            if (clock.instant().isBefore(asOf)) {
-                throw new IllegalStateException(
-                        "M4_RUNTIME_BEFORE_RESEARCH_AS_OF");
-            }
-            ShadowRecommendation recommendation =
-                    ShadowRecommendation.from(report);
-            if (request.nextPaperExecutionTime() == null) {
-                recommendation = recommendation.withoutPaperExecution(
-                        "NEXT_OPEN_SESSION_NOT_YET_KNOWN_AS_OF");
-            }
-            ShadowRecommendation frozenRecommendation = recommendation;
-            Instant completedAt = ShadowResearchCanonical.micros(
+            ShadowRun running = repository.start(created.id(),
                     clock.instant());
-            // A replay is evaluated now, but its signal belongs to the
-            // historical knowledge cut-off.  Using wall-clock completion as
-            // the signal would make every historical next-open execution
-            // impossible and, worse, blur the as-of boundary being proved.
-            Instant signalTime = request.triggerMode()
-                    == ShadowResearchModels.TriggerMode.HISTORICAL_REPLAY
-                    ? asOf : completedAt.isBefore(asOf) ? asOf : completedAt;
-            if (request.nextPaperExecutionTime() != null
-                    && !request.nextPaperExecutionTime().isAfter(signalTime)) {
-                throw new IllegalStateException(
-                        "M4_NEXT_EXECUTION_NOT_AFTER_SIGNAL");
+            try {
+                ResearchTask task = task(request, running, asOf);
+                LoadedDataset loaded = datasetSource.load(task);
+                validateDataset(loaded, request, asOf);
+                ResearchDataset dataset = loaded.dataset();
+                Clock researchClock = request.triggerMode()
+                        == ShadowResearchModels.TriggerMode.HISTORICAL_REPLAY
+                        ? Clock.fixed(asOf, ZoneOffset.UTC) : clock;
+                // Bind every deterministic tool call to the exact dataset
+                // that passed the pre-model temporal and identity checks.
+                AgentResearchToolGateway gateway =
+                        new AgentResearchToolGateway(ignored -> loaded,
+                                new DefaultStrategyResearchApi(),
+                                BacktestConfig.standard(), researchClock);
+                AgentResearchRuntime runtime = new AgentResearchRuntime(
+                        gateway, model, new AgentPromptCatalog(),
+                        researchClock);
+                ResearchReport report = runtime.run(task);
+                validateReport(report);
+                Instant marketClose = com.stockquant.core.research
+                        .StrategyResearchModels.closeInstant(
+                                request.tradeDate());
+                if (marketClose.isAfter(asOf)) {
+                    throw new IllegalStateException(
+                            "M4_RESEARCH_BEFORE_MARKET_CLOSE_FORBIDDEN");
+                }
+                // Research cannot be frozen before its as-of cut-off. A
+                // fixed replay clock may equal it; live execution must not.
+                if (clock.instant().isBefore(asOf)) {
+                    throw new IllegalStateException(
+                            "M4_RUNTIME_BEFORE_RESEARCH_AS_OF");
+                }
+                ShadowRecommendation recommendation =
+                        ShadowRecommendation.from(report);
+                if (request.nextPaperExecutionTime() == null) {
+                    recommendation = recommendation.withoutPaperExecution(
+                            "NEXT_OPEN_SESSION_NOT_YET_KNOWN_AS_OF");
+                }
+                ShadowRecommendation frozenRecommendation = recommendation;
+                Instant completedAt = ShadowResearchCanonical.micros(
+                        clock.instant());
+                // A replay is evaluated now, but its signal belongs to the
+                // historical knowledge cut-off. Wall-clock completion would
+                // blur the strict as-of boundary being proved.
+                Instant signalTime = request.triggerMode()
+                        == ShadowResearchModels.TriggerMode.HISTORICAL_REPLAY
+                        ? asOf : completedAt.isBefore(asOf)
+                        ? asOf : completedAt;
+                if (request.nextPaperExecutionTime() != null
+                        && !request.nextPaperExecutionTime().isAfter(
+                        signalTime)) {
+                    throw new IllegalStateException(
+                            "M4_NEXT_EXECUTION_NOT_AFTER_SIGNAL");
+                }
+                Persisted persisted = Objects.requireNonNull(
+                        transaction.execute(status -> {
+                            FrozenSnapshot value = repository.insertSnapshot(
+                                    running.id(), report,
+                                    frozenRecommendation, completedAt);
+                            repository.freezeRun(running.id(), signalTime,
+                                    request.nextPaperExecutionTime(),
+                                    report.dataset().datasetFingerprint(),
+                                    report.strategyExperiments().fingerprint(),
+                                    report.researchFingerprint(), completedAt);
+                            ShadowRun frozen = repository.run(running.id())
+                                    .orElseThrow();
+                            List<PaperOrder> orders = paper.createOrders(
+                                    frozen, frozenRecommendation,
+                                    request.nextPaperExecutionTime());
+                            var portfolio = repository.lockPortfolio();
+                            PortfolioSnapshot portfolioSnapshot =
+                                    paper.snapshot(portfolio, frozen.id(),
+                                            request.tradeDate(), completedAt,
+                                            latestMarks(dataset));
+                            return new Persisted(value, frozen, orders,
+                                    portfolioSnapshot);
+                        }), "snapshot");
+                var usage = report.totalModelUsage();
+                return new ShadowExecutionResult(persisted.run(),
+                        persisted.snapshot(), persisted.orders(), List.of(),
+                        repository.portfolio(),
+                        persisted.portfolioSnapshot(),
+                        report.modelCallCount(), descriptor.deterministic()
+                        ? 0 : report.modelCallCount(),
+                        request.tushareProviderRequests(),
+                        usage.inputTokens(), usage.outputTokens(),
+                        usage.reasoningTokens(), usage.totalTokens(),
+                        usage.estimatedCost(), true, true, false);
+            } catch (Throwable error) {
+                repository.fail(running.id(),
+                        error instanceof InterruptedException
+                                ? RunStatus.INTERRUPTED : RunStatus.FAILED,
+                        safeCode(error), clock.instant());
+                throw error;
             }
-            Persisted persisted = Objects.requireNonNull(
-                    transaction.execute(status -> {
-                        FrozenSnapshot value = repository.insertSnapshot(
-                                running.id(), report, frozenRecommendation,
-                                completedAt);
-                        repository.freezeRun(running.id(), signalTime,
-                                request.nextPaperExecutionTime(),
-                                report.dataset().datasetFingerprint(),
-                                report.strategyExperiments().fingerprint(),
-                                report.researchFingerprint(), completedAt);
-                        ShadowRun frozen = repository.run(running.id())
-                                .orElseThrow();
-                        List<PaperOrder> orders = paper.createOrders(frozen,
-                                frozenRecommendation,
-                                request.nextPaperExecutionTime());
-                        var portfolio = repository.lockPortfolio();
-                        PortfolioSnapshot portfolioSnapshot = paper.snapshot(
-                                portfolio, frozen.id(), request.tradeDate(),
-                                completedAt, latestMarks(dataset));
-                        return new Persisted(value, frozen, orders,
-                                portfolioSnapshot);
-                    }), "snapshot");
-            var usage = report.totalModelUsage();
-            return new ShadowExecutionResult(persisted.run(),
-                    persisted.snapshot(), persisted.orders(), List.of(),
-                    repository.portfolio(), persisted.portfolioSnapshot(),
-                    report.modelCallCount(), descriptor.deterministic()
-                    ? 0 : report.modelCallCount(),
-                    request.tushareProviderRequests(), usage.inputTokens(),
-                    usage.outputTokens(), usage.reasoningTokens(),
-                    usage.totalTokens(), usage.estimatedCost(), true, true,
-                    false);
-        } catch (Throwable error) {
-            repository.fail(running.id(), error instanceof InterruptedException
-                            ? RunStatus.INTERRUPTED : RunStatus.FAILED,
-                    safeCode(error), clock.instant());
-            throw error;
+        } finally {
+            model.close();
         }
     }
 
@@ -222,28 +234,98 @@ public final class ShadowResearchRuntime {
                         Duration.ofMinutes(8)));
     }
 
-    private static void validate(
-            ResearchReport report,
-            ResearchDataset dataset,
+    private static void validateDataset(
+            LoadedDataset loaded,
             ShadowRequest request,
             Instant asOf
     ) {
-        boolean badFact = dataset.bars().stream().anyMatch(value ->
-                value.tradeDate().isAfter(request.tradeDate())
-                        || value.sourceKnownAt().isAfter(asOf));
-        if (badFact || !dataset.lastSessionDate().equals(request.tradeDate())
-                || !report.dataset().noFutureDataLeakage()
-                || !report.dataset().typedFactReadback()
-                || !report.dataset().systemKnowledgeReadback()
-                || !report.researchOnly() || report.providerCalled()
-                || report.shadowStarted() || report.tradingStarted()
-                || report.agentRuns().stream().map(value -> value.agentRole())
-                .distinct().count() != 7
-                || report.toolCallCount() != 4
-                || report.strategyExperiments().experiments().stream()
+        ResearchDataset dataset = loaded.dataset();
+        if (!Set.copyOf(dataset.securities()).equals(
+                Set.copyOf(request.securities()))) {
+            throw new IllegalStateException(
+                    "M4_DATASET_SECURITY_SCOPE_MISMATCH");
+        }
+        if (!dataset.knowledgeCutoff().equals(asOf)) {
+            throw new IllegalStateException(
+                    "M4_DATASET_KNOWLEDGE_CUTOFF_MISMATCH");
+        }
+        if (dataset.bars().stream().anyMatch(value ->
+                value.tradeDate().isAfter(request.tradeDate()))) {
+            throw new IllegalStateException(
+                    "M4_DATASET_FUTURE_TRADE_DATE_FORBIDDEN");
+        }
+        if (dataset.bars().stream().anyMatch(value ->
+                value.sourceKnownAt().isAfter(asOf))) {
+            throw new IllegalStateException(
+                    "M4_DATASET_FUTURE_KNOWLEDGE_FORBIDDEN");
+        }
+        if (!dataset.lastSessionDate().equals(request.tradeDate())) {
+            throw new IllegalStateException(
+                    "M4_DATASET_TARGET_SESSION_MISSING");
+        }
+        Set<?> targetSecurities = dataset.bars().stream()
+                .filter(value -> value.tradeDate().equals(
+                        request.tradeDate()))
+                .map(value -> value.security())
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        if (!targetSecurities.equals(Set.copyOf(request.securities()))) {
+            throw new IllegalStateException(
+                    "M4_DATASET_TARGET_FACTS_INCOMPLETE");
+        }
+        if (!loaded.typedFactReadback()) {
+            throw new IllegalStateException(
+                    "M4_DATASET_TYPED_FACT_READBACK_REQUIRED");
+        }
+        if (!loaded.systemKnowledgeReadback()) {
+            throw new IllegalStateException(
+                    "M4_DATASET_SYSTEM_KNOWLEDGE_REQUIRED");
+        }
+        if (!loaded.dataQuality()) {
+            throw new IllegalStateException(
+                    "M4_DATASET_QUALITY_REQUIRED");
+        }
+        if (!loaded.noFutureDataLeakage()) {
+            throw new IllegalStateException(
+                    "M4_DATASET_NO_FUTURE_GUARD_REQUIRED");
+        }
+        if (!loaded.formulaOnlyQfq()) {
+            throw new IllegalStateException(
+                    "M4_DATASET_FORMULA_QFQ_REQUIRED");
+        }
+    }
+
+    private static void validateReport(ResearchReport report) {
+        if (!report.dataset().noFutureDataLeakage()) {
+            throw new IllegalStateException(
+                    "M4_REPORT_NO_FUTURE_GUARD_REQUIRED");
+        }
+        if (!report.dataset().typedFactReadback()) {
+            throw new IllegalStateException(
+                    "M4_REPORT_TYPED_FACT_READBACK_REQUIRED");
+        }
+        if (!report.dataset().systemKnowledgeReadback()) {
+            throw new IllegalStateException(
+                    "M4_REPORT_SYSTEM_KNOWLEDGE_REQUIRED");
+        }
+        if (!report.researchOnly() || report.providerCalled()
+                || report.shadowStarted() || report.tradingStarted()) {
+            throw new IllegalStateException(
+                    "M4_REPORT_RESEARCH_ONLY_BOUNDARY_REQUIRED");
+        }
+        if (report.agentRuns().stream().map(value -> value.agentRole())
+                .distinct().count() != 7) {
+            throw new IllegalStateException(
+                    "M4_REPORT_SEVEN_AGENT_TEAM_REQUIRED");
+        }
+        if (report.toolCallCount() != 4) {
+            throw new IllegalStateException(
+                    "M4_REPORT_TOOL_GATEWAY_COUNT_INVALID");
+        }
+        if (report.strategyExperiments().experiments().stream()
                 .anyMatch(value -> !value.accountingInvariant()
                         || !value.lookAheadGuard())) {
-            throw new IllegalStateException("M4_RESEARCH_NOT_ELIGIBLE");
+            throw new IllegalStateException(
+                    "M4_REPORT_STRATEGY_GUARD_REQUIRED");
         }
     }
 

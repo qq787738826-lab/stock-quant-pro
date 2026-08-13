@@ -34,6 +34,9 @@ param(
     [ValidateSet('KNOWN_OPEN', 'UNKNOWN')]
     [string] $CalendarAdmission = 'KNOWN_OPEN',
 
+    [ValidateSet('AUTO', 'CONTROLLED_MANUAL')]
+    [string] $ShadowDispatchMode = 'AUTO',
+
     [switch] $SubmitOnly,
 
     [ValidateRange(5, 2700)]
@@ -49,7 +52,8 @@ $paths = Initialize-StockQuantHostBrokerDirectories
 $identity = [Security.Principal.WindowsIdentity]::GetCurrent().Name
 $integrationBranch = 'feature/1.4.0-agent-team'
 
-if (($RequestId -ne 'AUTO' -or $TradeDate -ne 'AUTO' -or $SubmitOnly) -and
+if (($RequestId -ne 'AUTO' -or $TradeDate -ne 'AUTO' -or
+        $ShadowDispatchMode -ne 'AUTO' -or $SubmitOnly) -and
     $Operation -notin @('RUN_M4_SHADOW_RESEARCH',
         'START_RESEARCH_PRODUCTION', 'STOP_RESEARCH_PRODUCTION',
         'CHECK_RESEARCH_PRODUCTION_STATUS')) {
@@ -307,18 +311,29 @@ try {
         if ($resolvedM4TradeDate.Date -gt $chinaNow.Date) {
             throw 'M4_FUTURE_TRADE_DATE_FORBIDDEN'
         }
-        $m4HistoricalReplay = $resolvedM4TradeDate.Date -lt $chinaNow.Date
-        if (-not $m4HistoricalReplay -and
+        $m4ControlledManual = $ShadowDispatchMode -eq 'CONTROLLED_MANUAL'
+        if ($m4ControlledManual -and ($TradeDate -eq 'AUTO' -or
+                $resolvedM4TradeDate.Date -ge $chinaNow.Date)) {
+            throw 'M6_CONTROLLED_MANUAL_TRADE_DATE_INVALID'
+        }
+        $m4HistoricalReplay = -not $m4ControlledManual -and
+            $resolvedM4TradeDate.Date -lt $chinaNow.Date
+        if (-not $m4HistoricalReplay -and -not $m4ControlledManual -and
             $chinaNow.TimeOfDay -lt [TimeSpan]::FromHours(15)) {
             throw 'M4_MARKET_CLOSE_NOT_AVAILABLE'
         }
-        $m4TriggerMode = if ($m4HistoricalReplay) {
+        $m4TriggerMode = if ($m4ControlledManual) {
+            'MANUAL'
+        } elseif ($m4HistoricalReplay) {
             'HISTORICAL_REPLAY'
         } else { 'SCHEDULED' }
-        $m4ApprovalReference = if ($m4HistoricalReplay) {
+        $m4ApprovalReference = if ($m4ControlledManual -or
+                $m4HistoricalReplay) {
             'USER_APPROVED_M6_CONTROLLED_SHADOW_SMOKE'
         } else { 'USER_APPROVED_M4_CONTINUOUS_SHADOW_MONTHLY' }
-        $m4ExecutionSource = if ($m4HistoricalReplay) {
+        $m4ExecutionSource = if ($m4ControlledManual) {
+            'M6_RESEARCH_PRODUCTION_CONTROLLED_MANUAL'
+        } elseif ($m4HistoricalReplay) {
             'M6_RESEARCH_PRODUCTION_CONTROLLED_REPLAY'
         } else { 'M4_SHADOW_RESEARCH_CONTINUOUS_SCHEDULED' }
         $rangeStart = $resolvedM4TradeDate.AddDays(-30)

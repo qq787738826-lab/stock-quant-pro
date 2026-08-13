@@ -23,6 +23,7 @@ import java.time.ZoneOffset;
 import java.math.BigDecimal;
 import java.util.Map;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -95,6 +96,60 @@ class ShadowResearchRuntimePostgresTest {
         assertThrows(Exception.class, () -> jdbc.update(
                 "UPDATE shadow_research_snapshots SET limitations_json='[]'::jsonb WHERE run_id=?",
                 first.run().id()));
+    }
+
+    @Test
+    void missingTargetSessionFailsBeforeAnyModelCall() {
+        org.junit.jupiter.api.Assumptions.assumeTrue(dataSource != null);
+        JdbcTemplate jdbc = new JdbcTemplate(dataSource);
+        var repository = new ShadowResearchRepository(jdbc,
+                new ObjectMapper().findAndRegisterModules());
+        var tx = new TransactionTemplate(
+                new DataSourceTransactionManager(dataSource));
+        var accepted = ShadowResearchTestFixtures.dataset();
+        ShadowResearchDatasetSource fixedSource =
+                new ShadowResearchDatasetSource() {
+                    @Override
+                    public com.stockquant.server.agent.research
+                            .AgentResearchDatasetSource.LoadedDataset load(
+                            com.stockquant.server.agent.research
+                                    .AgentResearchModels.ResearchTask task) {
+                        return accepted;
+                    }
+
+                    @Override
+                    public com.stockquant.server.agent.research
+                            .AgentResearchDatasetSource.LoadedDataset
+                            requireLastLoaded() {
+                        return accepted;
+                    }
+                };
+        Clock clock = Clock.fixed(accepted.dataset().knowledgeCutoff(),
+                ZoneOffset.UTC);
+        var runtime = new ShadowResearchRuntime(repository, fixedSource,
+                new ShadowPaperPortfolioService(repository, tx), tx, clock);
+        LocalDate missing = accepted.dataset().lastSessionDate().plusDays(1);
+        var request = new ShadowRequest(TriggerMode.HISTORICAL_REPLAY,
+                missing, accepted.dataset().firstSessionDate(),
+                accepted.dataset().knowledgeCutoff(),
+                accepted.dataset().securities(),
+                accepted.dataset().securities().get(0),
+                ShadowResearchTestFixtures.strategies(),
+                StrategyResearchModels.openInstant(missing.plusDays(1)),
+                0, "Reject an unavailable target session before the model.");
+        AtomicInteger calls = new AtomicInteger();
+        ModelAdapter model = countingModel(calls);
+
+        IllegalStateException failure = assertThrows(
+                IllegalStateException.class, () -> runtime.run(request,
+                        model));
+
+        assertEquals("M4_DATASET_TARGET_SESSION_MISSING",
+                failure.getMessage());
+        assertEquals(0, calls.get());
+        assertEquals("FAILED", repository.runs(10).get(0).status().name());
+        assertEquals("M4_DATASET_TARGET_SESSION_MISSING",
+                repository.runs(10).get(0).errorCode());
     }
 
     @Test
@@ -395,6 +450,23 @@ class ShadowResearchRuntimePostgresTest {
     private static ShadowResearchRepository repository(JdbcTemplate jdbc) {
         return new ShadowResearchRepository(jdbc,
                 new ObjectMapper().findAndRegisterModules());
+    }
+
+    private static ModelAdapter countingModel(AtomicInteger calls) {
+        DeterministicFakeModelAdapter delegate =
+                new DeterministicFakeModelAdapter();
+        return new ModelAdapter() {
+            @Override
+            public Descriptor descriptor() {
+                return delegate.descriptor();
+            }
+
+            @Override
+            public ModelResponse complete(ModelRequest request) {
+                calls.incrementAndGet();
+                return delegate.complete(request);
+            }
+        };
     }
 
     private static ShadowPaperPortfolioService paper(

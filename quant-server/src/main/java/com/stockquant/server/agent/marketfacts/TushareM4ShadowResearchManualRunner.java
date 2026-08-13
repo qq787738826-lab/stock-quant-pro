@@ -290,6 +290,9 @@ public final class TushareM4ShadowResearchManualRunner {
                     facts).resolve(launch.tradeDate(),
                     launch.calendarHorizonEnd(), clock.instant())
                     .orElse(null);
+            Instant asOf = researchAsOf(launch, clock);
+            LocalDate paperExecutionDate = paperExecutionDate(
+                    nextTradeDate, asOf);
             var runtime = new ShadowResearchRuntime(repository, source, paper,
                     tx, clock);
             OpenAiResponsesModelAdapter bailian = null;
@@ -305,12 +308,12 @@ public final class TushareM4ShadowResearchManualRunner {
             }
             try {
                 var shadow = runtime.run(request(launch, captured,
-                                nextTradeDate, clock), model);
+                                paperExecutionDate, asOf), model);
                 if (bailian != null) {
                     progress.modelDiagnostics = bailian.diagnostics();
                 }
                 return Execution.completed(shadow, maintenance,
-                        nextTradeDate);
+                        paperExecutionDate);
             } catch (Throwable error) {
                 if (bailian != null) {
                     progress.modelDiagnostics = OpenAiResponsesModelAdapter
@@ -334,19 +337,30 @@ public final class TushareM4ShadowResearchManualRunner {
     private static ShadowRequest request(
             Arguments launch,
             TushareM1ResearchDataModels.RunEvidence captured,
-            LocalDate nextTradeDate,
-            Clock clock
+            LocalDate paperExecutionDate,
+            Instant asOf
     ) {
-        Instant asOf = researchAsOf(launch, clock);
-        Instant nextExecution = nextTradeDate == null ? null
+        Instant nextExecution = paperExecutionDate == null ? null
                 : com.stockquant.core.research.StrategyResearchModels
-                .openInstant(nextTradeDate);
+                .openInstant(paperExecutionDate);
         return new ShadowRequest(launch.triggerMode(), launch.tradeDate(),
                 launch.rangeStart(), asOf, launch.securities(),
                 launch.securities().get(0), strategies(), nextExecution,
                 captured.providerCallCount(),
                 "Perform evidence-bound seven-agent shadow research; freeze "
                         + "the conclusion and permit an empty paper portfolio.");
+    }
+
+    static LocalDate paperExecutionDate(
+            LocalDate resolvedNextTradeDate,
+            Instant researchAsOf
+    ) {
+        if (resolvedNextTradeDate == null) {
+            return null;
+        }
+        Instant open = com.stockquant.core.research.StrategyResearchModels
+                .openInstant(resolvedNextTradeDate);
+        return open.isAfter(researchAsOf) ? resolvedNextTradeDate : null;
     }
 
     static Instant researchAsOf(Arguments launch, Clock clock) {
