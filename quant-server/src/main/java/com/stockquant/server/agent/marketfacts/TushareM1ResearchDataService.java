@@ -107,13 +107,7 @@ public final class TushareM1ResearchDataService {
                 CaptureResult::appendedCount).sum();
         int idempotent = results.stream().mapToInt(
                 CaptureResult::idempotentCount).sum();
-        if (command.mode()
-                == TushareM1ResearchWindowCommand.Mode.IDEMPOTENCY_VERIFICATION
-                && (appended != 0 || idempotent != received)
-                || command.mode() == TushareM1ResearchWindowCommand.Mode.CAPTURE
-                && appended == 0) {
-            throw blocked("TUSHARE_M1_MODE_RESULT_MISMATCH");
-        }
+        validateModeResult(command.mode(), received, appended, idempotent);
         Instant readbackAt = clock.instant();
         ResearchDataset dataset = datasetService.loadAndVerify(
                 command, readbackAt);
@@ -157,6 +151,25 @@ public final class TushareM1ResearchDataService {
                 || qualification.qfqFullLineageRuntimeQualification()
                 != TushareTechnicalQualification.QualificationStatus.PARTIAL) {
             throw blocked("TUSHARE_M1_RESEARCH_DATA_ADMISSION_BLOCKED");
+        }
+    }
+
+    static void validateModeResult(
+            TushareM1ResearchWindowCommand.Mode mode,
+            int received,
+            int appended,
+            int idempotent
+    ) {
+        boolean valid = switch (Objects.requireNonNull(mode, "mode")) {
+            case CAPTURE -> appended > 0;
+            case IDEMPOTENCY_VERIFICATION -> appended == 0
+                    && idempotent == received;
+            case CAPTURE_OR_IDEMPOTENT -> received > 0
+                    && appended >= 0 && idempotent >= 0
+                    && appended + idempotent == received;
+        };
+        if (!valid) {
+            throw blocked("TUSHARE_M1_MODE_RESULT_MISMATCH");
         }
     }
 

@@ -37,8 +37,9 @@ param(
     [ValidatePattern('^20[0-9]{2}-[0-9]{2}-[0-9]{2}$')]
     [string] $CalendarHorizonEnd,
 
-    [ValidateSet('CAPTURE', 'IDEMPOTENCY_VERIFICATION')]
-    [string] $CaptureMode = 'CAPTURE',
+    [ValidateSet('CAPTURE', 'IDEMPOTENCY_VERIFICATION',
+        'CAPTURE_OR_IDEMPOTENT')]
+    [string] $CaptureMode = 'CAPTURE_OR_IDEMPOTENT',
 
     [ValidateSet('MANUAL', 'SCHEDULED', 'HISTORICAL_REPLAY')]
     [string] $TriggerMode = 'MANUAL',

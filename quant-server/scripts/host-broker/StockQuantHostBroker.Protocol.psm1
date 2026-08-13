@@ -1173,7 +1173,7 @@ function Read-StockQuantHostBrokerRequest {
                 [Globalization.DateTimeStyles]::None,
                 [ref]$calendarHorizonEnd) -or
             $calendarHorizonEnd -ne $tradeDate.AddDays(30) -or
-            $values['capture.mode'] -ne 'CAPTURE' -or
+            $values['capture.mode'] -ne 'CAPTURE_OR_IDEMPOTENT' -or
             -not ($scheduledScope -or $historicalScope) -or
             ($scheduledScope -and
                 $tradeDate.Date -ne $requestChinaDate) -or

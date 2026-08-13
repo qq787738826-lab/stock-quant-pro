@@ -21,6 +21,8 @@ $artifact = Join-Path $target `
     'quant-server-1.3.1-m4-shadow-research-runner.jar'
 $result = Join-Path $target (
     'm4-shadow-e2e-' + [Guid]::NewGuid().ToString('N') + '.json')
+$repeatResult = Join-Path $target (
+    'm4-shadow-e2e-repeat-' + [Guid]::NewGuid().ToString('N') + '.json')
 $port = 0
 $started = $false
 
@@ -113,7 +115,8 @@ try {
         -RangeStart '2025-01-02' -TradeDate '2025-01-10' `
         -NextTradeDate INTERNAL_CALENDAR -CalendarAdmission UNKNOWN `
         -CalendarHorizonEnd '2025-02-09' `
-        -CaptureMode CAPTURE -TriggerMode HISTORICAL_REPLAY `
+        -CaptureMode CAPTURE_OR_IDEMPOTENT `
+        -TriggerMode HISTORICAL_REPLAY `
         -MaximumCostCny 5.00
     if ($LASTEXITCODE -ne 0) { throw 'M4_E2E_RUNNER_FAILED' }
     $value = Get-Content -LiteralPath $result -Raw -Encoding UTF8 |
@@ -149,6 +152,40 @@ try {
         'M4_E2E_DAILY_MAINTENANCE_SNAPSHOT_MISSING'
     Exact (Scalar 'SELECT count(*) FROM shadow_paper_portfolios') 1 `
         'M4_E2E_PORTFOLIO_INVALID'
+    $observationsBeforeRepeat = Scalar `
+        'SELECT count(*) FROM pit_market_fact_observations'
+    $executionId2 = 'M4SHADOW_20260812T010204Z_B1C2D3E4F5A6'
+    & "$PSScriptRoot\run-m4-shadow-research.ps1" `
+        -ResultFile $repeatResult -ArtifactPath $artifact `
+        -ExecutionId $executionId2 -DatabasePort $port `
+        -ExecutionMode FAKE -RangeStart '2025-01-02' `
+        -TradeDate '2025-01-10' -NextTradeDate INTERNAL_CALENDAR `
+        -CalendarAdmission UNKNOWN -CalendarHorizonEnd '2025-02-09' `
+        -CaptureMode CAPTURE_OR_IDEMPOTENT `
+        -TriggerMode HISTORICAL_REPLAY -MaximumCostCny 5.00
+    if ($LASTEXITCODE -ne 0) {
+        throw 'M4_E2E_IDEMPOTENT_RUNNER_FAILED'
+    }
+    $repeat = Get-Content -LiteralPath $repeatResult -Raw -Encoding UTF8 |
+        ConvertFrom-Json
+    Exact $repeat.status 'SUCCEEDED' 'M4_E2E_IDEMPOTENT_STATUS_INVALID'
+    Exact $repeat.tushareProviderCallCount 8 `
+        'M4_E2E_IDEMPOTENT_TUSHARE_INVALID'
+    Exact $repeat.retryCount 0 'M4_E2E_IDEMPOTENT_RETRY_INVALID'
+    Exact $repeat.modelProviderRequestCount 0 `
+        'M4_E2E_IDEMPOTENT_MODEL_NETWORK_INVALID'
+    Exact $repeat.shadowRunId $value.shadowRunId `
+        'M4_E2E_IDEMPOTENT_RUN_CHANGED'
+    Exact $repeat.snapshotFingerprint $value.snapshotFingerprint `
+        'M4_E2E_IDEMPOTENT_SNAPSHOT_CHANGED'
+    Exact (Scalar 'SELECT count(*) FROM pit_market_fact_observations') `
+        $observationsBeforeRepeat 'M4_E2E_IDEMPOTENT_OBSERVATIONS_CHANGED'
+    Exact (Scalar 'SELECT count(*) FROM shadow_research_runs') 1 `
+        'M4_E2E_IDEMPOTENT_RUN_DUPLICATED'
+    Exact (Scalar 'SELECT count(*) FROM shadow_research_snapshots') 1 `
+        'M4_E2E_IDEMPOTENT_SNAPSHOT_DUPLICATED'
+    Exact (Scalar 'SELECT count(*) FROM shadow_paper_fills') 0 `
+        'M4_E2E_IDEMPOTENT_FILL_DUPLICATED'
     Exact (Scalar "SELECT string_agg(version, ',' ORDER BY installed_rank) FROM flyway_schema_history WHERE success") `
         '1,2,3,4,5,6,7,8,9,10,11,12,13,15,16' `
         'M4_E2E_MAIN_HISTORY_INVALID'
@@ -156,7 +193,8 @@ try {
     Write-Output 'M4_PACKAGED_FAKE_E2E=PASS'
     Write-Output 'M4_TEMP_POSTGRES_V1_V16=PASS'
     Write-Output 'M4_M1_M2_M3_M4_CHAIN=PASS'
-    Write-Output 'M4_FAKE_TUSHARE_CALLS=8'
+    Write-Output 'M4_FAKE_TUSHARE_CALLS=16'
+    Write-Output 'M4_CAPTURE_RECOVERY_IDEMPOTENT=PASS'
     Write-Output 'M4_REAL_TUSHARE_CALLS=0'
     Write-Output 'M4_REAL_BAILIAN_CALLS=0'
     Write-Output 'M4_ACTIVE_RUN_RESIDUALS=0'
@@ -168,6 +206,9 @@ try {
     }
     if (Test-Path -LiteralPath $result -PathType Leaf) {
         Remove-Item -LiteralPath $result -Force
+    }
+    if (Test-Path -LiteralPath $repeatResult -PathType Leaf) {
+        Remove-Item -LiteralPath $repeatResult -Force
     }
     Remove-Root
     if (Test-Path -LiteralPath $root) {

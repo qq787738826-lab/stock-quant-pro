@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -86,6 +87,38 @@ class TushareM1ResearchWindowTest {
         assertThrows(IllegalArgumentException.class, () ->
                 TushareManualBoundedSession.m1ResearchDataManual(
                         List.of(security), START, START.plusDays(31)));
+    }
+
+    @Test
+    void continuousCaptureAcceptsNewIdempotentAndMixedConservedFacts() {
+        var mode = TushareM1ResearchWindowCommand.Mode
+                .CAPTURE_OR_IDEMPOTENT;
+
+        assertDoesNotThrow(() -> TushareM1ResearchDataService
+                .validateModeResult(mode, 8, 8, 0));
+        assertDoesNotThrow(() -> TushareM1ResearchDataService
+                .validateModeResult(mode, 8, 0, 8));
+        assertDoesNotThrow(() -> TushareM1ResearchDataService
+                .validateModeResult(mode, 8, 3, 5));
+        assertThrows(RuntimeException.class, () ->
+                TushareM1ResearchDataService.validateModeResult(
+                        mode, 8, 3, 4));
+        assertThrows(RuntimeException.class, () ->
+                TushareM1ResearchDataService.validateModeResult(
+                        mode, 0, 0, 0));
+    }
+
+    @Test
+    void originalM1ModesRemainStrict() {
+        assertThrows(RuntimeException.class, () ->
+                TushareM1ResearchDataService.validateModeResult(
+                        TushareM1ResearchWindowCommand.Mode.CAPTURE,
+                        8, 0, 8));
+        assertThrows(RuntimeException.class, () ->
+                TushareM1ResearchDataService.validateModeResult(
+                        TushareM1ResearchWindowCommand.Mode
+                                .IDEMPOTENCY_VERIFICATION,
+                        8, 1, 7));
     }
 
     private static TushareMarketFactProvider provider(

@@ -71,6 +71,8 @@ public record TushareM1ResearchWindowCommand(
 
     public enum Mode {
         CAPTURE,
-        IDEMPOTENCY_VERIFICATION
+        IDEMPOTENCY_VERIFICATION,
+        /** Continuous research accepts either a new append or a legal tail hit. */
+        CAPTURE_OR_IDEMPOTENT
     }
 }

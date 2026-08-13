@@ -81,7 +81,7 @@ try {
         'calendar.admission' = 'KNOWN_OPEN'
         'calendar.horizon.end' =
             $scheduledDate.AddDays(30).ToString('yyyy-MM-dd')
-        'capture.mode' = 'CAPTURE'
+        'capture.mode' = 'CAPTURE_OR_IDEMPOTENT'
         'trigger.mode' = 'SCHEDULED'
         'database.host' = '127.0.0.1'
         'database.port' = '38432'
@@ -262,7 +262,7 @@ try {
         @('redirects', 'NORMAL'),
         @('model', 'qwen-plus'),
         @('provider.endpoint', 'https://example.invalid'),
-        @('capture.mode', 'IDEMPOTENCY_VERIFICATION'),
+        @('capture.mode', 'CAPTURE'),
         @('next.trade.date', 'NONE'),
         @('calendar.admission', 'INVALID'),
         @('calendar.horizon.end', '2026-09-11'),

@@ -380,7 +380,7 @@ try {
             'calendar.admission' = $CalendarAdmission
             'calendar.horizon.end' =
                 $calendarHorizonEnd.ToString('yyyy-MM-dd')
-            'capture.mode' = 'CAPTURE'
+            'capture.mode' = 'CAPTURE_OR_IDEMPOTENT'
             'trigger.mode' = $m4TriggerMode
             'database.host' = '127.0.0.1'
             'database.port' = '38432'
