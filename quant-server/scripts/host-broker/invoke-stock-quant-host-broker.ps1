@@ -166,6 +166,12 @@ try {
     } elseif ($Operation -in @('START_RESEARCH_PRODUCTION',
             'STOP_RESEARCH_PRODUCTION',
             'CHECK_RESEARCH_PRODUCTION_STATUS') -and
+        $branch -eq
+            'codex/1.4.0-v1.0.2-startup-self-heal-fix') {
+        'codex/1.4.0-v1.0.2-startup-self-heal-fix'
+    } elseif ($Operation -in @('START_RESEARCH_PRODUCTION',
+            'STOP_RESEARCH_PRODUCTION',
+            'CHECK_RESEARCH_PRODUCTION_STATUS') -and
         $branch -eq 'codex/1.4.0-m6-research-production-ready') {
         'codex/1.4.0-m6-research-production-ready'
     } else { $integrationBranch }

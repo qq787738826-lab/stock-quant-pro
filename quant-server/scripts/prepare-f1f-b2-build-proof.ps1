@@ -151,8 +151,9 @@ try {
             throw 'STOCK_QUANT_M6_STAGE_BUILD_BASELINE_REQUIRED'
         }
     } elseif ($Mode -eq 'RESEARCH_SELECTION_CONTROLLED_BUILD_ARTIFACT') {
-        if ($actualBranch -ne
-                'codex/1.4.0-v1.0.1-research-selection-usability' -or
+        if ($actualBranch -notin @(
+                'codex/1.4.0-v1.0.1-research-selection-usability',
+                'codex/1.4.0-v1.0.2-startup-self-heal-fix') -or
             $remoteCommit -ne $ExpectedCommit -or
             $RunnerProfile -notin @(
                 'RESEARCH_SELECTION', 'M6_RESEARCH_PRODUCTION')) {

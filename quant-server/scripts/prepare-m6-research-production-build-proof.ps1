@@ -24,8 +24,9 @@ if ($RunnerProfile -eq 'M6_RESEARCH_PRODUCTION') {
 $branch = (& git -C $repoRoot branch --show-current).Trim()
 $mode = if ($branch -eq 'feature/1.4.0-agent-team') {
     'CONTROLLED_BUILD_ARTIFACT'
-} elseif ($branch -eq
-        'codex/1.4.0-v1.0.1-research-selection-usability') {
+} elseif ($branch -in @(
+        'codex/1.4.0-v1.0.1-research-selection-usability',
+        'codex/1.4.0-v1.0.2-startup-self-heal-fix')) {
     'RESEARCH_SELECTION_CONTROLLED_BUILD_ARTIFACT'
 } else { 'M6_STAGE_CONTROLLED_BUILD_ARTIFACT' }
 

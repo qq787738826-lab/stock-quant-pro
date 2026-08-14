@@ -180,35 +180,40 @@ class TushareControlledAcceptanceTrustedMechanismTest {
     void researchSelectionStageProofBindsBothFixedSelectionAndProductionRunners(
             @TempDir Path temp
     ) throws Exception {
-        String branch =
-                "codex/1.4.0-v1.0.1-research-selection-usability";
         String mode = "RESEARCH_SELECTION_CONTROLLED_BUILD_ARTIFACT";
-        Path selectionJar = temp.resolve("research-selection.jar");
-        writeJarWithStartClass(selectionJar, COMMIT, branch, mode,
-                TushareControlledAcceptanceBuildProof
-                        .RESEARCH_SELECTION_RUNNER_START_CLASS);
-        Path selectionProof = Path.of(selectionJar
-                + TushareControlledAcceptanceBuildProof.SIDECAR_SUFFIX);
-        writeSidecar(selectionProof, COMMIT, COMMIT, sha256(selectionJar),
-                branch, mode);
-        VerifiedBuildProof selection = TushareControlledAcceptanceBuildProof
-                .loadBoundPreparationArtifactForTest(selectionJar,
-                        selectionProof);
-        assertTrue(selection.researchSelectionEligible());
-        assertFalse(selection.m6ProductionEligible());
+        for (String branch : List.of(
+                "codex/1.4.0-v1.0.1-research-selection-usability",
+                "codex/1.4.0-v1.0.2-startup-self-heal-fix")) {
+            String suffix = branch.contains("v1.0.2") ? "v102" : "v101";
+            Path selectionJar = temp.resolve(
+                    "research-selection-" + suffix + ".jar");
+            writeJarWithStartClass(selectionJar, COMMIT, branch, mode,
+                    TushareControlledAcceptanceBuildProof
+                            .RESEARCH_SELECTION_RUNNER_START_CLASS);
+            Path selectionProof = Path.of(selectionJar
+                    + TushareControlledAcceptanceBuildProof.SIDECAR_SUFFIX);
+            writeSidecar(selectionProof, COMMIT, COMMIT, sha256(selectionJar),
+                    branch, mode);
+            VerifiedBuildProof selection = TushareControlledAcceptanceBuildProof
+                    .loadBoundPreparationArtifactForTest(selectionJar,
+                            selectionProof);
+            assertTrue(selection.researchSelectionEligible());
+            assertFalse(selection.m6ProductionEligible());
 
-        Path productionJar = temp.resolve("research-production.jar");
-        writeJarWithStartClass(productionJar, COMMIT, branch, mode,
-                TushareControlledAcceptanceBuildProof.M6_RUNNER_START_CLASS);
-        Path productionProof = Path.of(productionJar
-                + TushareControlledAcceptanceBuildProof.SIDECAR_SUFFIX);
-        writeSidecar(productionProof, COMMIT, COMMIT, sha256(productionJar),
-                branch, mode);
-        VerifiedBuildProof production = TushareControlledAcceptanceBuildProof
-                .loadBoundPreparationArtifactForTest(productionJar,
-                        productionProof);
-        assertTrue(production.m6ProductionEligible());
-        assertFalse(production.researchSelectionEligible());
+            Path productionJar = temp.resolve(
+                    "research-production-" + suffix + ".jar");
+            writeJarWithStartClass(productionJar, COMMIT, branch, mode,
+                    TushareControlledAcceptanceBuildProof.M6_RUNNER_START_CLASS);
+            Path productionProof = Path.of(productionJar
+                    + TushareControlledAcceptanceBuildProof.SIDECAR_SUFFIX);
+            writeSidecar(productionProof, COMMIT, COMMIT,
+                    sha256(productionJar), branch, mode);
+            VerifiedBuildProof production = TushareControlledAcceptanceBuildProof
+                    .loadBoundPreparationArtifactForTest(productionJar,
+                            productionProof);
+            assertTrue(production.m6ProductionEligible());
+            assertFalse(production.researchSelectionEligible());
+        }
     }
 
     @Test

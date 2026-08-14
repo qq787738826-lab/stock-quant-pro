@@ -48,6 +48,10 @@ class ResearchProductionContractTest {
         assertTrue(broker.contains("/api/system/lifecycle/stop"));
         assertFalse(broker.contains("-Command"));
         assertFalse(broker.contains("Invoke-Expression"));
+        assertTrue(broker.contains(
+                "codex/1.4.0-v1.0.2-startup-self-heal-fix"));
+        assertTrue(invoker.contains(
+                "codex/1.4.0-v1.0.2-startup-self-heal-fix"));
 
         String selfHeal = read("scripts/StockQuantStartupSelfHeal.psm1");
         assertTrue(selfHeal.contains("HOST_BROKER_NOT_RUNNING"));
