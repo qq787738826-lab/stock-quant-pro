@@ -110,8 +110,11 @@ try {
             ProcessId = 0
             ConsecutiveSamples = 0
         }
+        $readBrokerHeartbeat = Get-Command `
+            'Read-StockQuantHostBrokerHeartbeat' -CommandType Function `
+            -ErrorAction Stop
         $heartbeatProbe = {
-            $candidate = Read-StockQuantHostBrokerHeartbeat `
+            $candidate = & $readBrokerHeartbeat `
                 -ExpectedGitCommit $expectedHead `
                 -AllowAncestorGitCommit
             $candidateProcessId = [int]$candidate.processId

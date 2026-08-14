@@ -30,6 +30,9 @@ class ResearchProductionContractTest {
         assertTrue(launcher.contains(
                 "Get-Process -Id $candidateProcessId"));
         assertTrue(launcher.contains("ConsecutiveSamples -lt 2"));
+        assertTrue(launcher.contains(
+                "$readBrokerHeartbeat = Get-Command"));
+        assertTrue(launcher.contains("& $readBrokerHeartbeat"));
         assertTrue(launcher.contains("}.GetNewClosure()"));
         assertTrue(launcher.contains(
                 "-HeartbeatProbe $heartbeatProbe"));

@@ -41,13 +41,19 @@ $tests++
 function Invoke-ClosureBoundRecoveryProbe {
     $expectedMarker = 'V1_0_2_EXPECTED_HEAD'
     $probeState = [pscustomobject]@{ Samples = 0 }
-    $probe = {
-        if ($expectedMarker -cne 'V1_0_2_EXPECTED_HEAD') {
+    function Read-ClosureBoundTestHeartbeat([string] $Marker) {
+        if ($Marker -cne 'V1_0_2_EXPECTED_HEAD') {
             throw 'STARTUP_SELF_HEAL_CLOSURE_VALUE_LOST'
         }
+        [pscustomobject]@{ state = 'IDLE' }
+    }
+    $readHeartbeat = Get-Command 'Read-ClosureBoundTestHeartbeat' `
+        -CommandType Function -ErrorAction Stop
+    $probe = {
+        $heartbeat = & $readHeartbeat -Marker $expectedMarker
         $probeState.Samples++
         if ($probeState.Samples -lt 2) { throw 'HOST_BROKER_NOT_RUNNING' }
-        [pscustomobject]@{ state = 'IDLE' }
+        $heartbeat
     }.GetNewClosure()
     Wait-StockQuantHostBrokerRecovery `
         -TimeoutMilliseconds 100 -PollMilliseconds 1 `
@@ -129,6 +135,8 @@ $tests++
 if ($launcherText -notmatch 'ConsecutiveSamples' -or
     $launcherText -notmatch 'Get-Process -Id \$candidateProcessId' -or
     $launcherText -notmatch 'ConsecutiveSamples -lt 2' -or
+    $launcherText -notmatch '\$readBrokerHeartbeat = Get-Command' -or
+    $launcherText -notmatch '& \$readBrokerHeartbeat' -or
     $launcherText -notmatch '\.GetNewClosure\(\)' -or
     $launcherText -notmatch '-HeartbeatProbe \$heartbeatProbe') {
     throw 'STARTUP_SELF_HEAL_STABLE_PROCESS_PROBE_FAILED'
