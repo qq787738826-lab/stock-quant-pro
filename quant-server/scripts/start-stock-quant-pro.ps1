@@ -106,12 +106,33 @@ try {
         Import-Module $startupSelfHealModule -Force -ErrorAction Stop
         $expectedHead = (git rev-parse HEAD).Trim()
         Write-Output 'STOCK_QUANT_STARTUP_STAGE=CHECKING_RESIDENT_BROKER'
+        $brokerProbeState = [pscustomobject]@{
+            ProcessId = 0
+            ConsecutiveSamples = 0
+        }
         $brokerWait = Wait-StockQuantHostBrokerRecovery `
             -TimeoutMilliseconds ($TimeoutSeconds * 1000) `
             -PollMilliseconds 1000 -HeartbeatProbe {
-                Read-StockQuantHostBrokerHeartbeat `
+                $candidate = Read-StockQuantHostBrokerHeartbeat `
                     -ExpectedGitCommit $expectedHead `
                     -AllowAncestorGitCommit
+                $candidateProcessId = [int]$candidate.processId
+                if ($null -eq (Get-Process -Id $candidateProcessId `
+                        -ErrorAction SilentlyContinue)) {
+                    $brokerProbeState.ProcessId = 0
+                    $brokerProbeState.ConsecutiveSamples = 0
+                    throw 'HOST_BROKER_NOT_RUNNING'
+                }
+                if ($brokerProbeState.ProcessId -eq $candidateProcessId) {
+                    $brokerProbeState.ConsecutiveSamples++
+                } else {
+                    $brokerProbeState.ProcessId = $candidateProcessId
+                    $brokerProbeState.ConsecutiveSamples = 1
+                }
+                if ($brokerProbeState.ConsecutiveSamples -lt 2) {
+                    throw 'HOST_BROKER_NOT_RUNNING'
+                }
+                $candidate
             }
         if ($brokerWait.Status -eq 'TIMEOUT') {
             $task = $null

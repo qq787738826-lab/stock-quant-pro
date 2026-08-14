@@ -103,6 +103,12 @@ if ($launcherText -notmatch '\[ValidateRange\(10, 900\)\]' -or
     throw 'STARTUP_SELF_HEAL_WATCHDOG_GRACE_WINDOW_FAILED'
 }
 $tests++
+if ($launcherText -notmatch 'ConsecutiveSamples' -or
+    $launcherText -notmatch 'Get-Process -Id \$candidateProcessId' -or
+    $launcherText -notmatch 'ConsecutiveSamples -lt 2') {
+    throw 'STARTUP_SELF_HEAL_STABLE_PROCESS_PROBE_FAILED'
+}
+$tests++
 if ($launcherText -notmatch 'Get-ScheduledTask' -or
     $launcherText -notmatch 'Assert-StockQuantHostBrokerTaskDefinition' -or
     $launcherText -notmatch 'StockQuantLocalBroker') {
