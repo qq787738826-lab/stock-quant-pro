@@ -661,7 +661,21 @@ function Get-StockQuantM4MonthlyUsage {
         } catch {
             throw 'M4_MONTHLY_BUDGET_LEDGER_INVALID'
         }
-        if ($terminal.operation -ne $values['operation'] -or
+        # V1.0.2 wrote UNKNOWN before request validation had copied the
+        # declared operation into the terminal result.  Preserve that
+        # immutable, zero-call build-proof rejection in the monthly ledger;
+        # every other operation mismatch remains fail-closed.
+        $legacyBuildProofRejection =
+            $values['operation'] -eq 'RUN_RESEARCH_SELECTION' -and
+            $terminal.operation -eq 'UNKNOWN' -and
+            $terminal.status -eq 'REJECTED' -and
+            $terminal.stage -eq 'REQUEST_VALIDATION' -and
+            $terminal.reason -eq
+                'STOCK_QUANT_HOST_BROKER_BUILD_PROOF_BINDING_INVALID' -and
+            [int]$terminal.providerCallCount -eq 0 -and
+            [int]$terminal.retryCount -eq 0
+        if (($terminal.operation -ne $values['operation'] -and
+                -not $legacyBuildProofRejection) -or
             $terminal.status -notin @('FAILED', 'REJECTED') -or
             [int]$terminal.providerCallCount -ne 0 -or
             [int]$terminal.retryCount -ne 0) {

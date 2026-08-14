@@ -260,6 +260,60 @@ try {
     }
     $tests++
 
+    $legacyId = 'SQHB_20990403T010203Z_C1D2E3F4A5B6'
+    $legacyRequest = Join-Path $paths.Requests `
+        "$legacyId.processed.properties"
+    $legacyTerminal = Join-Path $paths.Results "$legacyId.result.json"
+    Write-Lines $legacyRequest ([ordered]@{
+        'operation' = 'RUN_RESEARCH_SELECTION'
+        'request.id' = $legacyId
+        'created.at' = '2099-04-03T01:02:03Z'
+        'maximum.provider.requests' = '52'
+        'selection.run.id' = '303'
+        'selection.public.run.id' =
+            'SELECT_20990403T010203Z_C1D2E3F4A5B6'
+    })
+    $legacyResult = [ordered]@{
+        schemaVersion = 'STOCK_QUANT_HOST_BROKER_RESULT_V1'
+        requestId = $legacyId
+        operation = 'UNKNOWN'
+        status = 'REJECTED'
+        stage = 'REQUEST_VALIDATION'
+        reason = 'STOCK_QUANT_HOST_BROKER_BUILD_PROOF_BINDING_INVALID'
+        providerCallCount = 0
+        retryCount = 0
+    }
+    [IO.File]::WriteAllText($legacyTerminal,
+        ($legacyResult | ConvertTo-Json -Compress) + "`n",
+        [Text.UTF8Encoding]::new($false))
+    $ledgerFiles += $legacyRequest, $legacyTerminal
+    $legacyUsage = Get-StockQuantM4MonthlyUsage -CalendarMonth '2099-04'
+    if ([int]$legacyUsage.RequestCount -ne 1 -or
+        [int]$legacyUsage.TushareCalls -ne 0 -or
+        [decimal]$legacyUsage.ShadowCostCny -ne [decimal]0) {
+        throw 'RESEARCH_SELECTION_LEGACY_REJECTION_LEDGER_INVALID'
+    }
+    $tests++
+
+    $legacyResult.reason = 'STOCK_QUANT_HOST_BROKER_FAILED'
+    [IO.File]::WriteAllText($legacyTerminal,
+        ($legacyResult | ConvertTo-Json -Compress) + "`n",
+        [Text.UTF8Encoding]::new($false))
+    try {
+        Get-StockQuantM4MonthlyUsage -CalendarMonth '2099-04' | Out-Null
+        throw 'RESEARCH_SELECTION_UNSAFE_OPERATION_MISMATCH_ACCEPTED'
+    } catch {
+        if ($_.Exception.Message -ne 'M4_MONTHLY_BUDGET_LEDGER_INVALID') {
+            throw
+        }
+    }
+    $legacyResult.reason =
+        'STOCK_QUANT_HOST_BROKER_BUILD_PROOF_BINDING_INVALID'
+    [IO.File]::WriteAllText($legacyTerminal,
+        ($legacyResult | ConvertTo-Json -Compress) + "`n",
+        [Text.UTF8Encoding]::new($false))
+    $tests++
+
     Write-Output "RESEARCH_SELECTION_BROKER_PROTOCOL_TESTS=$tests"
     Write-Output 'RESEARCH_SELECTION_BROKER_PROVIDER_CALLS=0'
     Write-Output 'RESEARCH_SELECTION_BROKER_PERMANENT_DATABASE_WRITES=0'
