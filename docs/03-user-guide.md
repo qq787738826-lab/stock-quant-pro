@@ -9,7 +9,8 @@
 
 ## 1.4.0 研究版立即选股
 
-1. 在仓库根目录运行 `& .\quant-server\scripts\start-stock-quant-pro.ps1`。
+1. 在仓库根目录运行 `& .\quant-server\scripts\start-stock-quant-pro.ps1`；如果 Resident Broker
+   正在由 watchdog 恢复，启动器会自动等待后继续，不需要手工启动 Broker。
 2. 等首页显示 `READY` 后点击“立即选股”；默认使用最近 20 日主窗口、60 日辅助窗口。
 3. 系统自动检查固定 25 股池的数据，必要时在月度门禁内做增量、幂等补齐。
 4. 先看确定性“量化 Top 10”，再看最终 0—5 只候选的 Agent、Risk、Strategy 与 Critic 结论。
@@ -17,6 +18,8 @@
 6. 历史选股可在同一页回看；20/60/120/250 日入口均是当前时点回顾研究，不冒充历史 Live Shadow。
 
 立即选股只生成研究结论与 Paper 模拟。真实交易固定关闭，不连接券商，也不会使用真实资金。
+若固定 Broker 计划任务确实缺失、禁用、定义异常或超过自动恢复时限，启动器只显示
+`ACTION_REQUIRED`、明确 reason 和修复提示，不输出内部 PowerShell 堆栈。
 
 ## 1.3.0 模拟交易流程
 

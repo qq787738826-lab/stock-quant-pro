@@ -621,7 +621,12 @@ DATA_QUALITY 只作门禁和 confidence 上限，MARKET_REGIME V1 权重为 0 �
   20/60 日确定性 Ranking、Top 10 复用 M2/M3、Critic 后 0—5 候选、V17 不可变选股历史、
   首页“立即选股”和选股结果页。PIT/knownAt 与 Historical Live Shadow 边界不变；新结果记录
   Universe/Ranking/Agent/Prompt/Model/Strategy/Git 血缘。17:20 正式 Shadow 改用同一 Universe，
-  与手工选股通过 Broker 单实例串行，旧冻结历史不修改。当前为任务分支待用户验收，尚未合并。
+  与手工选股通过 Broker 单实例串行，旧冻结历史不修改；已合并至集成提交
+  `d5446833dfaa907fac0a0f317eef643441dbae10`。
+- V1.0.2_STARTUP_SELF_HEAL_FIX 在启动器增加 Resident Broker heartbeat 等待：Broker 健康时直接继续，
+  暂时不可用时等待既有 PT1M watchdog 自动恢复，恢复后再提交固定 Backend 启动请求；计划任务缺失、
+  禁用、定义异常或恢复超时时转换为脱敏 `ACTION_REQUIRED`，不触发 Task Scheduler、不读取秘密、
+  不调用 Provider，也不改变 Broker/Task Scheduler 架构。当前在单一小版本任务分支待用户验收。
 
 ## 当前后续入口与阻断
 

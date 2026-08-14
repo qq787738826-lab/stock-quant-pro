@@ -56,6 +56,8 @@ V4__simulated_trading.sql
 M1—M5、Shadow scheduler、凭据存在状态及月度预算。它不读取或显示秘密，不连接券商，
 也不会执行真实交易。详细边界见
 [`docs/agent-team/stage-m6-research-production-ready.md`](docs/agent-team/stage-m6-research-production-ready.md)。
+如果 Resident Broker 正在被一分钟 watchdog 恢复，启动器会自动等待并继续启动；只有
+计划任务缺失、禁用、定义异常或恢复超时时才返回脱敏的 `ACTION_REQUIRED`，不会要求手工触发 Broker。
 
 启动成功后，在首页点击“立即选股”即可使用 `RESEARCH_UNIVERSE_V1`：系统先对固定的
 25 只沪深主板股票执行 20/60 交易日确定性扫描，再仅让量化 Top 10 进入 7-Agent、

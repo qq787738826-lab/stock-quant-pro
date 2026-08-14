@@ -21,7 +21,16 @@ class ResearchProductionContractTest {
         assertTrue(launcher.contains("$Action -eq 'Backup'"));
         assertTrue(launcher.contains("$ErrorActionPreference = 'Continue'"));
         assertTrue(launcher.contains("$javaExitCode = $LASTEXITCODE"));
+        assertTrue(launcher.contains("Wait-StockQuantHostBrokerRecovery"));
+        assertTrue(launcher.contains("Read-StockQuantHostBrokerHeartbeat"));
+        assertTrue(launcher.contains("CHECKING_RESIDENT_BROKER"));
+        assertTrue(launcher.contains(
+                "STOCK_QUANT_PRODUCTION_STATUS=ACTION_REQUIRED"));
+        assertTrue(launcher.contains("Get-ScheduledTask"));
+        assertTrue(launcher.contains(
+                "Assert-StockQuantHostBrokerTaskDefinition"));
         assertFalse(launcher.contains("schtasks"));
+        assertFalse(launcher.contains("Start-ScheduledTask"));
         assertFalse(launcher.contains("DB_PASSWORD"));
         assertFalse(launcher.contains("TUSHARE_TOKEN"));
         assertTrue(invoker.contains("maximum.provider.requests' = '0'"));
@@ -39,6 +48,16 @@ class ResearchProductionContractTest {
         assertTrue(broker.contains("/api/system/lifecycle/stop"));
         assertFalse(broker.contains("-Command"));
         assertFalse(broker.contains("Invoke-Expression"));
+
+        String selfHeal = read("scripts/StockQuantStartupSelfHeal.psm1");
+        assertTrue(selfHeal.contains("HOST_BROKER_NOT_RUNNING"));
+        assertTrue(selfHeal.contains("RECOVERED"));
+        assertTrue(selfHeal.contains("TIMEOUT"));
+        assertTrue(selfHeal.contains("HOST_BROKER_TASK_NOT_INSTALLED"));
+        assertTrue(selfHeal.contains(
+                "HOST_BROKER_TASK_DEFINITION_INVALID"));
+        assertFalse(selfHeal.contains("Start-ScheduledTask"));
+        assertFalse(selfHeal.contains("schtasks"));
     }
 
     @Test
@@ -54,7 +73,7 @@ class ResearchProductionContractTest {
         assertTrue(runner.indexOf("ProductionSecretAudit.install()")
                 < runner.indexOf("readResearchDatabasePassword()"));
         assertTrue(runner.contains("Flyway.configure()"));
-        assertTrue(runner.contains("after != 16"));
+        assertTrue(runner.contains("after != 17"));
         assertTrue(controller.contains("@GetMapping(\"/health\")"));
         assertTrue(controller.contains("@PostMapping(\"/backups\")"));
         assertFalse(controller.toLowerCase().contains("trade"));
