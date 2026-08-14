@@ -13,6 +13,9 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $artifact = Join-Path $repoRoot `
     'quant-server\target\quant-server-1.3.1-research-production.jar'
 $proof = "$artifact.f1f-b2-proof.properties"
+$selectionArtifact = Join-Path $repoRoot `
+    'quant-server\target\quant-server-1.3.1-research-selection-runner.jar'
+$selectionProof = "$selectionArtifact.f1f-b2-proof.properties"
 $invokeBroker = Join-Path $PSScriptRoot `
     'host-broker\invoke-stock-quant-host-broker.ps1'
 $brokerScript = Join-Path $PSScriptRoot `
@@ -27,6 +30,50 @@ $startupSelfHealModule = Join-Path $PSScriptRoot `
 function Get-SystemHealth {
     Invoke-RestMethod -Uri 'http://127.0.0.1:8080/api/system/health' `
         -Method Get -TimeoutSec 10
+}
+
+function Assert-StockQuantFormalArtifactBinding(
+    [string] $ArtifactPath,
+    [string] $ProofPath,
+    [string] $ExpectedCommit,
+    [string] $ExpectedStartClass,
+    [string] $FailureReason
+) {
+    try {
+        if (-not (Test-Path -LiteralPath $ArtifactPath -PathType Leaf) -or
+            -not (Test-Path -LiteralPath $ProofPath -PathType Leaf)) {
+            throw $FailureReason
+        }
+        $hash = ((Get-FileHash -LiteralPath $ArtifactPath `
+            -Algorithm SHA256).Hash).ToLowerInvariant()
+        $proofLines = @(Get-Content -LiteralPath $ProofPath -Encoding UTF8)
+        if (@($proofLines | Where-Object {
+                    $_ -ceq "git.commit=$ExpectedCommit" }).Count -ne 1 -or
+            @($proofLines | Where-Object {
+                    $_ -ceq "artifact.sha256=$hash" }).Count -ne 1) {
+            throw $FailureReason
+        }
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+        $archive = [IO.Compression.ZipFile]::OpenRead($ArtifactPath)
+        try {
+            $entry = $archive.GetEntry('META-INF/MANIFEST.MF')
+            if ($null -eq $entry) { throw $FailureReason }
+            $reader = [IO.StreamReader]::new(
+                $entry.Open(), [Text.Encoding]::UTF8)
+            try { $manifest = $reader.ReadToEnd() -replace "`r?`n ", '' }
+            finally { $reader.Dispose() }
+        } finally {
+            $archive.Dispose()
+        }
+        if ($manifest -notmatch ('(?m)^Start-Class: ' +
+                [regex]::Escape($ExpectedStartClass) + '\s*$') -or
+            $manifest -notmatch ('(?m)^Stock-Quant-Git-Commit: ' +
+                [regex]::Escape($ExpectedCommit) + '\s*$')) {
+            throw $FailureReason
+        }
+    } catch {
+        throw $FailureReason
+    }
 }
 
 function Get-StartupActionRequiredMessage([string] $Reason) {
@@ -48,6 +95,9 @@ function Get-StartupActionRequiredMessage([string] $Reason) {
         }
         'M6_FORMAL_ARTIFACT_MISSING' {
             return 'The formal application build is missing. Run the controlled application update, then start again.'
+        }
+        'M6_RESEARCH_SELECTION_ARTIFACT_INVALID' {
+            return 'The stock-selection runtime is not aligned with this application version. Complete the controlled application update, then start again.'
         }
         'M6_JAVA_17_REQUIRED' {
             return 'Java 17 is required before Stock Quant Pro can start.'
@@ -105,6 +155,12 @@ try {
         Import-Module $protocolModule -Force -ErrorAction Stop
         Import-Module $startupSelfHealModule -Force -ErrorAction Stop
         $expectedHead = (git rev-parse HEAD).Trim()
+        Assert-StockQuantFormalArtifactBinding `
+            -ArtifactPath $selectionArtifact -ProofPath $selectionProof `
+            -ExpectedCommit $expectedHead `
+            -ExpectedStartClass `
+                'com.stockquant.server.agent.marketfacts.TushareResearchSelectionManualRunner' `
+            -FailureReason 'M6_RESEARCH_SELECTION_ARTIFACT_INVALID'
         Write-Output 'STOCK_QUANT_STARTUP_STAGE=CHECKING_RESIDENT_BROKER'
         $brokerProbeState = [pscustomobject]@{
             ProcessId = 0
@@ -208,6 +264,7 @@ try {
             'STOCK_QUANT_STARTUP_ACTION_REQUIRED:'.Length)
     } elseif ($failure -in @(
             'M6_FORMAL_ARTIFACT_MISSING', 'M6_JAVA_17_REQUIRED',
+            'M6_RESEARCH_SELECTION_ARTIFACT_INVALID',
             'M6_DATABASE_NOT_LISTENING',
             'M6_HOST_BROKER_OPERATION_FAILED',
             'M6_SYSTEM_HEALTH_BLOCKED')) {

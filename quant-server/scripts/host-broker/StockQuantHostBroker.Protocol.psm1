@@ -1811,6 +1811,23 @@ function Read-StockQuantHostBrokerRequest {
     }
 }
 
+function Get-StockQuantHostBrokerDeclaredOperation {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $Path
+    )
+    $paths = Get-StockQuantHostBrokerPaths
+    $full = Assert-StockQuantPathInside -Path $Path -Root $paths.Requests `
+        -FailureCode 'STOCK_QUANT_HOST_BROKER_REQUEST_PATH_INVALID' `
+        -MustExist -PathType Leaf
+    $values = Read-StrictStockQuantProperties -Path $full
+    if (-not $values.Contains('operation') -or
+        [string]$values['operation'] -notin $script:AllowedOperations) {
+        throw 'STOCK_QUANT_HOST_BROKER_OPERATION_NOT_ALLOWED'
+    }
+    return [string]$values['operation']
+}
+
 function Assert-StockQuantHostBrokerRequestIdAvailable {
     param(
         [Parameter(Mandatory = $true)]
@@ -1880,8 +1897,11 @@ function Write-StockQuantHostBrokerRequest {
     Assert-StockQuantHostBrokerRequestIdAvailable -RequestId $requestId
     $paths = Initialize-StockQuantHostBrokerDirectories
     $destination = Join-Path $paths.Requests "$requestId.request.properties"
+    # A .request.properties file is immediately claimable by the resident
+    # Broker. Validate the exact .processing form before atomically publishing
+    # it so a fast claim cannot make the submitter report a false rejection.
     $temporary = Join-Path $paths.Requests `
-        (".$requestId." + [Guid]::NewGuid().ToString('N') + '.tmp')
+        "$requestId.processing.properties"
     $lines = foreach ($key in $requestKeys) {
         $value = [string]$Values[$key]
         if ([string]::IsNullOrWhiteSpace($value) -or
@@ -1897,13 +1917,13 @@ function Write-StockQuantHostBrokerRequest {
     try {
         [IO.File]::WriteAllText(
             $temporary, $content, [Text.UTF8Encoding]::new($false))
+        Read-StockQuantHostBrokerRequest -Path $temporary | Out-Null
         [IO.File]::Move($temporary, $destination)
     } finally {
         if (Test-Path -LiteralPath $temporary) {
             Remove-Item -LiteralPath $temporary -Force
         }
     }
-    Read-StockQuantHostBrokerRequest -Path $destination | Out-Null
     return $destination
 }
 
@@ -2200,6 +2220,7 @@ Export-ModuleMember -Function @(
     'Get-StockQuantM4MonthlyUsage'
     'ConvertTo-StockQuantSafeCode'
     'Assert-StockQuantPathInside'
+    'Get-StockQuantHostBrokerDeclaredOperation'
     'Read-StockQuantHostBrokerRequest'
     'Assert-StockQuantHostBrokerRequestIdAvailable'
     'Write-StockQuantHostBrokerRequest'

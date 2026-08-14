@@ -58,6 +58,39 @@ class ResearchProductionContractTest {
                 "codex/1.4.0-v1.0.2-startup-self-heal-fix"));
         assertTrue(invoker.contains(
                 "codex/1.4.0-v1.0.2-startup-self-heal-fix"));
+        assertTrue(broker.contains(
+                "codex/1.4.0-v1.0.3-research-selection-runtime-fix"));
+        assertTrue(invoker.contains(
+                "codex/1.4.0-v1.0.3-research-selection-runtime-fix"));
+        assertTrue(invoker.contains(
+                "STOCK_QUANT_HOST_BROKER_STATUS=REJECTED"));
+        assertTrue(invoker.contains(
+                "STOCK_QUANT_HOST_BROKER_REASON=$reason"));
+
+        String build = read(
+                "scripts/prepare-m6-research-production-build-proof.ps1");
+        assertTrue(build.contains(
+                "@('M6_RESEARCH_PRODUCTION', 'RESEARCH_SELECTION')"));
+        assertTrue(build.contains(
+                "STOCK_QUANT_FORMAL_ARTIFACT_SET=PRODUCTION,RESEARCH_SELECTION"));
+        assertTrue(launcher.contains(
+                "quant-server-1.3.1-research-selection-runner.jar"));
+        assertTrue(launcher.contains(
+                "TushareResearchSelectionManualRunner"));
+        assertTrue(launcher.contains(
+                "M6_RESEARCH_SELECTION_ARTIFACT_INVALID"));
+
+        String protocol = read(
+                "scripts/host-broker/StockQuantHostBroker.Protocol.psm1");
+        int validate = protocol.indexOf(
+                "Read-StockQuantHostBrokerRequest -Path $temporary");
+        int publish = protocol.indexOf(
+                "[IO.File]::Move($temporary, $destination)");
+        assertTrue(validate > 0 && publish > validate);
+        assertTrue(broker.indexOf(
+                "Get-StockQuantHostBrokerDeclaredOperation")
+                < broker.indexOf(
+                "Read-StockQuantHostBrokerRequest"));
 
         String selfHeal = read("scripts/StockQuantStartupSelfHeal.psm1");
         assertTrue(selfHeal.contains("HOST_BROKER_NOT_RUNNING"));

@@ -148,9 +148,10 @@ try {
         $branch -eq 'codex/1.4.0-m3-agent-research-ready') {
         'codex/1.4.0-m3-agent-research-ready'
     } elseif ($Operation -eq 'RUN_RESEARCH_SELECTION' -and
-        $branch -eq
-            'codex/1.4.0-v1.0.1-research-selection-usability') {
-        'codex/1.4.0-v1.0.1-research-selection-usability'
+        $branch -in @(
+            'codex/1.4.0-v1.0.1-research-selection-usability',
+            'codex/1.4.0-v1.0.3-research-selection-runtime-fix')) {
+        $branch
     } elseif ($Operation -eq 'RUN_M4_SHADOW_RESEARCH' -and
         $branch -eq 'codex/1.4.0-m4-shadow-research-ready') {
         'codex/1.4.0-m4-shadow-research-ready'
@@ -169,6 +170,12 @@ try {
         $branch -eq
             'codex/1.4.0-v1.0.2-startup-self-heal-fix') {
         'codex/1.4.0-v1.0.2-startup-self-heal-fix'
+    } elseif ($Operation -in @('START_RESEARCH_PRODUCTION',
+            'STOP_RESEARCH_PRODUCTION',
+            'CHECK_RESEARCH_PRODUCTION_STATUS') -and
+        $branch -eq
+            'codex/1.4.0-v1.0.3-research-selection-runtime-fix') {
+        'codex/1.4.0-v1.0.3-research-selection-runtime-fix'
     } elseif ($Operation -in @('START_RESEARCH_PRODUCTION',
             'STOP_RESEARCH_PRODUCTION',
             'CHECK_RESEARCH_PRODUCTION_STATUS') -and
@@ -730,6 +737,11 @@ try {
     Write-Output "STOCK_QUANT_HOST_BROKER_REASON=$($result.reason)"
     if ($result.status -ne 'SUCCEEDED') { exit 20 }
     exit 0
+} catch {
+    $reason = ConvertTo-StockQuantSafeCode -ErrorValue $_
+    Write-Output 'STOCK_QUANT_HOST_BROKER_STATUS=REJECTED'
+    Write-Output "STOCK_QUANT_HOST_BROKER_REASON=$reason"
+    exit 20
 } finally {
     Pop-Location
 }

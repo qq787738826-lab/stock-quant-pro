@@ -610,7 +610,8 @@ public final class TushareControlledAcceptanceBuildProof {
                 == BuildMode.RESEARCH_SELECTION_CONTROLLED_BUILD_ARTIFACT) {
             return Set.of(
                     "codex/1.4.0-v1.0.1-research-selection-usability",
-                    "codex/1.4.0-v1.0.2-startup-self-heal-fix")
+                    "codex/1.4.0-v1.0.2-startup-self-heal-fix",
+                    "codex/1.4.0-v1.0.3-research-selection-runtime-fix")
                     .contains(branchName);
         }
         return REQUIRED_INTEGRATION_BRANCH.equals(branchName)

@@ -626,7 +626,14 @@ DATA_QUALITY 只作门禁和 confidence 上限，MARKET_REGIME V1 权重为 0 �
 - V1.0.2_STARTUP_SELF_HEAL_FIX 在启动器增加 Resident Broker heartbeat 等待：Broker 健康时直接继续，
   暂时不可用时等待既有 PT1M watchdog 自动恢复，恢复后再提交固定 Backend 启动请求；计划任务缺失、
   禁用、定义异常或恢复超时时转换为脱敏 `ACTION_REQUIRED`，不触发 Task Scheduler、不读取秘密、
-  不调用 Provider，也不改变 Broker/Task Scheduler 架构。当前在单一小版本任务分支待用户验收。
+  不调用 Provider，也不改变 Broker/Task Scheduler 架构；已合并至集成提交
+  `da43a0fc321c8437b61b85295169fb34a9a5534b`。
+- V1.0.3_RESEARCH_SELECTION_RUNTIME_FIX 修复正式升级时只冻结 Production JAR、遗漏同 SHA
+  Research Selection Runner 的资产漂移；正式资产准备现在原子生成两类 JAR/sidecar，启动器在 READY
+  前验证选股 Runner 的 Git、SHA-256、MANIFEST 与 Start-Class。Broker 请求改为发布前验证并原子公开，
+  消除 Resident Broker 抢先领取导致的虚假 dispatch failure；预 Runner 的脱敏失败 reason 保持到 API、
+  数据库终态和 UI 分类，页面区分数据、Provider、模型、预算、Broker、构建与数据库故障，同时保留折叠
+  的安全诊断码。未改变 Provider 预算、Research Universe、Shadow/Paper 历史或真实交易边界。
 
 ## 当前后续入口与阻断
 

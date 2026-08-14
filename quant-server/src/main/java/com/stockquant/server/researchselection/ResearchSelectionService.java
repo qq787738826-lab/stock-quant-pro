@@ -62,7 +62,8 @@ public final class ResearchSelectionService {
             String reason = safeCode(error,
                     "RESEARCH_SELECTION_DISPATCH_FAILED");
             repository.fail(run.runId(), Status.QUEUED,
-                    category(reason), reason, clock.instant());
+                    ResearchSelectionFailureCategory.from(reason), reason,
+                    clock.instant());
             throw error;
         }
     }
@@ -92,20 +93,6 @@ public final class ResearchSelectionService {
         String message = error.getMessage();
         return message != null && message.matches(
                 "[A-Z][A-Z0-9_]{3,127}") ? message : fallback;
-    }
-
-    private static String category(String reason) {
-        if (reason.contains("BUDGET")) return "BUDGET";
-        if (reason.contains("DATA") || reason.contains("CALENDAR")) {
-            return "DATA";
-        }
-        if (reason.contains("MODEL") || reason.contains("BAILIAN")) {
-            return "MODEL";
-        }
-        if (reason.contains("BROKER") || reason.contains("DISPATCH")) {
-            return "BROKER";
-        }
-        return "UNKNOWN";
     }
 
     private static String publicRunId(Instant at) {

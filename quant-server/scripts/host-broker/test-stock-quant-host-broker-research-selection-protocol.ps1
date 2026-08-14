@@ -127,8 +127,37 @@ try {
             [int]$parsed.Values['maximum.provider.requests'] -ne $maximum) {
             throw 'RESEARCH_SELECTION_PROTOCOL_VALID_REQUEST_REJECTED'
         }
+        # Read-Valid owns and removes its path, so exercise the declared
+        # operation parser through a fresh non-claimable processing file.
+        $declaredPath = Join-Path $paths.Requests `
+            "$($value['request.id']).processing.properties"
+        Write-Lines $declaredPath $value
+        try {
+            $declared = Get-StockQuantHostBrokerDeclaredOperation `
+                -Path $declaredPath
+            if ($declared -ne 'RUN_RESEARCH_SELECTION') {
+                throw 'RESEARCH_SELECTION_DECLARED_OPERATION_INVALID'
+            }
+        } finally {
+            Remove-Item -LiteralPath $declaredPath -Force `
+                -ErrorAction SilentlyContinue
+        }
         $tests++
     }
+
+    $protocolSource = Get-Content -LiteralPath (Join-Path $PSScriptRoot `
+        'StockQuantHostBroker.Protocol.psm1') -Raw -Encoding UTF8
+    $prePublishValidation = $protocolSource.IndexOf(
+        'Read-StockQuantHostBrokerRequest -Path $temporary')
+    $atomicPublish = $protocolSource.IndexOf(
+        '[IO.File]::Move($temporary, $destination)')
+    if ($prePublishValidation -lt 0 -or
+        $atomicPublish -le $prePublishValidation -or
+        $protocolSource.Contains(
+            'Read-StockQuantHostBrokerRequest -Path $destination')) {
+        throw 'RESEARCH_SELECTION_REQUEST_PUBLICATION_RACE_NOT_CLOSED'
+    }
+    $tests++
 
     foreach ($mutation in @(
             @('maximum.provider.requests', '51',

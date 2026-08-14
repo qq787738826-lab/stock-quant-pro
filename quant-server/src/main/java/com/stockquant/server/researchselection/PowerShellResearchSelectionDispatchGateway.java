@@ -17,6 +17,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 /** Writes one fixed, secret-free selection request through the resident Broker. */
@@ -80,7 +81,8 @@ public final class PowerShellResearchSelectionDispatchGateway
                     "STOCK_QUANT_HOST_BROKER_REQUEST_ID=" + requestId)
                     || !output.contains(
                     "STOCK_QUANT_HOST_BROKER_STATUS=SUBMITTED")) {
-                throw invalid("RESEARCH_SELECTION_DISPATCH_REJECTED");
+                throw invalid(rejectionReason(output).orElse(
+                        "RESEARCH_SELECTION_DISPATCH_REJECTED"));
             }
             return requestId;
         } catch (InterruptedException error) {
@@ -105,6 +107,24 @@ public final class PowerShellResearchSelectionDispatchGateway
             }
         }
         return List.copyOf(lines);
+    }
+
+    static Optional<String> rejectionReason(List<String> output) {
+        if (output == null || !output.contains(
+                "STOCK_QUANT_HOST_BROKER_STATUS=REJECTED")) {
+            return Optional.empty();
+        }
+        List<String> reasons = output.stream()
+                .filter(line -> line.startsWith(
+                        "STOCK_QUANT_HOST_BROKER_REASON="))
+                .map(line -> line.substring(
+                        "STOCK_QUANT_HOST_BROKER_REASON=".length()))
+                .filter(reason -> reason.matches(
+                        "[A-Z][A-Z0-9_]{3,127}"))
+                .distinct()
+                .toList();
+        return reasons.size() == 1 ? Optional.of(reasons.get(0))
+                : Optional.empty();
     }
 
     private static Path repositoryRoot() {

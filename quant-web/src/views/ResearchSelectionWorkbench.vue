@@ -9,6 +9,7 @@ const history = ref<SelectionSummary[]>([])
 const universe = ref<any>(null)
 const running = ref(false)
 const error = ref('')
+const diagnosticReason = ref('')
 const selectedWindow = ref(20)
 const activeRunId = ref<number | null>(null)
 const route = useRoute()
@@ -44,7 +45,7 @@ async function openRun(id: number) {
   if ('contractVersion' in value && value.status === 'COMPLETED') result.value = value
 }
 async function start() {
-  running.value = true; error.value = ''; result.value = null
+  running.value = true; error.value = ''; diagnosticReason.value = ''; result.value = null
   try {
     const accepted = await startSelection(selectedWindow.value)
     updateHistory(accepted.run)
@@ -56,6 +57,7 @@ async function start() {
   } catch (cause) {
     running.value = false
     error.value = startFriendly(cause)
+    diagnosticReason.value = safeDiagnostic(cause instanceof Error ? cause.message : '')
   }
 }
 function poll(id: number) {
@@ -69,6 +71,7 @@ function poll(id: number) {
         window.clearInterval(timer)
       } else if (value.status === 'FAILED') {
         error.value = friendly(value.failureCategory, value.failureReason)
+        diagnosticReason.value = safeDiagnostic(value.failureReason)
         running.value = false; activeRunId.value = null
         window.clearInterval(timer)
       }
@@ -82,9 +85,13 @@ function updateHistory(value: SelectionSummary) {
 }
 function friendly(category?: string, reason?: string) {
   if (category === 'BUDGET') return 'API预算不足，本次未继续消耗。'
-  if (category === 'DATA') return '数据不足，系统未生成强制候选。'
-  if (category === 'MODEL') return 'AI暂不可用，本次研究已安全停止。'
-  return `研究失败：${reason || '请稍后重试'}`
+  if (category === 'DATA') return '研究数据暂未准备完整，本次未生成强制候选。'
+  if (category === 'PROVIDER') return 'Tushare数据服务暂不可用，本次研究已安全停止。'
+  if (category === 'MODEL') return '百炼AI暂不可用，本次研究已安全停止。'
+  if (category === 'DATABASE') return '本地研究数据库暂不可用，系统正在等待恢复。'
+  if (category === 'BUILD') return '选股运行文件与当前版本不一致，请等待受控更新完成。'
+  if (category === 'BROKER') return '本地研究服务暂不可用，请等待系统自动恢复。'
+  return reason ? '研究未能完成，系统已安全停止。' : '研究暂不可用，请稍后重试。'
 }
 function startFriendly(cause: unknown) {
   const message = cause instanceof Error ? cause.message : ''
@@ -94,10 +101,20 @@ function startFriendly(cause: unknown) {
   if (message.startsWith('BUDGET:')) return 'API预算不足，本次未启动。'
   if (message.startsWith('DATA:')) return '数据准备暂不可用，本次未启动。'
   if (message.startsWith('MODEL:')) return 'AI暂不可用，本次未启动。'
+  if (message.includes('TUSHARE') || message.includes('PROVIDER')) {
+    return 'Tushare数据服务暂不可用，本次未启动。'
+  }
+  if (message.includes('BUILD') || message.includes('ARTIFACT') || message.includes('JAR')) {
+    return '选股运行文件与当前版本不一致，请等待受控更新完成。'
+  }
   if (message.startsWith('BROKER:') || message.startsWith('BUILD:')) {
     return '本地研究服务暂不可用，请等待系统自动恢复。'
   }
   return '研究启动失败，系统未产生真实交易。'
+}
+function safeDiagnostic(value?: string) {
+  const match = String(value || '').match(/[A-Z][A-Z0-9_]{3,127}/)
+  return match?.[0] || ''
 }
 const pct = (v: number) => `${(Number(v) * 100).toFixed(2)}%`
 onMounted(load)
@@ -116,6 +133,7 @@ onBeforeUnmount(() => window.clearInterval(timer))
     </header>
     <div class="boundary">研究与 Paper 模拟用途 · 真实交易 OFF · 当前分析不是 Historical Live Shadow</div>
     <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon />
+    <details v-if="error && diagnosticReason" class="diagnostic"><summary>高级诊断信息</summary><code>{{ diagnosticReason }}</code></details>
     <div v-if="running" class="stage-track"><div v-for="(stage, index) in stages" :key="stage" :class="{ active: index <= currentStage }"><i>{{ index + 1 }}</i><span>{{ stage }}</span></div></div>
 
     <template v-if="result">
@@ -135,5 +153,5 @@ onBeforeUnmount(() => window.clearInterval(timer))
 </template>
 
 <style scoped>
-.selection-page{display:grid;gap:18px}.selection-hero{height:auto;background:linear-gradient(135deg,#102a46,#101d30);border:1px solid #2b4c6d;border-radius:12px;padding:24px;display:flex;justify-content:space-between;align-items:center}.selection-hero p{color:#63b7ff;font-size:12px;letter-spacing:.12em}.selection-hero h1{font-size:30px;margin:4px 0}.selection-hero span,.boundary{color:#94a5bb}.selection-action{display:flex;gap:10px}.selection-action select{background:#0c1a2a;border:1px solid #34506d;color:#d9e6f5;border-radius:8px;padding:0 14px}.select-now{background:#1d8cff;border:0;color:white;border-radius:8px;font-size:16px;font-weight:700;padding:14px 26px;cursor:pointer}.select-now:disabled{opacity:.6}.boundary{font-size:12px;background:#121e2e;border-left:3px solid #e0a84e;padding:10px 14px}.stage-track{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}.stage-track div{display:flex;align-items:center;gap:8px;color:#65778f;background:#101b2a;padding:12px}.stage-track i{font-style:normal;border:1px solid #3c4d63;width:24px;height:24px;border-radius:50%;display:grid;place-items:center}.stage-track .active{color:#dcecff}.stage-track .active i{background:#1d8cff;border-color:#1d8cff}.summary-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.summary-strip article,.result-panel,.result-grid article,.history-panel,.agent-panel{background:#0f1b2c;border:1px solid #263951;border-radius:10px;padding:18px}.summary-strip span{display:block;color:#7f91a8;font-size:12px}.summary-strip b{display:block;margin-top:8px}.result-panel h2,.result-grid h2,.history-panel h2,.agent-panel h2{margin:0 0 14px}.empty-result{display:grid;text-align:center;padding:36px;color:#8fa2ba}.empty-result strong{font-size:22px;color:#e2eaf5}.candidate-card{display:grid;grid-template-columns:54px 1fr;gap:14px;padding:16px 0;border-top:1px solid #25364c}.candidate-rank{height:42px;width:42px;border-radius:8px;background:#183b60;color:#73bcff;display:grid;place-items:center;font-size:20px;font-weight:700}.candidate-main h3{margin:0}.candidate-main small,.candidate-main p{color:#8ea0b7}.candidate-main p{margin:9px 0}.candidate-tags{display:flex;gap:8px;margin:10px 0;flex-wrap:wrap}.candidate-tags>*{background:#152a43;border-radius:4px;padding:4px 8px;font-size:12px}.candidate-tags b{color:#6bb8ff}.strategy-row{display:flex;gap:8px;overflow:auto;padding:5px 0 9px}.strategy-row span{min-width:225px;background:#111f31;border:1px solid #263a52;border-radius:6px;padding:8px;color:#8ea0b7;font-size:11px}.strategy-row b{display:block;color:#cfe3fa;margin-bottom:4px}.opposing{color:#c5a76e!important}.result-grid{display:grid;grid-template-columns:2fr 1fr;gap:12px}.result-grid p{color:#91a2b8}.result-grid a{color:#5eb1ff}.agent-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.agent-grid article{background:#111f31;border:1px solid #263a52;border-radius:7px;padding:12px}.agent-grid header{display:flex;justify-content:space-between;color:#dcecff}.agent-grid header span,.agent-grid small{color:#70839a;font-size:11px}.agent-grid p{font-size:12px;color:#9aacc1}.agent-grid em{font-style:normal;color:#5db2ff;margin-right:7px}.critic-box,.paper-box{margin-top:12px;display:flex;gap:12px;align-items:center;background:#16263a;padding:12px;border-radius:6px}.critic-box span,.paper-box span{color:#a6b5c7;flex:1}.critic-box small{color:#7589a0}.history-row{cursor:pointer}.history-row:hover{background:#14253a}table{width:100%;border-collapse:collapse;font-size:12px}th{text-align:left;color:#71839b;padding:8px;border-bottom:1px solid #2a3a50}td{padding:10px 8px;border-bottom:1px solid #1d2c40}td small{display:block;color:#64778f;margin-top:2px}@media(max-width:1100px){.selection-hero{align-items:flex-start;gap:16px}.summary-strip,.result-grid,.agent-grid{grid-template-columns:1fr}.stage-track{grid-template-columns:repeat(3,1fr)}}
+.selection-page{display:grid;gap:18px}.selection-hero{height:auto;background:linear-gradient(135deg,#102a46,#101d30);border:1px solid #2b4c6d;border-radius:12px;padding:24px;display:flex;justify-content:space-between;align-items:center}.selection-hero p{color:#63b7ff;font-size:12px;letter-spacing:.12em}.selection-hero h1{font-size:30px;margin:4px 0}.selection-hero span,.boundary{color:#94a5bb}.selection-action{display:flex;gap:10px}.selection-action select{background:#0c1a2a;border:1px solid #34506d;color:#d9e6f5;border-radius:8px;padding:0 14px}.select-now{background:#1d8cff;border:0;color:white;border-radius:8px;font-size:16px;font-weight:700;padding:14px 26px;cursor:pointer}.select-now:disabled{opacity:.6}.boundary{font-size:12px;background:#121e2e;border-left:3px solid #e0a84e;padding:10px 14px}.diagnostic{font-size:12px;color:#7f91a8;background:#101b2a;border:1px solid #263951;border-radius:6px;padding:9px 12px}.diagnostic code{display:block;color:#9db0c8;margin-top:8px}.stage-track{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}.stage-track div{display:flex;align-items:center;gap:8px;color:#65778f;background:#101b2a;padding:12px}.stage-track i{font-style:normal;border:1px solid #3c4d63;width:24px;height:24px;border-radius:50%;display:grid;place-items:center}.stage-track .active{color:#dcecff}.stage-track .active i{background:#1d8cff;border-color:#1d8cff}.summary-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.summary-strip article,.result-panel,.result-grid article,.history-panel,.agent-panel{background:#0f1b2c;border:1px solid #263951;border-radius:10px;padding:18px}.summary-strip span{display:block;color:#7f91a8;font-size:12px}.summary-strip b{display:block;margin-top:8px}.result-panel h2,.result-grid h2,.history-panel h2,.agent-panel h2{margin:0 0 14px}.empty-result{display:grid;text-align:center;padding:36px;color:#8fa2ba}.empty-result strong{font-size:22px;color:#e2eaf5}.candidate-card{display:grid;grid-template-columns:54px 1fr;gap:14px;padding:16px 0;border-top:1px solid #25364c}.candidate-rank{height:42px;width:42px;border-radius:8px;background:#183b60;color:#73bcff;display:grid;place-items:center;font-size:20px;font-weight:700}.candidate-main h3{margin:0}.candidate-main small,.candidate-main p{color:#8ea0b7}.candidate-main p{margin:9px 0}.candidate-tags{display:flex;gap:8px;margin:10px 0;flex-wrap:wrap}.candidate-tags>*{background:#152a43;border-radius:4px;padding:4px 8px;font-size:12px}.candidate-tags b{color:#6bb8ff}.strategy-row{display:flex;gap:8px;overflow:auto;padding:5px 0 9px}.strategy-row span{min-width:225px;background:#111f31;border:1px solid #263a52;border-radius:6px;padding:8px;color:#8ea0b7;font-size:11px}.strategy-row b{display:block;color:#cfe3fa;margin-bottom:4px}.opposing{color:#c5a76e!important}.result-grid{display:grid;grid-template-columns:2fr 1fr;gap:12px}.result-grid p{color:#91a2b8}.result-grid a{color:#5eb1ff}.agent-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.agent-grid article{background:#111f31;border:1px solid #263a52;border-radius:7px;padding:12px}.agent-grid header{display:flex;justify-content:space-between;color:#dcecff}.agent-grid header span,.agent-grid small{color:#70839a;font-size:11px}.agent-grid p{font-size:12px;color:#9aacc1}.agent-grid em{font-style:normal;color:#5db2ff;margin-right:7px}.critic-box,.paper-box{margin-top:12px;display:flex;gap:12px;align-items:center;background:#16263a;padding:12px;border-radius:6px}.critic-box span,.paper-box span{color:#a6b5c7;flex:1}.critic-box small{color:#7589a0}.history-row{cursor:pointer}.history-row:hover{background:#14253a}table{width:100%;border-collapse:collapse;font-size:12px}th{text-align:left;color:#71839b;padding:8px;border-bottom:1px solid #2a3a50}td{padding:10px 8px;border-bottom:1px solid #1d2c40}td small{display:block;color:#64778f;margin-top:2px}@media(max-width:1100px){.selection-hero{align-items:flex-start;gap:16px}.summary-strip,.result-grid,.agent-grid{grid-template-columns:1fr}.stage-track{grid-template-columns:repeat(3,1fr)}}
 </style>

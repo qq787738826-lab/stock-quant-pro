@@ -13,6 +13,7 @@ import com.stockquant.server.agent.shadowresearch.ShadowPaperPortfolioService;
 import com.stockquant.server.agent.shadowresearch.ShadowResearchRepository;
 import com.stockquant.server.researchselection.ResearchSelectionDeepResearchService;
 import com.stockquant.server.researchselection.ResearchSelectionEngine;
+import com.stockquant.server.researchselection.ResearchSelectionFailureCategory;
 import com.stockquant.server.researchselection.ResearchSelectionModels;
 import com.stockquant.server.researchselection.ResearchSelectionModels.DataCoverage;
 import com.stockquant.server.researchselection.ResearchSelectionModels.SelectionResult;
@@ -290,7 +291,8 @@ public final class TushareResearchSelectionManualRunner {
     ) {
         String reason = safeCode(error);
         try {
-            repository.fail(runId, current, failureCategory(reason), reason,
+            repository.fail(runId, current,
+                    ResearchSelectionFailureCategory.from(reason), reason,
                     clock.instant());
         } catch (RuntimeException terminalFailure) {
             error.addSuppressed(terminalFailure);
@@ -488,18 +490,6 @@ public final class TushareResearchSelectionManualRunner {
         return message != null && message.matches(
                 "[A-Z][A-Z0-9_]{3,127}") ? message
                 : "RESEARCH_SELECTION_EXECUTION_FAILED";
-    }
-
-    private static String failureCategory(String reason) {
-        if (reason.contains("BUDGET")) return "BUDGET";
-        if (reason.contains("DATA") || reason.contains("CALENDAR")
-                || reason.contains("FACT")) return "DATA";
-        if (reason.contains("MODEL") || reason.contains("BAILIAN")
-                || reason.contains("LLM")) return "MODEL";
-        if (reason.contains("DATABASE") || reason.contains("PERSIST")) {
-            return "DATABASE";
-        }
-        return "UNKNOWN";
     }
 
     private static IllegalStateException invalid(String code) {

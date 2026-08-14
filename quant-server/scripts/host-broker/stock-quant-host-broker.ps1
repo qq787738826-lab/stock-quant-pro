@@ -181,13 +181,14 @@ function Assert-GitBinding {
                     [StringComparison]::OrdinalIgnoreCase)) {
                 'codex/1.4.0-m6-research-production-ready'
             } elseif ($BrokerRequest.Operation -eq
-                    'RUN_RESEARCH_SELECTION' -and $branch -eq
-                    'codex/1.4.0-v1.0.1-research-selection-usability' -and
+                    'RUN_RESEARCH_SELECTION' -and $branch -in @(
+                    'codex/1.4.0-v1.0.1-research-selection-usability',
+                    'codex/1.4.0-v1.0.3-research-selection-runtime-fix') -and
                 [IO.Path]::GetFullPath($BrokerRequest.JarPath).Equals(
                     (Join-Path $paths.TargetRoot `
                         'quant-server-1.3.1-research-selection-runner.jar'),
                     [StringComparison]::OrdinalIgnoreCase)) {
-                'codex/1.4.0-v1.0.1-research-selection-usability'
+                $branch
             } elseif ($BrokerRequest.Operation -in @(
                     'START_RESEARCH_PRODUCTION',
                     'STOP_RESEARCH_PRODUCTION',
@@ -210,6 +211,17 @@ function Assert-GitBinding {
                         'quant-server-1.3.1-research-production.jar'),
                     [StringComparison]::OrdinalIgnoreCase)) {
                 'codex/1.4.0-v1.0.2-startup-self-heal-fix'
+            } elseif ($BrokerRequest.Operation -in @(
+                    'START_RESEARCH_PRODUCTION',
+                    'STOP_RESEARCH_PRODUCTION',
+                    'CHECK_RESEARCH_PRODUCTION_STATUS') -and
+                $branch -eq
+                    'codex/1.4.0-v1.0.3-research-selection-runtime-fix' -and
+                [IO.Path]::GetFullPath($BrokerRequest.JarPath).Equals(
+                    (Join-Path $paths.TargetRoot `
+                        'quant-server-1.3.1-research-production.jar'),
+                    [StringComparison]::OrdinalIgnoreCase)) {
+                'codex/1.4.0-v1.0.3-research-selection-runtime-fix'
             } elseif ($BrokerRequest.Operation -in @(
                     'START_RESEARCH_PRODUCTION',
                     'STOP_RESEARCH_PRODUCTION',
@@ -1541,6 +1553,7 @@ function Assert-ResearchProductionBinding {
             $branch -notin @($integrationBranch,
                 'codex/1.4.0-v1.0.1-research-selection-usability',
                 'codex/1.4.0-v1.0.2-startup-self-heal-fix',
+                'codex/1.4.0-v1.0.3-research-selection-runtime-fix',
                 'codex/1.4.0-m6-research-production-ready') -or
             $unexpected.Count -ne 0 -or
             @(git diff --cached --name-only).Count -ne 0) {
@@ -2049,9 +2062,10 @@ function Invoke-ClaimedRequest {
         [IO.File]::Move($Candidate.FullName, $processingPath)
 
         $script:stage = 'REQUEST_VALIDATION'
+        $script:operation = Get-StockQuantHostBrokerDeclaredOperation `
+            -Path $processingPath
         $script:request = Read-StockQuantHostBrokerRequest `
             -Path $processingPath
-        $script:operation = $request.Operation
         Assert-GitBinding -BrokerRequest $request
 
         $script:stage = $operation

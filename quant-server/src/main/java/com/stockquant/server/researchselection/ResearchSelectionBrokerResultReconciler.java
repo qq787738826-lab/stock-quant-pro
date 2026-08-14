@@ -58,7 +58,8 @@ public final class ResearchSelectionBrokerResultReconciler {
                     try {
                         repository.fail(run.runId(),
                                 ResearchSelectionModels.Status.QUEUED,
-                                category(value.reason()), value.reason(),
+                                ResearchSelectionFailureCategory.from(
+                                        value.reason()), value.reason(),
                                 clock.instant());
                     } catch (IllegalStateException ignored) {
                         // The Runner may have claimed or terminalized it concurrently.
@@ -94,21 +95,6 @@ public final class ResearchSelectionBrokerResultReconciler {
         } catch (IOException error) {
             return Optional.empty();
         }
-    }
-
-    private static String category(String reason) {
-        if (reason.contains("BUDGET")) return "BUDGET";
-        if (reason.contains("DATA") || reason.contains("CALENDAR")) {
-            return "DATA";
-        }
-        if (reason.contains("MODEL") || reason.contains("BAILIAN")) {
-            return "MODEL";
-        }
-        if (reason.contains("BROKER") || reason.contains("REQUEST")
-                || reason.contains("BUILD") || reason.contains("GIT")) {
-            return "BROKER";
-        }
-        return "UNKNOWN";
     }
 
     private static Path repositoryRoot() {

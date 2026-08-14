@@ -183,8 +183,10 @@ class TushareControlledAcceptanceTrustedMechanismTest {
         String mode = "RESEARCH_SELECTION_CONTROLLED_BUILD_ARTIFACT";
         for (String branch : List.of(
                 "codex/1.4.0-v1.0.1-research-selection-usability",
-                "codex/1.4.0-v1.0.2-startup-self-heal-fix")) {
-            String suffix = branch.contains("v1.0.2") ? "v102" : "v101";
+                "codex/1.4.0-v1.0.2-startup-self-heal-fix",
+                "codex/1.4.0-v1.0.3-research-selection-runtime-fix")) {
+            String suffix = branch.contains("v1.0.3") ? "v103"
+                    : branch.contains("v1.0.2") ? "v102" : "v101";
             Path selectionJar = temp.resolve(
                     "research-selection-" + suffix + ".jar");
             writeJarWithStartClass(selectionJar, COMMIT, branch, mode,

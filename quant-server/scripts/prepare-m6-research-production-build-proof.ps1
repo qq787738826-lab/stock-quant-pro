@@ -26,12 +26,21 @@ $mode = if ($branch -eq 'feature/1.4.0-agent-team') {
     'CONTROLLED_BUILD_ARTIFACT'
 } elseif ($branch -in @(
         'codex/1.4.0-v1.0.1-research-selection-usability',
-        'codex/1.4.0-v1.0.2-startup-self-heal-fix')) {
+        'codex/1.4.0-v1.0.2-startup-self-heal-fix',
+        'codex/1.4.0-v1.0.3-research-selection-runtime-fix')) {
     'RESEARCH_SELECTION_CONTROLLED_BUILD_ARTIFACT'
 } else { 'M6_STAGE_CONTROLLED_BUILD_ARTIFACT' }
 
-& "$PSScriptRoot\prepare-f1f-b2-build-proof.ps1" `
-    -ExpectedCommit $ExpectedCommit `
-    -Mode $mode `
-    -RunnerProfile $RunnerProfile
-exit $LASTEXITCODE
+$profiles = if ($RunnerProfile -eq 'M6_RESEARCH_PRODUCTION') {
+    @('M6_RESEARCH_PRODUCTION', 'RESEARCH_SELECTION')
+} else { @($RunnerProfile) }
+foreach ($profile in $profiles) {
+    & "$PSScriptRoot\prepare-f1f-b2-build-proof.ps1" `
+        -ExpectedCommit $ExpectedCommit `
+        -Mode $mode `
+        -RunnerProfile $profile
+    if ($LASTEXITCODE -ne 0) {
+        throw "STOCK_QUANT_FORMAL_ARTIFACT_BUILD_FAILED_$profile"
+    }
+}
+Write-Output 'STOCK_QUANT_FORMAL_ARTIFACT_SET=PRODUCTION,RESEARCH_SELECTION'
