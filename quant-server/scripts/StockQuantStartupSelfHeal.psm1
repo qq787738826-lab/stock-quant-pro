@@ -5,7 +5,7 @@ function Wait-StockQuantHostBrokerRecovery {
     param(
         [Parameter(Mandatory = $true)]
         [scriptblock] $HeartbeatProbe,
-        [ValidateRange(1, 180000)]
+        [ValidateRange(1, 900000)]
         [int] $TimeoutMilliseconds = 120000,
         [ValidateRange(1, 5000)]
         [int] $PollMilliseconds = 1000,

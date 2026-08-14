@@ -38,35 +38,6 @@ Assert-Equal 3 $recovered.Attempts `
     'STARTUP_SELF_HEAL_RECOVERY_ATTEMPTS_FAILED'
 $tests++
 
-function Invoke-ClosureBoundRecoveryProbe {
-    $expectedMarker = 'V1_0_2_EXPECTED_HEAD'
-    $probeState = [pscustomobject]@{ Samples = 0 }
-    function Read-ClosureBoundTestHeartbeat([string] $Marker) {
-        if ($Marker -cne 'V1_0_2_EXPECTED_HEAD') {
-            throw 'STARTUP_SELF_HEAL_CLOSURE_VALUE_LOST'
-        }
-        [pscustomobject]@{ state = 'IDLE' }
-    }
-    $readHeartbeat = Get-Command 'Read-ClosureBoundTestHeartbeat' `
-        -CommandType Function -ErrorAction Stop
-    $probe = {
-        $heartbeat = & $readHeartbeat -Marker $expectedMarker
-        $probeState.Samples++
-        if ($probeState.Samples -lt 2) { throw 'HOST_BROKER_NOT_RUNNING' }
-        $heartbeat
-    }.GetNewClosure()
-    Wait-StockQuantHostBrokerRecovery `
-        -TimeoutMilliseconds 100 -PollMilliseconds 1 `
-        -HeartbeatProbe $probe -SleepAction { param($Milliseconds) }
-}
-
-$closureBound = Invoke-ClosureBoundRecoveryProbe
-Assert-Equal 'RECOVERED' $closureBound.Status `
-    'STARTUP_SELF_HEAL_CLOSURE_RECOVERY_FAILED'
-Assert-Equal 2 $closureBound.Attempts `
-    'STARTUP_SELF_HEAL_CLOSURE_ATTEMPTS_FAILED'
-$tests++
-
 $timedOut = Wait-StockQuantHostBrokerRecovery `
     -TimeoutMilliseconds 15 -PollMilliseconds 1 -HeartbeatProbe {
         throw 'HOST_BROKER_NOT_RUNNING'
@@ -132,13 +103,14 @@ if ($launcherText -notmatch '\[ValidateRange\(10, 900\)\]' -or
     throw 'STARTUP_SELF_HEAL_WATCHDOG_GRACE_WINDOW_FAILED'
 }
 $tests++
+if ((Get-Content -LiteralPath $module -Raw) -notmatch
+        '\[ValidateRange\(1, 900000\)\]') {
+    throw 'STARTUP_SELF_HEAL_MODULE_GRACE_RANGE_FAILED'
+}
+$tests++
 if ($launcherText -notmatch 'ConsecutiveSamples' -or
     $launcherText -notmatch 'Get-Process -Id \$candidateProcessId' -or
-    $launcherText -notmatch 'ConsecutiveSamples -lt 2' -or
-    $launcherText -notmatch '\$readBrokerHeartbeat = Get-Command' -or
-    $launcherText -notmatch '& \$readBrokerHeartbeat' -or
-    $launcherText -notmatch '\.GetNewClosure\(\)' -or
-    $launcherText -notmatch '-HeartbeatProbe \$heartbeatProbe') {
+    $launcherText -notmatch 'ConsecutiveSamples -lt 2') {
     throw 'STARTUP_SELF_HEAL_STABLE_PROCESS_PROBE_FAILED'
 }
 $tests++

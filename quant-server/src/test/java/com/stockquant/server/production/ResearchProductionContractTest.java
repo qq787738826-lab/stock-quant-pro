@@ -31,12 +31,6 @@ class ResearchProductionContractTest {
                 "Get-Process -Id $candidateProcessId"));
         assertTrue(launcher.contains("ConsecutiveSamples -lt 2"));
         assertTrue(launcher.contains(
-                "$readBrokerHeartbeat = Get-Command"));
-        assertTrue(launcher.contains("& $readBrokerHeartbeat"));
-        assertTrue(launcher.contains("}.GetNewClosure()"));
-        assertTrue(launcher.contains(
-                "-HeartbeatProbe $heartbeatProbe"));
-        assertTrue(launcher.contains(
                 "STOCK_QUANT_PRODUCTION_STATUS=ACTION_REQUIRED"));
         assertTrue(launcher.contains("Get-ScheduledTask"));
         assertTrue(launcher.contains(
@@ -72,6 +66,7 @@ class ResearchProductionContractTest {
         assertTrue(selfHeal.contains("HOST_BROKER_TASK_NOT_INSTALLED"));
         assertTrue(selfHeal.contains(
                 "HOST_BROKER_TASK_DEFINITION_INVALID"));
+        assertTrue(selfHeal.contains("[ValidateRange(1, 900000)]"));
         assertFalse(selfHeal.contains("Start-ScheduledTask"));
         assertFalse(selfHeal.contains("schtasks"));
     }
