@@ -30,6 +30,9 @@ class ResearchProductionContractTest {
         assertTrue(launcher.contains(
                 "Get-Process -Id $candidateProcessId"));
         assertTrue(launcher.contains("ConsecutiveSamples -lt 2"));
+        assertTrue(launcher.contains("}.GetNewClosure()"));
+        assertTrue(launcher.contains(
+                "-HeartbeatProbe $heartbeatProbe"));
         assertTrue(launcher.contains(
                 "STOCK_QUANT_PRODUCTION_STATUS=ACTION_REQUIRED"));
         assertTrue(launcher.contains("Get-ScheduledTask"));

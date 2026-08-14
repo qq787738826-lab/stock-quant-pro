@@ -110,30 +110,31 @@ try {
             ProcessId = 0
             ConsecutiveSamples = 0
         }
+        $heartbeatProbe = {
+            $candidate = Read-StockQuantHostBrokerHeartbeat `
+                -ExpectedGitCommit $expectedHead `
+                -AllowAncestorGitCommit
+            $candidateProcessId = [int]$candidate.processId
+            if ($null -eq (Get-Process -Id $candidateProcessId `
+                    -ErrorAction SilentlyContinue)) {
+                $brokerProbeState.ProcessId = 0
+                $brokerProbeState.ConsecutiveSamples = 0
+                throw 'HOST_BROKER_NOT_RUNNING'
+            }
+            if ($brokerProbeState.ProcessId -eq $candidateProcessId) {
+                $brokerProbeState.ConsecutiveSamples++
+            } else {
+                $brokerProbeState.ProcessId = $candidateProcessId
+                $brokerProbeState.ConsecutiveSamples = 1
+            }
+            if ($brokerProbeState.ConsecutiveSamples -lt 2) {
+                throw 'HOST_BROKER_NOT_RUNNING'
+            }
+            $candidate
+        }.GetNewClosure()
         $brokerWait = Wait-StockQuantHostBrokerRecovery `
             -TimeoutMilliseconds ($TimeoutSeconds * 1000) `
-            -PollMilliseconds 1000 -HeartbeatProbe {
-                $candidate = Read-StockQuantHostBrokerHeartbeat `
-                    -ExpectedGitCommit $expectedHead `
-                    -AllowAncestorGitCommit
-                $candidateProcessId = [int]$candidate.processId
-                if ($null -eq (Get-Process -Id $candidateProcessId `
-                        -ErrorAction SilentlyContinue)) {
-                    $brokerProbeState.ProcessId = 0
-                    $brokerProbeState.ConsecutiveSamples = 0
-                    throw 'HOST_BROKER_NOT_RUNNING'
-                }
-                if ($brokerProbeState.ProcessId -eq $candidateProcessId) {
-                    $brokerProbeState.ConsecutiveSamples++
-                } else {
-                    $brokerProbeState.ProcessId = $candidateProcessId
-                    $brokerProbeState.ConsecutiveSamples = 1
-                }
-                if ($brokerProbeState.ConsecutiveSamples -lt 2) {
-                    throw 'HOST_BROKER_NOT_RUNNING'
-                }
-                $candidate
-            }
+            -PollMilliseconds 1000 -HeartbeatProbe $heartbeatProbe
         if ($brokerWait.Status -eq 'TIMEOUT') {
             $task = $null
             $taskQuerySucceeded = $true
