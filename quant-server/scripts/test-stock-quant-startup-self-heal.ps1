@@ -98,6 +98,11 @@ if ($launcherText -notmatch 'Wait-StockQuantHostBrokerRecovery' -or
     throw 'STARTUP_SELF_HEAL_LAUNCHER_WAIT_CONTRACT_FAILED'
 }
 $tests++
+if ($launcherText -notmatch '\[ValidateRange\(10, 900\)\]' -or
+    $launcherText -notmatch '\[int\] \$TimeoutSeconds = 600') {
+    throw 'STARTUP_SELF_HEAL_WATCHDOG_GRACE_WINDOW_FAILED'
+}
+$tests++
 if ($launcherText -notmatch 'Get-ScheduledTask' -or
     $launcherText -notmatch 'Assert-StockQuantHostBrokerTaskDefinition' -or
     $launcherText -notmatch 'StockQuantLocalBroker') {

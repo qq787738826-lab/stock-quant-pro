@@ -3,8 +3,8 @@ param(
     [ValidateSet('Start', 'Status', 'Stop', 'Backup')]
     [string] $Action = 'Start',
     [switch] $NoBrowser,
-    [ValidateRange(10, 180)]
-    [int] $TimeoutSeconds = 120
+    [ValidateRange(10, 900)]
+    [int] $TimeoutSeconds = 600
 )
 
 $ErrorActionPreference = 'Stop'

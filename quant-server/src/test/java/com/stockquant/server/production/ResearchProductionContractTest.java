@@ -24,6 +24,8 @@ class ResearchProductionContractTest {
         assertTrue(launcher.contains("Wait-StockQuantHostBrokerRecovery"));
         assertTrue(launcher.contains("Read-StockQuantHostBrokerHeartbeat"));
         assertTrue(launcher.contains("CHECKING_RESIDENT_BROKER"));
+        assertTrue(launcher.contains("[ValidateRange(10, 900)]"));
+        assertTrue(launcher.contains("[int] $TimeoutSeconds = 600"));
         assertTrue(launcher.contains(
                 "STOCK_QUANT_PRODUCTION_STATUS=ACTION_REQUIRED"));
         assertTrue(launcher.contains("Get-ScheduledTask"));
