@@ -72,7 +72,13 @@ public final class ShadowResearchScheduler {
                 && !repository.nextCommonOpenKnown(date, clock.instant())) {
             calendar = ShadowResearchRepository.CalendarState.UNKNOWN;
         }
-        var result = dispatcher.dispatch(date, clock.instant(), calendar);
+        ShadowResearchDispatchGateway.DispatchResult result;
+        try {
+            result = dispatcher.dispatch(date, clock.instant(), calendar);
+        } catch (RuntimeException error) {
+            runtimeState.checked(clock.instant(), safeCode(error));
+            throw error;
+        }
         if (result.accepted()) {
             runtimeState.dispatched(clock.instant());
         } else {
@@ -88,5 +94,12 @@ public final class ShadowResearchScheduler {
     static boolean eligibleWeekday(LocalDate date) {
         return date.getDayOfWeek() != DayOfWeek.SATURDAY
                 && date.getDayOfWeek() != DayOfWeek.SUNDAY;
+    }
+
+    private static String safeCode(Throwable error) {
+        String message = error.getMessage();
+        return message != null && message.matches(
+                "[A-Z][A-Z0-9_]{3,127}")
+                ? message : "M4_SCHEDULER_DISPATCH_FAILED";
     }
 }

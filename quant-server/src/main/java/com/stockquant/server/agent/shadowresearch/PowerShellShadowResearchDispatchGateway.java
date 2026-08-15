@@ -24,6 +24,7 @@ import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -100,21 +101,10 @@ public final class PowerShellShadowResearchDispatchGateway
             fixedFile(root, artifact.toString()
                     + ".f1f-b2-proof.properties");
             Path powershell = powershell();
-            List<String> command = List.of(
-                    powershell.toString(), "-NoProfile", "-NonInteractive",
-                    "-ExecutionPolicy", "Bypass", "-File",
-                    script.toString(), "-Operation",
-                    "RUN_RESEARCH_SELECTION", "-ArtifactPath",
-                    artifact.toString(), "-RequestId", requestId,
-                    "-SelectionRunId", Long.toString(selection.runId()),
-                    "-SelectionPublicRunId", selection.publicRunId(),
-                    "-SelectionTrigger", "SCHEDULED_SHADOW",
-                    "-PrimaryWindow", "20", "-AuxiliaryWindow", "60",
-                    "-MaximumProviderRequests",
-                    Integer.toString(maximumProviderRequests(
-                            selectionRequest, researchAsOf)),
-                    "-SubmitOnly",
-                    "-TimeoutSeconds", "30");
+            List<String> command = brokerCommand(powershell, script,
+                    artifact, requestId, selection.runId(),
+                    selection.publicRunId(), maximumProviderRequests(
+                            selectionRequest, researchAsOf));
             Process process = new ProcessBuilder(command)
                     .directory(root.toFile()).redirectErrorStream(true)
                     .start();
@@ -131,7 +121,8 @@ public final class PowerShellShadowResearchDispatchGateway
                     && output.contains(
                     "STOCK_QUANT_HOST_BROKER_STATUS=SUBMITTED");
             if (!accepted) {
-                throw invalid("M4_SCHEDULER_BROKER_SUBMIT_REJECTED");
+                throw invalid(rejectionReason(output).orElse(
+                        "M4_SCHEDULER_BROKER_SUBMIT_REJECTED"));
             }
             selections.bindBrokerRequest(selection.runId(), requestId);
             repository.completeScheduledDispatch(requestId, true, null,
@@ -168,6 +159,47 @@ public final class PowerShellShadowResearchDispatchGateway
             }
         }
         return List.copyOf(lines);
+    }
+
+    static List<String> brokerCommand(
+            Path powershell,
+            Path script,
+            Path artifact,
+            String requestId,
+            long selectionRunId,
+            String selectionPublicRunId,
+            int maximumProviderRequests
+    ) {
+        return List.of(
+                powershell.toString(), "-NoProfile", "-NonInteractive",
+                "-ExecutionPolicy", "Bypass", "-File", script.toString(),
+                "-Operation", "RUN_RESEARCH_SELECTION", "-ArtifactPath",
+                artifact.toString(), "-RequestId", requestId,
+                "-SelectionRunId", Long.toString(selectionRunId),
+                "-SelectionPublicRunId", selectionPublicRunId,
+                "-SelectionTrigger", "SCHEDULED_SHADOW",
+                "-PrimaryWindow", "20", "-AuxiliaryWindow", "60",
+                "-MaximumProviderRequests",
+                Integer.toString(maximumProviderRequests), "-SubmitOnly",
+                "-TimeoutSeconds", "30");
+    }
+
+    static Optional<String> rejectionReason(List<String> output) {
+        if (output == null || !output.contains(
+                "STOCK_QUANT_HOST_BROKER_STATUS=REJECTED")) {
+            return Optional.empty();
+        }
+        List<String> reasons = output.stream()
+                .filter(line -> line.startsWith(
+                        "STOCK_QUANT_HOST_BROKER_REASON="))
+                .map(line -> line.substring(
+                        "STOCK_QUANT_HOST_BROKER_REASON=".length()))
+                .filter(reason -> reason.matches(
+                        "[A-Z][A-Z0-9_]{3,127}"))
+                .distinct()
+                .toList();
+        return reasons.size() == 1 ? Optional.of(reasons.get(0))
+                : Optional.empty();
     }
 
     private int maximumProviderRequests(

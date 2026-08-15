@@ -186,6 +186,7 @@ public final class TushareResearchSelectionManualRunner {
             var config = repository.config(launch.selectionRunId());
             if (!config.publicRunId().equals(launch.publicRunId())
                     || !config.gitCommit().equals(launch.gitCommit())
+                    || config.triggerMode() != launch.triggerMode()
                     || config.status() != Status.QUEUED) {
                 throw invalid("RESEARCH_SELECTION_RUN_BINDING_INVALID");
             }
@@ -427,7 +428,8 @@ public final class TushareResearchSelectionManualRunner {
                 throw missing;
             }
             var created = repository.create(launch.publicRunId(),
-                    ResearchSelectionModels.SelectionRequest.immediate(),
+                    new ResearchSelectionModels.SelectionRequest(
+                            launch.triggerMode(), 20, 60, 10, 5, true),
                     clock.instant(), launch.gitCommit());
             if (created.runId() != launch.selectionRunId()) {
                 throw invalid("RESEARCH_SELECTION_FAKE_RUN_ID_INVALID");
@@ -504,6 +506,7 @@ public final class TushareResearchSelectionManualRunner {
             long selectionRunId,
             String publicRunId,
             String gitCommit,
+            ResearchSelectionModels.TriggerMode triggerMode,
             int databasePort,
             int maximumProviderRequests,
             ExecutionMode mode,
@@ -523,7 +526,7 @@ public final class TushareResearchSelectionManualRunner {
             }
             if (!values.keySet().equals(java.util.Set.of("result-file",
                     "execution-id", "selection-run-id", "public-run-id",
-                    "git-commit", "database-port",
+                    "git-commit", "selection-trigger", "database-port",
                     "maximum-provider-requests", "execution-mode",
                     "maximum-cost-cny"))) {
                 throw invalid("RESEARCH_SELECTION_ARGUMENTS_INVALID");
@@ -534,6 +537,9 @@ public final class TushareResearchSelectionManualRunner {
                         values.get("execution-id"),
                         Long.parseLong(values.get("selection-run-id")),
                         values.get("public-run-id"), values.get("git-commit"),
+                        ResearchSelectionModels.TriggerMode.valueOf(
+                                values.get("selection-trigger")
+                                        .toUpperCase(Locale.ROOT)),
                         Integer.parseInt(values.get("database-port")),
                         Integer.parseInt(values.get(
                                 "maximum-provider-requests")),

@@ -194,4 +194,31 @@ class ShadowResearchSchedulerTest {
 
         assertEquals(1, calls.get());
     }
+
+    @Test
+    void strictSubmitFailureIsVisibleInSchedulerHealth() {
+        ShadowResearchRepository repository = mock(
+                ShadowResearchRepository.class);
+        Instant now = Instant.parse("2025-09-10T09:20:00Z");
+        when(repository.frozenSlot(any(), any(), any()))
+                .thenReturn(Optional.empty());
+        when(repository.researchCalendarState(any(), any()))
+                .thenReturn(ShadowResearchRepository.CalendarState.OPEN);
+        when(repository.nextCommonOpenKnown(any(), any())).thenReturn(true);
+        ShadowResearchDispatchGateway gateway = (date, asOf, calendar) -> {
+            throw new IllegalStateException(
+                    "M4_MONTHLY_BUDGET_LEDGER_INVALID");
+        };
+        var runtime = new ShadowSchedulerRuntimeState();
+        var scheduler = new ShadowResearchScheduler(repository, gateway,
+                new ShadowResearchScheduleProperties(),
+                Clock.fixed(now, ZoneOffset.UTC), runtime);
+
+        assertThrows(IllegalStateException.class,
+                scheduler::dispatchAfterClose);
+        assertEquals(now, runtime.snapshot().lastCheckedAt());
+        assertEquals("M4_MONTHLY_BUDGET_LEDGER_INVALID",
+                runtime.snapshot().lastReason());
+        assertEquals(null, runtime.snapshot().lastDispatchedAt());
+    }
 }

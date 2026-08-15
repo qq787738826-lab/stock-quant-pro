@@ -11,6 +11,9 @@ param(
     [string] $PublicRunId,
     [Parameter(Mandatory = $true)]
     [ValidatePattern('^[0-9a-f]{40}$')] [string] $GitCommit,
+    [Parameter(Mandatory = $true)]
+    [ValidateSet('ON_DEMAND', 'SCHEDULED_SHADOW')]
+    [string] $SelectionTrigger,
     [Parameter(Mandatory = $true)] [ValidateRange(1, 65535)]
     [int] $DatabasePort,
     [Parameter(Mandatory = $true)]
@@ -55,6 +58,7 @@ try {
             "--result-file=$result" "--execution-id=$ExecutionId" `
             "--selection-run-id=$SelectionRunId" `
             "--public-run-id=$PublicRunId" "--git-commit=$GitCommit" `
+            "--selection-trigger=$SelectionTrigger" `
             "--database-port=$DatabasePort" `
             "--maximum-provider-requests=$MaximumProviderRequests" `
             "--execution-mode=$ExecutionMode" `

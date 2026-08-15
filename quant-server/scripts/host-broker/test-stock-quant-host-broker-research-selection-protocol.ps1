@@ -145,6 +145,25 @@ try {
         $tests++
     }
 
+    $scheduled = Copy-Values $request
+    $scheduled['request.id'] = New-StockQuantHostBrokerRequestId
+    $scheduled['selection.trigger'] = 'SCHEDULED_SHADOW'
+    $scheduledParsed = Read-Valid $scheduled
+    if ($scheduledParsed.Operation -ne 'RUN_RESEARCH_SELECTION' -or
+        $scheduledParsed.Values['selection.trigger'] -ne
+            'SCHEDULED_SHADOW' -or
+        $scheduledParsed.AuthorizationStatus -ne
+            'STOCK_QUANT_PRO_V1_MONTHLY_APPROVED') {
+        throw 'RESEARCH_SELECTION_SCHEDULED_REQUEST_REJECTED'
+    }
+    $brokerSource = Get-Content -LiteralPath (Join-Path $PSScriptRoot `
+        'stock-quant-host-broker.ps1') -Raw -Encoding UTF8
+    if (-not $brokerSource.Contains(
+            "-SelectionTrigger `$BrokerRequest.Values['selection.trigger']")) {
+        throw 'RESEARCH_SELECTION_SCHEDULED_TRIGGER_NOT_BOUND_TO_RUNNER'
+    }
+    $tests++
+
     $protocolSource = Get-Content -LiteralPath (Join-Path $PSScriptRoot `
         'StockQuantHostBroker.Protocol.psm1') -Raw -Encoding UTF8
     $prePublishValidation = $protocolSource.IndexOf(

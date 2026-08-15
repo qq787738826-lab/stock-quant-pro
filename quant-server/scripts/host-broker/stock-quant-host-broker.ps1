@@ -1383,6 +1383,7 @@ function Invoke-ResearchSelection {
         -ExecutionId $executionId `
         -SelectionRunId ([long]$BrokerRequest.Values['selection.run.id']) `
         -PublicRunId $BrokerRequest.Values['selection.public.run.id'] `
+        -SelectionTrigger $BrokerRequest.Values['selection.trigger'] `
         -GitCommit $BrokerRequest.GitCommit -DatabasePort 38432 `
         -MaximumProviderRequests $maximumProvider `
         -ExecutionMode FORMAL -MaximumCostCny $maximumCost 2>&1 |

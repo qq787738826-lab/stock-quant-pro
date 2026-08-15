@@ -109,7 +109,8 @@ try {
     & "$PSScriptRoot\run-research-selection.ps1" -ResultFile $result `
         -ArtifactPath $artifact -ExecutionId $executionId `
         -SelectionRunId 1 -PublicRunId $publicRun `
-        -GitCommit $ExpectedCommit -DatabasePort $port `
+        -GitCommit $ExpectedCommit -SelectionTrigger SCHEDULED_SHADOW `
+        -DatabasePort $port `
         -MaximumProviderRequests 52 -ExecutionMode FAKE `
         -MaximumCostCny 5.00
     if ($LASTEXITCODE -ne 0) {
@@ -191,7 +192,7 @@ SELECT COALESCE(string_agg(value, ',' ORDER BY value), 'NONE')
         'RESEARCH_SELECTION_E2E_COMPLETED_INVALID'
     Exact (Scalar "SELECT count(*) FROM research_selection_runs WHERE status NOT IN ('COMPLETED','FAILED')") 0 `
         'RESEARCH_SELECTION_E2E_ACTIVE_REMAINS'
-    Exact (Scalar "SELECT count(*) FROM shadow_research_runs WHERE status='FROZEN' AND trigger_mode='ON_DEMAND_SELECTION'") 1 `
+    Exact (Scalar "SELECT count(*) FROM shadow_research_runs WHERE status='FROZEN' AND trigger_mode='SCHEDULED'") 1 `
         'RESEARCH_SELECTION_E2E_SHADOW_INVALID'
     Exact (Scalar 'SELECT count(*) FROM shadow_paper_fills') 0 `
         'RESEARCH_SELECTION_E2E_UNEXPECTED_FILL'
@@ -206,6 +207,7 @@ SELECT COALESCE(string_agg(value, ',' ORDER BY value), 'NONE')
         -ResultFile $repeatResult -ArtifactPath $artifact `
         -ExecutionId $executionId2 -SelectionRunId 2 `
         -PublicRunId $publicRun2 -GitCommit $ExpectedCommit `
+        -SelectionTrigger ON_DEMAND `
         -DatabasePort $port -MaximumProviderRequests 0 `
         -ExecutionMode FAKE -MaximumCostCny 5.00
     if ($LASTEXITCODE -ne 0) {
@@ -232,7 +234,9 @@ SELECT COALESCE(string_agg(value, ',' ORDER BY value), 'NONE')
         'RESEARCH_SELECTION_E2E_REUSE_COMPLETED_INVALID'
     Exact (Scalar "SELECT count(*) FROM research_selection_runs WHERE status NOT IN ('COMPLETED','FAILED')") 0 `
         'RESEARCH_SELECTION_E2E_REUSE_ACTIVE_REMAINS'
-    Exact (Scalar "SELECT count(*) FROM shadow_research_runs WHERE status='FROZEN' AND trigger_mode='ON_DEMAND_SELECTION'") 2 `
+    Exact (Scalar "SELECT count(*) FROM shadow_research_runs WHERE status='FROZEN' AND trigger_mode='SCHEDULED'") 1 `
+        'RESEARCH_SELECTION_E2E_SCHEDULED_SHADOW_CHANGED'
+    Exact (Scalar "SELECT count(*) FROM shadow_research_runs WHERE status='FROZEN' AND trigger_mode='ON_DEMAND_SELECTION'") 1 `
         'RESEARCH_SELECTION_E2E_REUSE_SHADOW_INVALID'
     Exact (Scalar 'SELECT count(*) FROM shadow_paper_fills') 0 `
         'RESEARCH_SELECTION_E2E_REUSE_FILL_DUPLICATED'
@@ -243,6 +247,7 @@ SELECT COALESCE(string_agg(value, ',' ORDER BY value), 'NONE')
     Write-Output 'RESEARCH_SELECTION_PACKAGED_FAKE_E2E=PASS'
     Write-Output 'RESEARCH_SELECTION_TEMP_POSTGRES_V1_V17=PASS'
     Write-Output 'RESEARCH_SELECTION_M1_M2_M3_M4_CHAIN=PASS'
+    Write-Output 'RESEARCH_SELECTION_SCHEDULED_SHADOW=FROZEN'
     Write-Output 'RESEARCH_SELECTION_FAKE_TUSHARE_CALLS=52'
     Write-Output 'RESEARCH_SELECTION_FAKE_MODEL_CALLS=26'
     Write-Output 'RESEARCH_SELECTION_REAL_TUSHARE_CALLS=0'

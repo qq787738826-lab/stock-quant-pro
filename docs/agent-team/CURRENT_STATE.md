@@ -634,6 +634,13 @@ DATA_QUALITY 只作门禁和 confidence 上限，MARKET_REGIME V1 权重为 0 �
   消除 Resident Broker 抢先领取导致的虚假 dispatch failure；预 Runner 的脱敏失败 reason 保持到 API、
   数据库终态和 UI 分类，页面区分数据、Provider、模型、预算、Broker、构建与数据库故障，同时保留折叠
   的安全诊断码。未改变 Provider 预算、Research Universe、Shadow/Paper 历史或真实交易边界。
+- V1.0.4_AUTOMATIC_SHADOW_SCHEDULER_FIX 将 17:20 Scheduler 的 `SCHEDULED_SHADOW` 字段从固定
+  Java submit 命令、严格 Broker request 一直绑定到 Research Selection Runner 和数据库 run 配置；
+  Runner 在 Provider 前拒绝 trigger 错配。Scheduler submit 现在只接受唯一严格脱敏 Broker reason，
+  并把该 reason 投影到运行健康状态。2026-08-14 run 9 永久保持 `FAILED`：其请求在发布前被月度账本
+  检查拒绝，精确条件为旧零调用终态的 `operation=UNKNOWN` 与原请求
+  `operation=RUN_RESEARCH_SELECTION` 不一致；既有 V1.0.3 已仅对该不可变 build-proof 拒绝形状完成
+  fail-closed 兼容，其他 operation 错配继续拒绝。不得补跑或改写 run 9。
 
 ## 当前后续入口与阻断
 
