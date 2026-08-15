@@ -24,7 +24,7 @@ test('核心状态、风险和研究结论显示为简体中文', () => {
   const statuses = {
     READY: '就绪', HEALTHY: '正常', DEGRADED: '部分可用',
     ACTION_REQUIRED: '需要处理', ACTIVE: '运行中', IDLE: '空闲',
-    FROZEN: '已冻结', COMPLETED: '已完成', FAILED: '失败',
+    FROZEN: '已冻结', COMPLETED: '已完成', REVISED: '已修订', FAILED: '失败',
     QUEUED: '排队中', RUNNING: '运行中', WATCH: '观察',
     RETAIN: '保留', DEMOTE: '降级', REPLACE: '替换',
   }

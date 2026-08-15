@@ -10,6 +10,7 @@ const STATUS_LABELS: Readonly<Record<string, string>> = Object.freeze({
   BUSY: '忙碌中',
   FROZEN: '已冻结',
   COMPLETED: '已完成',
+  REVISED: '已修订',
   FAILED: '失败',
   FAILED_PRE_PROVIDER: '调用数据源前失败',
   FAILED_PROVIDER: '数据源调用失败',
