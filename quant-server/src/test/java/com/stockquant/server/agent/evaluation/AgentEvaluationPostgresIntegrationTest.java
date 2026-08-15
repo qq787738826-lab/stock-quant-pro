@@ -214,11 +214,11 @@ class AgentEvaluationPostgresIntegrationTest {
                         .INSUFFICIENT_SAMPLE, report.realShadowStatus());
         assertEquals("WATCH_CHALLENGER",
                 report.comparison().decision().name());
-        assertEquals("M3_CRITIC_REVIEW_V3", challenger.promptVersions()
+        assertEquals("M3_CRITIC_REVIEW_V5", challenger.promptVersions()
                 .get(AgentRole.CRITIC_REVIEW));
         assertTrue(challengerReport.agentRuns().stream().filter(run ->
                 run.agentRole() == AgentRole.CRITIC_REVIEW).allMatch(run ->
-                "M3_CRITIC_REVIEW_V3".equals(run.promptVersion())));
+                "M3_CRITIC_REVIEW_V5".equals(run.promptVersion())));
         assertEquals(snapshotHash,
                 shadows.snapshot(execution.run().id()).orElseThrow()
                         .snapshotFingerprint());

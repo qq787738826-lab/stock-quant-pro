@@ -347,8 +347,7 @@ public final class TushareM4ShadowResearchManualRunner {
                 launch.rangeStart(), asOf, launch.securities(),
                 launch.securities().get(0), strategies(), nextExecution,
                 captured.providerCallCount(),
-                "Perform evidence-bound seven-agent shadow research; freeze "
-                        + "the conclusion and permit an empty paper portfolio.");
+                "执行受证据约束的七智能体影子研究；冻结研究结论，并允许模拟组合保持空仓。");
     }
 
     static LocalDate paperExecutionDate(

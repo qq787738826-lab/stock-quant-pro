@@ -37,8 +37,12 @@ class AgentResearchRuntimeTest {
         assertEquals(2, report.rounds());
         assertEquals(Set.of(AgentRole.values()), report.agentRuns().stream()
                 .map(value -> value.agentRole()).collect(Collectors.toSet()));
-        assertTrue(report.agentRuns().stream().allMatch(value ->
-                value.promptVersion().endsWith("_V2")));
+        assertEquals("M3_RESEARCH_COORDINATOR_V3",
+                new AgentPromptCatalog().prompt(
+                        AgentRole.RESEARCH_COORDINATOR).version());
+        assertEquals("M3_CRITIC_REVIEW_V4",
+                new AgentPromptCatalog().prompt(
+                        AgentRole.CRITIC_REVIEW).version());
         assertTrue(report.criticReview().issues().contains(
                 CriticIssueCode.PIT_LINEAGE_LIMITATION));
         assertTrue(report.criticReview().reworkRequested());
@@ -112,6 +116,28 @@ class AgentResearchRuntimeTest {
         assertTrue(first.deterministic());
         assertEquals(0, first.totalModelUsage().inputTokens());
         assertEquals(0, first.totalModelUsage().outputTokens());
+    }
+
+    @Test
+    void newFakeResearchReportUsesSimplifiedChineseUserFacingText() {
+        ResearchReport report = runtime().run(AgentResearchTestFixtures.task(
+                "基于确定性证据完成七智能体研究，并保留所有风险限制。"));
+
+        assertTrue(report.agentRuns().stream()
+                .flatMap(value -> value.findings().stream())
+                .allMatch(value -> containsHan(value.statement())));
+        assertTrue(report.evidence().stream()
+                .allMatch(value -> containsHan(value.statement())));
+        assertTrue(java.util.Arrays.stream(AgentRole.values())
+                .map(role -> new AgentPromptCatalog().prompt(role).text())
+                .allMatch(value -> value.contains(
+                        "Simplified Chinese (zh-CN)")));
+        assertEquals("M3_CRITIC_REVIEW_V5",
+                AgentPromptCatalog.m5CriticCalibrationChallenger()
+                        .prompt(AgentRole.CRITIC_REVIEW).version());
+        assertTrue(AgentPromptCatalog.m5CriticCalibrationChallenger()
+                .prompt(AgentRole.CRITIC_REVIEW).text()
+                .contains("Simplified Chinese (zh-CN)"));
     }
 
     @Test
@@ -233,5 +259,11 @@ class AgentResearchRuntimeTest {
         return new AgentResearchRuntime(gateway,
                 new DeterministicFakeModelAdapter(),
                 new AgentPromptCatalog(), CLOCK);
+    }
+
+    private static boolean containsHan(String value) {
+        return value.codePoints().anyMatch(codePoint ->
+                Character.UnicodeScript.of(codePoint)
+                        == Character.UnicodeScript.HAN);
     }
 }

@@ -29,23 +29,17 @@ public final class DeterministicFakeModelAdapter implements ModelAdapter {
         return switch (request.agentRole()) {
             case RESEARCH_COORDINATOR -> coordinator(request);
             case DATA_ANALYST -> response(request, ClaimType.FACT,
-                    "The accepted research dataset is eligible for bounded "
-                            + "quantitative analysis.",
-                    "Dataset eligibility was checked with deterministic "
-                            + "evidence.");
+                    "已验收的研究数据集具备开展受限量化分析的资格。",
+                    "已使用确定性证据检查数据集资格。");
             case MARKET_TECHNICAL -> response(request, ClaimType.INFERENCE,
-                    "The technical classifications are derived from the "
-                            + "recorded adjusted-price observations.",
-                    "Technical interpretation remains bounded by the "
-                            + "observed window.");
+                    "技术分类来自已记录的前复权价格观察。",
+                    "技术解释严格限定在已观察的数据窗口内。");
             case STRATEGY_RESEARCH -> response(request, ClaimType.FACT,
-                    "The strategy comparison uses deterministic backtests "
-                            + "with accounting and look-ahead guards.",
-                    "Strategy metrics came from the strategy research API.");
+                    "策略比较使用带有会计守恒和防未来数据门禁的确定性回测。",
+                    "策略指标均来自确定性策略研究接口。");
             case RISK -> response(request, ClaimType.FACT,
-                    "The risk classification reflects quantified drawdown, "
-                            + "volatility, and concentration evidence.",
-                    "Risk was assessed independently from return preference.");
+                    "风险分类反映了量化回撤、波动率和集中度证据。",
+                    "风险评估独立于收益偏好完成。");
             case PORTFOLIO -> portfolio(request);
             case CRITIC_REVIEW -> critic(request);
         };
@@ -53,8 +47,7 @@ public final class DeterministicFakeModelAdapter implements ModelAdapter {
 
     private static ModelResponse toolSelection(ModelRequest request) {
         return new ModelResponse(request.allowedTools(), List.of(),
-                "The bounded role selected only its explicitly allowed "
-                        + "deterministic research tool contract.",
+                "该角色仅选择了明确授权的确定性研究工具。",
                 List.of(), false, ModelUsage.zero());
     }
 
@@ -64,14 +57,11 @@ public final class DeterministicFakeModelAdapter implements ModelAdapter {
         ModelClaim claim = new ModelClaim(
                 insufficient ? ClaimType.UNKNOWN : ClaimType.RECOMMENDATION,
                 insufficient
-                        ? "The available window is insufficient for an "
-                        + "out-of-sample research preference."
-                        : "The evidence supports a bounded research "
-                        + "preference, not an executable trading instruction.",
+                        ? "当前数据窗口不足以形成样本外研究偏好。"
+                        : "现有证据支持受限的研究偏好，但不构成可执行交易指令。",
                 evidence, cap(request, insufficient ? "0.40" : "0.55"));
         return new ModelResponse(List.of(), List.of(claim),
-                "The final report preserves evidence, disagreement, risk, "
-                        + "and unresolved limitations.",
+                "最终报告保留了证据、分歧、风险和未解决限制。",
                 List.of(), false, ModelUsage.zero());
     }
 
@@ -79,21 +69,17 @@ public final class DeterministicFakeModelAdapter implements ModelAdapter {
         boolean insufficient = insufficientOutOfSample(request);
         String statement = request.revision()
                 ? insufficient
-                ? "The revised synthesis marks the available window as "
-                + "insufficient for out-of-sample preference."
-                : "The research preference is revised to disclose unresolved "
-                + "lineage limits and a reduced confidence cap."
-                : "The leading deterministic experiment is a research "
-                + "preference subject to the independent risk assessment.";
+                ? "修订后的综合结论明确标记当前窗口不足以形成样本外偏好。"
+                : "修订后的研究偏好披露了尚未解决的血缘限制，并降低置信度上限。"
+                : "领先的确定性实验仅形成研究偏好，仍受独立风险评估约束。";
         return new ModelResponse(List.of(), List.of(new ModelClaim(
                 insufficient ? ClaimType.UNKNOWN : ClaimType.RECOMMENDATION,
                 statement, ids(request.evidence()),
                 cap(request, insufficient ? "0.40"
                         : request.revision() ? "0.50" : "0.60"))),
                 request.revision()
-                        ? "The portfolio synthesis now carries the critic's "
-                        + "lineage limitation."
-                        : "The portfolio synthesis remains research-only.",
+                        ? "组合综合结论已纳入批判审查提出的血缘限制。"
+                        : "组合综合结论仍然仅限研究用途。",
                 List.of(), false, ModelUsage.zero());
     }
 
@@ -101,21 +87,19 @@ public final class DeterministicFakeModelAdapter implements ModelAdapter {
         boolean pitGap = request.evidence().stream().anyMatch(value ->
                 value.sourceTool() == ToolCode.RESEARCH_DATASET
                         && value.statement().contains(
-                        "provider PIT lineage is false"));
+                        "PROVIDER_PIT_VERIFIED=false"));
         List<CriticIssueCode> issues = pitGap
                 ? List.of(CriticIssueCode.PIT_LINEAGE_LIMITATION)
                 : List.of();
         String statement = pitGap
-                ? "The portfolio conclusion must explicitly preserve the "
-                + "unverified provider lineage limitation."
-                : "No unsupported quantitative conclusion survived the "
-                + "evidence checks.";
+                ? "组合结论必须明确保留数据源时点血缘尚未验证这一限制。"
+                : "证据检查后没有保留缺乏支持的量化结论。";
         return new ModelResponse(List.of(), List.of(new ModelClaim(
                 ClaimType.INFERENCE, statement, ids(request.evidence()),
                 cap(request, "0.50"))),
                 pitGap
-                        ? "A bounded portfolio revision is required."
-                        : "The structured report is internally consistent.",
+                        ? "需要进行一次受限的组合结论修订。"
+                        : "结构化研究报告内部一致。",
                 issues, pitGap, ModelUsage.zero());
     }
 
@@ -142,6 +126,6 @@ public final class DeterministicFakeModelAdapter implements ModelAdapter {
         return request.evidence().stream().anyMatch(value ->
                 value.sourceTool() == ToolCode.STRATEGY_COMPARE
                         && value.statement().contains(
-                        "out-of-sample evaluated=false"));
+                        "OUT_OF_SAMPLE_EVALUATED=false"));
     }
 }

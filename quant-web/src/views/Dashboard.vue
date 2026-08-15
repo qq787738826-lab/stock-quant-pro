@@ -54,7 +54,7 @@ onMounted(refresh)
       <el-button @click="refresh">刷新</el-button>
     </header>
     <section class="selection-launch">
-      <div><small>RESEARCH_UNIVERSE_V1 · 25只沪深主板</small>
+      <div><small>研究股票池 V1 · 25只沪深主板</small>
         <h2>今天关注哪些股票？</h2>
         <p>过去20/60交易日量化扫描 → 前10名 → 七智能体研究 → 批判审查 → 最终候选。</p></div>
       <el-button type="primary" size="large" :loading="selectionStarting" @click="selectNow">立即选股</el-button>

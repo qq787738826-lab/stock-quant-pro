@@ -66,6 +66,9 @@ class BailianAgentResearchRuntimeTest {
         assertEquals(0, adapter.telemetry().reasoningTokenCount());
         assertEquals(1_820, adapter.telemetry().totalTokenCount());
         assertEquals("CNY", adapter.telemetry().costCurrency());
+        assertTrue(report.agentRuns().stream()
+                .flatMap(value -> value.findings().stream())
+                .allMatch(value -> containsHan(value.statement())));
         assertTrue(adapter.telemetry().closed());
     }
 
@@ -90,14 +93,14 @@ class BailianAgentResearchRuntimeTest {
                 ObjectNode claim = claims.addObject();
                 claim.put("claimType", claimType(role).name());
                 claim.put("statement",
-                        "The cited evidence supports this bounded finding.");
+                        "引用的确定性证据支持这项受限研究结论。");
                 claim.putArray("evidenceIds").add(
                         evidence.get(0).path("evidenceId").asText());
                 claim.put("confidence", 0.5);
             }
             structured.put("summary", selection
-                    ? "The bounded deterministic tool set was selected."
-                    : "The evidence-bounded research step completed.");
+                    ? "已选择受限的确定性研究工具集。"
+                    : "受证据约束的研究步骤已完成。");
             ArrayNode issues = structured.putArray("issueCodes");
             boolean critic = "CRITIC_REVIEW".equals(role);
             if (critic) {
@@ -131,5 +134,11 @@ class BailianAgentResearchRuntimeTest {
             case RESEARCH_COORDINATOR -> ClaimType.UNKNOWN;
             default -> ClaimType.INFERENCE;
         };
+    }
+
+    private static boolean containsHan(String value) {
+        return value.codePoints().anyMatch(codePoint ->
+                Character.UnicodeScript.of(codePoint)
+                        == Character.UnicodeScript.HAN);
     }
 }

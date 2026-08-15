@@ -86,9 +86,8 @@ public final class ResearchSelectionDeepResearchService
                 anchor, topDataset.firstSessionDate(), asOf,
                 topDataset.securities(), shortlist.get(0).security(),
                 strategies, paperExecution, providerCalls,
-                "Current-as-of evidence-bound stock selection over "
-                        + ResearchUniverseV1.VERSION
-                        + "; paper research only, no real trading.",
+                "基于 " + ResearchUniverseV1.VERSION
+                        + " 开展当前时点、证据约束的股票研究；仅用于研究和模拟，不进行真实交易。",
                 slot,
                 ShadowResearchModels.SELECTION_STRATEGY_VERSION);
         return runtime.run(request, model);

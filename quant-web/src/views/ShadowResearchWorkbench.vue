@@ -8,6 +8,8 @@ import {
   displayDecision,
   displayPhase,
   displayReason,
+  displayResearchList,
+  displayResearchText,
   displayRisk,
   displayStatus,
   displayStrategy,
@@ -15,6 +17,7 @@ import {
   displayValue,
   formatCurrency,
   formatDateTime,
+  isLegacyResearchText,
 } from '../localization/display'
 
 const overview = shallowRef<ShadowOverview | null>(null)
@@ -22,6 +25,8 @@ const detail = shallowRef<ShadowRunDetail | null>(null)
 const loading = ref(false)
 const error = ref('')
 const report = computed(() => detail.value?.snapshot?.report)
+const legacyReport = computed(() => report.value?.agentRuns.some(run =>
+  run.findings.some(finding => isLegacyResearchText(finding.statement))) ?? false)
 
 const money = (value?: number) => value == null ? '—' : formatCurrency(value)
 const percent = (value?: number) => value == null ? '—' : `${(Number(value) * 100).toFixed(2)}%`
@@ -81,12 +86,13 @@ onMounted(async () => {
 
       <section v-if="report" class="panel">
         <h2>七智能体与批判审查</h2>
-        <div class="agents"><article v-for="run in report.agentRuns" :key="run.runId"><b>{{ displayAgentRole(run.agentRole) }}</b><span>{{ displayPhase(run.phase) }} · {{ displayStatus(run.status) }}</span><p v-for="finding in run.findings" :key="finding.findingId">{{ displayClaimType(finding.claimType) }} · {{ finding.statement }}</p></article></div>
-        <p class="critic">批判审查：{{ report.criticReview.issues.join('；') || '未发现阻断性问题' }} · 修正 {{ report.criticReview.correctionApplied ? '已应用' : '不适用' }}</p>
+        <el-alert v-if="legacyReport" title="历史原始报告：原始英文研究正文保持不可变；新影子研究默认使用简体中文。" type="info" :closable="false" show-icon />
+        <div class="agents"><article v-for="run in report.agentRuns" :key="run.runId"><b>{{ displayAgentRole(run.agentRole) }}</b><span>{{ displayPhase(run.phase) }} · {{ displayStatus(run.status) }}</span><p v-for="finding in run.findings" :key="finding.findingId">{{ displayClaimType(finding.claimType) }} · {{ displayResearchText(finding.statement) }}</p></article></div>
+        <p class="critic">批判审查：{{ displayResearchList(report.criticReview.issues) || '未发现阻断性问题' }} · 修正 {{ report.criticReview.correctionApplied ? '已应用' : '不适用' }}</p>
       </section>
 
       <section v-if="detail.snapshot" class="grid">
-        <article class="panel"><h2>候选与限制</h2><p>候选排名：{{ detail.snapshot.recommendation.rankedSecurities.join(' · ') || '无候选' }}</p><p v-for="item in detail.snapshot.recommendation.limitations" :key="item">• {{ item }}</p></article>
+        <article class="panel"><h2>候选与限制</h2><p>候选排名：{{ detail.snapshot.recommendation.rankedSecurities.join(' · ') || '无候选' }}</p><p v-for="item in detail.snapshot.recommendation.limitations" :key="item">• {{ displayResearchText(item) }}</p></article>
         <article class="panel"><h2>证据</h2><p>{{ report?.evidence.length ?? 0 }} 项 · 类型化事实 / 系统知识 / 前复权</p><p>快照 {{ short(detail.snapshot.snapshotFingerprint) }}</p><p>研究 {{ short(detail.run.researchFingerprint) }}</p></article>
       </section>
 

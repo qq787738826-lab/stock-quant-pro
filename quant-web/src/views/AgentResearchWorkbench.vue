@@ -9,11 +9,14 @@ import {
   displayDecision,
   displayPhase,
   displayReason,
+  displayResearchList,
+  displayResearchText,
   displayRisk,
   displayStatus,
   displayStrategy,
   displayTool,
   formatDateTime,
+  isLegacyResearchText,
 } from '../localization/display'
 
 const route = useRoute()
@@ -25,6 +28,8 @@ const error = ref('')
 
 const roleRuns = computed(() => report.value?.agentRuns ?? [])
 const experiments = computed(() => report.value?.strategyExperiments.experiments ?? [])
+const legacyReport = computed(() => report.value?.agentRuns.some(run =>
+  run.findings.some(finding => isLegacyResearchText(finding.statement))) ?? false)
 
 function percent(value: number | null | undefined): string {
   return value == null ? '—' : `${(Number(value) * 100).toFixed(2)}%`
@@ -97,6 +102,7 @@ onMounted(async () => {
     </section>
 
     <template v-if="report">
+      <el-alert v-if="legacyReport" title="历史原始报告：原始英文研究正文保持不可变；固定系统提示已在展示层中文化。" type="info" :closable="false" show-icon />
       <section class="summary-grid">
         <article class="metric"><span>状态</span><strong>{{ displayStatus(report.status) }}</strong></article>
         <article class="metric"><span>证券 / 开市日</span><strong>{{ report.dataset.securityCount }} / {{ report.dataset.openSessionCount }}</strong></article>
@@ -106,7 +112,7 @@ onMounted(async () => {
 
       <section class="panel">
         <h2>任务与数据证据</h2>
-        <p>{{ report.task.objective }}</p>
+        <p>{{ displayResearchText(report.task.objective) }}</p>
         <div class="facts">
           <span>窗口 {{ report.task.rangeStart }} → {{ report.task.rangeEnd }}</span>
           <span>数据指纹 {{ shortHash(report.dataset.datasetFingerprint) }}</span>
@@ -138,7 +144,7 @@ onMounted(async () => {
           <article v-for="run in roleRuns" :key="run.runId" class="agent-card">
             <div><strong>{{ displayAgentRole(run.agentRole) }}</strong><el-tag size="small">{{ displayStatus(run.status) }}</el-tag></div>
             <small>{{ displayPhase(run.phase) }} · 提示词 {{ run.promptVersion }} · {{ run.modelProvider }}/{{ run.model }}</small>
-            <p v-for="finding in run.findings" :key="finding.findingId"><b>{{ displayClaimType(finding.claimType) }}</b> {{ finding.statement }}<em>{{ finding.evidenceIds.length }} 条证据</em></p>
+            <p v-for="finding in run.findings" :key="finding.findingId"><b>{{ displayClaimType(finding.claimType) }}</b> {{ displayResearchText(finding.statement) }}<em>{{ finding.evidenceIds.length }} 条证据</em></p>
           </article>
         </div>
       </section>
@@ -146,9 +152,9 @@ onMounted(async () => {
       <section class="two-column">
         <article class="panel">
           <h2>批判审查与修正</h2>
-          <p><strong>问题：</strong> {{ report.criticReview.issues.join('；') || '无' }}</p>
+          <p><strong>问题：</strong> {{ displayResearchList(report.criticReview.issues) || '无' }}</p>
           <p><strong>返工：</strong> {{ report.criticReview.reworkRequested ? '是' : '否' }} · 修正 {{ report.criticReview.correctionApplied ? '已应用' : '不适用' }}</p>
-          <p><strong>限制：</strong> {{ report.portfolio.limitations.join('；') || '无' }}</p>
+          <p><strong>限制：</strong> {{ displayResearchList(report.portfolio.limitations) || '无' }}</p>
         </article>
         <article class="panel decision">
           <h2>最终研究判断</h2>
@@ -163,8 +169,8 @@ onMounted(async () => {
         <h2>工具与证据</h2>
         <div class="facts"><span v-for="call in report.toolCalls" :key="call.callId">{{ call.callId }} · {{ displayTool(call.toolCode) }} · {{ displayStatus(call.status) }}</span></div>
         <el-collapse>
-          <el-collapse-item v-for="item in report.evidence" :key="item.evidenceId" :title="`${item.evidenceId} · ${item.sourceTool}`">
-            <p>{{ item.statement }}</p><small>来源 {{ shortHash(item.sourceFingerprint) }} · {{ formatDateTime(item.observedAt) }}</small>
+          <el-collapse-item v-for="item in report.evidence" :key="item.evidenceId" :title="`${item.evidenceId} · ${displayTool(item.sourceTool)}`">
+            <p>{{ displayResearchText(item.statement) }}</p><small>来源 {{ shortHash(item.sourceFingerprint) }} · {{ formatDateTime(item.observedAt) }}</small>
           </el-collapse-item>
         </el-collapse>
       </section>

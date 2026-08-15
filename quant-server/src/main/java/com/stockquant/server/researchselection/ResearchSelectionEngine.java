@@ -41,7 +41,7 @@ import java.util.Objects;
 public final class ResearchSelectionEngine {
     private static final String STRATEGY_VERSION =
             "RESEARCH_SELECTION_STRATEGY_V1";
-    private static final String PROMPT_VERSION = "M3_PROMPT_CATALOG_V2";
+    private static final String PROMPT_VERSION = "M3_PROMPT_CATALOG_V3";
 
     private final TushareResearchUniverseDatasetLoader datasetLoader;
     private final ResearchSelectionRankingService ranking;

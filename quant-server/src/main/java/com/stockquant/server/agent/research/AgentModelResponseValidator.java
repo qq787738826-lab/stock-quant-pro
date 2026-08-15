@@ -24,6 +24,16 @@ final class AgentModelResponseValidator {
     private static final Pattern FORBIDDEN_ACTION = Pattern.compile(
             "(?i)(place\\s+an?\\s+order|execute\\s+(?:a\\s+)?trade|"
                     + "submit\\s+(?:a\\s+)?trade|真实下单|自动交易|执行交易)");
+    private static final Pattern HAN = Pattern.compile("[\\p{IsHan}]");
+    private static final Set<String> ZH_CN_PROMPT_VERSIONS = Set.of(
+            "M3_RESEARCH_COORDINATOR_V3",
+            "M3_DATA_ANALYST_V3",
+            "M3_MARKET_TECHNICAL_V3",
+            "M3_STRATEGY_RESEARCH_V3",
+            "M3_RISK_V3",
+            "M3_PORTFOLIO_V3",
+            "M3_CRITIC_REVIEW_V4",
+            "M3_CRITIC_REVIEW_V5");
     private static final Map<AgentRole, Set<ClaimType>> CLAIM_TYPES =
             claimTypes();
     private static final Set<String> DOWNGRADE_TO_UNKNOWN = Set.of(
@@ -35,7 +45,8 @@ final class AgentModelResponseValidator {
             "M3_MODEL_EVIDENCE_REFERENCE_REJECTED",
             "M3_UNSUPPORTED_MODEL_CLAIM",
             "M3_UNKNOWN_CONFIDENCE_REJECTED",
-            "M3_UNSUPPORTED_NUMERIC_CLAIM");
+            "M3_UNSUPPORTED_NUMERIC_CLAIM",
+            "M3_MODEL_LANGUAGE_REJECTED");
 
     private AgentModelResponseValidator() {
     }
@@ -103,9 +114,11 @@ final class AgentModelResponseValidator {
                     "M3_MODEL_SUMMARY_REJECTED");
         }
         String summary = NUMBER.matcher(response.summary()).find()
-                ? "Structured role analysis completed under deterministic "
-                + "evidence constraints."
+                ? "已在确定性证据约束下完成结构化角色分析。"
                 : response.summary();
+        if (requiresZhCn(request) && !containsHan(summary)) {
+            summary = "已在确定性证据约束下完成结构化角色分析。";
+        }
         return new ModelAdapter.ModelResponse(response.requestedTools(),
                 validatedClaims, summary, response.issueCodes(),
                 response.reworkRequested(), response.usage());
@@ -118,18 +131,14 @@ final class AgentModelResponseValidator {
     private static String rejectedClaimStatement(String reason) {
         return switch (reason) {
             case "M3_MODEL_EVIDENCE_REFERENCE_REJECTED" ->
-                    "A model claim was rejected because its evidence "
-                            + "reference was not present in deterministic "
-                            + "tool output.";
+                    "模型结论引用了确定性工具输出中不存在的证据，已被系统拒绝。";
             case "M3_UNSUPPORTED_MODEL_CLAIM" ->
-                    "A model claim was rejected because deterministic "
-                            + "supporting evidence was insufficient.";
+                    "模型结论缺乏足够的确定性支持证据，已被系统拒绝。";
             case "M3_UNKNOWN_CONFIDENCE_REJECTED" ->
-                    "A model uncertainty claim was rejected because its "
-                            + "confidence exceeded the uncertainty limit.";
-            default -> "A model-supplied numeric statement was rejected "
-                    + "because cited deterministic evidence did not directly "
-                    + "support it.";
+                    "模型的不确定性结论超过置信度上限，已被系统拒绝。";
+            case "M3_MODEL_LANGUAGE_REJECTED" ->
+                    "模型输出未按要求使用简体中文，已被系统拒绝。";
+            default -> "模型给出的数值结论缺乏确定性证据支持，已被系统拒绝。";
         };
     }
 
@@ -149,6 +158,10 @@ final class AgentModelResponseValidator {
         if (containsControl(claim.statement())) {
             throw AgentResearchModels.invalid(
                     "M3_MODEL_CLAIM_CONTROL_REJECTED");
+        }
+        if (requiresZhCn(request) && !containsHan(claim.statement())) {
+            throw AgentResearchModels.invalid(
+                    "M3_MODEL_LANGUAGE_REJECTED");
         }
         if (FORBIDDEN_ACTION.matcher(claim.statement()).find()) {
             throw AgentResearchModels.invalid(
@@ -189,6 +202,14 @@ final class AgentModelResponseValidator {
     private static boolean containsControl(String value) {
         return value.chars().anyMatch(character -> Character.isISOControl(
                 character) && !Character.isWhitespace(character));
+    }
+
+    private static boolean containsHan(String value) {
+        return HAN.matcher(value).find();
+    }
+
+    private static boolean requiresZhCn(ModelAdapter.ModelRequest request) {
+        return ZH_CN_PROMPT_VERSIONS.contains(request.promptVersion());
     }
 
     private static Map<AgentRole, Set<ClaimType>> claimTypes() {

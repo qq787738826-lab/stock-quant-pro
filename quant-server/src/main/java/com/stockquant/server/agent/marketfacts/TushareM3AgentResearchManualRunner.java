@@ -272,9 +272,8 @@ public final class TushareM3AgentResearchManualRunner {
                 new Security("600000", "SSE"),
                 new Security("000001", "SZSE")).stream().sorted().toList();
         return new ResearchTask("M3TASK_" + executionId,
-                "Compare representative long-only strategies using the "
-                        + "accepted M1 research dataset and M2 backtest "
-                        + "engine; quantify risk and preserve limitations.",
+                "使用已验收的 M1 研究数据集和 M2 回测引擎比较代表性多头策略；"
+                        + "量化风险并完整保留研究限制。",
                 securities, LocalDate.of(2025, 1, 2),
                 LocalDate.of(2025, 1, 10), LocalDate.of(2025, 1, 10),
                 knowledgeCutoff, securities.get(0), List.of(

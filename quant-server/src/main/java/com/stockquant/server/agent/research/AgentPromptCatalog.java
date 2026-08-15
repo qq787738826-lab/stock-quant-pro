@@ -12,19 +12,19 @@ import java.util.Map;
 public final class AgentPromptCatalog {
     private static final Map<AgentRole, String> CHAMPION_RESOURCES = Map.of(
             AgentRole.RESEARCH_COORDINATOR,
-            "agent-research/prompts/research-coordinator-v2.txt",
+            "agent-research/prompts/research-coordinator-v3.txt",
             AgentRole.DATA_ANALYST,
-            "agent-research/prompts/data-analyst-v2.txt",
+            "agent-research/prompts/data-analyst-v3.txt",
             AgentRole.MARKET_TECHNICAL,
-            "agent-research/prompts/market-technical-v2.txt",
+            "agent-research/prompts/market-technical-v3.txt",
             AgentRole.STRATEGY_RESEARCH,
-            "agent-research/prompts/strategy-research-v2.txt",
+            "agent-research/prompts/strategy-research-v3.txt",
             AgentRole.RISK,
-            "agent-research/prompts/risk-v2.txt",
+            "agent-research/prompts/risk-v3.txt",
             AgentRole.PORTFOLIO,
-            "agent-research/prompts/portfolio-v2.txt",
+            "agent-research/prompts/portfolio-v3.txt",
             AgentRole.CRITIC_REVIEW,
-            "agent-research/prompts/critic-review-v2.txt");
+            "agent-research/prompts/critic-review-v4.txt");
 
     private final Map<AgentRole, PromptDefinition> prompts;
 
@@ -51,7 +51,7 @@ public final class AgentPromptCatalog {
         EnumMap<AgentRole, String> resources = new EnumMap<>(
                 CHAMPION_RESOURCES);
         resources.put(AgentRole.CRITIC_REVIEW,
-                "agent-research/prompts/critic-review-v3.txt");
+                "agent-research/prompts/critic-review-v5.txt");
         return new AgentPromptCatalog(Map.copyOf(resources));
     }
 

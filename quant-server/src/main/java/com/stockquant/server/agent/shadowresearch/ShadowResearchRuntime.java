@@ -356,7 +356,7 @@ public final class ShadowResearchRuntime {
     }
 
     private static String promptVersion() {
-        return "M3_PROMPT_CATALOG_V2";
+        return "M3_PROMPT_CATALOG_V3";
     }
 
     private static String safeCode(Throwable error) {

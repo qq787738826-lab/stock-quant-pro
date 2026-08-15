@@ -41,7 +41,7 @@ class AgentModelResponseValidatorTest {
                 validated.claims().get(0).claimType());
         assertTrue(validated.claims().get(0).evidenceIds().isEmpty());
         assertTrue(validated.claims().get(0).statement().contains(
-                "was rejected"));
+                "已被系统拒绝"));
         assertTrue(!validated.claims().get(0).statement().contains("9.99"));
     }
 
@@ -107,7 +107,7 @@ class AgentModelResponseValidatorTest {
                     validated.claims().get(0).claimType());
             assertTrue(validated.claims().get(0).evidenceIds().isEmpty());
             assertTrue(validated.claims().get(0).statement().contains(
-                    "was rejected"));
+                    "已被系统拒绝"));
             assertTrue(!validated.claims().get(0).statement().contains(
                     "recommendation"));
             assertTrue(!validated.claims().get(0).statement().contains(
@@ -132,7 +132,34 @@ class AgentModelResponseValidatorTest {
                 validated.claims().get(0).claimType());
         assertTrue(validated.claims().get(0).evidenceIds().isEmpty());
         assertTrue(validated.claims().get(0).statement().contains(
-                "was rejected"));
+                "已被系统拒绝"));
+    }
+
+    @Test
+    void zhCnPromptRejectsEnglishProseWithoutExposingIt() {
+        var request = new ModelAdapter.ModelRequest(
+                "MC_02_DATA_ANALYST", AgentRole.DATA_ANALYST,
+                "DATA_QUALITY", "M3_DATA_ANALYST_V3",
+                "System rules are fixed.", "中文研究任务。",
+                List.of(), List.of(EVIDENCE), List.of(), false,
+                new BigDecimal("0.80"), HASH);
+        var response = new ModelAdapter.ModelResponse(List.of(), List.of(
+                new ModelAdapter.ModelClaim(ClaimType.FACT,
+                        "This unsupported user-facing prose is English.",
+                        List.of(EVIDENCE.evidenceId()),
+                        new BigDecimal("0.30"))),
+                "English role summary.", List.of(), false,
+                ModelUsage.zero());
+
+        var validated = AgentModelResponseValidator.validate(request,
+                response);
+
+        assertEquals(ClaimType.UNKNOWN,
+                validated.claims().get(0).claimType());
+        assertEquals("模型输出未按要求使用简体中文，已被系统拒绝。",
+                validated.claims().get(0).statement());
+        assertEquals("已在确定性证据约束下完成结构化角色分析。",
+                validated.summary());
     }
 
     @Test

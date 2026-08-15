@@ -88,10 +88,10 @@ const AGENT_ROLE_LABELS: Readonly<Record<string, string>> = Object.freeze({
 
 const CLAIM_TYPE_LABELS: Readonly<Record<string, string>> = Object.freeze({
   FACT: '事实',
-  INFERENCE: '推断',
+  INFERENCE: '推论',
   HYPOTHESIS: '假设',
-  RECOMMENDATION: '建议',
-  UNKNOWN: '未知',
+  RECOMMENDATION: '研究建议',
+  UNKNOWN: '未知 / 证据不足',
 })
 
 const TRIGGER_LABELS: Readonly<Record<string, string>> = Object.freeze({
@@ -104,10 +104,10 @@ const TRIGGER_LABELS: Readonly<Record<string, string>> = Object.freeze({
 })
 
 const STRATEGY_LABELS: Readonly<Record<string, string>> = Object.freeze({
-  BUY_AND_HOLD_V1: '买入并持有基准',
-  MOVING_AVERAGE_MOMENTUM_V1: '移动均线动量',
+  BUY_AND_HOLD_V1: '买入并持有',
+  MOVING_AVERAGE_MOMENTUM_V1: '均线动量',
   MEAN_REVERSION_V1: '均值回归',
-  CROSS_SECTIONAL_MOMENTUM_V1: '横截面动量组合',
+  CROSS_SECTIONAL_MOMENTUM_V1: '横截面动量',
 })
 
 const GENERAL_LABELS: Readonly<Record<string, string>> = Object.freeze({
@@ -135,6 +135,76 @@ const GENERAL_LABELS: Readonly<Record<string, string>> = Object.freeze({
   DATASET: '研究数据集',
   EVIDENCE: '证据',
   CRITIC: '批判审查',
+  RESEARCH: '研究',
+  STRATEGY: '策略回测',
+  SHADOW: '影子研究',
+  EVALUATION: '智能体评测',
+  REAL_TRADING: '真实交易',
+  PAPER_EQUITY: '模拟权益',
+  PAPER_RETURN: '模拟收益',
+  POSITIONS: '模拟持仓',
+})
+
+const PRODUCT_LABELS: Readonly<Record<string, string>> = Object.freeze({
+  RESEARCH_PRODUCTION_V1: '研究生产版 V1',
+  SYSTEM_HEALTH_V1: '系统健康 V1',
+  RESEARCH_UNIVERSE_V1: '研究股票池 V1',
+  AGENT_RESEARCH_TEAM_V1: '七智能体研究团队 V1',
+  STRATEGY_ENGINE_V1: '策略引擎 V1',
+  BACKTEST_ENGINE_V1: '回测引擎 V1',
+  SHADOW_RESEARCH_RUNTIME_V1: '影子研究运行时 V1',
+  AGENT_EVALUATION_SYSTEM_V1: '智能体评测系统 V1',
+  LOCAL_PAPER_ONLY: '本地运行 / 仅模拟',
+})
+
+const RESEARCH_TEXT_LABELS: Readonly<Record<string, string>> = Object.freeze({
+  DATA_QUALITY_GAP: '数据质量存在缺口',
+  FUTURE_DATA_RISK: '存在未来数据风险',
+  METRIC_MISMATCH: '指标与确定性证据不一致',
+  UNSUPPORTED_CLAIM: '存在缺乏证据支持的结论',
+  OVERFITTING_RISK: '存在过拟合风险',
+  DRAWDOWN_UNDERSTATED: '回撤风险可能被低估',
+  AGENT_CONFLICT: '智能体观点存在冲突',
+  OVERCONFIDENCE: '研究置信度过高',
+  PIT_LINEAGE_LIMITATION: '数据源时点血缘尚未完整验证',
+  PROMPT_INJECTION_ATTEMPT: '检测到提示词注入尝试',
+  CONCENTRATION_LIMIT: '组合集中度超出研究约束',
+  FORMULA_ONLY_QFQ_LINEAGE: '当前前复权仅具备公式推导血缘',
+  PROVIDER_PIT_NOT_VERIFIED: '数据源时点血缘尚未验证',
+  OUT_OF_SAMPLE_WINDOW_INSUFFICIENT: '样本外评估窗口不足',
+  OVERFITTING_RISK_DETECTED: '检测到过拟合风险',
+  HIGH_RETURN_HIGH_DRAWDOWN: '高收益同时伴随高回撤',
+  NO_SECURITY_PASSED_SELECTION_THRESHOLD: '没有证券通过选股阈值',
+  'A model claim was rejected because its evidence reference was not present in deterministic tool output.':
+    '模型结论引用了确定性工具输出中不存在的证据，已被系统拒绝。',
+  'A model claim was rejected because deterministic supporting evidence was insufficient.':
+    '模型结论缺乏足够的确定性支持证据，已被系统拒绝。',
+  'A model uncertainty claim was rejected because its confidence exceeded the uncertainty limit.':
+    '模型的不确定性结论超过置信度上限，已被系统拒绝。',
+  'A model-supplied numeric statement was rejected because cited deterministic evidence did not directly support it.':
+    '模型给出的数值结论缺乏确定性证据支持，已被系统拒绝。',
+  'The accepted research dataset is eligible for bounded quantitative analysis.':
+    '已验收的研究数据集具备开展受限量化分析的资格。',
+  'The technical classifications are derived from the recorded adjusted-price observations.':
+    '技术分类来自已记录的前复权价格观察。',
+  'The strategy comparison uses deterministic backtests with accounting and look-ahead guards.':
+    '策略比较使用带有会计守恒和防未来数据门禁的确定性回测。',
+  'The risk classification reflects quantified drawdown, volatility, and concentration evidence.':
+    '风险分类反映了量化回撤、波动率和集中度证据。',
+  'The available window is insufficient for an out-of-sample research preference.':
+    '当前数据窗口不足以形成样本外研究偏好。',
+  'The evidence supports a bounded research preference, not an executable trading instruction.':
+    '现有证据支持受限的研究偏好，但不构成可执行交易指令。',
+  'The revised synthesis marks the available window as insufficient for out-of-sample preference.':
+    '修订后的综合结论明确标记当前窗口不足以形成样本外偏好。',
+  'The research preference is revised to disclose unresolved lineage limits and a reduced confidence cap.':
+    '修订后的研究偏好披露了尚未解决的血缘限制，并降低置信度上限。',
+  'The leading deterministic experiment is a research preference subject to the independent risk assessment.':
+    '领先的确定性实验仅形成研究偏好，仍受独立风险评估约束。',
+  'The portfolio conclusion must explicitly preserve the unverified provider lineage limitation.':
+    '组合结论必须明确保留数据源时点血缘尚未验证这一限制。',
+  'No unsupported quantitative conclusion survived the evidence checks.':
+    '证据检查后没有保留缺乏支持的量化结论。',
 })
 
 const PHASE_LABELS: Readonly<Record<string, string>> = Object.freeze({
@@ -295,7 +365,84 @@ export function displayValue(value: unknown): string {
     ?? lookup(RISK_LABELS, value)
     ?? lookup(TRIGGER_LABELS, value)
     ?? lookup(STRATEGY_LABELS, value)
+    ?? lookup(PRODUCT_LABELS, value)
     ?? String(value)
+}
+
+function localizeResearchEnums(value: string): string {
+  return value
+    .replace(/PROVIDER_PIT_VERIFIED=(true|false)/g, (_, flag) =>
+      `数据源时点血缘已验证=${flag === 'true' ? '是' : '否'}`)
+    .replace(/OUT_OF_SAMPLE_EVALUATED=(true|false)/g, (_, flag) =>
+      `样本外评估=${flag === 'true' ? '是' : '否'}`)
+    .replace(/\b(UPTREND|DOWNTREND|NEUTRAL)\b/g, item =>
+      lookup(GENERAL_LABELS, item) ?? item)
+    .replace(/\b(LOW|MODERATE|MEDIUM|HIGH|CRITICAL|UNKNOWN)\b/g, item =>
+      lookup(RISK_LABELS, item) ?? item)
+    .replace(/\b(true|false)\b/g, item => item === 'true' ? '是' : '否')
+}
+
+export function displayProduct(value: unknown): string {
+  if (value == null || String(value).trim() === '') return '—'
+  return lookup(PRODUCT_LABELS, value) ?? String(value)
+}
+
+export function displayResearchText(value: unknown): string {
+  if (value == null || String(value).trim() === '') return '—'
+  const raw = String(value).trim()
+  const exact = RESEARCH_TEXT_LABELS[raw]
+    ?? lookup(RESEARCH_TEXT_LABELS, raw)
+  if (exact) return exact
+  const dataset = raw.match(/^The accepted M1 dataset passed typed-fact, SYSTEM_KNOWLEDGE, data-quality, formula-only QFQ, and no-future-data checks for (\d+) securities and (\d+) open sessions; provider PIT lineage is (true|false)\.$/)
+  if (dataset) {
+    return `已验收的 M1 研究数据集通过类型化事实、SYSTEM_KNOWLEDGE、数据质量、公式化 QFQ 和防未来数据检查；覆盖证券数=${dataset[1]}，开市日数=${dataset[2]}；数据源时点血缘已验证=${dataset[3] === 'true' ? '是' : '否'}。`
+  }
+  const technical = raw.match(/^For ([^,]+), deterministic QFQ analysis used (\d+) observations; window return=([^,]+), short momentum=([^,]+), annualized volatility=([^,]+), trend=([^\.]+)\.$/)
+  if (technical) {
+    return `证券 ${technical[1]} 的确定性 QFQ 分析使用观察数=${technical[2]}；区间收益=${technical[3]}，短期动量=${technical[4]}，年化波动率=${technical[5]}，趋势=${displayValue(technical[6])}。`
+  }
+  if (raw.startsWith('Deterministic M2 backtest for ')) {
+    return localizeResearchEnums(raw
+      .replace(/^Deterministic M2 backtest for /, '策略 ')
+      .replace(' produced total return=', ' 的确定性 M2 回测结果：总收益=')
+      .replace(', Sharpe=', '，夏普比率=')
+      .replace(', maximum drawdown=', '，最大回撤=')
+      .replace(', turnover=', '，换手率=')
+      .replace(', excess return=', '，超额收益=')
+      .replace('; accounting and look-ahead guards passed=', '；会计与防未来数据门禁=')
+      .replace(', out-of-sample evaluated=', '，样本外评估=')
+      .replace(', train return=', '，训练期收益=')
+      .replace(', test return=', '，测试期收益=')
+      .replace(', walk-forward folds=', '，滚动窗口折数=')
+      .replace(', overfitting flag=', '，过拟合标记='))
+  }
+  if (raw.startsWith('Risk policy classified ')) {
+    return localizeResearchEnums(raw
+      .replace(/^Risk policy classified /, '风险规则将策略 ')
+      .replace(' as ', ' 分类为 ')
+      .replace(' with maximum drawdown=', '；最大回撤=')
+      .replace(', annualized volatility=', '，年化波动率=')
+      .replace(', maximum position weight=', '，最大持仓权重=')
+      .replace(', high-return/high-drawdown flag=', '，高收益高回撤标记='))
+  }
+  if (raw.startsWith('Current-as-of evidence-bound stock selection over ')) {
+    return raw.replace(/^Current-as-of evidence-bound stock selection over /,
+      '基于 ').replace('; paper research only, no real trading.',
+      ' 开展当前时点、证据约束的股票研究；仅用于研究和模拟，不进行真实交易。')
+  }
+  if (raw === 'Perform evidence-bound seven-agent shadow research; freeze the conclusion and permit an empty paper portfolio.') {
+    return '执行受证据约束的七智能体影子研究；冻结研究结论，并允许模拟组合保持空仓。'
+  }
+  return localizeResearchEnums(raw)
+}
+
+export function displayResearchList(values: readonly unknown[] | null | undefined): string {
+  return (values ?? []).map(displayResearchText).filter(value => value !== '—').join('；')
+}
+
+export function isLegacyResearchText(value: unknown): boolean {
+  const raw = String(value ?? '').trim()
+  return /[A-Za-z]{4,}/.test(raw) && !/[\u3400-\u9fff]/.test(raw)
 }
 
 export function displayReason(value: unknown): string {
@@ -341,7 +488,8 @@ export function formatCurrency(value: unknown, maximumFractionDigits = 2): strin
 
 const ALL_MAPS = [STATUS_LABELS, RISK_LABELS, DECISION_LABELS,
   AGENT_ROLE_LABELS, CLAIM_TYPE_LABELS, TRIGGER_LABELS, STRATEGY_LABELS,
-  GENERAL_LABELS, PHASE_LABELS, TOOL_LABELS, COMPONENT_LABELS, REASON_LABELS]
+  GENERAL_LABELS, PRODUCT_LABELS, RESEARCH_TEXT_LABELS, PHASE_LABELS,
+  TOOL_LABELS, COMPONENT_LABELS, REASON_LABELS]
 
 export const DISPLAY_MAPPING_COUNT = new Set(
   ALL_MAPS.flatMap(map => Object.keys(map)),

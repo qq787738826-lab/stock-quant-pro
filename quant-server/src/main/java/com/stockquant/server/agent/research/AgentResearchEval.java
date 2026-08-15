@@ -200,7 +200,7 @@ public final class AgentResearchEval {
                 && validated.claims().get(0).claimType() == ClaimType.UNKNOWN
                 && validated.claims().get(0).evidenceIds().isEmpty()
                 && validated.claims().get(0).statement().contains(
-                "was rejected")
+                "已被系统拒绝")
                 && !validated.claims().get(0).statement().equals(claim);
     }
 

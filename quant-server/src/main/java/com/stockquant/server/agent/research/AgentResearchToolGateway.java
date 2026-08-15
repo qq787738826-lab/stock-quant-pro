@@ -103,13 +103,12 @@ public final class AgentResearchToolGateway {
                     loaded.noFutureDataLeakage(), loaded.formulaOnlyQfq(),
                     loaded.providerPitVerified());
             Evidence item = evidence(ToolCode.RESEARCH_DATASET, fingerprint,
-                    "The accepted M1 dataset passed typed-fact, "
-                            + "SYSTEM_KNOWLEDGE, data-quality, formula-only "
-                            + "QFQ, and no-future-data checks for "
-                            + result.securityCount() + " securities and "
-                            + result.openSessionCount() + " open sessions; "
-                            + "provider PIT lineage is "
-                            + result.providerPitVerified() + ".");
+                    "已验收的 M1 研究数据集通过类型化事实、"
+                            + "SYSTEM_KNOWLEDGE、数据质量、公式化 QFQ 和防未来数据检查；"
+                            + "覆盖证券数=" + result.securityCount()
+                            + "，开市日数=" + result.openSessionCount()
+                            + "；PROVIDER_PIT_VERIFIED="
+                            + result.providerPitVerified() + "。");
             complete(ToolCode.RESEARCH_DATASET, AgentRole.DATA_ANALYST,
                     task, result);
             return new DatasetToolResult(loaded, result, List.of(item));
@@ -124,14 +123,13 @@ public final class AgentResearchToolGateway {
                     .toList();
             List<Evidence> items = snapshots.stream().map(value -> evidence(
                     ToolCode.MARKET_TECHNICAL, value.fingerprint(),
-                    "For " + value.security().canonicalCode()
-                            + ", deterministic QFQ analysis used "
-                            + value.observationCount() + " observations; "
-                            + "window return=" + value.windowReturn()
-                            + ", short momentum=" + value.shortMomentum()
-                            + ", annualized volatility="
-                            + value.annualizedVolatility() + ", trend="
-                            + value.trend() + ".")).toList();
+                    "证券 " + value.security().canonicalCode()
+                            + " 的确定性 QFQ 分析使用观察数="
+                            + value.observationCount() + "；区间收益="
+                            + value.windowReturn() + "，短期动量="
+                            + value.shortMomentum() + "，年化波动率="
+                            + value.annualizedVolatility() + "，趋势="
+                            + value.trend() + "。")).toList();
             String fingerprint = AgentResearchCanonical.sha256(snapshots);
             complete(ToolCode.MARKET_TECHNICAL,
                     AgentRole.MARKET_TECHNICAL, loaded.dataset(), snapshots);
@@ -198,23 +196,21 @@ public final class AgentResearchToolGateway {
                     experiments, ranking, fingerprint);
             List<Evidence> items = experiments.stream().map(value -> evidence(
                     ToolCode.STRATEGY_COMPARE, value.backtestFingerprint(),
-                    "Deterministic M2 backtest for " + value.strategyCode()
-                            + " produced total return=" + value.totalReturn()
-                            + ", Sharpe=" + value.sharpeRatio()
-                            + ", maximum drawdown=" + value.maxDrawdown()
-                            + ", turnover=" + value.turnover()
-                            + ", excess return=" + value.excessReturn()
-                            + "; accounting and look-ahead guards passed="
-                            + value.accountingInvariant() + "/"
+                    "策略 " + value.strategyCode()
+                            + " 的确定性 M2 回测结果：总收益="
+                            + value.totalReturn() + "，夏普比率="
+                            + value.sharpeRatio() + "，最大回撤="
+                            + value.maxDrawdown() + "，换手率="
+                            + value.turnover() + "，超额收益="
+                            + value.excessReturn() + "；会计守恒门禁="
+                            + value.accountingInvariant() + "，防未来数据门禁="
                             + value.lookAheadGuard()
-                            + ", out-of-sample evaluated="
-                            + value.outOfSampleEvaluated()
-                            + ", train return=" + value.trainReturn()
-                            + ", test return=" + value.testReturn()
-                            + ", walk-forward folds="
-                            + value.walkForwardFolds()
-                            + ", overfitting flag="
-                            + value.overfittingFlag() + ".")).toList();
+                            + "，OUT_OF_SAMPLE_EVALUATED="
+                            + value.outOfSampleEvaluated() + "，训练期收益="
+                            + value.trainReturn() + "，测试期收益="
+                            + value.testReturn() + "，滚动窗口折数="
+                            + value.walkForwardFolds() + "，过拟合标记="
+                            + value.overfittingFlag() + "。")).toList();
             complete(ToolCode.STRATEGY_COMPARE,
                     AgentRole.STRATEGY_RESEARCH, loaded.dataset(), result);
             return new StrategyToolResult(result, items);
@@ -237,15 +233,13 @@ public final class AgentResearchToolGateway {
                     true, true, concentration, fingerprint);
             List<Evidence> items = strategies.stream().map(value -> evidence(
                     ToolCode.RISK_METRICS, fingerprint,
-                    "Risk policy classified " + value.strategyCode()
-                            + " as " + value.level() + " with maximum "
-                            + "drawdown=" + value.maxDrawdown()
-                            + ", annualized volatility="
-                            + value.annualizedVolatility()
-                            + ", maximum position weight="
+                    "风险规则将策略 " + value.strategyCode() + " 分类为 "
+                            + value.level() + "；最大回撤="
+                            + value.maxDrawdown() + "，年化波动率="
+                            + value.annualizedVolatility() + "，最大持仓权重="
                             + value.maximumPositionWeight()
-                            + ", high-return/high-drawdown flag="
-                            + value.highReturnHighDrawdown() + ".")).toList();
+                            + "，高收益高回撤标记="
+                            + value.highReturnHighDrawdown() + "。")).toList();
             complete(ToolCode.RISK_METRICS, AgentRole.RISK,
                     experiments, result);
             return new RiskToolResult(result, items);
