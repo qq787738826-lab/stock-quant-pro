@@ -2,6 +2,20 @@
 import { computed, onMounted, ref, shallowRef } from 'vue'
 import { getShadowResearchOverview, getShadowResearchRun } from '../shadow-research/api'
 import type { ShadowOverview, ShadowRun, ShadowRunDetail } from '../shadow-research/types'
+import {
+  displayAgentRole,
+  displayClaimType,
+  displayDecision,
+  displayPhase,
+  displayReason,
+  displayRisk,
+  displayStatus,
+  displayStrategy,
+  displayTrigger,
+  displayValue,
+  formatCurrency,
+  formatDateTime,
+} from '../localization/display'
 
 const overview = shallowRef<ShadowOverview | null>(null)
 const detail = shallowRef<ShadowRunDetail | null>(null)
@@ -9,7 +23,7 @@ const loading = ref(false)
 const error = ref('')
 const report = computed(() => detail.value?.snapshot?.report)
 
-const money = (value?: number) => value == null ? '—' : `¥${Number(value).toLocaleString('zh-CN', { maximumFractionDigits: 2 })}`
+const money = (value?: number) => value == null ? '—' : formatCurrency(value)
 const percent = (value?: number) => value == null ? '—' : `${(Number(value) * 100).toFixed(2)}%`
 const short = (value?: string) => value ? `${value.slice(0, 12)}…` : '—'
 
@@ -17,7 +31,7 @@ async function select(run: ShadowRun) {
   loading.value = true
   error.value = ''
   try { detail.value = await getShadowResearchRun(run.id) }
-  catch (cause) { error.value = cause instanceof Error ? cause.message : 'Shadow 详情加载失败' }
+  catch (cause) { error.value = cause instanceof Error ? displayReason(cause.message) : '影子研究详情加载失败' }
   finally { loading.value = false }
 }
 
@@ -27,7 +41,7 @@ onMounted(async () => {
     overview.value = await getShadowResearchOverview()
     const first = overview.value.runs[0]
     if (first) await select(first)
-  } catch (cause) { error.value = cause instanceof Error ? cause.message : 'Shadow 历史加载失败' }
+  } catch (cause) { error.value = cause instanceof Error ? displayReason(cause.message) : '影子研究历史加载失败' }
   finally { loading.value = false }
 })
 </script>
@@ -35,49 +49,49 @@ onMounted(async () => {
 <template>
   <div class="shadow-page" v-loading="loading">
     <header class="hero">
-      <div><p>SHADOW_RESEARCH_RUNTIME_V1 · PAPER ONLY</p><h1>影子研究</h1><span>冻结当时可见的数据、Agent 判断与模拟执行；不连接券商，不产生真实订单。</span></div>
-      <el-tag type="warning" effect="dark">RESEARCH / PAPER</el-tag>
+      <div><p>影子研究运行时 V1 · 仅模拟</p><h1>影子研究</h1><span>冻结当时可见的数据、智能体判断与模拟执行；不连接券商，不产生真实订单。</span></div>
+      <el-tag type="warning" effect="dark">研究 / 模拟</el-tag>
     </header>
     <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon />
 
     <section v-if="overview" class="metrics">
-      <article><span>Paper Equity</span><strong>{{ money(overview.latestPortfolioSnapshot?.totalEquity ?? overview.portfolio.cash) }}</strong></article>
-      <article><span>Paper Return</span><strong>{{ percent(overview.latestPortfolioSnapshot?.totalReturn) }}</strong></article>
-      <article><span>Positions</span><strong>{{ overview.portfolio.positions.length }}</strong></article>
-      <article><span>Real Trading</span><strong>{{ overview.realTradingEnabled ? 'ENABLED' : 'DISABLED' }}</strong></article>
+      <article><span>模拟权益</span><strong>{{ money(overview.latestPortfolioSnapshot?.totalEquity ?? overview.portfolio.cash) }}</strong></article>
+      <article><span>模拟收益</span><strong>{{ percent(overview.latestPortfolioSnapshot?.totalReturn) }}</strong></article>
+      <article><span>模拟持仓</span><strong>{{ overview.portfolio.positions.length }}</strong></article>
+      <article><span>真实交易</span><strong>{{ overview.realTradingEnabled ? '已启用' : '已关闭' }}</strong></article>
     </section>
 
     <section v-if="overview" class="panel">
       <h2>冻结运行历史</h2>
       <el-table :data="overview.runs" size="small" highlight-current-row @row-click="select">
         <el-table-column prop="tradeDate" label="交易日" width="120" />
-        <el-table-column prop="triggerMode" label="触发" width="150" />
-        <el-table-column prop="status" label="状态" width="120" />
+        <el-table-column label="触发" width="150"><template #default="scope">{{ displayTrigger(scope.row.triggerMode) }}</template></el-table-column>
+        <el-table-column label="状态" width="120"><template #default="scope">{{ displayStatus(scope.row.status) }}</template></el-table-column>
         <el-table-column prop="model" label="模型" width="150" />
-        <el-table-column label="Dataset"><template #default="scope">{{ short(scope.row.datasetFingerprint) }}</template></el-table-column>
-        <el-table-column prop="completedAt" label="冻结时间" min-width="190" />
+        <el-table-column label="数据指纹"><template #default="scope">{{ short(scope.row.datasetFingerprint) }}</template></el-table-column>
+        <el-table-column label="冻结时间" min-width="190"><template #default="scope">{{ formatDateTime(scope.row.completedAt) }}</template></el-table-column>
       </el-table>
     </section>
 
     <template v-if="detail">
       <section class="grid">
-        <article class="panel"><h2>时间边界</h2><p>researchAsOf <b>{{ detail.run.researchAsOf }}</b></p><p>signalTime <b>{{ detail.run.signalTime ?? '—' }}</b></p><p>paperExecutionTime <b>{{ detail.run.paperExecutionTime ?? '待下一合法时点' }}</b></p></article>
-        <article class="panel"><h2>冻结结论</h2><template v-if="detail.snapshot"><strong class="decision">{{ detail.snapshot.recommendation.decisionCode }}</strong><p>{{ detail.snapshot.recommendation.preferredStrategy }} · {{ detail.snapshot.recommendation.riskLevel }}</p><p>confidence {{ percent(detail.snapshot.recommendation.confidence) }} · paper exposure {{ percent(detail.snapshot.recommendation.suggestedGrossExposure) }}</p></template><p v-else>本次运行未冻结结论：{{ detail.run.errorCode }}</p></article>
+        <article class="panel"><h2>时间边界</h2><p>研究时点 <b>{{ formatDateTime(detail.run.researchAsOf) }}</b></p><p>信号时点 <b>{{ formatDateTime(detail.run.signalTime) }}</b></p><p>模拟执行时点 <b>{{ detail.run.paperExecutionTime ? formatDateTime(detail.run.paperExecutionTime) : '待下一合法时点' }}</b></p></article>
+        <article class="panel"><h2>冻结结论</h2><template v-if="detail.snapshot"><strong class="decision">{{ displayDecision(detail.snapshot.recommendation.decisionCode) }}</strong><p>{{ displayStrategy(detail.snapshot.recommendation.preferredStrategy) }} · {{ displayRisk(detail.snapshot.recommendation.riskLevel) }}</p><p>置信度 {{ percent(detail.snapshot.recommendation.confidence) }} · 模拟仓位 {{ percent(detail.snapshot.recommendation.suggestedGrossExposure) }}</p></template><p v-else>本次运行未冻结结论：{{ displayReason(detail.run.errorCode) }}</p></article>
       </section>
 
       <section v-if="report" class="panel">
-        <h2>7 Agent 与 Critic</h2>
-        <div class="agents"><article v-for="run in report.agentRuns" :key="run.runId"><b>{{ run.agentRole }}</b><span>{{ run.phase }} · {{ run.status }}</span><p v-for="finding in run.findings" :key="finding.findingId">{{ finding.claimType }} · {{ finding.statement }}</p></article></div>
-        <p class="critic">Critic: {{ report.criticReview.issues.join(', ') || 'NONE' }} · correction {{ report.criticReview.correctionApplied ? 'APPLIED' : 'N/A' }}</p>
+        <h2>七智能体与批判审查</h2>
+        <div class="agents"><article v-for="run in report.agentRuns" :key="run.runId"><b>{{ displayAgentRole(run.agentRole) }}</b><span>{{ displayPhase(run.phase) }} · {{ displayStatus(run.status) }}</span><p v-for="finding in run.findings" :key="finding.findingId">{{ displayClaimType(finding.claimType) }} · {{ finding.statement }}</p></article></div>
+        <p class="critic">批判审查：{{ report.criticReview.issues.join('；') || '未发现阻断性问题' }} · 修正 {{ report.criticReview.correctionApplied ? '已应用' : '不适用' }}</p>
       </section>
 
       <section v-if="detail.snapshot" class="grid">
-        <article class="panel"><h2>候选与限制</h2><p>Ranking: {{ detail.snapshot.recommendation.rankedSecurities.join(' · ') || 'EMPTY' }}</p><p v-for="item in detail.snapshot.recommendation.limitations" :key="item">• {{ item }}</p></article>
-        <article class="panel"><h2>Evidence</h2><p>{{ report?.evidence.length ?? 0 }} items · typed facts / SYSTEM_KNOWLEDGE / QFQ</p><p>snapshot {{ short(detail.snapshot.snapshotFingerprint) }}</p><p>research {{ short(detail.run.researchFingerprint) }}</p></article>
+        <article class="panel"><h2>候选与限制</h2><p>候选排名：{{ detail.snapshot.recommendation.rankedSecurities.join(' · ') || '无候选' }}</p><p v-for="item in detail.snapshot.recommendation.limitations" :key="item">• {{ item }}</p></article>
+        <article class="panel"><h2>证据</h2><p>{{ report?.evidence.length ?? 0 }} 项 · 类型化事实 / 系统知识 / 前复权</p><p>快照 {{ short(detail.snapshot.snapshotFingerprint) }}</p><p>研究 {{ short(detail.run.researchFingerprint) }}</p></article>
       </section>
 
-      <section class="panel"><h2>Paper Orders / Fills</h2><el-table :data="detail.orders" size="small"><el-table-column prop="side" label="方向" width="80"/><el-table-column label="证券"><template #default="scope">{{ scope.row.security.symbol }} / {{ scope.row.security.exchange }}</template></el-table-column><el-table-column prop="targetWeight" label="目标权重"/><el-table-column prop="earliestExecutionTime" label="最早模拟成交"/><el-table-column prop="status" label="状态"/></el-table><p v-if="!detail.orders.length">空仓是合法决策；本次没有模拟订单。</p></section>
-      <section class="panel"><h2>Future Outcome</h2><el-table :data="detail.outcomes" size="small"><el-table-column prop="horizonCode" label="观察期" width="100"/><el-table-column prop="evaluationDate" label="评价日期" width="140"/><el-table-column label="等权结果"><template #default="scope">{{ percent(scope.row.observation.equalWeightReturn) }}</template></el-table-column><el-table-column label="时间边界"><template #default="scope">{{ scope.row.observation.noFutureDataLeakage ? 'PASS' : 'BLOCKED' }}</template></el-table-column></el-table><p v-if="!detail.outcomes.length">未来观察尚未到期；冻结结论不会被回写。</p></section>
+      <section class="panel"><h2>模拟订单与成交</h2><el-table :data="detail.orders" size="small"><el-table-column label="方向" width="80"><template #default="scope">{{ displayValue(scope.row.side) }}</template></el-table-column><el-table-column label="证券"><template #default="scope">{{ scope.row.security.symbol }} / {{ scope.row.security.exchange }}</template></el-table-column><el-table-column prop="targetWeight" label="目标权重"/><el-table-column label="最早模拟成交"><template #default="scope">{{ formatDateTime(scope.row.earliestExecutionTime) }}</template></el-table-column><el-table-column label="状态"><template #default="scope">{{ displayStatus(scope.row.status) }}</template></el-table-column></el-table><p v-if="!detail.orders.length">空仓是合法决策；本次没有模拟订单。</p></section>
+      <section class="panel"><h2>后续结果</h2><el-table :data="detail.outcomes" size="small"><el-table-column prop="horizonCode" label="观察期" width="100"/><el-table-column prop="evaluationDate" label="评价日期" width="140"/><el-table-column label="等权结果"><template #default="scope">{{ percent(scope.row.observation.equalWeightReturn) }}</template></el-table-column><el-table-column label="时间边界"><template #default="scope">{{ scope.row.observation.noFutureDataLeakage ? '通过' : '受阻' }}</template></el-table-column></el-table><p v-if="!detail.outcomes.length">未来观察尚未到期；冻结结论不会被回写。</p></section>
     </template>
   </div>
 </template>

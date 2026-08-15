@@ -3,6 +3,18 @@ import { computed, onMounted, ref, shallowRef } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getAgentResearchReport, getAgentResearchReports } from '../agent-research/api'
 import type { ReportSummary, ResearchReport } from '../agent-research/types'
+import {
+  displayAgentRole,
+  displayClaimType,
+  displayDecision,
+  displayPhase,
+  displayReason,
+  displayRisk,
+  displayStatus,
+  displayStrategy,
+  displayTool,
+  formatDateTime,
+} from '../localization/display'
 
 const route = useRoute()
 const router = useRouter()
@@ -34,7 +46,7 @@ async function load(taskId: string): Promise<void> {
     await router.replace({ path: '/agent-research', query: { taskId } })
   } catch (cause) {
     report.value = null
-    error.value = cause instanceof Error ? cause.message : '研究报告加载失败'
+    error.value = cause instanceof Error ? displayReason(cause.message) : '研究报告加载失败'
   } finally {
     loading.value = false
   }
@@ -52,7 +64,7 @@ onMounted(async () => {
     const taskId = requested || history.value[0]?.taskId
     if (taskId) await load(taskId)
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : '研究报告列表加载失败'
+    error.value = cause instanceof Error ? displayReason(cause.message) : '研究报告列表加载失败'
   } finally {
     loading.value = false
   }
@@ -63,11 +75,11 @@ onMounted(async () => {
   <div class="research-workbench" v-loading="loading">
     <header class="page-head">
       <div>
-        <p class="eyebrow">AGENT_RESEARCH_TEAM_V1 · READ ONLY</p>
+        <p class="eyebrow">七智能体研究团队 V1 · 只读</p>
         <h1>智能体研究报告</h1>
-        <p>数据、回测和风险指标均来自 M1/M2 确定性工具；本页面不能启动交易或 Shadow。</p>
+        <p>数据、回测和风险指标均来自 M1/M2 确定性工具；本页面不能启动交易或影子研究。</p>
       </div>
-      <el-tag type="success" effect="dark">RESEARCH OUTPUT</el-tag>
+      <el-tag type="success" effect="dark">研究输出</el-tag>
     </header>
 
     <el-alert v-if="error" :title="error" type="error" show-icon :closable="false" />
@@ -77,16 +89,16 @@ onMounted(async () => {
       <h2>研究任务</h2>
       <el-table :data="history" size="small" highlight-current-row @row-click="selectReport">
         <el-table-column prop="taskId" label="任务" min-width="250" />
-        <el-table-column prop="status" label="状态" width="180" />
-        <el-table-column prop="preferredStrategy" label="研究偏好" min-width="210" />
+        <el-table-column label="状态" width="180"><template #default="scope">{{ displayStatus(scope.row.status) }}</template></el-table-column>
+        <el-table-column label="研究偏好" min-width="210"><template #default="scope">{{ displayStrategy(scope.row.preferredStrategy) }}</template></el-table-column>
         <el-table-column label="置信度" width="100"><template #default="scope">{{ percent(scope.row.confidence) }}</template></el-table-column>
-        <el-table-column prop="completedAt" label="完成时间" min-width="190" />
+        <el-table-column label="完成时间" min-width="190"><template #default="scope">{{ formatDateTime(scope.row.completedAt) }}</template></el-table-column>
       </el-table>
     </section>
 
     <template v-if="report">
       <section class="summary-grid">
-        <article class="metric"><span>状态</span><strong>{{ report.status }}</strong></article>
+        <article class="metric"><span>状态</span><strong>{{ displayStatus(report.status) }}</strong></article>
         <article class="metric"><span>证券 / 开市日</span><strong>{{ report.dataset.securityCount }} / {{ report.dataset.openSessionCount }}</strong></article>
         <article class="metric"><span>工具 / 模型调用</span><strong>{{ report.toolCallCount }} / {{ report.modelCallCount }}</strong></article>
         <article class="metric"><span>研究置信度</span><strong>{{ percent(report.finalDecision.confidence) }}</strong></article>
@@ -97,67 +109,67 @@ onMounted(async () => {
         <p>{{ report.task.objective }}</p>
         <div class="facts">
           <span>窗口 {{ report.task.rangeStart }} → {{ report.task.rangeEnd }}</span>
-          <span>Dataset {{ shortHash(report.dataset.datasetFingerprint) }}</span>
-          <span>Typed fact {{ report.dataset.typedFactReadback ? 'PASS' : 'FAIL' }}</span>
-          <span>SYSTEM_KNOWLEDGE {{ report.dataset.systemKnowledgeReadback ? 'PASS' : 'FAIL' }}</span>
-          <span>No future data {{ report.dataset.noFutureDataLeakage ? 'PASS' : 'FAIL' }}</span>
-          <span>Provider PIT {{ report.dataset.providerPitVerified ? 'VERIFIED' : 'NOT VERIFIED' }}</span>
+          <span>数据指纹 {{ shortHash(report.dataset.datasetFingerprint) }}</span>
+          <span>类型化事实 {{ report.dataset.typedFactReadback ? '通过' : '未通过' }}</span>
+          <span>系统知识回读 {{ report.dataset.systemKnowledgeReadback ? '通过' : '未通过' }}</span>
+          <span>无未来数据 {{ report.dataset.noFutureDataLeakage ? '通过' : '未通过' }}</span>
+          <span>数据源时点边界 {{ report.dataset.providerPitVerified ? '已验证' : '未验证' }}</span>
         </div>
       </section>
 
       <section class="panel">
         <h2>策略实验与 M2 回测</h2>
         <el-table :data="experiments" size="small">
-          <el-table-column prop="strategyCode" label="策略" min-width="250" />
+          <el-table-column label="策略" min-width="250"><template #default="scope">{{ displayStrategy(scope.row.strategyCode) }}</template></el-table-column>
           <el-table-column label="总收益" width="100"><template #default="scope">{{ percent(scope.row.totalReturn) }}</template></el-table-column>
-          <el-table-column label="Sharpe" width="90"><template #default="scope">{{ number(scope.row.sharpeRatio, 3) }}</template></el-table-column>
+          <el-table-column label="夏普" width="90"><template #default="scope">{{ number(scope.row.sharpeRatio, 3) }}</template></el-table-column>
           <el-table-column label="最大回撤" width="110"><template #default="scope">{{ percent(scope.row.maxDrawdown) }}</template></el-table-column>
           <el-table-column label="超额收益" width="110"><template #default="scope">{{ percent(scope.row.excessReturn) }}</template></el-table-column>
           <el-table-column prop="fillCount" label="成交" width="75" />
-          <el-table-column label="OOS" width="80"><template #default="scope">{{ scope.row.outOfSampleEvaluated ? 'PASS' : 'N/A' }}</template></el-table-column>
-          <el-table-column prop="walkForwardFolds" label="WF folds" width="90" />
-          <el-table-column label="过拟合" width="80"><template #default="scope">{{ scope.row.overfittingFlag ? 'RISK' : 'NO' }}</template></el-table-column>
+          <el-table-column label="样本外" width="80"><template #default="scope">{{ scope.row.outOfSampleEvaluated ? '通过' : '不适用' }}</template></el-table-column>
+          <el-table-column prop="walkForwardFolds" label="滚动窗口" width="100" />
+          <el-table-column label="过拟合" width="80"><template #default="scope">{{ scope.row.overfittingFlag ? '有风险' : '未发现' }}</template></el-table-column>
         </el-table>
       </section>
 
       <section class="panel">
-        <h2>7 Agent 协作轨迹</h2>
+        <h2>七智能体协作轨迹</h2>
         <div class="agent-grid">
           <article v-for="run in roleRuns" :key="run.runId" class="agent-card">
-            <div><strong>{{ run.agentRole }}</strong><el-tag size="small">{{ run.status }}</el-tag></div>
-            <small>{{ run.phase }} · {{ run.promptVersion }} · {{ run.modelProvider }}/{{ run.model }}</small>
-            <p v-for="finding in run.findings" :key="finding.findingId"><b>{{ finding.claimType }}</b> {{ finding.statement }}<em>{{ finding.evidenceIds.length }} evidence</em></p>
+            <div><strong>{{ displayAgentRole(run.agentRole) }}</strong><el-tag size="small">{{ displayStatus(run.status) }}</el-tag></div>
+            <small>{{ displayPhase(run.phase) }} · 提示词 {{ run.promptVersion }} · {{ run.modelProvider }}/{{ run.model }}</small>
+            <p v-for="finding in run.findings" :key="finding.findingId"><b>{{ displayClaimType(finding.claimType) }}</b> {{ finding.statement }}<em>{{ finding.evidenceIds.length }} 条证据</em></p>
           </article>
         </div>
       </section>
 
       <section class="two-column">
         <article class="panel">
-          <h2>Critic 质疑与修正</h2>
-          <p><strong>Issues:</strong> {{ report.criticReview.issues.join(', ') || 'NONE' }}</p>
-          <p><strong>返工:</strong> {{ report.criticReview.reworkRequested ? 'YES' : 'NO' }} · 修正 {{ report.criticReview.correctionApplied ? 'APPLIED' : 'N/A' }}</p>
-          <p><strong>限制:</strong> {{ report.portfolio.limitations.join(', ') || 'NONE' }}</p>
+          <h2>批判审查与修正</h2>
+          <p><strong>问题：</strong> {{ report.criticReview.issues.join('；') || '无' }}</p>
+          <p><strong>返工：</strong> {{ report.criticReview.reworkRequested ? '是' : '否' }} · 修正 {{ report.criticReview.correctionApplied ? '已应用' : '不适用' }}</p>
+          <p><strong>限制：</strong> {{ report.portfolio.limitations.join('；') || '无' }}</p>
         </article>
         <article class="panel decision">
           <h2>最终研究判断</h2>
-          <strong>{{ report.finalDecision.code }}</strong>
-          <p>{{ report.finalDecision.preferredStrategy }} · {{ report.finalDecision.riskLevel }}</p>
-          <p>建议总暴露 {{ percent(report.portfolio.suggestedGrossExposure) }} · confidence {{ percent(report.finalDecision.confidence) }}</p>
+          <strong>{{ displayDecision(report.finalDecision.code) }}</strong>
+          <p>{{ displayStrategy(report.finalDecision.preferredStrategy) }} · {{ displayRisk(report.finalDecision.riskLevel) }}</p>
+          <p>建议总仓位 {{ percent(report.portfolio.suggestedGrossExposure) }} · 置信度 {{ percent(report.finalDecision.confidence) }}</p>
           <el-alert title="仅限研究，不构成交易指令" type="warning" :closable="false" show-icon />
         </article>
       </section>
 
       <section class="panel">
-        <h2>工具与 Evidence</h2>
-        <div class="facts"><span v-for="call in report.toolCalls" :key="call.callId">{{ call.callId }} · {{ call.toolCode }} · {{ call.status }}</span></div>
+        <h2>工具与证据</h2>
+        <div class="facts"><span v-for="call in report.toolCalls" :key="call.callId">{{ call.callId }} · {{ displayTool(call.toolCode) }} · {{ displayStatus(call.status) }}</span></div>
         <el-collapse>
           <el-collapse-item v-for="item in report.evidence" :key="item.evidenceId" :title="`${item.evidenceId} · ${item.sourceTool}`">
-            <p>{{ item.statement }}</p><small>source {{ shortHash(item.sourceFingerprint) }} · {{ item.observedAt }}</small>
+            <p>{{ item.statement }}</p><small>来源 {{ shortHash(item.sourceFingerprint) }} · {{ formatDateTime(item.observedAt) }}</small>
           </el-collapse-item>
         </el-collapse>
       </section>
 
-      <footer class="trace">{{ report.reportVersion }} · {{ report.runtimeVersion }} · fingerprint {{ report.researchFingerprint }}</footer>
+      <footer class="trace">{{ report.reportVersion }} · {{ report.runtimeVersion }} · 指纹 {{ report.researchFingerprint }}</footer>
     </template>
   </div>
 </template>

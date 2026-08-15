@@ -3,6 +3,17 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getResearchUniverse, getSelectionHistory, getSelectionRun, startSelection } from '../research-selection/api'
 import type { SelectionResult, SelectionSummary } from '../research-selection/types'
+import {
+  displayAgentRole,
+  displayClaimType,
+  displayDecision,
+  displayRisk,
+  displayStatus,
+  displayStrategy,
+  displayValue,
+  formatCurrency,
+  formatDateTime,
+} from '../localization/display'
 
 const result = ref<SelectionResult | null>(null)
 const history = ref<SelectionSummary[]>([])
@@ -15,7 +26,7 @@ const activeRunId = ref<number | null>(null)
 const route = useRoute()
 const router = useRouter()
 let timer: number | undefined
-const stages = ['准备数据', '量化扫描', '策略分析', 'AI研究', 'Critic审查', '完成']
+const stages = ['准备数据', '量化扫描', '策略分析', '智能体研究', '批判审查', '完成']
 const currentStage = computed(() => {
   const value = history.value.find(item => item.runId === activeRunId.value)
     ?.status || ''
@@ -124,31 +135,31 @@ onBeforeUnmount(() => window.clearInterval(timer))
 <template>
   <div class="selection-page">
     <header class="selection-hero">
-      <div><p>RESEARCH_UNIVERSE_V1 · CURRENT AS-OF</p><h1>立即选股</h1>
-        <span>确定性扫描 {{ universe?.size || 25 }} 只沪深主板股票，Top 10 进入 7-Agent 深度研究。</span></div>
+      <div><p>研究股票池 V1 · 当前时点研究</p><h1>立即选股</h1>
+        <span>确定性扫描 {{ universe?.size || 25 }} 只沪深主板股票，前10名进入七智能体深度研究。</span></div>
       <div class="selection-action"><select v-model="selectedWindow" :disabled="running">
         <option :value="20">最近20交易日</option><option :value="60">最近60交易日</option>
         <option :value="120">最近120交易日</option><option :value="250">最近250交易日</option>
       </select><button class="select-now" :disabled="running" @click="start">{{ running ? '研究进行中…' : '立即选股' }}</button></div>
     </header>
-    <div class="boundary">研究与 Paper 模拟用途 · 真实交易 OFF · 当前分析不是 Historical Live Shadow</div>
+    <div class="boundary">仅限研究与模拟 · 真实交易已关闭 · 当前分析不是历史实时影子记录</div>
     <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon />
     <details v-if="error && diagnosticReason" class="diagnostic"><summary>高级诊断信息</summary><code>{{ diagnosticReason }}</code></details>
     <div v-if="running" class="stage-track"><div v-for="(stage, index) in stages" :key="stage" :class="{ active: index <= currentStage }"><i>{{ index + 1 }}</i><span>{{ stage }}</span></div></div>
 
     <template v-if="result">
-      <section class="summary-strip"><article><span>分析窗口</span><b>{{ result.dataCoverage.rangeStart }} → {{ result.dataCoverage.rangeEnd }}</b></article><article><span>完整股票</span><b>{{ result.dataCoverage.completeSecurityCount }} / {{ result.dataCoverage.securityCount }}</b></article><article><span>总耗时</span><b>{{ (result.timings.totalMillis / 1000).toFixed(1) }}s</b></article><article><span>本次成本</span><b>¥{{ result.usage.conservativeCostCny }}</b></article></section>
+      <section class="summary-strip"><article><span>分析窗口</span><b>{{ result.dataCoverage.rangeStart }} → {{ result.dataCoverage.rangeEnd }}</b></article><article><span>完整股票</span><b>{{ result.dataCoverage.completeSecurityCount }} / {{ result.dataCoverage.securityCount }}</b></article><article><span>总耗时</span><b>{{ (result.timings.totalMillis / 1000).toFixed(1) }} 秒</b></article><article><span>本次成本</span><b>{{ formatCurrency(result.usage.conservativeCostCny, 4) }}</b></article></section>
       <section class="result-panel"><h2>今日选股结果</h2>
-        <div v-if="result.emptyResult" class="empty-result"><strong>今日无合格候选</strong><span>INSUFFICIENT_EVIDENCE · 系统没有为了展示效果强制推荐股票。</span></div>
+        <div v-if="result.emptyResult" class="empty-result"><strong>今日无合格候选</strong><span>{{ displayDecision('INSUFFICIENT_EVIDENCE') }} · 系统没有为了展示效果强制推荐股票。</span></div>
         <article v-for="candidate in result.candidates" :key="candidate.security.symbol" class="candidate-card">
-          <div class="candidate-rank">{{ candidate.rank }}</div><div class="candidate-main"><h3>{{ candidate.name }} <small>{{ candidate.security.symbol }} / {{ candidate.security.exchange }}</small></h3><div class="candidate-tags"><b>综合 {{ candidate.quantitativeScore }}</b><span>风险 {{ candidate.riskLevel }}</span><span>Confidence {{ pct(candidate.confidence) }}</span><span>{{ candidate.recommendation }}</span></div><p><strong>量化：</strong>{{ candidate.supportingReasons.join('；') }}</p><p><strong>Agent：</strong>{{ result.agentReport.finalDecision.code }} · {{ result.agentReport.finalDecision.supportingEvidenceIds.length }} 条支持证据</p><p><strong>Strategy：</strong>{{ candidate.preferredStrategy }} · 最大回撤 {{ pct(candidate.maxDrawdown) }} · {{ candidate.trend }}</p><div class="strategy-row"><span v-for="strategy in candidate.strategyComparison" :key="strategy.strategyCode"><b>{{ strategy.strategyCode }}</b> 收益 {{ pct(strategy.totalReturn) }} · Sharpe {{ Number(strategy.sharpeRatio).toFixed(2) }} · 回撤 {{ pct(strategy.maxDrawdown) }}</span></div><p><strong>Critic：</strong>{{ candidate.criticIssues.length ? candidate.criticIssues.join('；') : '未发现阻断性问题' }}</p><p class="opposing"><strong>限制：</strong>{{ candidate.opposingReasons.join('；') || '无额外限制' }}</p></div>
+          <div class="candidate-rank">{{ candidate.rank }}</div><div class="candidate-main"><h3>{{ candidate.name }} <small>{{ candidate.security.symbol }} / {{ candidate.security.exchange }}</small></h3><div class="candidate-tags"><b>综合 {{ candidate.quantitativeScore }}</b><span>风险 {{ displayRisk(candidate.riskLevel) }}</span><span>置信度 {{ pct(candidate.confidence) }}</span><span>{{ displayDecision(candidate.recommendation) }}</span></div><p><strong>量化：</strong>{{ candidate.supportingReasons.join('；') }}</p><p><strong>智能体：</strong>{{ displayDecision(result.agentReport.finalDecision.code) }} · {{ result.agentReport.finalDecision.supportingEvidenceIds.length }} 条支持证据</p><p><strong>策略：</strong>{{ displayStrategy(candidate.preferredStrategy) }} · 最大回撤 {{ pct(candidate.maxDrawdown) }} · {{ displayValue(candidate.trend) }}</p><div class="strategy-row"><span v-for="strategy in candidate.strategyComparison" :key="strategy.strategyCode"><b>{{ displayStrategy(strategy.strategyCode) }}</b> 收益 {{ pct(strategy.totalReturn) }} · 夏普比率 {{ Number(strategy.sharpeRatio).toFixed(2) }} · 回撤 {{ pct(strategy.maxDrawdown) }}</span></div><p><strong>批判审查：</strong>{{ candidate.criticIssues.length ? candidate.criticIssues.join('；') : '未发现阻断性问题' }}</p><p class="opposing"><strong>限制：</strong>{{ candidate.opposingReasons.join('；') || '无额外限制' }}</p></div>
         </article>
       </section>
-      <section class="result-grid"><article><h2>量化 Top 10</h2><table><thead><tr><th>#</th><th>股票</th><th>行业</th><th>评分</th><th>20日</th><th>60日</th><th>Sharpe</th><th>回撤</th></tr></thead><tbody><tr v-for="score in result.shortlist" :key="score.security.symbol"><td>{{ score.rank }}</td><td>{{ score.name }}<small>{{ score.security.symbol }}</small></td><td>{{ score.industry }}</td><td>{{ score.score }}</td><td>{{ pct(score.twentyDayReturn) }}</td><td>{{ pct(score.sixtyDayReturn) }}</td><td>{{ score.sharpe }}</td><td>{{ pct(score.maxDrawdown) }}</td></tr></tbody></table></article><article><h2>研究血缘与用量</h2><p>Universe：{{ result.lineage.researchUniverseVersion }}</p><p>Ranking：{{ result.lineage.rankingVersion }}</p><p>Model：{{ result.lineage.modelProvider }} / {{ result.lineage.model }}</p><p>Agent：{{ result.usage.modelCalls }} calls / {{ result.usage.totalTokens }} tokens</p><p>Tushare：{{ result.usage.tushareProviderRequests }} calls / retry {{ result.usage.retryCount }}</p><p>PIT / knownAt：{{ result.dataCoverage.noFutureDataLeakage ? 'PASS' : 'FAILED' }}</p><router-link to="/shadow-research">查看冻结研究与 Paper →</router-link></article></section>
-      <section class="agent-panel"><h2>7-Agent 研究结论</h2><div class="agent-grid"><article v-for="agent in result.agentReport.agentRuns" :key="agent.runId"><header><b>{{ agent.agentRole }}</b><span>{{ agent.status }}</span></header><p v-for="finding in agent.findings" :key="finding.findingId"><em>{{ finding.claimType }}</em>{{ finding.statement }}</p><small v-if="!agent.findings.length">本轮没有可证据化的新结论。</small></article></div><div class="critic-box"><b>Critic 审查</b><span>{{ result.agentReport.criticReview.issues.length ? result.agentReport.criticReview.issues.join('；') : '未发现阻断性问题' }}</span><small>修正：{{ result.agentReport.criticReview.correctionApplied ? '已应用' : '无需修正' }} · 返工 {{ result.agentReport.criticReview.reworkRounds }} 轮</small></div><div class="paper-box"><b>Paper 模拟：{{ result.paperEnabled ? 'ON' : 'OFF' }}</b><span>{{ result.shadowRunId ? '研究结论已冻结并进入 Paper 流程' : '本次未生成 Paper 记录' }}；真实交易始终 OFF。</span></div></section>
+      <section class="result-grid"><article><h2>量化前10名</h2><table><thead><tr><th>#</th><th>股票</th><th>行业</th><th>评分</th><th>20日</th><th>60日</th><th>夏普</th><th>回撤</th></tr></thead><tbody><tr v-for="score in result.shortlist" :key="score.security.symbol"><td>{{ score.rank }}</td><td>{{ score.name }}<small>{{ score.security.symbol }}</small></td><td>{{ score.industry }}</td><td>{{ score.score }}</td><td>{{ pct(score.twentyDayReturn) }}</td><td>{{ pct(score.sixtyDayReturn) }}</td><td>{{ score.sharpe }}</td><td>{{ pct(score.maxDrawdown) }}</td></tr></tbody></table></article><article><h2>研究血缘与用量</h2><p>股票池版本：{{ result.lineage.researchUniverseVersion }}</p><p>排名版本：{{ result.lineage.rankingVersion }}</p><p>模型：{{ result.lineage.modelProvider }} / {{ result.lineage.model }}</p><p>智能体：{{ result.usage.modelCalls }} 次调用 / {{ result.usage.totalTokens }} 个令牌</p><p>Tushare：{{ result.usage.tushareProviderRequests }} 次请求 / 重试 {{ result.usage.retryCount }}</p><p>时点边界：{{ result.dataCoverage.noFutureDataLeakage ? '通过' : '未通过' }}</p><router-link to="/shadow-research">查看冻结研究与模拟账本 →</router-link></article></section>
+      <section class="agent-panel"><h2>七智能体研究结论</h2><div class="agent-grid"><article v-for="agent in result.agentReport.agentRuns" :key="agent.runId"><header><b>{{ displayAgentRole(agent.agentRole) }}</b><span>{{ displayStatus(agent.status) }}</span></header><p v-for="finding in agent.findings" :key="finding.findingId"><em>{{ displayClaimType(finding.claimType) }}</em>{{ finding.statement }}</p><small v-if="!agent.findings.length">本轮没有可证据化的新结论。</small></article></div><div class="critic-box"><b>批判审查</b><span>{{ result.agentReport.criticReview.issues.length ? result.agentReport.criticReview.issues.join('；') : '未发现阻断性问题' }}</span><small>修正：{{ result.agentReport.criticReview.correctionApplied ? '已应用' : '无需修正' }} · 返工 {{ result.agentReport.criticReview.reworkRounds }} 轮</small></div><div class="paper-box"><b>模拟研究：{{ result.paperEnabled ? '已开启' : '已关闭' }}</b><span>{{ result.shadowRunId ? '研究结论已冻结并进入模拟流程' : '本次未生成模拟记录' }}；真实交易始终关闭。</span></div></section>
     </template>
 
-    <section class="history-panel"><h2>历史选股结果</h2><table><thead><tr><th>时间</th><th>锚点</th><th>状态</th><th>股票池</th><th>Top10</th><th>候选</th><th>结论</th></tr></thead><tbody><tr v-for="item in history" :key="item.runId" class="history-row" @click="openRun(item.runId)"><td>{{ item.createdAt }}</td><td>{{ item.anchorTradeDate || '准备中' }}</td><td>{{ item.status }}</td><td>{{ item.universeSize }}</td><td>{{ item.shortlistSize }}</td><td>{{ item.candidateCount }}</td><td>{{ item.decisionCode }}</td></tr></tbody></table></section>
+    <section class="history-panel"><h2>历史选股结果</h2><table><thead><tr><th>时间</th><th>锚点</th><th>状态</th><th>股票池</th><th>前10名</th><th>候选</th><th>结论</th></tr></thead><tbody><tr v-for="item in history" :key="item.runId" class="history-row" @click="openRun(item.runId)"><td>{{ formatDateTime(item.createdAt) }}</td><td>{{ item.anchorTradeDate || '准备中' }}</td><td>{{ displayStatus(item.status) }}</td><td>{{ item.universeSize }}</td><td>{{ item.shortlistSize }}</td><td>{{ item.candidateCount }}</td><td>{{ displayDecision(item.decisionCode) }}</td></tr></tbody></table></section>
   </div>
 </template>
 

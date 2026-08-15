@@ -2,6 +2,7 @@
 import * as echarts from 'echarts'
 import { nextTick, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { api } from '../api'
+import { displayReason, displayRisk, displayValue, formatCurrency, formatDateTime } from '../localization/display'
 
 const account = ref<any>({ positions: [] })
 const orders = ref<any[]>([])
@@ -24,7 +25,7 @@ const form = reactive({
 })
 
 function money(value: any) {
-  return Number(value || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  return formatCurrency(value)
 }
 
 function price(value: any) {
@@ -65,7 +66,7 @@ async function load() {
     await nextTick()
     renderChart()
   } catch (e: any) {
-    error.value = e.message || '模拟账户加载失败'
+    error.value = e?.message ? displayReason(e.message) : '模拟账户加载失败'
   } finally {
     loading.value = false
   }
@@ -137,7 +138,7 @@ async function act(key: string, action: () => Promise<void>) {
     await action()
     await load()
   } catch (e: any) {
-    error.value = e.message || '操作失败'
+    error.value = e?.message ? displayReason(e.message) : '操作失败'
   } finally {
     actionLoading.value = ''
   }
@@ -255,7 +256,7 @@ onUnmounted(() => {
       <h3>未处理风险事件</h3>
       <div class="scroll-list">
         <div v-for="row in risks" :key="row.id" class="risk-row">
-          <div><b :class="row.level==='HIGH'?'down':''">{{ row.symbol }} · {{ row.event_type }}</b><span>{{ row.message }}</span></div>
+          <div><b :class="row.level==='HIGH'?'down':''">{{ row.symbol }} · {{ displayValue(row.event_type) }} · {{ displayRisk(row.level) }}</b><span>{{ row.message }}</span></div>
           <div class="risk-price">现 {{ row.current_price || '--' }} / 线 {{ row.trigger_price || '--' }}</div>
           <button class="mini-btn" @click="resolveRisk(row)">已处理</button>
         </div>
@@ -272,9 +273,9 @@ onUnmounted(() => {
         <tbody>
           <tr v-for="row in orders" :key="row.id">
             <td>{{ row.id }}</td><td>{{ row.client_order_no }}</td><td>{{ row.symbol }} {{ row.display_name }}</td>
-            <td :class="row.side==='BUY'?'up':'down'">{{ row.side }}</td><td>{{ row.quantity }}</td><td>{{ price(row.limit_price) }}</td>
+            <td :class="row.side==='BUY'?'up':'down'">{{ displayValue(row.side) }}</td><td>{{ row.quantity }}</td><td>{{ price(row.limit_price) }}</td>
             <td>{{ statusLabel(row.status) }}</td><td>{{ row.side==='BUY' ? money(row.frozen_amount) : `${row.frozen_quantity || 0}股` }}</td>
-            <td>{{ row.net_amount ? money(row.net_amount) : '--' }}</td><td>{{ row.created_at }}</td>
+            <td>{{ row.net_amount ? money(row.net_amount) : '--' }}</td><td>{{ formatDateTime(row.created_at) }}</td>
             <td class="row-actions">
               <button v-if="row.status==='PENDING_CONFIRM'" class="mini-btn primary" @click="confirm(row)">确认成交</button>
               <button v-if="row.status==='PENDING_CONFIRM'" class="mini-btn" @click="cancelOrder(row)">撤销</button>
@@ -297,7 +298,7 @@ onUnmounted(() => {
           <thead><tr><th>时间</th><th>股票</th><th>方向</th><th>数量</th><th>价格</th><th>净额</th><th>费用</th><th>已实现盈亏</th></tr></thead>
           <tbody>
             <tr v-for="row in trades" :key="row.id">
-              <td>{{ row.trade_time }}</td><td>{{ row.symbol }} {{ row.name }}</td><td :class="row.side==='BUY'?'up':'down'">{{ row.side }}</td>
+              <td>{{ formatDateTime(row.trade_time) }}</td><td>{{ row.symbol }} {{ row.name }}</td><td :class="row.side==='BUY'?'up':'down'">{{ displayValue(row.side) }}</td>
               <td>{{ row.quantity }}</td><td>{{ price(row.price) }}</td><td>{{ money(row.net_amount) }}</td>
               <td>{{ money(Number(row.commission||0)+Number(row.stamp_duty||0)+Number(row.transfer_fee||0)) }}</td>
               <td :class="Number(row.realized_pnl)>=0?'up':'down'">{{ money(row.realized_pnl) }}</td>

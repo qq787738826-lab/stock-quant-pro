@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { api } from '../api'
+import { displayReason, displayStatus } from '../localization/display'
 
 type Task = {
   id?: number
@@ -83,7 +84,10 @@ const updateProgress = computed(() => {
 function friendlyError(e: any, fallback: string) {
   const raw = String(e?.message || '')
   if (raw === 'Network Error') {
-    return '无法连接Java后端。请确认 QuantServerApplication 已启动，并检查 http://127.0.0.1:8080/api/health'
+    return '后端服务暂不可用，系统可能正在恢复，请稍后重试。'
+  }
+  if (raw && (/[A-Z][A-Z0-9_]{3,}/.test(raw) || /status code|sql|exception/i.test(raw))) {
+    return displayReason(raw)
   }
   return raw || fallback
 }
@@ -325,7 +329,7 @@ onUnmounted(() => {
     <div class="task-header">
       <h3>扫描任务 <span v-if="task.id">#{{ task.id }} · {{ scanTypeLabel(task) }}</span></h3>
       <span class="status-tag" :class="String(task.status || '').toLowerCase()">
-        {{ task.status || '暂无任务' }}
+        {{ task.status ? displayStatus(task.status) : '暂无任务' }}
       </span>
     </div>
     <div class="progress-track"><div class="progress-value" :style="{ width: scanProgress + '%' }"></div></div>
@@ -352,7 +356,7 @@ onUnmounted(() => {
     <div class="task-header">
       <h3>行情更新任务 <span v-if="updateTask.id">#{{ updateTask.id }}</span></h3>
       <span class="status-tag" :class="String(updateTask.status || '').toLowerCase()">
-        {{ updateTask.status || '暂无任务' }}
+        {{ updateTask.status ? displayStatus(updateTask.status) : '暂无任务' }}
       </span>
     </div>
     <div class="progress-track"><div class="progress-value update" :style="{ width: updateProgress + '%' }"></div></div>
@@ -378,7 +382,7 @@ onUnmounted(() => {
           <tr v-for="row in taskHistory" :key="row.id">
             <td>#{{ row.id }}</td>
             <td>{{ scanTypeLabel(row) }} <span v-if="row.official" class="official">正式</span></td>
-            <td>{{ row.status }}</td>
+            <td>{{ displayStatus(row.status) }}</td>
             <td>{{ row.total_symbols || row.requested_limit || 0 }}</td>
             <td>{{ row.success_symbols || 0 }} / {{ row.failed_symbols || 0 }}</td>
             <td>{{ row.selected_count || 0 }}</td>

@@ -2,6 +2,12 @@
 import { computed, onMounted, ref, shallowRef } from 'vue'
 import { getAgentEvaluationOverview } from '../agent-evaluation/api'
 import type { AgentScorecard, EvaluationOverview } from '../agent-evaluation/types'
+import {
+  displayAgentRole,
+  displayDecision,
+  displayReason,
+  displayStatus,
+} from '../localization/display'
 
 const overview = shallowRef<EvaluationOverview | null>(null)
 const loading = ref(false)
@@ -11,32 +17,32 @@ const champion = computed(() => overview.value?.latestReport?.versionEvaluations
 const scorecards = computed<AgentScorecard[]>(() => champion.value?.scorecards ?? [])
 const challenger = computed(() => overview.value?.latestReport?.versionEvaluations
   .find(value => value.versionKey === overview.value?.latestReport?.comparison.challengerVersionKey))
-const percent = (value?: number) => value == null ? 'N/A' : `${(Number(value) * 100).toFixed(2)}%`
+const percent = (value?: number) => value == null ? '—' : `${(Number(value) * 100).toFixed(2)}%`
 
 onMounted(async () => {
   loading.value = true
   try { overview.value = await getAgentEvaluationOverview() }
-  catch (cause) { error.value = cause instanceof Error ? cause.message : 'Agent evaluation unavailable' }
+  catch (cause) { error.value = cause instanceof Error ? displayReason(cause.message) : '智能体评测暂不可用' }
   finally { loading.value = false }
 })
 </script>
 
 <template>
   <div class="evaluation" v-loading="loading">
-    <header class="hero"><div><p>AGENT_EVALUATION_SYSTEM_V1 / IMMUTABLE EVIDENCE</p><h1>Agent Evaluation</h1><span>Explainable scorecards, immutable versions, Shadow outcomes and bounded champion/challenger decisions.</span></div><el-tag type="warning" effect="dark">NO REAL TRADING</el-tag></header>
+    <header class="hero"><div><p>智能体评测系统 V1 / 不可变证据</p><h1>智能体评测</h1><span>可解释评分卡、不可变版本、影子研究结果与受控的正式版/候选版决策。</span></div><el-tag type="warning" effect="dark">禁止真实交易</el-tag></header>
     <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon />
-    <el-empty v-else-if="!loading && !overview?.latestReport" description="No frozen M5 evaluation report" />
+    <el-empty v-else-if="!loading && !overview?.latestReport" description="暂无已冻结的智能体评测报告" />
     <template v-if="overview?.latestReport">
       <section class="metrics">
-        <article><span>Champion</span><strong>{{ overview.latestReport.currentChampionVersionKey }}</strong></article>
-        <article><span>Shadow samples</span><strong>{{ overview.latestReport.eligibleOutcomeCount }} / {{ overview.realShadowStatus }}</strong></article>
-        <article><span>Paper return</span><strong>{{ percent(overview.latestReport.paperTotalReturn) }}</strong></article>
-        <article><span>Real trading</span><strong>{{ overview.realTradingEnabled ? 'ENABLED' : 'DISABLED' }}</strong></article>
+        <article><span>当前正式版本</span><strong>{{ overview.latestReport.currentChampionVersionKey }}</strong></article>
+        <article><span>影子研究样本</span><strong>{{ overview.latestReport.eligibleOutcomeCount }} / {{ displayDecision(overview.realShadowStatus) }}</strong></article>
+        <article><span>模拟收益</span><strong>{{ percent(overview.latestReport.paperTotalReturn) }}</strong></article>
+        <article><span>真实交易</span><strong>{{ overview.realTradingEnabled ? '已启用' : '已关闭' }}</strong></article>
       </section>
-      <section class="panel"><h2>Seven Agent scorecards</h2><el-table :data="scorecards" size="small"><el-table-column prop="role" label="Agent" min-width="210"/><el-table-column prop="weightedScore" label="Score" width="100"/><el-table-column prop="lifecycleDecision" label="Decision" width="120"/><el-table-column prop="reportSampleCount" label="Reports" width="90"/><el-table-column label="Failure modes"><template #default="scope">{{ scope.row.failureModes.join(', ') || 'NONE' }}</template></el-table-column></el-table></section>
-      <section class="grid"><article class="panel"><h2>Champion / Challenger</h2><p>Challenger: {{ overview.latestReport.comparison.challengerVersionKey }}</p><strong>{{ overview.latestReport.comparison.decision }}</strong><p>{{ overview.latestReport.comparison.reasons.join(', ') }}</p><p>Score delta: {{ overview.latestReport.comparison.scoreDelta }} / cost ratio: {{ overview.latestReport.comparison.costRatio }} / latency ratio: {{ overview.latestReport.comparison.latencyRatio }}</p><p>Promotion: {{ overview.latestReport.comparison.promotionAllowed ? 'ALLOWED' : 'BLOCKED' }}</p></article><article class="panel"><h2>Confidence calibration</h2><p>Eligible: {{ champion?.calibration.eligibleSampleCount ?? 0 }}</p><p>Abstentions: {{ champion?.calibration.abstentionCount ?? 0 }} (not penalized)</p><p>Brier: {{ champion?.calibration.brierScore ?? 0 }}</p><p>ECE: {{ champion?.calibration.expectedCalibrationError ?? 0 }}</p><p v-if="champion?.calibration.status === 'INSUFFICIENT_SAMPLE'">INSUFFICIENT_SAMPLE is preserved; no long-run claim is manufactured.</p></article></section>
-      <section class="panel"><h2>Version registry</h2><el-table :data="overview.registeredVersions" size="small"><el-table-column prop="kind" label="Kind" width="120"/><el-table-column prop="versionKey" label="Version" min-width="240"/><el-table-column prop="parentVersionKey" label="Parent" min-width="220"/><el-table-column prop="modelProvider" label="Provider" width="130"/><el-table-column prop="model" label="Model" min-width="170"/><el-table-column label="Status" width="130"><template #default="scope">{{ scope.row.versionKey === overview.latestReport.currentChampionVersionKey ? 'CHAMPION' : scope.row.versionKey === challenger?.versionKey ? 'CHALLENGER' : 'HISTORICAL' }}</template></el-table-column></el-table></section>
-      <section class="panel"><h2>Traceability</h2><p>Offline eval {{ champion?.offlineEvalPassed }}/{{ champion?.offlineEvalTotal }} / replay {{ champion?.historicalReplaySamples }} samples / {{ champion?.modelCalls }} model calls / {{ champion?.totalTokens }} tokens / {{ champion?.accountedCost }} {{ champion?.costCurrency }}</p><p>Frozen history remains bound to its original prompt/model/runtime/tool/strategy fingerprint. M5 cannot overwrite M4 decisions.</p></section>
+      <section class="panel"><h2>七智能体评分卡</h2><el-table :data="scorecards" size="small"><el-table-column label="智能体" min-width="210"><template #default="scope">{{ displayAgentRole(scope.row.role) }}</template></el-table-column><el-table-column prop="weightedScore" label="评分" width="100"/><el-table-column label="评估结论" width="120"><template #default="scope">{{ displayStatus(scope.row.lifecycleDecision) }}</template></el-table-column><el-table-column prop="reportSampleCount" label="报告数" width="90"/><el-table-column label="主要问题"><template #default="scope"><span v-for="mode in scope.row.failureModes" :key="mode" :title="`高级诊断：${mode}`">{{ displayReason(mode) }}；</span><span v-if="!scope.row.failureModes.length">无</span></template></el-table-column></el-table></section>
+      <section class="grid"><article class="panel"><h2>正式版本 / 候选版本</h2><p>候选版本：{{ overview.latestReport.comparison.challengerVersionKey }}</p><strong>{{ displayDecision(overview.latestReport.comparison.decision) }}</strong><p><span v-for="reason in overview.latestReport.comparison.reasons" :key="reason" :title="`高级诊断：${reason}`">{{ displayReason(reason) }}；</span></p><p>评分差：{{ overview.latestReport.comparison.scoreDelta }} / 成本比：{{ overview.latestReport.comparison.costRatio }} / 延迟比：{{ overview.latestReport.comparison.latencyRatio }}</p><p>允许晋升：{{ overview.latestReport.comparison.promotionAllowed ? '是' : '否' }}</p></article><article class="panel"><h2>置信度校准</h2><p>有效样本：{{ champion?.calibration.eligibleSampleCount ?? 0 }}</p><p>放弃判断：{{ champion?.calibration.abstentionCount ?? 0 }}（不扣分）</p><p>布里尔分数：{{ champion?.calibration.brierScore ?? 0 }}</p><p>期望校准误差：{{ champion?.calibration.expectedCalibrationError ?? 0 }}</p><p v-if="champion?.calibration.status === 'INSUFFICIENT_SAMPLE'">当前样本不足；系统不会制造长期有效性结论。</p></article></section>
+      <section class="panel"><h2>版本登记</h2><el-table :data="overview.registeredVersions" size="small"><el-table-column label="类型" width="120"><template #default="scope">{{ displayDecision(scope.row.kind) }}</template></el-table-column><el-table-column prop="versionKey" label="版本" min-width="240"/><el-table-column prop="parentVersionKey" label="上级版本" min-width="220"/><el-table-column prop="modelProvider" label="模型服务" width="130"/><el-table-column prop="model" label="模型" min-width="170"/><el-table-column label="状态" width="130"><template #default="scope">{{ displayDecision(scope.row.versionKey === overview.latestReport.currentChampionVersionKey ? 'CHAMPION' : scope.row.versionKey === challenger?.versionKey ? 'CHALLENGER' : 'HISTORICAL') }}</template></el-table-column></el-table></section>
+      <section class="panel"><h2>可追溯性</h2><p>离线评测 {{ champion?.offlineEvalPassed }}/{{ champion?.offlineEvalTotal }} / 历史回放 {{ champion?.historicalReplaySamples }} 个样本 / {{ champion?.modelCalls }} 次模型调用 / {{ champion?.totalTokens }} 个令牌 / {{ champion?.accountedCost }} {{ champion?.costCurrency }}</p><p>冻结历史始终绑定原始提示词、模型、运行时、工具和策略指纹；新评测不能覆盖既有影子研究决策。</p></section>
     </template>
   </div>
 </template>
