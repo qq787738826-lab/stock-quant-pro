@@ -14,6 +14,7 @@ import com.stockquant.server.agent.shadowresearch.ShadowResearchModels.TriggerMo
 import com.stockquant.server.agent.shadowresearch.ShadowResearchRepository;
 import com.stockquant.server.agent.shadowresearch.ShadowResearchRuntime;
 import com.stockquant.server.researchselection.ResearchSelectionModels.QuantitativeScore;
+import com.stockquant.server.researchselection.ResearchSelectionModels.HistoricalResearch;
 import com.stockquant.server.researchselection.ResearchSelectionModels.SelectionRequest;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -60,6 +61,7 @@ public final class ResearchSelectionDeepResearchService
             LocalDate anchor,
             Instant asOf,
             int providerCalls,
+            HistoricalResearch historical,
             ModelAdapter model
     ) {
         int bars = topDataset.bars().size();
@@ -87,11 +89,42 @@ public final class ResearchSelectionDeepResearchService
                 anchor, topDataset.firstSessionDate(), asOf,
                 topDataset.securities(), shortlist.get(0).security(),
                 strategies, paperExecution, providerCalls,
-                "基于 " + ResearchUniverseV1.VERSION
-                        + " 开展当前时点、证据约束的股票研究；仅用于研究和模拟，不进行真实交易。",
+                objective(historical, shortlist),
                 slot,
                 ShadowResearchModels.SELECTION_STRATEGY_VERSION);
         return runtime.run(request, model);
+    }
+
+    static String objective(
+            HistoricalResearch historical,
+            List<QuantitativeScore> shortlist
+    ) {
+        Objects.requireNonNull(historical, "historical");
+        Map<String, ResearchSelectionModels.HistoricalStability> bySecurity =
+                historical.securities().stream().collect(
+                Collectors.toUnmodifiableMap(value ->
+                        value.security().canonicalCode(), value -> value));
+        StringBuilder value = new StringBuilder("基于 ")
+                .append(ResearchUniverseV1.VERSION)
+                .append(" 开展当前时点研究；历史稳定性=")
+                .append(historical.version()).append('/')
+                .append(historical.researchLabel()).append('/')
+                .append(historical.pitQualification()).append("，可用")
+                .append(historical.availableSessions()).append("日；Top10[");
+        for (QuantitativeScore score : shortlist) {
+            var stability = bySecurity.get(score.security().canonicalCode());
+            if (stability == null) continue;
+            String item = score.security().canonicalCode() + '='
+                    + stability.score() + '/' + stability.grade() + ';';
+            if (value.length() + item.length() > 440) break;
+            value.append(item);
+        }
+        value.append("]。仅用于研究和模拟，不进行真实交易；历史结果不得冒充Live Shadow。");
+        if (value.length() > 500) {
+            throw new IllegalStateException(
+                    "RESEARCH_SELECTION_HISTORY_OBJECTIVE_TOO_LONG");
+        }
+        return value.toString();
     }
 
     static Instant validatePaperExecution(

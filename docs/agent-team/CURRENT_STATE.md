@@ -641,6 +641,14 @@ DATA_QUALITY 只作门禁和 confidence 上限，MARKET_REGIME V1 权重为 0 �
   检查拒绝，精确条件为旧零调用终态的 `operation=UNKNOWN` 与原请求
   `operation=RUN_RESEARCH_SELECTION` 不一致；既有 V1.0.3 已仅对该不可变 build-proof 拒绝形状完成
   fail-closed 兼容，其他 operation 错配继续拒绝。不得补跑或改写 run 9。
+- V1.0.8_FAST_HISTORICAL_RESEARCH_MVP 在既有“立即选股”结果中增加只读、确定性的
+  `HISTORICAL_STABILITY_SCORE_V1`：复用 M2 四种既有策略计算 20/60/120/250 日覆盖、60 日内
+  滚动 20 日窗口和严格时间顺序的 20/10 日 walk-forward，以数据完整性 20%、多窗口/多策略一致性
+  20%、样本外表现 25%、回撤与波动 20%、成本后表现与样本数量 15% 形成可解释的 A/B/C 研究等级。
+  历史不足投影为 `INSUFFICIENT_HISTORY` 并降低等级，不触发 Provider 补采，也不使当前选股失败；
+  结果固定标记为 `POST_HOC_RESEARCH/PIT_PARTIAL`，不得冒充 Live Shadow。页面明确分隔当前研究、
+  历史稳定性与真实 Live Shadow 样本，七智能体仍只执行一次既有 Top10 研究流程；无新策略、迁移、
+  Broker/Scheduler 合同或真实交易能力。
 
 ## 当前后续入口与阻断
 

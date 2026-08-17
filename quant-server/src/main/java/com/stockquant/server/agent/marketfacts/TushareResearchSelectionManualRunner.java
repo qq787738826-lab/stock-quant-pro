@@ -264,7 +264,8 @@ public final class TushareResearchSelectionManualRunner {
                 var result = engine.run(launch.selectionRunId(),
                         launch.publicRunId(), config.request(), anchor,
                         config.researchAsOf(), launch.gitCommit(),
-                        progress.providerCalls, 0, coverage, model, deep,
+                        progress.providerCalls, 0, coverage,
+                        repository.liveShadowSampleCounts(), model, deep,
                         stages::advance, progress.startedNanos,
                         progress.startedAt);
                 repository.complete(launch.selectionRunId(),

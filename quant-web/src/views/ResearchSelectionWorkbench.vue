@@ -3,7 +3,15 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AgentConclusionPanel from '../components/AgentConclusionPanel.vue'
 import { getResearchUniverse, getSelectionHistory, getSelectionRun, startSelection } from '../research-selection/api'
-import type { SelectionResult, SelectionSummary } from '../research-selection/types'
+import type { Candidate, SelectionResult, SelectionSummary } from '../research-selection/types'
+import {
+  displayHistoricalGrade,
+  displayHistoricalLabel,
+  displayHistoricalWindow,
+  displayHistoryStatus,
+  historicalBySecurity,
+  securityKey,
+} from '../research-selection/historical'
 import {
   displayDecision,
   displayRisk,
@@ -38,6 +46,11 @@ const currentStage = computed(() => {
 })
 const legacyReport = computed(() => result.value?.agentReport.agentRuns.some(agent =>
   agent.findings.some(finding => isLegacyResearchText(finding.statement))) ?? false)
+const stabilityMap = computed(() => historicalBySecurity(
+  result.value?.historicalResearch))
+const historyFor = (candidate: Candidate) => stabilityMap.value.get(
+  securityKey(candidate.security))
+const gradeClass = (grade?: string) => `history-grade grade-${grade || 'C'}`
 
 async function load() {
   [history.value, universe.value] = await Promise.all([
@@ -159,13 +172,77 @@ onBeforeUnmount(() => window.clearInterval(timer))
       <el-alert v-if="legacyReport" title="历史原始报告：原始英文智能体正文保持不可变；新研究默认使用简体中文。" type="info" :closable="false" show-icon />
       <div class="anchor-notice">本次研究使用截至 <strong>{{ result.anchorTradeDate }}</strong> 收盘的数据。</div>
       <section class="summary-strip"><article><span>分析窗口</span><b>{{ result.dataCoverage.rangeStart }} → {{ result.dataCoverage.rangeEnd }}</b></article><article><span>完整股票</span><b>{{ result.dataCoverage.completeSecurityCount }} / {{ result.dataCoverage.securityCount }}</b></article><article><span>总耗时</span><b>{{ (result.timings.totalMillis / 1000).toFixed(1) }} 秒</b></article><article><span>本次成本</span><b>{{ formatCurrency(result.usage.conservativeCostCny, 4) }}</b></article></section>
+      <section v-if="result.historicalResearch" class="historical-overview">
+        <header>
+          <div><h2>历史稳定性研究</h2><p>
+            {{ displayHistoricalLabel(result.historicalResearch.researchLabel) }} ·
+            {{ displayHistoricalLabel(result.historicalResearch.pitQualification) }} ·
+            不代表历史实时影子业绩
+          </p></div>
+          <div class="grade-distribution">
+            <b>A {{ result.historicalResearch.gradeDistribution.A }}</b>
+            <b>B {{ result.historicalResearch.gradeDistribution.B }}</b>
+            <b>C {{ result.historicalResearch.gradeDistribution.C }}</b>
+          </div>
+        </header>
+        <div class="coverage-grid">
+          <article v-for="coverage in result.historicalResearch.windowCoverage" :key="coverage.requestedSessions" :class="{ insufficient: coverage.status !== 'AVAILABLE' }">
+            <span>{{ coverage.requestedSessions }}日</span>
+            <strong>{{ displayHistoryStatus(coverage) }}</strong>
+            <small>{{ coverage.rangeStart }} → {{ coverage.rangeEnd }}</small>
+          </article>
+        </div>
+        <p class="historical-boundary">计算版本 {{ result.historicalResearch.version }}；knownAt与防未来检查{{ result.historicalResearch.noFutureDataLeakage ? '通过' : '未通过' }}。历史不足只降低等级，不会使立即选股失败，也不会触发历史补采。</p>
+      </section>
+      <section v-else class="historical-overview historical-legacy">
+        <h2>历史稳定性研究</h2><p>该结果生成于V1.0.8之前，未保存历史稳定性投影；原始报告保持不变。</p>
+      </section>
       <section class="result-panel"><h2>今日选股结果</h2>
         <div v-if="result.emptyResult" class="empty-result"><strong>今日无合格候选</strong><span>{{ displayDecision('INSUFFICIENT_EVIDENCE') }} · 系统没有为了展示效果强制推荐股票。</span></div>
         <article v-for="candidate in result.candidates" :key="candidate.security.symbol" class="candidate-card">
-          <div class="candidate-rank">{{ candidate.rank }}</div><div class="candidate-main"><h3>{{ candidate.name }} <small>{{ candidate.security.symbol }} / {{ candidate.security.exchange }}</small></h3><div class="candidate-tags"><b>综合 {{ candidate.quantitativeScore }}</b><span>风险 {{ displayRisk(candidate.riskLevel) }}</span><span>置信度 {{ pct(candidate.confidence) }}</span><span>{{ displayDecision(candidate.recommendation) }}</span></div><p><strong>量化：</strong>{{ displayResearchList(candidate.supportingReasons) }}</p><p><strong>智能体：</strong>{{ displayDecision(result.agentReport.finalDecision.code) }} · {{ result.agentReport.finalDecision.supportingEvidenceIds.length }} 条支持证据</p><p><strong>策略：</strong>{{ displayStrategy(candidate.preferredStrategy) }} · 最大回撤 {{ pct(candidate.maxDrawdown) }} · {{ displayValue(candidate.trend) }}</p><div class="strategy-row"><span v-for="strategy in candidate.strategyComparison" :key="strategy.strategyCode"><b>{{ displayStrategy(strategy.strategyCode) }}</b> 收益 {{ pct(strategy.totalReturn) }} · 夏普比率 {{ Number(strategy.sharpeRatio).toFixed(2) }} · 回撤 {{ pct(strategy.maxDrawdown) }}</span></div><p><strong>批判审查：</strong>{{ displayResearchList(candidate.criticIssues) || '未发现阻断性问题' }}</p><p class="opposing"><strong>限制：</strong>{{ displayResearchList(candidate.opposingReasons) || '无额外限制' }}</p></div>
+          <div class="candidate-rank">{{ candidate.rank }}</div>
+          <div class="candidate-main">
+            <h3>{{ candidate.name }} <small>{{ candidate.security.symbol }} / {{ candidate.security.exchange }}</small></h3>
+            <div class="candidate-tags">
+              <b>当前排名分 {{ candidate.quantitativeScore }}</b>
+              <span v-if="historyFor(candidate)" :class="gradeClass(historyFor(candidate)?.grade)">
+                历史 {{ historyFor(candidate)?.score }} · {{ displayHistoricalGrade(historyFor(candidate)?.grade) }}
+              </span>
+              <span>风险 {{ displayRisk(candidate.riskLevel) }}</span>
+              <span>置信度 {{ pct(candidate.confidence) }}</span>
+              <span>{{ displayDecision(candidate.recommendation) }}</span>
+            </div>
+            <div class="candidate-evidence-grid">
+              <section><h4>当前研究</h4>
+                <p><strong>量化：</strong>{{ displayResearchList(candidate.supportingReasons) }}</p>
+                <p><strong>智能体：</strong>{{ displayDecision(result.agentReport.finalDecision.code) }} · {{ result.agentReport.finalDecision.supportingEvidenceIds.length }} 条支持证据</p>
+                <p><strong>策略：</strong>{{ displayStrategy(candidate.preferredStrategy) }} · 最大回撤 {{ pct(candidate.maxDrawdown) }} · {{ displayValue(candidate.trend) }}</p>
+              </section>
+              <section><h4>历史稳定性</h4>
+                <template v-if="historyFor(candidate)">
+                  <p><strong>可用历史：</strong>{{ historyFor(candidate)?.availableSessions }} 个交易日</p>
+                  <p><strong>最差窗口：</strong>{{ displayHistoricalWindow(historyFor(candidate)?.worstWindow) }} · {{ pct(historyFor(candidate)?.worstWindowReturn || 0) }}</p>
+                  <p><strong>Walk-forward：</strong>{{ historyFor(candidate)?.walkForward.available ? `训练${historyFor(candidate)?.walkForward.trainSessions}日/测试${historyFor(candidate)?.walkForward.testSessions}日，${historyFor(candidate)?.walkForward.foldCount}折，样本外平均 ${pct(historyFor(candidate)?.walkForward.averageOutOfSampleReturn || 0)}` : '历史覆盖不足' }}</p>
+                  <p><strong>支持：</strong>{{ displayResearchList(historyFor(candidate)?.supportingEvidence || []) }}</p>
+                  <p class="opposing"><strong>限制：</strong>{{ displayResearchList(historyFor(candidate)?.limitations || []) }}</p>
+                </template>
+                <p v-else>历史覆盖不足（INSUFFICIENT_HISTORY）</p>
+              </section>
+              <section><h4>Live Shadow验证</h4>
+                <template v-if="historyFor(candidate)">
+                  <p><strong>前瞻样本：</strong>{{ historyFor(candidate)?.liveShadowSamples }} 次</p>
+                  <p>{{ (historyFor(candidate)?.liveShadowSamples || 0) > 0 ? '已有冻结Live Shadow样本，仅作辅助验证。' : '样本不足；历史研究不得替代Live Shadow。' }}</p>
+                </template>
+                <p v-else>尚无可关联样本。</p>
+              </section>
+            </div>
+            <div class="strategy-row"><span v-for="strategy in candidate.strategyComparison" :key="strategy.strategyCode"><b>{{ displayStrategy(strategy.strategyCode) }}</b> 收益 {{ pct(strategy.totalReturn) }} · 夏普比率 {{ Number(strategy.sharpeRatio).toFixed(2) }} · 回撤 {{ pct(strategy.maxDrawdown) }}</span></div>
+            <p><strong>批判审查：</strong>{{ displayResearchList(candidate.criticIssues) || '未发现阻断性问题' }}</p>
+            <p class="opposing"><strong>当前研究限制：</strong>{{ displayResearchList(candidate.opposingReasons) || '无额外限制' }}</p>
+          </div>
         </article>
       </section>
-      <section class="result-grid"><article><h2>量化前10名</h2><table><thead><tr><th>#</th><th>股票</th><th>行业</th><th>评分</th><th>20日</th><th>60日</th><th>夏普</th><th>回撤</th></tr></thead><tbody><tr v-for="score in result.shortlist" :key="score.security.symbol"><td>{{ score.rank }}</td><td>{{ score.name }}<small>{{ score.security.symbol }}</small></td><td>{{ score.industry }}</td><td>{{ score.score }}</td><td>{{ pct(score.twentyDayReturn) }}</td><td>{{ pct(score.sixtyDayReturn) }}</td><td>{{ score.sharpe }}</td><td>{{ pct(score.maxDrawdown) }}</td></tr></tbody></table></article><article><h2>研究血缘与用量</h2><p>股票池版本：{{ displayProduct(result.lineage.researchUniverseVersion) }}</p><p>排名版本：{{ result.lineage.rankingVersion }}</p><p>模型：{{ result.lineage.modelProvider }} / {{ result.lineage.model }}</p><p>智能体：{{ result.usage.modelCalls }} 次调用 / {{ result.usage.totalTokens }} 个令牌</p><p>Tushare：{{ result.usage.tushareProviderRequests }} 次请求 / 重试 {{ result.usage.retryCount }}</p><p>时点边界：{{ result.dataCoverage.noFutureDataLeakage ? '通过' : '未通过' }}</p><router-link to="/shadow-research">查看冻结研究与模拟账本 →</router-link></article></section>
+      <section class="result-grid"><article><h2>量化前10名</h2><table><thead><tr><th>#</th><th>股票</th><th>行业</th><th>当前分</th><th>历史分</th><th>等级</th><th>20日</th><th>60日</th><th>回撤</th></tr></thead><tbody><tr v-for="score in result.shortlist" :key="score.security.symbol"><td>{{ score.rank }}</td><td>{{ score.name }}<small>{{ score.security.symbol }}</small></td><td>{{ score.industry }}</td><td>{{ score.score }}</td><td>{{ stabilityMap.get(securityKey(score.security))?.score ?? '—' }}</td><td>{{ stabilityMap.get(securityKey(score.security))?.grade ?? '—' }}</td><td>{{ pct(score.twentyDayReturn) }}</td><td>{{ pct(score.sixtyDayReturn) }}</td><td>{{ pct(score.maxDrawdown) }}</td></tr></tbody></table></article><article><h2>研究血缘与用量</h2><p>股票池版本：{{ displayProduct(result.lineage.researchUniverseVersion) }}</p><p>排名版本：{{ result.lineage.rankingVersion }}</p><p>历史稳定性：{{ result.lineage.historicalStabilityVersion || '旧结果未生成' }}</p><p>模型：{{ result.lineage.modelProvider }} / {{ result.lineage.model }}</p><p>智能体：{{ result.usage.modelCalls }} 次调用 / {{ result.usage.totalTokens }} 个令牌</p><p>Tushare：{{ result.usage.tushareProviderRequests }} 次请求 / 重试 {{ result.usage.retryCount }}</p><p>时点边界：{{ result.dataCoverage.noFutureDataLeakage ? '通过' : '未通过' }}</p><router-link to="/shadow-research">查看冻结研究与模拟账本 →</router-link></article></section>
       <AgentConclusionPanel
         :report="result.agentReport"
         :paper-enabled="result.paperEnabled"
@@ -179,4 +256,5 @@ onBeforeUnmount(() => window.clearInterval(timer))
 
 <style scoped>
 .selection-page{display:grid;gap:18px}.selection-hero{height:auto;background:linear-gradient(135deg,#102a46,#101d30);border:1px solid #2b4c6d;border-radius:12px;padding:24px;display:flex;justify-content:space-between;align-items:center}.selection-hero p{color:#63b7ff;font-size:12px;letter-spacing:.12em}.selection-hero h1{font-size:30px;margin:4px 0}.selection-hero span,.boundary{color:#94a5bb}.selection-action{display:flex;gap:10px}.selection-action select{background:#0c1a2a;border:1px solid #34506d;color:#d9e6f5;border-radius:8px;padding:0 14px}.select-now{background:#1d8cff;border:0;color:white;border-radius:8px;font-size:16px;font-weight:700;padding:14px 26px;cursor:pointer}.select-now:disabled{opacity:.6}.boundary{font-size:12px;background:#121e2e;border-left:3px solid #e0a84e;padding:10px 14px}.anchor-notice{font-size:13px;color:#a9c6e5;background:#10243a;border-left:3px solid #4ca4f5;padding:11px 14px}.anchor-notice strong{color:#e4f1ff}.diagnostic{font-size:12px;color:#7f91a8;background:#101b2a;border:1px solid #263951;border-radius:6px;padding:9px 12px}.diagnostic code{display:block;color:#9db0c8;margin-top:8px}.stage-track{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}.stage-track div{display:flex;align-items:center;gap:8px;color:#65778f;background:#101b2a;padding:12px}.stage-track i{font-style:normal;border:1px solid #3c4d63;width:24px;height:24px;border-radius:50%;display:grid;place-items:center}.stage-track .active{color:#dcecff}.stage-track .active i{background:#1d8cff;border-color:#1d8cff}.summary-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.summary-strip article,.result-panel,.result-grid article,.history-panel,.agent-panel{background:#0f1b2c;border:1px solid #263951;border-radius:10px;padding:18px}.summary-strip span{display:block;color:#7f91a8;font-size:12px}.summary-strip b{display:block;margin-top:8px}.result-panel h2,.result-grid h2,.history-panel h2,.agent-panel h2{margin:0 0 14px}.empty-result{display:grid;text-align:center;padding:36px;color:#8fa2ba}.empty-result strong{font-size:22px;color:#e2eaf5}.candidate-card{display:grid;grid-template-columns:54px 1fr;gap:14px;padding:16px 0;border-top:1px solid #25364c}.candidate-rank{height:42px;width:42px;border-radius:8px;background:#183b60;color:#73bcff;display:grid;place-items:center;font-size:20px;font-weight:700}.candidate-main h3{margin:0}.candidate-main small,.candidate-main p{color:#8ea0b7}.candidate-main p{margin:9px 0}.candidate-tags{display:flex;gap:8px;margin:10px 0;flex-wrap:wrap}.candidate-tags>*{background:#152a43;border-radius:4px;padding:4px 8px;font-size:12px}.candidate-tags b{color:#6bb8ff}.strategy-row{display:flex;gap:8px;overflow:auto;padding:5px 0 9px}.strategy-row span{min-width:225px;background:#111f31;border:1px solid #263a52;border-radius:6px;padding:8px;color:#8ea0b7;font-size:11px}.strategy-row b{display:block;color:#cfe3fa;margin-bottom:4px}.opposing{color:#c5a76e!important}.result-grid{display:grid;grid-template-columns:2fr 1fr;gap:12px}.result-grid p{color:#91a2b8}.result-grid a{color:#5eb1ff}.agent-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.agent-grid article{background:#111f31;border:1px solid #263a52;border-radius:7px;padding:12px}.agent-grid header{display:flex;justify-content:space-between;color:#dcecff}.agent-grid header span,.agent-grid small{color:#70839a;font-size:11px}.agent-grid p{font-size:12px;color:#9aacc1}.agent-grid em{font-style:normal;color:#5db2ff;margin-right:7px}.critic-box,.paper-box{margin-top:12px;display:flex;gap:12px;align-items:center;background:#16263a;padding:12px;border-radius:6px}.critic-box span,.paper-box span{color:#a6b5c7;flex:1}.critic-box small{color:#7589a0}.history-row{cursor:pointer}.history-row:hover{background:#14253a}table{width:100%;border-collapse:collapse;font-size:12px}th{text-align:left;color:#71839b;padding:8px;border-bottom:1px solid #2a3a50}td{padding:10px 8px;border-bottom:1px solid #1d2c40}td small{display:block;color:#64778f;margin-top:2px}@media(max-width:1100px){.selection-hero{align-items:flex-start;gap:16px}.summary-strip,.result-grid,.agent-grid{grid-template-columns:1fr}.stage-track{grid-template-columns:repeat(3,1fr)}}
+.historical-overview{background:#0f1b2c;border:1px solid #2d4966;border-radius:10px;padding:18px}.historical-overview header{display:flex;justify-content:space-between;gap:16px;align-items:flex-start}.historical-overview h2{margin:0 0 6px}.historical-overview p{margin:0;color:#8fa4bb;font-size:12px}.grade-distribution{display:flex;gap:8px}.grade-distribution b{padding:6px 10px;border-radius:5px;background:#182a3d;color:#b9d1e9}.coverage-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;margin-top:14px}.coverage-grid article{background:#13263a;border:1px solid #2b4d6c;border-radius:7px;padding:10px}.coverage-grid article.insufficient{border-color:#66553b;background:#272318}.coverage-grid span,.coverage-grid strong,.coverage-grid small{display:block}.coverage-grid span{color:#71b9fb}.coverage-grid strong{margin:5px 0;color:#d8e7f6;font-size:12px}.coverage-grid small{color:#71849a}.historical-boundary{margin-top:12px!important;padding-top:10px;border-top:1px solid #20374d}.historical-legacy{border-color:#5d523d}.candidate-evidence-grid{display:grid;grid-template-columns:1fr 1.25fr .75fr;gap:10px;margin:12px 0}.candidate-evidence-grid section{background:#101f31;border:1px solid #263a52;border-radius:7px;padding:11px}.candidate-evidence-grid h4{margin:0 0 8px;color:#cfe3f7}.history-grade{font-weight:700}.grade-A{color:#67d5a0}.grade-B{color:#77bfff}.grade-C{color:#e0ae62}@media(max-width:1100px){.coverage-grid,.candidate-evidence-grid{grid-template-columns:1fr}.historical-overview header{display:block}.grade-distribution{margin-top:10px}}
 </style>

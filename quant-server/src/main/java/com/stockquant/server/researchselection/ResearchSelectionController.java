@@ -62,7 +62,11 @@ public final class ResearchSelectionController {
     public record StartRequest(Integer primaryWindow) {
         SelectionRequest toSelection() {
             int primary = primaryWindow == null ? 20 : primaryWindow;
-            int auxiliary = primary <= 60 ? 60 : primary;
+            // V1.0.8 treats 120/250 as read-only historical targets.  The
+            // current selection window remains 60 sessions, so insufficient
+            // older history can never authorize a Provider backfill.
+            int auxiliary = ResearchSelectionModels
+                    .DEFAULT_AUXILIARY_WINDOW;
             return new SelectionRequest(
                     ResearchSelectionModels.TriggerMode.ON_DEMAND,
                     primary, auxiliary, 10, 5, true);

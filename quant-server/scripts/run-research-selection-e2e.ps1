@@ -126,6 +126,29 @@ try {
     Exact $value.universeSize 25 'RESEARCH_SELECTION_E2E_UNIVERSE_INVALID'
     Exact $value.shortlistSize 10 `
         'RESEARCH_SELECTION_E2E_SHORTLIST_INVALID'
+    Exact $value.historicalResearch.version `
+        'HISTORICAL_STABILITY_SCORE_V1' `
+        'RESEARCH_SELECTION_E2E_HISTORY_VERSION_INVALID'
+    Exact $value.historicalResearch.researchLabel 'POST_HOC_RESEARCH' `
+        'RESEARCH_SELECTION_E2E_HISTORY_LABEL_INVALID'
+    Exact $value.historicalResearch.pitQualification 'PIT_PARTIAL' `
+        'RESEARCH_SELECTION_E2E_HISTORY_PIT_INVALID'
+    Exact $value.historicalResearch.availableSessions 60 `
+        'RESEARCH_SELECTION_E2E_HISTORY_SESSIONS_INVALID'
+    Exact @($value.historicalResearch.securities).Count 25 `
+        'RESEARCH_SELECTION_E2E_HISTORY_UNIVERSE_INVALID'
+    Exact @($value.historicalResearch.windowCoverage).Count 4 `
+        'RESEARCH_SELECTION_E2E_HISTORY_WINDOWS_INVALID'
+    Exact $value.historicalResearch.gradeDistribution.A 0 `
+        'RESEARCH_SELECTION_E2E_HISTORY_GRADE_INVALID'
+    if (-not $value.historicalResearch.knownAtQualified -or
+        -not $value.historicalResearch.dataQualityPassed -or
+        -not $value.historicalResearch.noFutureDataLeakage -or
+        @($value.historicalResearch.windowCoverage |
+            Where-Object { $_.requestedSessions -in @(120, 250) -and
+                $_.status -eq 'INSUFFICIENT_HISTORY' }).Count -ne 2) {
+        throw 'RESEARCH_SELECTION_E2E_HISTORY_BOUNDARY_INVALID'
+    }
     Write-Output ("RESEARCH_SELECTION_E2E_CANDIDATES={0}" -f `
         [int]$value.candidateCount)
     Write-Output ("RESEARCH_SELECTION_E2E_DECISION={0}" -f `
@@ -223,7 +246,10 @@ SELECT COALESCE(string_agg(value, ',' ORDER BY value), 'NONE')
         'RESEARCH_SELECTION_E2E_REUSE_RETRY_INVALID'
     if ([int]$repeat.candidateCount -ne [int]$value.candidateCount -or
         [bool]$repeat.emptyResult -ne [bool]$value.emptyResult -or
-        [string]$repeat.decisionCode -ne [string]$value.decisionCode) {
+        [string]$repeat.decisionCode -ne [string]$value.decisionCode -or
+        [string]$repeat.historicalResearch.datasetFingerprint -ne
+            [string]$value.historicalResearch.datasetFingerprint -or
+        [int]$repeat.historicalResearch.availableSessions -ne 60) {
         throw 'RESEARCH_SELECTION_E2E_REUSE_CANDIDATES_INVALID'
     }
     Exact $repeat.modelProviderRequestCount 0 `
@@ -247,6 +273,9 @@ SELECT COALESCE(string_agg(value, ',' ORDER BY value), 'NONE')
     Write-Output 'RESEARCH_SELECTION_PACKAGED_FAKE_E2E=PASS'
     Write-Output 'RESEARCH_SELECTION_TEMP_POSTGRES_V1_V17=PASS'
     Write-Output 'RESEARCH_SELECTION_M1_M2_M3_M4_CHAIN=PASS'
+    Write-Output 'RESEARCH_SELECTION_HISTORICAL_STABILITY=PASS'
+    Write-Output 'RESEARCH_SELECTION_HISTORY_20_60=AVAILABLE'
+    Write-Output 'RESEARCH_SELECTION_HISTORY_120_250=INSUFFICIENT_HISTORY'
     Write-Output 'RESEARCH_SELECTION_SCHEDULED_SHADOW=FROZEN'
     Write-Output 'RESEARCH_SELECTION_FAKE_TUSHARE_CALLS=52'
     Write-Output 'RESEARCH_SELECTION_FAKE_MODEL_CALLS=26'

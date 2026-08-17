@@ -5,6 +5,7 @@ import com.stockquant.server.agent.shadowresearch.ShadowResearchRepository;
 import com.stockquant.server.researchselection.ResearchSelectionModels;
 import com.stockquant.server.researchselection.ResearchSelectionAnchorResolver;
 import com.stockquant.server.researchselection.ResearchSelectionProviderBudgetPlanner;
+import com.stockquant.server.researchselection.ResearchSelectionHistoricalDatasetLoader;
 import com.stockquant.server.researchselection.ResearchSelectionRepository;
 import com.stockquant.server.researchselection.ResearchUniverseV1;
 import org.flywaydb.core.Flyway;
@@ -117,6 +118,15 @@ class ResearchSelectionPostgresIntegrationTest {
         assertTrue(loaded.coverage().systemKnowledgeReadback());
         assertTrue(loaded.coverage().formulaOnlyQfq());
         assertTrue(loaded.coverage().noFutureDataLeakage());
+        var historical = new ResearchSelectionHistoricalDatasetLoader()
+                .expand(loader, loaded, ANCHOR, AS_OF);
+        assertTrue(historical.loaded().dataset().sessions().size() >= 60);
+        assertTrue(historical.loaded().dataset().sessions().size() < 120);
+        assertEquals(ResearchSelectionModels.HistoricalAvailability.AVAILABLE,
+                historical.windowCoverage().get(1).status());
+        assertEquals(ResearchSelectionModels.HistoricalAvailability
+                        .INSUFFICIENT_HISTORY,
+                historical.windowCoverage().get(2).status());
         assertEquals(0, ResearchSelectionProviderBudgetPlanner
                 .requiredProviderRequests(loader, request, AS_OF));
         Instant nextSessionAfterClose = Instant.from(
@@ -128,6 +138,8 @@ class ResearchSelectionPostgresIntegrationTest {
                 .requiredProviderRequests(loader, request,
                         nextSessionAfterClose));
         var shadow = new ShadowResearchRepository(jdbc, mapper);
+        assertTrue(new ResearchSelectionRepository(jdbc, mapper)
+                .liveShadowSampleCounts().isEmpty());
         assertEquals(ShadowResearchRepository.CalendarState.OPEN,
                 shadow.researchCalendarState(ANCHOR, AS_OF));
         assertEquals(17, jdbc.queryForObject("""

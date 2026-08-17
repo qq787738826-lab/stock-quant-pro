@@ -15,7 +15,9 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -147,7 +149,7 @@ public final class ResearchSelectionRepository {
         SelectionResult result = new SelectionResult(
                 ResearchSelectionModels.VERSION, id, config.publicRunId(),
                 Status.FAILED, config.triggerMode(), config.researchAsOf(),
-                null, null, List.of(), List.of(), List.of(), true,
+                null, null, null, List.of(), List.of(), List.of(), true,
                 "FAILED", null, null, config.paperEnabled(), false, false,
                 new ResearchSelectionModels.Timings(0, 0, 0, 0, 0),
                 new ResearchSelectionModels.Usage(0, 0, 0, 0, 0, 0, 0,
@@ -273,6 +275,29 @@ public final class ResearchSelectionRepository {
                   FROM research_selection_runs
                  ORDER BY id DESC LIMIT ?
                 """, this::mapSummary, bounded);
+    }
+
+    /** Read-only count of genuine scheduled frozen samples per security. */
+    public Map<String, Integer> liveShadowSampleCounts() {
+        Map<String, Integer> result = new LinkedHashMap<>();
+        jdbc.query("""
+                SELECT ranked.security_code, count(DISTINCT run.id) AS samples
+                  FROM shadow_research_runs run
+                  JOIN shadow_research_snapshots snapshot
+                    ON snapshot.run_id=run.id
+                 CROSS JOIN LATERAL jsonb_array_elements_text(
+                    COALESCE(snapshot.recommendation_json
+                        ->'rankedSecurities', '[]'::jsonb)
+                 ) AS ranked(security_code)
+                 WHERE run.status='FROZEN'
+                   AND run.trigger_mode='SCHEDULED'
+                 GROUP BY ranked.security_code
+                 ORDER BY ranked.security_code
+                """, (row, ignored) -> Map.entry(
+                row.getString("security_code"), row.getInt("samples")))
+                .forEach(entry -> result.put(entry.getKey(),
+                        entry.getValue()));
+        return Map.copyOf(result);
     }
 
     private RunSummary mapSummary(ResultSet row, int ignored)

@@ -2,7 +2,6 @@ package com.stockquant.server.researchselection;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stockquant.core.research.DefaultStrategyResearchApi;
-import com.stockquant.core.research.StrategyRegistry;
 import com.stockquant.core.research.StrategyResearchModels.BacktestConfig;
 import com.stockquant.core.research.StrategyResearchModels.ComparisonResult;
 import com.stockquant.core.research.StrategyResearchModels.ResearchDataset;
@@ -17,6 +16,7 @@ import com.stockquant.server.agent.research.ModelAdapter;
 import com.stockquant.server.agent.shadowresearch.ShadowResearchModels.ShadowExecutionResult;
 import com.stockquant.server.researchselection.ResearchSelectionModels.Candidate;
 import com.stockquant.server.researchselection.ResearchSelectionModels.DataCoverage;
+import com.stockquant.server.researchselection.ResearchSelectionModels.HistoricalResearch;
 import com.stockquant.server.researchselection.ResearchSelectionModels.Lineage;
 import com.stockquant.server.researchselection.ResearchSelectionModels.QuantitativeScore;
 import com.stockquant.server.researchselection.ResearchSelectionModels.RecommendationStatus;
@@ -70,6 +70,7 @@ public final class ResearchSelectionEngine {
             int providerCalls,
             int retryCount,
             DataCoverage preparedCoverage,
+            Map<String, Integer> liveShadowSamples,
             ModelAdapter model,
             DeepResearch deepResearch,
             StageListener stages,
@@ -80,6 +81,8 @@ public final class ResearchSelectionEngine {
         stages.stage(Status.PREPARING_DATA);
         var loaded = datasetLoader.load(ResearchUniverseV1.securities(),
                 request.auxiliaryWindow(), anchor, asOf);
+        var historicalDataset = new ResearchSelectionHistoricalDatasetLoader()
+                .expand(datasetLoader, loaded, anchor, asOf);
         long dataMillis = elapsed(phase);
 
         phase = System.nanoTime();
@@ -91,8 +94,11 @@ public final class ResearchSelectionEngine {
 
         phase = System.nanoTime();
         stages.stage(Status.STRATEGY_ANALYSIS);
+        HistoricalResearch historical =
+                new ResearchSelectionHistoricalStabilityService().analyze(
+                        historicalDataset, fullRanking, liveShadowSamples);
         ResearchDataset topDataset = subset(loaded.dataset(), shortlist);
-        List<StrategySpec> strategies = strategies();
+        List<StrategySpec> strategies = ResearchSelectionStrategies.fixed();
         ComparisonResult comparison = new DefaultStrategyResearchApi().compare(
                 topDataset, strategies, BacktestConfig.standard(),
                 topDataset.firstSessionDate(), topDataset.lastSessionDate(),
@@ -104,7 +110,7 @@ public final class ResearchSelectionEngine {
         var descriptor = model.descriptor();
         ShadowExecutionResult shadow = deepResearch.run(topDataset,
                 shortlist, strategies, request, publicRunId, anchor, asOf,
-                providerCalls, model);
+                providerCalls, historical, model);
         ResearchReport report = shadow.snapshot().report();
         long agentMillis = elapsed(phase);
 
@@ -126,19 +132,23 @@ public final class ResearchSelectionEngine {
         String resultFingerprint = hash(Map.of(
                 "ranking", fullRanking, "shortlist", shortlist,
                 "candidates", candidates, "research",
-                report.researchFingerprint(), "asOf", asOf));
+                report.researchFingerprint(), "historical", historical,
+                "asOf", asOf));
         Lineage lineage = new Lineage(ResearchUniverseV1.VERSION,
                 ResearchUniverseV1.securities(), request.primaryWindow(),
                 request.auxiliaryWindow(),
                 ResearchSelectionModels.RANKING_VERSION,
                 AgentResearchModels.RUNTIME_VERSION, PROMPT_VERSION,
                 descriptor.provider(), descriptor.model(), STRATEGY_VERSION,
-                gitCommit, datasetFingerprint, resultFingerprint);
+                ResearchSelectionModels.HISTORICAL_STABILITY_VERSION,
+                gitCommit, datasetFingerprint,
+                historical.datasetFingerprint(), resultFingerprint);
         SelectionResult result = new SelectionResult(
                 ResearchSelectionModels.VERSION, runId, publicRunId,
                 Status.COMPLETED, request.triggerMode(), asOf, anchor,
                 preparedCoverage == null ? loaded.coverage()
-                        : preparedCoverage, fullRanking, shortlist, candidates,
+                        : preparedCoverage, historical, fullRanking,
+                shortlist, candidates,
                 candidates.isEmpty(), candidates.isEmpty()
                 ? AgentResearchModels.DecisionCode.INSUFFICIENT_EVIDENCE.name()
                 : report.finalDecision().code().name(),
@@ -227,23 +237,6 @@ public final class ResearchSelectionEngine {
                 .orElse(shortlist.get(0).security());
     }
 
-    private static List<StrategySpec> strategies() {
-        return List.of(
-                new StrategySpec(StrategyRegistry.BUY_AND_HOLD,
-                        Map.of("symbol", "ALL", "targetWeight", "0.80")),
-                new StrategySpec(StrategyRegistry.MOVING_AVERAGE_MOMENTUM,
-                        Map.of("shortWindow", "5", "longWindow", "20",
-                                "targetWeight", "0.20")),
-                new StrategySpec(StrategyRegistry.MEAN_REVERSION,
-                        Map.of("lookback", "10", "entryDeviation", "0.02",
-                                "exitDeviation", "0.00",
-                                "targetWeight", "0.20")),
-                new StrategySpec(StrategyRegistry.CROSS_SECTIONAL_MOMENTUM,
-                        Map.of("lookback", "20", "topN", "3",
-                                "rebalanceEvery", "5",
-                                "targetGrossExposure", "0.60")));
-    }
-
     private String hash(Object value) {
         return new BacktestCanonicalHashService(mapper)
                 .hash(mapper.valueToTree(value));
@@ -275,6 +268,7 @@ public final class ResearchSelectionEngine {
                 LocalDate anchor,
                 Instant asOf,
                 int providerCalls,
+                HistoricalResearch historical,
                 ModelAdapter model
         );
     }

@@ -8,12 +8,15 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 
 /** Stable user-facing contracts for current-as-of stock selection. */
 public final class ResearchSelectionModels {
     public static final String VERSION = "RESEARCH_SELECTION_V1";
     public static final String RANKING_VERSION =
             "RESEARCH_SELECTION_RANKING_V1";
+    public static final String HISTORICAL_STABILITY_VERSION =
+            "HISTORICAL_STABILITY_SCORE_V1";
     public static final int DEFAULT_PRIMARY_WINDOW = 20;
     public static final int DEFAULT_AUXILIARY_WINDOW = 60;
     public static final int DEFAULT_SHORTLIST_SIZE = 10;
@@ -39,6 +42,14 @@ public final class ResearchSelectionModels {
         WATCH, INSUFFICIENT_EVIDENCE
     }
 
+    public enum HistoricalAvailability {
+        AVAILABLE, INSUFFICIENT_HISTORY
+    }
+
+    public enum HistoricalGrade {
+        A, B, C
+    }
+
     public record SelectionRequest(
             TriggerMode triggerMode,
             int primaryWindow,
@@ -50,7 +61,8 @@ public final class ResearchSelectionModels {
         public SelectionRequest {
             if (triggerMode == null
                     || !List.of(20, 60, 120, 250).contains(primaryWindow)
-                    || auxiliaryWindow < primaryWindow
+                    || auxiliaryWindow < Math.min(primaryWindow,
+                    DEFAULT_AUXILIARY_WINDOW)
                     || auxiliaryWindow > 250
                     || shortlistSize < 1 || shortlistSize > 10
                     || finalLimit < 1 || finalLimit > 5
@@ -104,6 +116,112 @@ public final class ResearchSelectionModels {
     ) {
         public QuantitativeScore {
             explanations = List.copyOf(explanations);
+        }
+    }
+
+    public record HistoricalWindowCoverage(
+            int requestedSessions,
+            HistoricalAvailability status,
+            int availableSessions,
+            LocalDate rangeStart,
+            LocalDate rangeEnd,
+            int missingSessions,
+            String reason
+    ) {
+    }
+
+    public record HistoricalWindowMetrics(
+            String windowCode,
+            int sessionCount,
+            LocalDate rangeStart,
+            LocalDate rangeEnd,
+            BigDecimal totalReturn,
+            BigDecimal costAdjustedReturn,
+            BigDecimal maxDrawdown,
+            BigDecimal annualizedVolatility,
+            BigDecimal sharpe,
+            BigDecimal turnover,
+            BigDecimal winRate,
+            int tradeCount,
+            String bestStrategy,
+            BigDecimal bestStrategyReturn,
+            String worstStrategy,
+            BigDecimal worstStrategyReturn,
+            int positiveStrategyCount,
+            int strategyCount
+    ) {
+    }
+
+    public record WalkForwardSummary(
+            boolean available,
+            String reason,
+            int trainSessions,
+            int testSessions,
+            int stepSessions,
+            int foldCount,
+            int strategyFoldCount,
+            BigDecimal averageOutOfSampleReturn,
+            BigDecimal worstOutOfSampleReturn,
+            BigDecimal positiveFoldRatio,
+            BigDecimal maximumOutOfSampleDrawdown,
+            int tradeCount,
+            boolean strictlyIsolated,
+            boolean noFutureDataLeakage
+    ) {
+    }
+
+    public record HistoricalStability(
+            Security security,
+            int availableSessions,
+            BigDecimal score,
+            HistoricalGrade grade,
+            BigDecimal dataCompletenessComponent,
+            BigDecimal multiWindowConsistencyComponent,
+            BigDecimal outOfSampleComponent,
+            BigDecimal riskComponent,
+            BigDecimal costAndSampleComponent,
+            BigDecimal multiWindowConsistency,
+            BigDecimal multiStrategyConsistency,
+            String bestWindow,
+            BigDecimal bestWindowReturn,
+            String worstWindow,
+            BigDecimal worstWindowReturn,
+            WalkForwardSummary walkForward,
+            List<HistoricalWindowMetrics> windows,
+            int liveShadowSamples,
+            List<String> supportingEvidence,
+            List<String> limitations,
+            boolean noFutureDataLeakage
+    ) {
+        public HistoricalStability {
+            windows = List.copyOf(windows);
+            supportingEvidence = List.copyOf(supportingEvidence);
+            limitations = List.copyOf(limitations);
+        }
+    }
+
+    public record HistoricalResearch(
+            String version,
+            String researchLabel,
+            String pitQualification,
+            int availableSessions,
+            LocalDate rangeStart,
+            LocalDate rangeEnd,
+            List<HistoricalWindowCoverage> windowCoverage,
+            List<LocalDate> missingTradeDates,
+            List<HistoricalStability> securities,
+            Map<String, Integer> gradeDistribution,
+            boolean calendarCompleteThroughAnchor,
+            boolean knownAtQualified,
+            boolean dataQualityPassed,
+            boolean noFutureDataLeakage,
+            String datasetFingerprint
+    ) {
+        public HistoricalResearch {
+            windowCoverage = List.copyOf(windowCoverage);
+            missingTradeDates = List.copyOf(missingTradeDates);
+            securities = List.copyOf(securities);
+            gradeDistribution = Map.copyOf(gradeDistribution);
         }
     }
 
@@ -165,8 +283,10 @@ public final class ResearchSelectionModels {
             String modelProvider,
             String model,
             String strategyVersion,
+            String historicalStabilityVersion,
             String gitCommit,
             String datasetFingerprint,
+            String historicalDatasetFingerprint,
             String resultFingerprint
     ) {
         public Lineage {
@@ -183,6 +303,7 @@ public final class ResearchSelectionModels {
             Instant researchAsOf,
             LocalDate anchorTradeDate,
             DataCoverage dataCoverage,
+            HistoricalResearch historicalResearch,
             List<QuantitativeScore> ranking,
             List<QuantitativeScore> shortlist,
             List<Candidate> candidates,
