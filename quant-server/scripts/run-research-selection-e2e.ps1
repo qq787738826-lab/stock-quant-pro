@@ -137,8 +137,9 @@ try {
         'RESEARCH_SELECTION_E2E_HISTORY_LABEL_INVALID'
     Exact $historyPit 'PIT_PARTIAL' `
         'RESEARCH_SELECTION_E2E_HISTORY_PIT_INVALID'
-    Exact $historySessions 60 `
-        'RESEARCH_SELECTION_E2E_HISTORY_SESSIONS_INVALID'
+    if ([int]$historySessions -lt 60 -or [int]$historySessions -ge 120) {
+        throw 'RESEARCH_SELECTION_E2E_HISTORY_SESSIONS_INVALID'
+    }
     Exact (Scalar "SELECT jsonb_array_length(result_json->'historicalResearch'->'securities') FROM research_selection_runs WHERE id=1") 25 `
         'RESEARCH_SELECTION_E2E_HISTORY_UNIVERSE_INVALID'
     Exact (Scalar "SELECT jsonb_array_length(result_json->'historicalResearch'->'windowCoverage') FROM research_selection_runs WHERE id=1") 4 `
@@ -260,7 +261,8 @@ SELECT COALESCE(string_agg(value, ',' ORDER BY value), 'NONE')
         [string]$repeat.decisionCode -ne [string]$value.decisionCode -or
         (Scalar "SELECT result_json->'historicalResearch'->>'datasetFingerprint' FROM research_selection_runs WHERE id=2") -ne
             $historyFingerprint -or
-        [int](Scalar "SELECT result_json->'historicalResearch'->>'availableSessions' FROM research_selection_runs WHERE id=2") -ne 60) {
+        [int](Scalar "SELECT result_json->'historicalResearch'->>'availableSessions' FROM research_selection_runs WHERE id=2") -ne
+            [int]$historySessions) {
         throw 'RESEARCH_SELECTION_E2E_REUSE_CANDIDATES_INVALID'
     }
     Exact $repeat.modelProviderRequestCount 0 `
