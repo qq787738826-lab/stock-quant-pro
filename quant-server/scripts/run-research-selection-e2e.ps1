@@ -126,27 +126,38 @@ try {
     Exact $value.universeSize 25 'RESEARCH_SELECTION_E2E_UNIVERSE_INVALID'
     Exact $value.shortlistSize 10 `
         'RESEARCH_SELECTION_E2E_SHORTLIST_INVALID'
-    Exact $value.historicalResearch.version `
-        'HISTORICAL_STABILITY_SCORE_V1' `
+    $historyVersion = Scalar "SELECT result_json->'historicalResearch'->>'version' FROM research_selection_runs WHERE id=1"
+    $historyLabel = Scalar "SELECT result_json->'historicalResearch'->>'researchLabel' FROM research_selection_runs WHERE id=1"
+    $historyPit = Scalar "SELECT result_json->'historicalResearch'->>'pitQualification' FROM research_selection_runs WHERE id=1"
+    $historySessions = Scalar "SELECT result_json->'historicalResearch'->>'availableSessions' FROM research_selection_runs WHERE id=1"
+    $historyFingerprint = Scalar "SELECT result_json->'historicalResearch'->>'datasetFingerprint' FROM research_selection_runs WHERE id=1"
+    Exact $historyVersion 'HISTORICAL_STABILITY_SCORE_V1' `
         'RESEARCH_SELECTION_E2E_HISTORY_VERSION_INVALID'
-    Exact $value.historicalResearch.researchLabel 'POST_HOC_RESEARCH' `
+    Exact $historyLabel 'POST_HOC_RESEARCH' `
         'RESEARCH_SELECTION_E2E_HISTORY_LABEL_INVALID'
-    Exact $value.historicalResearch.pitQualification 'PIT_PARTIAL' `
+    Exact $historyPit 'PIT_PARTIAL' `
         'RESEARCH_SELECTION_E2E_HISTORY_PIT_INVALID'
-    Exact $value.historicalResearch.availableSessions 60 `
+    Exact $historySessions 60 `
         'RESEARCH_SELECTION_E2E_HISTORY_SESSIONS_INVALID'
-    Exact @($value.historicalResearch.securities).Count 25 `
+    Exact (Scalar "SELECT jsonb_array_length(result_json->'historicalResearch'->'securities') FROM research_selection_runs WHERE id=1") 25 `
         'RESEARCH_SELECTION_E2E_HISTORY_UNIVERSE_INVALID'
-    Exact @($value.historicalResearch.windowCoverage).Count 4 `
+    Exact (Scalar "SELECT jsonb_array_length(result_json->'historicalResearch'->'windowCoverage') FROM research_selection_runs WHERE id=1") 4 `
         'RESEARCH_SELECTION_E2E_HISTORY_WINDOWS_INVALID'
-    Exact $value.historicalResearch.gradeDistribution.A 0 `
+    Exact (Scalar "SELECT result_json->'historicalResearch'->'gradeDistribution'->>'A' FROM research_selection_runs WHERE id=1") 0 `
         'RESEARCH_SELECTION_E2E_HISTORY_GRADE_INVALID'
-    if (-not $value.historicalResearch.knownAtQualified -or
-        -not $value.historicalResearch.dataQualityPassed -or
-        -not $value.historicalResearch.noFutureDataLeakage -or
-        @($value.historicalResearch.windowCoverage |
-            Where-Object { $_.requestedSessions -in @(120, 250) -and
-                $_.status -eq 'INSUFFICIENT_HISTORY' }).Count -ne 2) {
+    $historyBoundarySql = @'
+SELECT count(*)
+  FROM research_selection_runs,
+       LATERAL jsonb_array_elements(
+           result_json->'historicalResearch'->'windowCoverage') item(value)
+ WHERE id=1
+   AND (item.value->>'requestedSessions')::integer IN (120,250)
+   AND item.value->>'status'='INSUFFICIENT_HISTORY'
+'@
+    if ((Scalar "SELECT result_json->'historicalResearch'->>'knownAtQualified' FROM research_selection_runs WHERE id=1") -ne 'true' -or
+        (Scalar "SELECT result_json->'historicalResearch'->>'dataQualityPassed' FROM research_selection_runs WHERE id=1") -ne 'true' -or
+        (Scalar "SELECT result_json->'historicalResearch'->>'noFutureDataLeakage' FROM research_selection_runs WHERE id=1") -ne 'true' -or
+        [int](Scalar $historyBoundarySql) -ne 2) {
         throw 'RESEARCH_SELECTION_E2E_HISTORY_BOUNDARY_INVALID'
     }
     Write-Output ("RESEARCH_SELECTION_E2E_CANDIDATES={0}" -f `
@@ -247,9 +258,9 @@ SELECT COALESCE(string_agg(value, ',' ORDER BY value), 'NONE')
     if ([int]$repeat.candidateCount -ne [int]$value.candidateCount -or
         [bool]$repeat.emptyResult -ne [bool]$value.emptyResult -or
         [string]$repeat.decisionCode -ne [string]$value.decisionCode -or
-        [string]$repeat.historicalResearch.datasetFingerprint -ne
-            [string]$value.historicalResearch.datasetFingerprint -or
-        [int]$repeat.historicalResearch.availableSessions -ne 60) {
+        (Scalar "SELECT result_json->'historicalResearch'->>'datasetFingerprint' FROM research_selection_runs WHERE id=2") -ne
+            $historyFingerprint -or
+        [int](Scalar "SELECT result_json->'historicalResearch'->>'availableSessions' FROM research_selection_runs WHERE id=2") -ne 60) {
         throw 'RESEARCH_SELECTION_E2E_REUSE_CANDIDATES_INVALID'
     }
     Exact $repeat.modelProviderRequestCount 0 `
