@@ -62,6 +62,10 @@ class ResearchProductionContractTest {
                 "codex/1.4.0-v1.0.3-research-selection-runtime-fix"));
         assertTrue(invoker.contains(
                 "codex/1.4.0-v1.0.3-research-selection-runtime-fix"));
+        assertTrue(broker.contains(
+                "codex/1.4.0-v1.0.7-intraday-research-selection-anchor-fix"));
+        assertTrue(invoker.contains(
+                "codex/1.4.0-v1.0.7-intraday-research-selection-anchor-fix"));
         assertTrue(invoker.contains(
                 "STOCK_QUANT_HOST_BROKER_STATUS=REJECTED"));
         assertTrue(invoker.contains(

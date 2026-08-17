@@ -14,7 +14,9 @@ public final class ResearchSelectionFailureCategory {
             return "DATABASE";
         }
         if (reason.contains("DATA") || reason.contains("CALENDAR")
-                || reason.contains("FACT") || reason.contains("WINDOW")) {
+                || reason.contains("FACT") || reason.contains("WINDOW")
+                || reason.contains("ANCHOR")
+                || reason.contains("NOT_AFTER_AS_OF")) {
             return "DATA";
         }
         if (reason.contains("MODEL") || reason.contains("BAILIAN")

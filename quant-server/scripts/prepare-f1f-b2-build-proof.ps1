@@ -154,7 +154,8 @@ try {
         if ($actualBranch -notin @(
                 'codex/1.4.0-v1.0.1-research-selection-usability',
                 'codex/1.4.0-v1.0.2-startup-self-heal-fix',
-                'codex/1.4.0-v1.0.3-research-selection-runtime-fix') -or
+                'codex/1.4.0-v1.0.3-research-selection-runtime-fix',
+                'codex/1.4.0-v1.0.7-intraday-research-selection-anchor-fix') -or
             $remoteCommit -ne $ExpectedCommit -or
             $RunnerProfile -notin @(
                 'RESEARCH_SELECTION', 'M6_RESEARCH_PRODUCTION')) {

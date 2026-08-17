@@ -82,6 +82,7 @@ public final class ResearchSelectionDeepResearchService
                 publicRunId.length() - 12);
         Instant paperExecution = selectionRequest.paperEnabled()
                 ? nextExecution.resolve(anchor, asOf) : null;
+        paperExecution = validatePaperExecution(paperExecution, asOf);
         var request = new ShadowRequest(trigger,
                 anchor, topDataset.firstSessionDate(), asOf,
                 topDataset.securities(), shortlist.get(0).security(),
@@ -91,6 +92,18 @@ public final class ResearchSelectionDeepResearchService
                 slot,
                 ShadowResearchModels.SELECTION_STRATEGY_VERSION);
         return runtime.run(request, model);
+    }
+
+    static Instant validatePaperExecution(
+            Instant paperExecution,
+            Instant researchAsOf
+    ) {
+        Objects.requireNonNull(researchAsOf, "researchAsOf");
+        if (paperExecution != null && !paperExecution.isAfter(researchAsOf)) {
+            throw new IllegalStateException(
+                    "RESEARCH_SELECTION_PAPER_EXECUTION_NOT_AFTER_AS_OF");
+        }
+        return paperExecution;
     }
 
     static ShadowRecommendation constrainRecommendation(

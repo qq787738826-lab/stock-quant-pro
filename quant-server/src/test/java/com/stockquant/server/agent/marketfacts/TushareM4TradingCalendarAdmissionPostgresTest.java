@@ -66,6 +66,21 @@ class TushareM4TradingCalendarAdmissionPostgresTest {
                 date.plusDays(30), Instant.from(date.atTime(16, 0)
                         .atZone(PitMarketFactsContracts.MARKET_ZONE)))
                 .orElseThrow());
+        Instant august13Intraday = Instant.from(LocalDate.of(2026, 8, 13)
+                .atTime(10, 15)
+                .atZone(PitMarketFactsContracts.MARKET_ZONE));
+        assertEquals(LocalDate.of(2026, 8, 14),
+                resolver.resolveAfterResearchAsOf(date, date.plusDays(30),
+                        august13Intraday).orElseThrow());
+        assertTrue(com.stockquant.core.research.StrategyResearchModels
+                .openInstant(LocalDate.of(2026, 8, 14))
+                .isAfter(august13Intraday));
+        Instant august13PreOpen = Instant.from(LocalDate.of(2026, 8, 13)
+                .atTime(8, 0)
+                .atZone(PitMarketFactsContracts.MARKET_ZONE));
+        assertEquals(LocalDate.of(2026, 8, 13),
+                resolver.resolveAfterResearchAsOf(date, date.plusDays(30),
+                        august13PreOpen).orElseThrow());
     }
 
     @Test

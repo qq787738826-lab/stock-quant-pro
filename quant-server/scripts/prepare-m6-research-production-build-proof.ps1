@@ -27,7 +27,8 @@ $mode = if ($branch -eq 'feature/1.4.0-agent-team') {
 } elseif ($branch -in @(
         'codex/1.4.0-v1.0.1-research-selection-usability',
         'codex/1.4.0-v1.0.2-startup-self-heal-fix',
-        'codex/1.4.0-v1.0.3-research-selection-runtime-fix')) {
+        'codex/1.4.0-v1.0.3-research-selection-runtime-fix',
+        'codex/1.4.0-v1.0.7-intraday-research-selection-anchor-fix')) {
     'RESEARCH_SELECTION_CONTROLLED_BUILD_ARTIFACT'
 } else { 'M6_STAGE_CONTROLLED_BUILD_ARTIFACT' }
 

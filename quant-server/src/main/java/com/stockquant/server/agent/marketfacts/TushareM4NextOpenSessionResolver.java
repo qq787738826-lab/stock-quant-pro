@@ -23,6 +23,24 @@ final class TushareM4NextOpenSessionResolver {
             LocalDate horizonEnd,
             Instant knowledgeCutoff
     ) {
+        return resolve(signalDate, horizonEnd, knowledgeCutoff, null);
+    }
+
+    Optional<LocalDate> resolveAfterResearchAsOf(
+            LocalDate signalDate,
+            LocalDate horizonEnd,
+            Instant knowledgeCutoff
+    ) {
+        return resolve(signalDate, horizonEnd, knowledgeCutoff,
+                knowledgeCutoff);
+    }
+
+    private Optional<LocalDate> resolve(
+            LocalDate signalDate,
+            LocalDate horizonEnd,
+            Instant knowledgeCutoff,
+            Instant executionAfter
+    ) {
         Objects.requireNonNull(signalDate, "signalDate");
         Objects.requireNonNull(horizonEnd, "horizonEnd");
         Objects.requireNonNull(knowledgeCutoff, "knowledgeCutoff");
@@ -45,7 +63,10 @@ final class TushareM4NextOpenSessionResolver {
                 return Optional.empty();
             }
             if (Boolean.TRUE.equals(sse.get(date))
-                    && Boolean.TRUE.equals(szse.get(date))) {
+                    && Boolean.TRUE.equals(szse.get(date))
+                    && (executionAfter == null
+                    || com.stockquant.core.research.StrategyResearchModels
+                    .openInstant(date).isAfter(executionAfter))) {
                 return Optional.of(date);
             }
         }

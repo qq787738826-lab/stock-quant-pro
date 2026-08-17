@@ -5,9 +5,11 @@ import com.stockquant.core.research.StrategyResearchModels.DailyBar;
 import com.stockquant.core.research.StrategyResearchModels.KnowledgeMode;
 import com.stockquant.core.research.StrategyResearchModels.ResearchDataset;
 import com.stockquant.core.research.StrategyResearchModels.Security;
+import com.stockquant.core.research.StrategyResearchModels.StrategySpec;
 import com.stockquant.core.research.StrategyResearchModels.TradingSession;
 import com.stockquant.server.agent.shadowresearch.ShadowResearchModels
         .ShadowRecommendation;
+import com.stockquant.server.agent.shadowresearch.ShadowResearchModels;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -16,6 +18,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -150,6 +153,50 @@ class ResearchSelectionCoreTest {
         assertEquals(BigDecimal.ZERO, empty.suggestedGrossExposure());
         assertTrue(empty.limitations().contains(
                 "NO_SECURITY_PASSED_SELECTION_THRESHOLD"));
+    }
+
+    @Test
+    void intradayElapsedPaperOpenIsTheExactM4RequestViolation() {
+        LocalDate anchor = LocalDate.of(2026, 8, 14);
+        Instant researchAsOf = Instant.parse("2026-08-17T02:22:19Z");
+        Instant elapsedOpen = StrategyResearchModels.openInstant(
+                LocalDate.of(2026, 8, 17));
+        List<Security> securities = ResearchUniverseV1.securities().stream()
+                .limit(10).toList();
+        List<StrategySpec> strategies = List.of(
+                StrategySpec.of("BUY_AND_HOLD_V1"),
+                StrategySpec.of("MEAN_REVERSION_V1"));
+
+        IllegalArgumentException legacy = assertThrows(
+                IllegalArgumentException.class, () -> new ShadowResearchModels
+                        .ShadowRequest(
+                        ShadowResearchModels.TriggerMode.ON_DEMAND_SELECTION,
+                        anchor, LocalDate.of(2026, 5, 1), researchAsOf,
+                        securities, securities.get(0), strategies,
+                        elapsedOpen, 0, "current-as-of research",
+                        "ON_DEMAND_A1B2C3D4E5F6",
+                        ShadowResearchModels.SELECTION_STRATEGY_VERSION));
+        assertEquals("M4_SHADOW_REQUEST_INVALID", legacy.getMessage());
+        IllegalStateException precise = assertThrows(
+                IllegalStateException.class, () ->
+                        ResearchSelectionDeepResearchService
+                                .validatePaperExecution(elapsedOpen,
+                                        researchAsOf));
+        assertEquals("RESEARCH_SELECTION_PAPER_EXECUTION_NOT_AFTER_AS_OF",
+                precise.getMessage());
+
+        Instant nextDayOpen = StrategyResearchModels.openInstant(
+                LocalDate.of(2026, 8, 18));
+        assertEquals(nextDayOpen, ResearchSelectionDeepResearchService
+                .validatePaperExecution(nextDayOpen, researchAsOf));
+        new ShadowResearchModels.ShadowRequest(
+                ShadowResearchModels.TriggerMode.ON_DEMAND_SELECTION,
+                anchor, LocalDate.of(2026, 5, 1), researchAsOf, securities,
+                securities.get(0), strategies, nextDayOpen, 0,
+                "current-as-of research", "ON_DEMAND_A1B2C3D4E5F6",
+                ShadowResearchModels.SELECTION_STRATEGY_VERSION);
+        assertEquals("DATA", ResearchSelectionFailureCategory.from(
+                "RESEARCH_SELECTION_PAPER_EXECUTION_NOT_AFTER_AS_OF"));
     }
 
     private static ResearchDataset dataset(int sessions) {

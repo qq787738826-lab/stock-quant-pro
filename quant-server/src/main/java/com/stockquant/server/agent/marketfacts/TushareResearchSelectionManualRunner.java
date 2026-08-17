@@ -13,6 +13,7 @@ import com.stockquant.server.agent.shadowresearch.ShadowPaperPortfolioService;
 import com.stockquant.server.agent.shadowresearch.ShadowResearchRepository;
 import com.stockquant.server.researchselection.ResearchSelectionDeepResearchService;
 import com.stockquant.server.researchselection.ResearchSelectionEngine;
+import com.stockquant.server.researchselection.ResearchSelectionAnchorResolver;
 import com.stockquant.server.researchselection.ResearchSelectionFailureCategory;
 import com.stockquant.server.researchselection.ResearchSelectionModels;
 import com.stockquant.server.researchselection.ResearchSelectionModels.DataCoverage;
@@ -32,7 +33,6 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
@@ -43,7 +43,6 @@ public final class TushareResearchSelectionManualRunner {
     static final int EXIT_SUCCESS = 0;
     static final int EXIT_REJECTED = 20;
     private static final int FORMAL_PORT = 38_432;
-    private static final ZoneId SHANGHAI = ZoneId.of("Asia/Shanghai");
 
     private TushareResearchSelectionManualRunner() {
     }
@@ -192,7 +191,9 @@ public final class TushareResearchSelectionManualRunner {
             }
             var facts = new PitMarketFactRepository(jdbc, mapper);
             var loader = new TushareResearchUniverseDatasetLoader(facts);
-            LocalDate anchor = resolveAnchor(loader, config.researchAsOf());
+            LocalDate anchor = ResearchSelectionAnchorResolver.resolve(loader,
+                    config.request().auxiliaryWindow(),
+                    config.researchAsOf());
             DataCoverage coverage;
             StageTransition stages = new StageTransition(repository,
                     launch.selectionRunId());
@@ -223,7 +224,9 @@ public final class TushareResearchSelectionManualRunner {
                             launch.selectionRunId(), config.researchAsOf(),
                             actualAsOf);
                 }
-                anchor = resolveAnchor(loader, config.researchAsOf());
+                anchor = ResearchSelectionAnchorResolver.resolve(loader,
+                        config.request().auxiliaryWindow(),
+                        config.researchAsOf());
                 coverage = loader.load(ResearchUniverseV1.securities(),
                         config.request().auxiliaryWindow(), anchor,
                         config.researchAsOf()).coverage();
@@ -241,8 +244,8 @@ public final class TushareResearchSelectionManualRunner {
                     shadowRepository, paper, transaction, clock,
                     (signalDate, cutoff) -> new
                             TushareM4NextOpenSessionResolver(facts)
-                            .resolve(signalDate, signalDate.plusDays(30),
-                                    cutoff)
+                            .resolveAfterResearchAsOf(signalDate,
+                                    signalDate.plusDays(30), cutoff)
                             .map(com.stockquant.core.research
                                     .StrategyResearchModels::openInstant)
                             .orElse(null));
@@ -366,33 +369,6 @@ public final class TushareResearchSelectionManualRunner {
         } catch (TushareResearchUniverseCaptureService.CaptureFailure failure) {
             progress.providerCalls += failure.providerCallCount();
             throw failure;
-        }
-    }
-
-    private static LocalDate resolveAnchor(
-            TushareResearchUniverseDatasetLoader loader,
-            Instant asOf
-    ) {
-        LocalDate local = asOf.atZone(SHANGHAI).toLocalDate();
-        try {
-            return loader.latestCommonOpenDate(ResearchUniverseV1.securities(),
-                    local, asOf);
-        } catch (IllegalStateException error) {
-            if (!"RESEARCH_UNIVERSE_COMMON_OPEN_SESSION_MISSING".equals(
-                    error.getMessage())) {
-                throw error;
-            }
-            if (asOf.isBefore(com.stockquant.core.research
-                    .StrategyResearchModels.closeInstant(local))) {
-                local = local.minusDays(1);
-            }
-            while (local.getDayOfWeek()
-                    == java.time.DayOfWeek.SATURDAY
-                    || local.getDayOfWeek()
-                    == java.time.DayOfWeek.SUNDAY) {
-                local = local.minusDays(1);
-            }
-            return local;
         }
     }
 

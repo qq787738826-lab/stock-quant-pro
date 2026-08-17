@@ -150,7 +150,8 @@ try {
     } elseif ($Operation -eq 'RUN_RESEARCH_SELECTION' -and
         $branch -in @(
             'codex/1.4.0-v1.0.1-research-selection-usability',
-            'codex/1.4.0-v1.0.3-research-selection-runtime-fix')) {
+            'codex/1.4.0-v1.0.3-research-selection-runtime-fix',
+            'codex/1.4.0-v1.0.7-intraday-research-selection-anchor-fix')) {
         $branch
     } elseif ($Operation -eq 'RUN_M4_SHADOW_RESEARCH' -and
         $branch -eq 'codex/1.4.0-m4-shadow-research-ready') {
@@ -173,9 +174,10 @@ try {
     } elseif ($Operation -in @('START_RESEARCH_PRODUCTION',
             'STOP_RESEARCH_PRODUCTION',
             'CHECK_RESEARCH_PRODUCTION_STATUS') -and
-        $branch -eq
-            'codex/1.4.0-v1.0.3-research-selection-runtime-fix') {
-        'codex/1.4.0-v1.0.3-research-selection-runtime-fix'
+        $branch -in @(
+            'codex/1.4.0-v1.0.3-research-selection-runtime-fix',
+            'codex/1.4.0-v1.0.7-intraday-research-selection-anchor-fix')) {
+        $branch
     } elseif ($Operation -in @('START_RESEARCH_PRODUCTION',
             'STOP_RESEARCH_PRODUCTION',
             'CHECK_RESEARCH_PRODUCTION_STATUS') -and

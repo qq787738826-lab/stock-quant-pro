@@ -3,6 +3,7 @@ package com.stockquant.server.agent.marketfacts;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stockquant.server.agent.shadowresearch.ShadowResearchRepository;
 import com.stockquant.server.researchselection.ResearchSelectionModels;
+import com.stockquant.server.researchselection.ResearchSelectionAnchorResolver;
 import com.stockquant.server.researchselection.ResearchSelectionProviderBudgetPlanner;
 import com.stockquant.server.researchselection.ResearchSelectionRepository;
 import com.stockquant.server.researchselection.ResearchUniverseV1;
@@ -71,7 +72,10 @@ class ResearchSelectionPostgresIntegrationTest {
             assertEquals(0, initial.retryCount());
             assertTrue(initial.appendedObservations() > 3_000);
             assertEquals(0, initial.idempotentChainTailHits());
-            assertEquals(2, ResearchSelectionProviderBudgetPlanner
+            assertEquals(ANCHOR.minusDays(1),
+                    ResearchSelectionAnchorResolver.resolve(loader,
+                            request.auxiliaryWindow(), AS_OF));
+            assertEquals(0, ResearchSelectionProviderBudgetPlanner
                     .requiredProviderRequests(loader, request, AS_OF));
             assertTrue(facts.findCalendarAsOf(
                     TushareMarketFactProvider.PROVIDER_CODE,
@@ -115,6 +119,14 @@ class ResearchSelectionPostgresIntegrationTest {
         assertTrue(loaded.coverage().noFutureDataLeakage());
         assertEquals(0, ResearchSelectionProviderBudgetPlanner
                 .requiredProviderRequests(loader, request, AS_OF));
+        Instant nextSessionAfterClose = Instant.from(
+                ANCHOR.plusDays(1).atTime(16, 0)
+                        .atZone(PitMarketFactsContracts.MARKET_ZONE));
+        assertEquals(ANCHOR, ResearchSelectionAnchorResolver.resolve(loader,
+                request.auxiliaryWindow(), nextSessionAfterClose));
+        assertEquals(0, ResearchSelectionProviderBudgetPlanner
+                .requiredProviderRequests(loader, request,
+                        nextSessionAfterClose));
         var shadow = new ShadowResearchRepository(jdbc, mapper);
         assertEquals(ShadowResearchRepository.CalendarState.OPEN,
                 shadow.researchCalendarState(ANCHOR, AS_OF));

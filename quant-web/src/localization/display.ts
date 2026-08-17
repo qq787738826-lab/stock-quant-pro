@@ -269,6 +269,8 @@ const REASON_LABELS: Readonly<Record<string, string>> = Object.freeze({
   CREDENTIAL_MISSING: '凭据尚未配置',
   CREDENTIAL_STATUS_UNAVAILABLE: '暂时无法检查凭据状态',
   M4_SCHEDULER_BROKER_SUBMIT_REJECTED: '自动影子研究提交失败',
+  M4_SHADOW_REQUEST_INVALID: '研究时间边界校验未通过',
+  RESEARCH_SELECTION_PAPER_EXECUTION_NOT_AFTER_AS_OF: '模拟执行时间早于研究时点，已安全拒绝',
   RESEARCH_SELECTION_ALREADY_RUNNING: '已有一次立即选股正在运行',
   NETWORK_ERROR: '本机网络连接暂不可用',
   EVIDENCE_CORRECTNESS: '证据引用正确性不足',

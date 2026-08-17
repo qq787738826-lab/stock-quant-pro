@@ -90,6 +90,9 @@ test('普通时间、金额和脱敏错误原因适合中文用户阅读', () =>
   assert.equal(formatDateTime('2026-08-17T09:20:00Z'), '2026-08-17 17:20')
   assert.equal(formatCurrency(1000000, 0), '¥1,000,000')
   assert.equal(displayReason('M4_SCHEDULER_BROKER_SUBMIT_REJECTED'), '自动影子研究提交失败')
+  assert.equal(displayReason('M4_SHADOW_REQUEST_INVALID'), '研究时间边界校验未通过')
+  assert.equal(displayReason('RESEARCH_SELECTION_PAPER_EXECUTION_NOT_AFTER_AS_OF'),
+    '模拟执行时间早于研究时点，已安全拒绝')
   assert.equal(displayReason('SOME_TUSHARE_RUNTIME_ERROR'), '市场数据服务异常')
   assert.ok(DISPLAY_MAPPING_COUNT >= 200)
 })
@@ -120,4 +123,6 @@ test('核心普通用户页面不再使用英文主导航或直接渲染核心�
     "portfolio.limitations.join('；')", '<small>RESEARCH_UNIVERSE_V1']) {
     assert.equal(merged.includes(expression), false, `仍直接渲染内部值: ${expression}`)
   }
+  assert.equal(merged.includes('本次研究使用截至 <strong>{{ result.anchorTradeDate }}</strong> 收盘的数据。'), true)
+  assert.equal(merged.includes('系统没有使用尚未结束的当日日线'), true)
 })
