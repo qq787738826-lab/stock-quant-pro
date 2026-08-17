@@ -26,6 +26,7 @@ import java.util.concurrent.TimeUnit;
         name = "enabled", havingValue = "true")
 public final class PowerShellResearchSelectionDispatchGateway
         implements ResearchSelectionDispatchGateway {
+    static final String MAXIMUM_COST_CNY = "1.50";
     private static final DateTimeFormatter REQUEST_TIME =
             DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'")
                     .withZone(ZoneOffset.UTC);
@@ -67,7 +68,8 @@ public final class PowerShellResearchSelectionDispatchGateway
                             request.primaryWindow()), "-AuxiliaryWindow",
                     Integer.toString(request.auxiliaryWindow()),
                     "-MaximumProviderRequests",
-                    Integer.toString(maximumProviderRequests), "-SubmitOnly",
+                    Integer.toString(maximumProviderRequests),
+                    "-MaximumCostCny", MAXIMUM_COST_CNY, "-SubmitOnly",
                     "-TimeoutSeconds", "30");
             Process process = new ProcessBuilder(command)
                     .directory(root.toFile()).redirectErrorStream(true)

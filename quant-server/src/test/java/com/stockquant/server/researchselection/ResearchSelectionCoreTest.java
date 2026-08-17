@@ -95,6 +95,8 @@ class ResearchSelectionCoreTest {
         assertEquals(10, immediate.shortlistSize());
         assertEquals(5, immediate.finalLimit());
         assertTrue(immediate.paperEnabled());
+        assertEquals("1.50",
+                PowerShellResearchSelectionDispatchGateway.MAXIMUM_COST_CNY);
         assertThrows(IllegalArgumentException.class, () ->
                 new ResearchSelectionModels.SelectionRequest(
                         ResearchSelectionModels.TriggerMode.ON_DEMAND,

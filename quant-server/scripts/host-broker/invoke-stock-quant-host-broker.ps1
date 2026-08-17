@@ -56,6 +56,9 @@ param(
     [ValidateSet(0, 2, 52)]
     [int] $MaximumProviderRequests = 52,
 
+    [ValidateSet('1.50', '5.00')]
+    [string] $MaximumCostCny = '5.00',
+
     [switch] $SubmitOnly,
 
     [ValidateRange(5, 2700)]
@@ -78,6 +81,10 @@ if (($RequestId -ne 'AUTO' -or $TradeDate -ne 'AUTO' -or
         'RUN_RESEARCH_SELECTION',
         'START_RESEARCH_PRODUCTION', 'STOP_RESEARCH_PRODUCTION',
         'CHECK_RESEARCH_PRODUCTION_STATUS')) {
+    throw 'STOCK_QUANT_HOST_BROKER_FIXED_DISPATCH_ARGUMENT_INVALID'
+}
+if ($MaximumCostCny -ne '5.00' -and
+    $Operation -ne 'RUN_RESEARCH_SELECTION') {
     throw 'STOCK_QUANT_HOST_BROKER_FIXED_DISPATCH_ARGUMENT_INVALID'
 }
 
@@ -357,7 +364,8 @@ try {
             -CalendarMonth $calendarMonth
         [decimal]$shadowCost = [decimal]$usage.CommittedShadowCostCny
         [decimal]$projectCost = [decimal]$usage.CommittedProjectCostCny
-        [decimal]$remainingCost = [decimal]5.00
+        [decimal]$remainingCost = [decimal]::Parse($MaximumCostCny,
+            [Globalization.CultureInfo]::InvariantCulture)
         if ([decimal]30 - $shadowCost -lt $remainingCost) {
             $remainingCost = [decimal]30 - $shadowCost
         }
