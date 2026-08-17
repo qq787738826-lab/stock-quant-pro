@@ -219,6 +219,8 @@ const PHASE_LABELS: Readonly<Record<string, string>> = Object.freeze({
   RISK_TOOL_SELECTION: '选择风险工具',
   RISK_ASSESSMENT: '风险评估',
   PORTFOLIO_DECISION: '组合判断',
+  PORTFOLIO_SYNTHESIS: '组合综合',
+  PORTFOLIO_REVISION: '组合修订',
   CRITIC_CHALLENGE: '批判审查',
   FINAL_SYNTHESIS: '最终汇总',
 })
