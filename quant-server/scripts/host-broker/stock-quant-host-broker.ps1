@@ -1373,6 +1373,8 @@ function Invoke-ResearchSelection {
         -CalendarMonth $BrokerRequest.Values['budget.calendar.month']
     [int]$maximumProvider =
         [int]$BrokerRequest.Values['maximum.provider.requests']
+    [int]$networkRecoveryBudget =
+        [int]$BrokerRequest.Values['network.recovery.budget']
     [decimal]$maximumCost = [decimal]$BrokerRequest.Values[
         'maximum.cost.cny']
     if ([int]$usage.CommittedTushareCalls + $maximumProvider -gt
@@ -1436,7 +1438,8 @@ function Invoke-ResearchSelection {
         [int]$selection.universeSize -lt 1000 -or
         [int]$selection.shortlistSize -ne 10 -or
         [int]$selection.tushareProviderCallCount -gt $maximumProvider -or
-        [int]$selection.retryCount -ne 0 -or
+        [int]$selection.retryCount -lt 0 -or
+        [int]$selection.retryCount -gt $networkRecoveryBudget -or
         [int]$selection.modelProviderRequestCount -ne 13 -or
         [int]$selection.modelCallCount -ne 13 -or
         @($selection.agentRoles | Sort-Object -Unique).Count -ne 7 -or

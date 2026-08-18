@@ -380,6 +380,15 @@ try {
                 $MaximumProviderRequests -gt $monthlyTushareLimit) {
             throw 'RESEARCH_SELECTION_MONTHLY_BUDGET_EXHAUSTED'
         }
+        [int]$networkRecoveryBudget = if (
+            $MaximumProviderRequests -eq 0) { 0 } else { 4 }
+        [int]$baseProviderRequests =
+            $MaximumProviderRequests - $networkRecoveryBudget
+        if ($baseProviderRequests -lt 0 -or
+            ($MaximumProviderRequests -gt 0 -and
+                $baseProviderRequests -lt 2)) {
+            throw 'RESEARCH_SELECTION_FIXED_SCOPE_INVALID'
+        }
         $requestValues = [ordered]@{
             'schema.version' = 'STOCK_QUANT_HOST_BROKER_REQUEST_V1'
             'request.id' = $requestId
@@ -406,11 +415,11 @@ try {
             'tushare.provider' = 'TUSHARE'
             'tushare.endpoints' =
                 'stock_basic,daily,adj_factor,trade_cal'
-            'endpoint.stock_basic.requests' = [string]($MaximumProviderRequests % 2)
+            'endpoint.stock_basic.requests' = [string]($baseProviderRequests % 2)
             'endpoint.daily.requests' = [string][math]::Floor(
-                $MaximumProviderRequests / 2)
+                $baseProviderRequests / 2)
             'endpoint.adj_factor.requests' = [string][math]::Floor(
-                $MaximumProviderRequests / 2)
+                $baseProviderRequests / 2)
             'endpoint.trade_cal.requests' = '0'
             'maximum.provider.requests' = [string]$MaximumProviderRequests
             'budget.calendar.month' = $calendarMonth
@@ -432,6 +441,7 @@ try {
             'project.monthly.cost.before.cny' =
                 [string]$usage.CommittedProjectCostCny
             'retry.budget' = '0'
+            'network.recovery.budget' = [string]$networkRecoveryBudget
             'redirects' = 'NEVER'
             'user.approval.reference' =
                 'USER_APPROVED_STOCK_QUANT_PRO_V1_MONTHLY'

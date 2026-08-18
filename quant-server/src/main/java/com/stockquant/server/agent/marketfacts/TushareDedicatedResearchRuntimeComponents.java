@@ -104,7 +104,7 @@ final class TushareDedicatedResearchRuntimeComponents implements AutoCloseable {
     static TushareDedicatedResearchRuntimeComponents createE2eDryRun(
             DataSource dataSource,
             Clock clock,
-            TushareControlledAcceptanceE2eDryRunGateway gateway
+            TushareApiGateway gateway
     ) {
         Objects.requireNonNull(dataSource, "dataSource");
         Objects.requireNonNull(clock, "clock");

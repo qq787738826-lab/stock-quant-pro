@@ -111,7 +111,7 @@ try {
         -SelectionRunId 1 -PublicRunId $publicRun `
         -GitCommit $ExpectedCommit -SelectionTrigger SCHEDULED_SHADOW `
         -DatabasePort $port `
-        -MaximumProviderRequests 123 -ExecutionMode FAKE `
+        -MaximumProviderRequests 127 -ExecutionMode FAKE `
         -MaximumCostCny 5.00
     if ($LASTEXITCODE -ne 0) {
         throw 'RESEARCH_SELECTION_E2E_RUNNER_FAILED'

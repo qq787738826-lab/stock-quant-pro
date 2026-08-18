@@ -686,6 +686,8 @@ class TushareMarketFactProviderTest {
                 .path("market").asText());
         assertEquals("L", gateway.calls.get(0).parameters()
                 .path("list_status").asText());
+        assertEquals(QueryMode.CONTROLLED_NETWORK_RECOVERY,
+                gateway.calls.get(0).mode());
     }
 
     @Test
@@ -731,22 +733,32 @@ class TushareMarketFactProviderTest {
         gateway.mainboardFactorRows = List.of(
                 factorRow("600001.SH", date), factorRow("000001.SZ", date),
                 factorRow("300001.SZ", date));
+        gateway.mainboardDailyProviderCalls = 2;
+        gateway.mainboardDailyRetries = 1;
+        gateway.mainboardFactorProviderCalls = 2;
+        gateway.mainboardFactorRetries = 1;
         List<MainboardInstrument> members = List.of(
                 mainboard("600001.SH", "600001", "SSE"),
                 mainboard("000001.SZ", "000001", "SZSE"));
         var session = TushareManualBoundedSession.mainboardUniverse(
-                Set.of(date), date, date, false, false);
+                Set.of(date), date, date, false, false, 4);
 
         var response = provider(gateway).fetchMainboardMarketDate(members,
                 date, Duration.ofSeconds(5), session);
 
         assertTrue(response.complete());
-        assertEquals(2, response.providerMetadata()
+        assertEquals(4, response.providerMetadata()
                 .path("providerCallCount").asInt());
+        assertEquals(2, response.providerMetadata()
+                .path("networkRecoveryCount").asInt());
+        assertEquals(0, response.providerMetadata()
+                .path("rateLimitRetryCount").asInt());
         assertEquals(2, response.rawDailyBars().size());
         assertEquals(2, response.adjustmentFactors().size());
         assertEquals(List.of("daily", "adj_factor"), gateway.calls.stream()
                 .map(Call::endpoint).toList());
+        assertTrue(gateway.calls.stream().allMatch(call -> call.mode()
+                == QueryMode.CONTROLLED_NETWORK_RECOVERY));
         assertTrue(gateway.calls.stream().allMatch(call ->
                 call.parameters().size() == 1
                         && call.parameters().path("trade_date").asText()
@@ -812,6 +824,8 @@ class TushareMarketFactProviderTest {
                         date, Duration.ofSeconds(5), truncatedSession));
         assertEquals("MAINBOARD_PROVIDER_RESPONSE_TRUNCATED",
                 rowLimit.safeCode());
+        assertEquals(List.of("daily", "adj_factor"), truncated.calls.stream()
+                .map(Call::endpoint).toList());
 
         FixtureGateway mismatch = new FixtureGateway(mapper);
         mismatch.mainboardDailyRows = List.of(dailyRow("600001.SH", date));
@@ -961,6 +975,10 @@ class TushareMarketFactProviderTest {
         private List<List<JsonNode>> mainboardRows;
         private List<List<JsonNode>> mainboardDailyRows;
         private List<List<JsonNode>> mainboardFactorRows;
+        private int mainboardDailyProviderCalls = 1;
+        private int mainboardDailyRetries;
+        private int mainboardFactorProviderCalls = 1;
+        private int mainboardFactorRetries;
 
         private FixtureGateway(ObjectMapper mapper) {
             this.mapper = mapper;
@@ -1069,8 +1087,18 @@ class TushareMarketFactProviderTest {
                         default -> throw new IllegalArgumentException(
                                 endpoint);
                     },
-                    1,
-                    0);
+                    "daily".equals(endpoint)
+                            && mainboardDailyRows != null
+                            ? mainboardDailyProviderCalls
+                            : "adj_factor".equals(endpoint)
+                            && mainboardFactorRows != null
+                            ? mainboardFactorProviderCalls : 1,
+                    "daily".equals(endpoint)
+                            && mainboardDailyRows != null
+                            ? mainboardDailyRetries
+                            : "adj_factor".equals(endpoint)
+                            && mainboardFactorRows != null
+                            ? mainboardFactorRetries : 0);
         }
 
         private static List<List<JsonNode>> repeated(

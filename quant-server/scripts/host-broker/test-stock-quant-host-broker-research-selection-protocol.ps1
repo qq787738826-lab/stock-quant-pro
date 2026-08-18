@@ -102,7 +102,7 @@ try {
         'endpoint.daily.requests' = '1'
         'endpoint.adj_factor.requests' = '1'
         'endpoint.trade_cal.requests' = '0'
-        'maximum.provider.requests' = '2'
+        'maximum.provider.requests' = '6'
         'budget.calendar.month' = $calendarMonth
         'tushare.monthly.limit' = [string]$monthlyTushareLimit
         'tushare.monthly.calls.before' = '0'
@@ -118,6 +118,7 @@ try {
         'project.monthly.limit.cny' = '200.00'
         'project.monthly.cost.before.cny' = '0.00'
         'retry.budget' = '0'
+        'network.recovery.budget' = '4'
         'redirects' = 'NEVER'
         'user.approval.reference' =
             'USER_APPROVED_STOCK_QUANT_PRO_V1_MONTHLY'
@@ -133,15 +134,18 @@ try {
         'build.mode=RESEARCH_SELECTION_CONTROLLED_BUILD_ARTIFACT'
     ) -join "`n") + "`n", [Text.UTF8Encoding]::new($false))
 
-    foreach ($maximum in @(0, 2, 121)) {
+    foreach ($maximum in @(0, 6, 125)) {
         $value = Copy-Values $request
         $value['request.id'] = New-StockQuantHostBrokerRequestId
         $value['maximum.provider.requests'] = [string]$maximum
-        $value['endpoint.stock_basic.requests'] = [string]($maximum % 2)
+        [int]$recovery = if ($maximum -eq 0) { 0 } else { 4 }
+        [int]$base = $maximum - $recovery
+        $value['network.recovery.budget'] = [string]$recovery
+        $value['endpoint.stock_basic.requests'] = [string]($base % 2)
         $value['endpoint.daily.requests'] = [string][math]::Floor(
-            $maximum / 2)
+            $base / 2)
         $value['endpoint.adj_factor.requests'] = [string][math]::Floor(
-            $maximum / 2)
+            $base / 2)
         $parsed = Read-Valid $value
         if ($parsed.Operation -ne 'RUN_RESEARCH_SELECTION' -or
             $parsed.AuthorizationStatus -ne
@@ -207,6 +211,8 @@ try {
                 'DYNAMIC_UNIVERSE'),
             @('selection.shortlist.limit', '25', 'UNBOUNDED_AGENT_SCOPE'),
             @('retry.budget', '1', 'RETRY_ENABLED'),
+            @('network.recovery.budget', '5',
+                'NETWORK_RECOVERY_UNBOUNDED'),
             @('redirects', 'FOLLOW', 'REDIRECT_ENABLED'),
             @('model', 'dynamic-model', 'DYNAMIC_MODEL'),
             @('tushare.monthly.limit', $wrongMonthlyTushareLimit,
@@ -247,7 +253,8 @@ try {
         'operation' = 'RUN_RESEARCH_SELECTION'
         'request.id' = $ledgerId
         'created.at' = '2099-02-03T01:02:03Z'
-        'maximum.provider.requests' = '2'
+        'maximum.provider.requests' = '6'
+        'network.recovery.budget' = '4'
         'selection.run.id' = '202'
         'selection.universe.version' =
             'RESEARCH_UNIVERSE_MAINBOARD_V1'
@@ -262,8 +269,8 @@ try {
         publicRunId = 'SELECT_20990203T010203Z_A1B2C3D4E5F6'
         universeSize = 3000
         shortlistSize = 10
-        tushareProviderCallCount = 2
-        retryCount = 0
+        tushareProviderCallCount = 3
+        retryCount = 1
         modelProviderRequestCount = 13
         modelCallCount = 13
         conservativeCostCny = '0.75'
@@ -275,7 +282,7 @@ try {
     $ledgerFiles += $ledgerRequest, $ledgerResult
     $usage = Get-StockQuantM4MonthlyUsage -CalendarMonth '2099-02'
     if ([int]$usage.RequestCount -ne 1 -or
-        [int]$usage.TushareCalls -ne 2 -or
+        [int]$usage.TushareCalls -ne 3 -or
         [decimal]$usage.ShadowCostCny -ne [decimal]0.75 -or
         [decimal]$usage.ProjectCostCny -ne [decimal]0.75) {
         throw 'RESEARCH_SELECTION_MONTHLY_LEDGER_INVALID'

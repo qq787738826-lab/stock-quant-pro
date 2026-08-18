@@ -52,17 +52,38 @@ public final class TushareMainboardUniverseCaptureService {
             String gitCommit,
             Duration timeout
     ) {
+        return capture(current, refreshStockBasic, missingTradeDates,
+                calendarStart, calendarEnd, refreshCalendar, gitCommit,
+                timeout, 0);
+    }
+
+    public CaptureEvidence capture(
+            SnapshotBundle current,
+            boolean refreshStockBasic,
+            Set<LocalDate> missingTradeDates,
+            LocalDate calendarStart,
+            LocalDate calendarEnd,
+            boolean refreshCalendar,
+            String gitCommit,
+            Duration timeout,
+            int maximumNetworkRecoveries
+    ) {
         if (missingTradeDates == null || calendarStart == null
                 || calendarEnd == null || gitCommit == null
                 || !gitCommit.matches("[0-9a-f]{40}") || timeout == null
                 || timeout.isZero() || timeout.isNegative()
+                || maximumNetworkRecoveries < 0
+                || maximumNetworkRecoveries
+                > TushareManualBoundedSession
+                .MAINBOARD_MAX_NETWORK_RECOVERIES
                 || current == null && !refreshStockBasic) {
             throw invalid("MAINBOARD_CAPTURE_REQUEST_INVALID");
         }
         var preProvider = guard.verifyBeforeProvider();
         var session = TushareManualBoundedSession.mainboardUniverse(
                 missingTradeDates, calendarStart, calendarEnd,
-                refreshStockBasic, refreshCalendar);
+                refreshStockBasic, refreshCalendar,
+                maximumNetworkRecoveries);
         int appended = 0;
         int idempotent = 0;
         List<Long> batches = new ArrayList<>();
@@ -120,15 +141,18 @@ public final class TushareMainboardUniverseCaptureService {
                 }
             }
             if (session.consumedBusinessRequests()
-                    != session.maximumBusinessRequests()) {
+                    != session.expectedBusinessRequests()
+                    + session.consumedNetworkRecoveries()) {
                 throw invalid("MAINBOARD_PROVIDER_BUDGET_MISMATCH");
             }
             return new CaptureEvidence(snapshot,
-                    session.consumedBusinessRequests(), 0, batches,
+                    session.consumedBusinessRequests(),
+                    session.consumedNetworkRecoveries(), batches,
                     appended, idempotent, clock.instant());
         } catch (RuntimeException failure) {
             throw new CaptureFailure(safeCode(failure),
-                    session.consumedBusinessRequests(), failure);
+                    session.consumedBusinessRequests(),
+                    session.consumedNetworkRecoveries(), failure);
         }
     }
 
@@ -194,15 +218,22 @@ public final class TushareMainboardUniverseCaptureService {
 
     public static final class CaptureFailure extends IllegalStateException {
         private final int providerCallCount;
+        private final int retryCount;
 
         private CaptureFailure(String reason, int providerCallCount,
+                               int retryCount,
                                RuntimeException cause) {
             super(reason, cause);
             this.providerCallCount = providerCallCount;
+            this.retryCount = retryCount;
         }
 
         public int providerCallCount() {
             return providerCallCount;
+        }
+
+        public int retryCount() {
+            return retryCount;
         }
     }
 }

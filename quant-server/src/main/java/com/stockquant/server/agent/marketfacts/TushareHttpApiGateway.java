@@ -54,12 +54,7 @@ public final class TushareHttpApiGateway
                 rateLimiter,
                 properties.validatedBaseUri(),
                 new JdkHttpExchangeStrategy(
-                        HttpClient.newBuilder()
-                                .connectTimeout(
-                                        properties.getConnectTimeout())
-                                .followRedirects(
-                                        HttpClient.Redirect.NEVER)
-                                .build()),
+                        properties.getConnectTimeout()),
                 duration -> Thread.sleep(
                         duration.toMillis(),
                         duration.minusMillis(
@@ -106,11 +101,13 @@ public final class TushareHttpApiGateway
         validateRequest(
                 endpoint, parameters, fields, timeout, mode, session);
         properties.requireManualBoundedToken();
-        int maximumRetries = mode == QueryMode.CONTROLLED_NO_RETRY
+        int maximumRetries = mode != QueryMode.NORMAL
                 || !session.automaticRetryAllowed()
                 ? 0 : properties.getMaximumRateLimitRetries();
         int calls = 0;
         int retries = 0;
+        boolean networkRecoveryUsed = false;
+        HttpExchangeStrategy exchangeStrategy = httpExchangeStrategy;
         while (true) {
             session.authorizeAndReserve(endpoint, parameters);
             try {
@@ -125,10 +122,27 @@ public final class TushareHttpApiGateway
             calls++;
             try {
                 ResponseEnvelope response = execute(
-                        endpoint, parameters, fields, timeout);
+                        endpoint, parameters, fields, timeout,
+                        exchangeStrategy);
                 return new QueryResult(
                         parse(response), calls, retries);
             } catch (GatewayException error) {
+                if (eligibleNetworkRecovery(error, mode,
+                        networkRecoveryUsed)
+                        && session.networkRecoveryAvailable()) {
+                    try {
+                        awaitNetworkRecovery();
+                    } catch (GatewayException waitFailure) {
+                        throw withCounts(waitFailure, calls, retries);
+                    }
+                    if (!session.reserveNetworkRecovery()) {
+                        throw withCounts(error, calls, retries);
+                    }
+                    exchangeStrategy = exchangeStrategy.freshConnection();
+                    retries++;
+                    networkRecoveryUsed = true;
+                    continue;
+                }
                 if (error.kind() != ErrorKind.RATE_LIMITED
                         || retries >= maximumRetries) {
                     throw withCounts(error, calls, retries);
@@ -143,7 +157,8 @@ public final class TushareHttpApiGateway
             String endpoint,
             ObjectNode parameters,
             List<String> fields,
-            Duration timeout
+            Duration timeout,
+            HttpExchangeStrategy exchangeStrategy
     ) {
         ObjectNode body = objectMapper.createObjectNode();
         body.put("api_name", endpoint);
@@ -165,7 +180,7 @@ public final class TushareHttpApiGateway
             Duration effectiveTimeout = timeout.compareTo(
                     properties.getReadTimeout()) <= 0
                     ? timeout : properties.getReadTimeout();
-            exchange = httpExchangeStrategy.post(
+            exchange = exchangeStrategy.post(
                     baseUri,
                     requestBody,
                     effectiveTimeout);
@@ -362,6 +377,31 @@ public final class TushareHttpApiGateway
         }
     }
 
+    private void awaitNetworkRecovery() {
+        try {
+            retryWaitStrategy.await(properties.getRetryBackoff());
+        } catch (InterruptedException error) {
+            Thread.currentThread().interrupt();
+            throw failure(
+                    ErrorKind.NETWORK_ERROR,
+                    "TUSHARE_NETWORK_RECOVERY_INTERRUPTED",
+                    "Tushare network recovery wait was interrupted",
+                    error);
+        }
+    }
+
+    private static boolean eligibleNetworkRecovery(
+            GatewayException error,
+            QueryMode mode,
+            boolean recoveryUsed
+    ) {
+        return mode == QueryMode.CONTROLLED_NETWORK_RECOVERY
+                && !recoveryUsed
+                && error.kind() == ErrorKind.NETWORK_ERROR
+                && "TUSHARE_NETWORK_ERROR".equals(error.safeCode())
+                && error.diagnostic() == null;
+    }
+
     private String safeProviderMessage(String message) {
         String safe = message == null || message.isBlank()
                 ? "Tushare provider error" : message;
@@ -543,11 +583,27 @@ public final class TushareHttpApiGateway
                 String body,
                 Duration timeout
         ) throws IOException, InterruptedException;
+
+        /** Returns a strategy backed by a newly constructed connection. */
+        default HttpExchangeStrategy freshConnection() {
+            return this;
+        }
     }
 
-    private record JdkHttpExchangeStrategy(
-            HttpClient httpClient
-    ) implements HttpExchangeStrategy {
+    private static final class JdkHttpExchangeStrategy
+            implements HttpExchangeStrategy {
+        private final Duration connectTimeout;
+        private final HttpClient httpClient;
+
+        private JdkHttpExchangeStrategy(Duration connectTimeout) {
+            this.connectTimeout = Objects.requireNonNull(
+                    connectTimeout, "connectTimeout");
+            this.httpClient = HttpClient.newBuilder()
+                    .connectTimeout(connectTimeout)
+                    .followRedirects(HttpClient.Redirect.NEVER)
+                    .build();
+        }
+
         @Override
         public HttpExchangeResult post(
                 URI uri,
@@ -569,6 +625,11 @@ public final class TushareHttpApiGateway
                     response.headers().firstValue("Content-Type")
                             .orElse("MISSING"),
                     response.body());
+        }
+
+        @Override
+        public HttpExchangeStrategy freshConnection() {
+            return new JdkHttpExchangeStrategy(connectTimeout);
         }
     }
 

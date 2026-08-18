@@ -415,6 +415,7 @@ $script:ResearchSelectionRequiredKeys = @(
     'project.monthly.limit.cny'
     'project.monthly.cost.before.cny'
     'retry.budget'
+    'network.recovery.budget'
     'redirects'
     'user.approval.reference'
     'created.at'
@@ -582,6 +583,10 @@ function Get-StockQuantM4MonthlyUsage {
             if ($selection) {
                 [int]$maximumCalls = [int]$values[
                     'maximum.provider.requests']
+                [int]$networkRecoveryBudget = if (
+                    $values.Contains('network.recovery.budget')) {
+                    [int]$values['network.recovery.budget']
+                } else { 0 }
                 $selectionUniverse = [string]$values[
                     'selection.universe.version']
                 $universeSizeValid =
@@ -601,7 +606,8 @@ function Get-StockQuantM4MonthlyUsage {
                         [string]$values['selection.public.run.id'] -or
                     [int]$runner.tushareProviderCallCount -lt 0 -or
                     [int]$runner.tushareProviderCallCount -gt $maximumCalls -or
-                    [int]$runner.retryCount -ne 0 -or
+                    [int]$runner.retryCount -lt 0 -or
+                    [int]$runner.retryCount -gt $networkRecoveryBudget -or
                     [int]$runner.modelProviderRequestCount -lt 0 -or
                     [int]$runner.modelProviderRequestCount -gt 13 -or
                     $cost -lt 0 -or $cost -gt [decimal]5.00 -or
@@ -1283,6 +1289,7 @@ function Read-StockQuantHostBrokerRequest {
         [int]$dailyRequests = -1
         [int]$factorRequests = -1
         [int]$calendarRequests = -1
+        [int]$networkRecoveryRequests = -1
         $createdSelection = ConvertTo-StockQuantTimestamp `
             ([string]$values['created.at'])
         $selectionMonth = [TimeZoneInfo]::ConvertTimeBySystemTimeZoneId(
@@ -1341,11 +1348,25 @@ function Read-StockQuantHostBrokerRequest {
                 [Globalization.NumberStyles]::None,
                 [Globalization.CultureInfo]::InvariantCulture,
                 [ref]$calendarRequests) -or
+            -not [int]::TryParse(
+                [string]$values['network.recovery.budget'],
+                [Globalization.NumberStyles]::None,
+                [Globalization.CultureInfo]::InvariantCulture,
+                [ref]$networkRecoveryRequests) -or
             $stockBasicRequests -notin @(0, 1) -or
             $dailyRequests -lt 0 -or $factorRequests -ne $dailyRequests -or
             $calendarRequests -ne 0 -or
+            $networkRecoveryRequests -notin @(0, 4) -or
+            ($maximumProviderRequests -eq 0 -and (
+                $stockBasicRequests + $dailyRequests + $factorRequests +
+                $calendarRequests -ne 0 -or
+                $networkRecoveryRequests -ne 0)) -or
+            ($maximumProviderRequests -gt 0 -and (
+                $dailyRequests -lt 1 -or
+                $networkRecoveryRequests -ne 4)) -or
             $maximumProviderRequests -ne ($stockBasicRequests +
-                $dailyRequests + $factorRequests + $calendarRequests) -or
+                $dailyRequests + $factorRequests + $calendarRequests +
+                $networkRecoveryRequests) -or
             $values['budget.calendar.month'] -ne $selectionMonth -or
             $values['tushare.monthly.limit'] -ne
                 [string]$selectionTushareLimit -or

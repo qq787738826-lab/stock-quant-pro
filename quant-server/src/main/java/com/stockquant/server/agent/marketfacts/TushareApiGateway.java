@@ -21,7 +21,9 @@ public interface TushareApiGateway {
 
     enum QueryMode {
         NORMAL,
-        CONTROLLED_NO_RETRY
+        CONTROLLED_NO_RETRY,
+        /** One no-response resend per call, bounded again across the run. */
+        CONTROLLED_NETWORK_RECOVERY
     }
 
     enum ErrorKind {

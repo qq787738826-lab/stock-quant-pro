@@ -83,11 +83,16 @@ try {
     }
     $value = Get-Content -LiteralPath $result -Raw -Encoding UTF8 |
         ConvertFrom-Json
+    [int]$maximumNetworkRecoveries = if (
+        $MaximumProviderRequests -eq 0) { 0 } else { 4 }
     if ($value.schemaVersion -ne 'RESEARCH_SELECTION_RUNNER_RESULT_V1' -or
         $value.status -ne 'SUCCEEDED' -or
         [int]$value.universeSize -lt 1000 -or
         [int]$value.shortlistSize -ne 10 -or
-        [int]$value.retryCount -ne 0 -or
+        [int]$value.tushareProviderCallCount -lt 0 -or
+        [int]$value.tushareProviderCallCount -gt $MaximumProviderRequests -or
+        [int]$value.retryCount -lt 0 -or
+        [int]$value.retryCount -gt $maximumNetworkRecoveries -or
         [int]$value.modelCallCount -ne 13 -or
         [int]$value.toolCallCount -ne 4 -or
         @($value.agentRoles | Sort-Object -Unique).Count -ne 7 -or

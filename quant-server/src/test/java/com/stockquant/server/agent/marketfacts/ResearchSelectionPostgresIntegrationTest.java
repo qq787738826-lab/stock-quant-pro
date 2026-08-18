@@ -24,6 +24,8 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -274,6 +276,64 @@ class ResearchSelectionPostgresIntegrationTest {
     }
 
     @Test
+    void boundedNetworkRecoveryPersistsOnlyCompleteDatesAndRestartResumesGap() {
+        JdbcTemplate jdbc = new JdbcTemplate(dataSource);
+        ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+        List<LocalDate> dates = List.of(
+                LocalDate.of(2026, 8, 10),
+                LocalDate.of(2026, 8, 11),
+                LocalDate.of(2026, 8, 12),
+                LocalDate.of(2026, 8, 13));
+        ResearchUniverseMainboard.SnapshotBundle snapshot;
+        try (var initial = components(
+                new TushareControlledAcceptanceE2eDryRunGateway())) {
+            snapshot = initial.mainboardUniverseCaptureService().capture(
+                    null, true, Set.of(dates.get(0)), dates.get(0),
+                    dates.get(3), true, "a".repeat(40),
+                    Duration.ofSeconds(5)).snapshot();
+        }
+
+        var intermittent = new IntermittentNetworkGateway(
+                new TushareControlledAcceptanceE2eDryRunGateway());
+        try (var interrupted = components(intermittent)) {
+            var failure = assertThrows(
+                    TushareMainboardUniverseCaptureService.CaptureFailure.class,
+                    () -> interrupted.mainboardUniverseCaptureService()
+                            .capture(snapshot, false,
+                                    Set.copyOf(dates.subList(1, 4)),
+                                    dates.get(0), dates.get(3), false,
+                                    "b".repeat(40), Duration.ofSeconds(5),
+                                    4));
+            assertEquals("TUSHARE_NETWORK_ERROR", failure.getMessage());
+            assertEquals(9, failure.providerCallCount());
+            assertEquals(4, failure.retryCount());
+            assertEquals(9, intermittent.attempts);
+        }
+
+        var loader = new ResearchUniverseMainboardDatasetLoader(
+                new PitMarketFactRepository(jdbc, mapper));
+        var gap = loader.audit(snapshot, dates.get(3), AS_OF, 4);
+        assertEquals(List.of(dates.get(3)), gap.missingTradeDates());
+        int observationsBeforeResume = count(jdbc,
+                "pit_market_fact_observations");
+
+        try (var resumed = components(
+                new TushareControlledAcceptanceE2eDryRunGateway())) {
+            var evidence = resumed.mainboardUniverseCaptureService().capture(
+                    snapshot, false, Set.copyOf(gap.missingTradeDates()),
+                    dates.get(0), dates.get(3), false, "c".repeat(40),
+                    Duration.ofSeconds(5), 4);
+            assertEquals(2, evidence.providerCallCount());
+            assertEquals(0, evidence.retryCount());
+            assertEquals(1, evidence.batchIds().size());
+        }
+        assertTrue(count(jdbc, "pit_market_fact_observations")
+                > observationsBeforeResume);
+        assertTrue(loader.audit(snapshot, dates.get(3), AS_OF, 4)
+                .missingTradeDates().isEmpty());
+    }
+
+    @Test
     void twentySevenResponseCaptureRollsBackAsOneTransaction() {
         JdbcTemplate jdbc = new JdbcTemplate(dataSource);
         jdbc.execute("""
@@ -369,13 +429,13 @@ class ResearchSelectionPostgresIntegrationTest {
     }
 
     private static TushareDedicatedResearchRuntimeComponents components(
-            TushareControlledAcceptanceE2eDryRunGateway gateway
+            TushareApiGateway gateway
     ) {
         return components(gateway, AS_OF);
     }
 
     private static TushareDedicatedResearchRuntimeComponents components(
-            TushareControlledAcceptanceE2eDryRunGateway gateway,
+            TushareApiGateway gateway,
             Instant clock
     ) {
         return TushareDedicatedResearchRuntimeComponents.createE2eDryRun(
@@ -386,5 +446,50 @@ class ResearchSelectionPostgresIntegrationTest {
         Integer value = jdbc.queryForObject(
                 "SELECT count(*) FROM " + table, Integer.class);
         return value == null ? 0 : value;
+    }
+
+    /** Simulates a transport that loses the first response per endpoint/date. */
+    private static final class IntermittentNetworkGateway
+            implements TushareApiGateway {
+        private final TushareApiGateway delegate;
+        private final Set<String> failedOnce = new HashSet<>();
+        private int attempts;
+
+        private IntermittentNetworkGateway(TushareApiGateway delegate) {
+            this.delegate = delegate;
+        }
+
+        @Override
+        public QueryResult query(
+                String endpoint,
+                com.fasterxml.jackson.databind.node.ObjectNode parameters,
+                List<String> fields,
+                Duration timeout,
+                QueryMode mode,
+                TushareManualBoundedSession session
+        ) {
+            String key = endpoint + '|' + parameters.path("trade_date")
+                    .asText("NO_DATE");
+            if (!failedOnce.add(key)) {
+                QueryResult result = delegate.query(endpoint, parameters,
+                        fields, timeout, mode, session);
+                attempts += result.providerCallCount();
+                return result;
+            }
+            session.authorizeAndReserve(endpoint, parameters);
+            attempts++;
+            if (!session.reserveNetworkRecovery()) {
+                throw new GatewayException(ErrorKind.NETWORK_ERROR,
+                        "TUSHARE_NETWORK_ERROR",
+                        "synthetic no-response network failure",
+                        1, 0, null);
+            }
+            QueryResult recovered = delegate.query(endpoint, parameters,
+                    fields, timeout, mode, session);
+            attempts += recovered.providerCallCount();
+            return new QueryResult(recovered.table(),
+                    recovered.providerCallCount() + 1,
+                    recovered.rateLimitRetryCount() + 1);
+        }
     }
 }

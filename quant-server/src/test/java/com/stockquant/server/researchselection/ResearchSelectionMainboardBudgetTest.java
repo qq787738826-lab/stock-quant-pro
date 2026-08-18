@@ -34,13 +34,14 @@ class ResearchSelectionMainboardBudgetTest {
         assertEquals(60, plan.dailyRequests());
         assertEquals(60, plan.adjustmentFactorRequests());
         assertEquals(0, plan.tradeCalendarRequests());
-        assertEquals(121, plan.totalRequests());
+        assertEquals(4, plan.networkRecoveryRequests());
+        assertEquals(125, plan.totalRequests());
         assertEquals(24, plan.scheduledReserve());
-        assertEquals(241, plan.ledgerUsed() + plan.totalRequests()
+        assertEquals(245, plan.ledgerUsed() + plan.totalRequests()
                 + plan.scheduledReserve());
         assertEquals(250, plan.ledgerLimit());
         assertTrue(plan.executableWithinBudget());
-        assertEquals(9, plan.ledgerLimit() - plan.ledgerUsed()
+        assertEquals(5, plan.ledgerLimit() - plan.ledgerUsed()
                 - plan.totalRequests() - plan.scheduledReserve());
     }
 
@@ -56,6 +57,7 @@ class ResearchSelectionMainboardBudgetTest {
                         3_000, 96, 150).backfill();
 
         assertEquals(0, plan.totalRequests());
+        assertEquals(0, plan.networkRecoveryRequests());
         assertEquals(24, plan.scheduledReserve());
         assertTrue(plan.executableWithinBudget());
     }

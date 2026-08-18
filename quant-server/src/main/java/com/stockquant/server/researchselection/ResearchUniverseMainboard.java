@@ -150,6 +150,7 @@ public final class ResearchUniverseMainboard {
             int dailyRequests,
             int adjustmentFactorRequests,
             int tradeCalendarRequests,
+            int networkRecoveryRequests,
             int totalRequests,
             int ledgerUsed,
             int ledgerLimit,

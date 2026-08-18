@@ -147,6 +147,28 @@ class TushareResearchUniverseSessionTest {
         assertEquals(0, session.consumedBusinessRequests());
     }
 
+    @Test
+    void mainboardNetworkRecoveryIsGloballyBoundedAndSeparatelyCounted() {
+        LocalDate date = LocalDate.of(2026, 8, 12);
+        var session = TushareManualBoundedSession.mainboardUniverse(
+                Set.of(date), date, date, false, false, 4);
+        ObjectNode parameters = MAPPER.createObjectNode()
+                .put("trade_date", date(date));
+
+        session.authorizeAndReserve("daily", parameters.deepCopy());
+        for (int index = 0; index < 4; index++) {
+            assertEquals(true, session.reserveNetworkRecovery());
+            session.authorizeAndReserve("daily", parameters.deepCopy());
+        }
+        assertFalse(session.reserveNetworkRecovery());
+        session.authorizeAndReserve("adj_factor", parameters.deepCopy());
+
+        assertEquals(2, session.expectedBusinessRequests());
+        assertEquals(6, session.maximumBusinessRequests());
+        assertEquals(4, session.consumedNetworkRecoveries());
+        assertEquals(6, session.consumedBusinessRequests());
+    }
+
     private static List<SecuritySelection> selections() {
         return ResearchUniverseV1.securities().stream().map(value ->
                 new SecuritySelection(value.symbol(), value.exchange()))

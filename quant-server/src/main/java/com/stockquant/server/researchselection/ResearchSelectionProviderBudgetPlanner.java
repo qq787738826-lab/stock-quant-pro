@@ -103,7 +103,11 @@ public final class ResearchSelectionProviderBudgetPlanner {
                 : audit.missingTradeDates().size();
         int factors = daily;
         int calendar = audit.calendarIncomplete() ? 2 : 0;
-        int total = stockBasic + daily + factors + calendar;
+        int baseRequests = stockBasic + daily + factors + calendar;
+        int networkRecoveries = baseRequests == 0 ? 0
+                : TushareManualBoundedSession
+                .MAINBOARD_MAX_NETWORK_RECOVERIES;
+        int total = baseRequests + networkRecoveries;
         int reserve = scheduledReserve(asOf);
         LocalDate rangeStart = audit.requiredTradeDates().isEmpty()
                 ? anchor : audit.requiredTradeDates().get(0);
@@ -116,7 +120,8 @@ public final class ResearchSelectionProviderBudgetPlanner {
                 snapshot == null ? 0 : snapshot.snapshot().memberCount(),
                 existingSecurityCount, anchor, rangeStart, rangeEnd,
                 audit.requiredTradeDates(), audit.missingTradeDates(),
-                stockBasic, daily, factors, calendar, total, ledgerUsed,
+                stockBasic, daily, factors, calendar, networkRecoveries,
+                total, ledgerUsed,
                 ledgerLimit, reserve,
                 ledgerUsed + total + reserve <= ledgerLimit);
         return new MainboardPlan(anchor, audit, plan);

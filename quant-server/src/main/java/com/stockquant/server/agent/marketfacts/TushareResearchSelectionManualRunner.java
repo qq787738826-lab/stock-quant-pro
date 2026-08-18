@@ -274,7 +274,7 @@ public final class TushareResearchSelectionManualRunner {
                 var result = engine.runMainboard(launch.selectionRunId(),
                         launch.publicRunId(), config.request(), snapshot,
                         anchor, config.researchAsOf(), launch.gitCommit(),
-                        progress.providerCalls, 0,
+                        progress.providerCalls, progress.retryCount,
                         repository.liveShadowSampleCounts(), model, deep,
                         stages::advance, progress.startedNanos,
                         progress.startedAt);
@@ -363,7 +363,11 @@ public final class TushareResearchSelectionManualRunner {
         var backfill = new ResearchUniverseMainboard.BackfillPlan(
                 ResearchUniverseMainboard.VERSION, null, 0, 0, anchor,
                 dates.get(0), anchor, dates, dates, 1, dates.size(),
-                dates.size(), 2, total, 0,
+                dates.size(), 2,
+                TushareManualBoundedSession
+                        .MAINBOARD_MAX_NETWORK_RECOVERIES,
+                total + TushareManualBoundedSession
+                        .MAINBOARD_MAX_NETWORK_RECOVERIES, 0,
                 TushareManualBoundedSession
                         .MAINBOARD_UNIVERSE_MAX_PROVIDER_REQUESTS,
                 0, true);
@@ -391,14 +395,17 @@ public final class TushareResearchSelectionManualRunner {
                             plan.backfill().rangeStart(),
                             plan.backfill().rangeEnd(),
                             plan.backfill().tradeCalendarRequests() == 2,
-                            gitCommit, Duration.ofSeconds(30));
+                            gitCommit, Duration.ofSeconds(30),
+                            plan.backfill().networkRecoveryRequests());
             progress.providerCalls += evidence.providerCallCount();
+            progress.retryCount += evidence.retryCount();
             progress.appended += evidence.appendedObservations();
             progress.idempotent += evidence.idempotentChainTailHits();
             return evidence.snapshot();
         } catch (TushareMainboardUniverseCaptureService
                  .CaptureFailure failure) {
             progress.providerCalls += failure.providerCallCount();
+            progress.retryCount += failure.retryCount();
             throw failure;
         }
     }
@@ -503,7 +510,7 @@ public final class TushareResearchSelectionManualRunner {
                     commit, startedAt, clock.instant(),
                     launch == null ? 0 : launch.selectionRunId(),
                     launch == null ? "SELECT_UNKNOWN" : launch.publicRunId(),
-                    progress.providerCalls, 0,
+                    progress.providerCalls, progress.retryCount,
                     progress.modelDiagnostics == null ? 0
                             : progress.modelDiagnostics.networkCallCount(),
                     progress.modelDiagnostics, reason, auditClean));
@@ -605,6 +612,7 @@ public final class TushareResearchSelectionManualRunner {
         private final long startedNanos = System.nanoTime();
         private Instant startedAt;
         private int providerCalls;
+        private int retryCount;
         private int appended;
         private int idempotent;
         private FailureDiagnostics modelDiagnostics;

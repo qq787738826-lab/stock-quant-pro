@@ -40,7 +40,12 @@ final class TushareControlledAcceptanceE2eDryRunGateway
             QueryMode mode,
             TushareManualBoundedSession session
     ) {
-        if (mode != QueryMode.CONTROLLED_NO_RETRY) {
+        QueryMode expectedMode = session.sessionProfile()
+                == TushareManualBoundedSession.SessionProfile
+                .MAINBOARD_UNIVERSE_V1
+                ? QueryMode.CONTROLLED_NETWORK_RECOVERY
+                : QueryMode.CONTROLLED_NO_RETRY;
+        if (mode != expectedMode) {
             throw new IllegalArgumentException(
                     "TUSHARE_E2E_DRY_RUN_RETRY_MODE_INVALID");
         }

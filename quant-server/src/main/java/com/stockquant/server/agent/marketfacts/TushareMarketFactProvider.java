@@ -813,9 +813,10 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
         ObjectNode parameters = objectMapper.createObjectNode();
         parameters.put("trade_date", providerDate(tradeDate));
         QueryResult daily = gateway.query("daily", parameters, DAILY_FIELDS,
-                timeout, QueryMode.CONTROLLED_NO_RETRY, session);
+                timeout, QueryMode.CONTROLLED_NETWORK_RECOVERY, session);
         QueryResult factors = gateway.query("adj_factor", parameters,
-                FACTOR_FIELDS, timeout, QueryMode.CONTROLLED_NO_RETRY,
+                FACTOR_FIELDS, timeout,
+                QueryMode.CONTROLLED_NETWORK_RECOVERY,
                 session);
         rejectMarketWideTruncation("daily", daily);
         rejectMarketWideTruncation("adj_factor", factors);
@@ -862,7 +863,11 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
                 tradeDate, tradeDate, Set.of(FactType.RAW_DAILY_BAR,
                 FactType.ADJUSTMENT_FACTOR), timeout);
         return response(request, true, bars, alignedFactors, List.of(),
-                List.of(), 2, 0, QueryMode.CONTROLLED_NO_RETRY, session);
+                List.of(), daily.providerCallCount()
+                        + factors.providerCallCount(),
+                daily.rateLimitRetryCount()
+                        + factors.rateLimitRetryCount(),
+                QueryMode.CONTROLLED_NETWORK_RECOVERY, session);
     }
 
     MarketFactResponse fetchMainboardCalendar(
@@ -888,7 +893,7 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
                 representative.symbol(), exchange, rangeStart, rangeEnd,
                 Set.of(FactType.TRADING_CALENDAR), timeout);
         QueryResult result = queryCalendar(request,
-                QueryMode.CONTROLLED_NO_RETRY, session);
+                QueryMode.CONTROLLED_NETWORK_RECOVERY, session);
         List<TradingCalendar> values = mapCalendar(request, result.table());
         long expectedDays = ChronoUnit.DAYS.between(rangeStart, rangeEnd) + 1;
         if (values.size() != expectedDays) {
@@ -900,7 +905,8 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
         }
         return response(request, true, List.of(), List.of(), values,
                 List.of(), result.providerCallCount(),
-                result.rateLimitRetryCount(), QueryMode.CONTROLLED_NO_RETRY,
+                result.rateLimitRetryCount(),
+                QueryMode.CONTROLLED_NETWORK_RECOVERY,
                 session);
     }
 
@@ -1155,7 +1161,7 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
         parameters.put("list_status", "L");
         QueryResult result = gateway.query("stock_basic", parameters,
                 MAINBOARD_STOCK_BASIC_FIELDS, timeout,
-                QueryMode.CONTROLLED_NO_RETRY, session);
+                QueryMode.CONTROLLED_NETWORK_RECOVERY, session);
         rejectMarketWideTruncation("stock_basic", result);
         List<MainboardInstrument> instruments = mapMainboardInstruments(
                 result.table());
@@ -1659,7 +1665,12 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
         ObjectNode metadata = objectMapper.createObjectNode();
         metadata.put("implementationScope", IMPLEMENTATION_SCOPE);
         metadata.put("providerCallCount", providerCalls);
-        metadata.put("rateLimitRetryCount", retryCount);
+        metadata.put("rateLimitRetryCount",
+                mode == QueryMode.CONTROLLED_NETWORK_RECOVERY
+                        ? 0 : retryCount);
+        metadata.put("networkRecoveryCount",
+                mode == QueryMode.CONTROLLED_NETWORK_RECOVERY
+                        ? retryCount : 0);
         metadata.put("queryMode", mode.name());
         metadata.put("tushareMode",
                 TushareMarketFactProperties.Mode.MANUAL_BOUNDED.name());

@@ -7,7 +7,9 @@ import com.stockquant.server.agent.marketfacts.TushareApiGateway.GatewayExceptio
 import com.stockquant.server.agent.marketfacts.TushareApiGateway.QueryMode;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
 import java.net.URI;
+import java.net.http.HttpTimeoutException;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.util.ArrayDeque;
@@ -188,6 +190,194 @@ class TushareHttpApiGatewayTest {
         assertEquals(1, error.providerCallCount());
         assertEquals(0, error.rateLimitRetryCount());
         assertEquals(1, fixture.exchange.requests.size());
+    }
+
+    @Test
+    void controlledNetworkRecoveryUsesFreshConnectionAndCountsEveryAttempt() {
+        Fixture fixture = fixture(properties(), 180, 90_000);
+        LocalDate date = LocalDate.of(2026, 8, 12);
+        var session = TushareManualBoundedSession.mainboardUniverse(
+                Set.of(date), date, date, false, false, 4);
+        fixture.exchange.networkFailure();
+        fixture.exchange.respond(200, successEmpty());
+
+        var result = fixture.gateway.query("daily",
+                mapper.createObjectNode().put("trade_date", "20260812"),
+                List.of("ts_code"), Duration.ofSeconds(5),
+                QueryMode.CONTROLLED_NETWORK_RECOVERY, session);
+        fixture.exchange.networkFailure();
+        fixture.exchange.respond(200, successEmpty());
+        var factor = fixture.gateway.query("adj_factor",
+                mapper.createObjectNode().put("trade_date", "20260812"),
+                List.of("ts_code"), Duration.ofSeconds(5),
+                QueryMode.CONTROLLED_NETWORK_RECOVERY, session);
+
+        assertEquals(2, result.providerCallCount());
+        assertEquals(1, result.rateLimitRetryCount());
+        assertEquals(2, factor.providerCallCount());
+        assertEquals(1, factor.rateLimitRetryCount());
+        assertEquals(4, session.consumedBusinessRequests());
+        assertEquals(2, session.consumedNetworkRecoveries());
+        assertEquals(2, fixture.exchange.freshConnections);
+        assertEquals(4, fixture.exchange.requests.size());
+    }
+
+    @Test
+    void controlledNetworkRecoveryIsOnePerRequestAndFourPerSession() {
+        Fixture fixture = fixture(properties(), 180, 90_000);
+        List<LocalDate> dates = List.of(
+                LocalDate.of(2026, 8, 6), LocalDate.of(2026, 8, 7),
+                LocalDate.of(2026, 8, 10), LocalDate.of(2026, 8, 11),
+                LocalDate.of(2026, 8, 12));
+        var session = TushareManualBoundedSession.mainboardUniverse(
+                Set.copyOf(dates), dates.get(0), dates.get(4), false,
+                false, 4);
+        for (int index = 0; index < 4; index++) {
+            fixture.exchange.networkFailure();
+            fixture.exchange.respond(200, successEmpty());
+            var result = fixture.gateway.query("daily",
+                    mapper.createObjectNode().put("trade_date",
+                            dates.get(index).toString().replace("-", "")),
+                    List.of("ts_code"), Duration.ofSeconds(5),
+                    QueryMode.CONTROLLED_NETWORK_RECOVERY, session);
+            assertEquals(2, result.providerCallCount());
+            assertEquals(1, result.rateLimitRetryCount());
+        }
+        fixture.exchange.networkFailure();
+        GatewayException exhausted = assertThrows(GatewayException.class,
+                () -> fixture.gateway.query("daily",
+                        mapper.createObjectNode().put("trade_date",
+                                "20260812"), List.of("ts_code"),
+                        Duration.ofSeconds(5),
+                        QueryMode.CONTROLLED_NETWORK_RECOVERY, session));
+
+        assertEquals("TUSHARE_NETWORK_ERROR", exhausted.safeCode());
+        assertEquals(1, exhausted.providerCallCount());
+        assertEquals(0, exhausted.rateLimitRetryCount());
+        assertEquals(4, session.consumedNetworkRecoveries());
+        assertEquals(9, session.consumedBusinessRequests());
+        assertEquals(9, fixture.exchange.requests.size());
+        assertEquals(4, fixture.exchange.freshConnections);
+    }
+
+    @Test
+    void secondNoResponseFailureStopsWithoutThirdAttempt() {
+        Fixture fixture = fixture(properties(), 180, 90_000);
+        LocalDate date = LocalDate.of(2026, 8, 12);
+        var session = TushareManualBoundedSession.mainboardUniverse(
+                Set.of(date), date, date, false, false, 4);
+        fixture.exchange.networkFailure();
+        fixture.exchange.networkFailure();
+        fixture.exchange.respond(200, successEmpty());
+
+        GatewayException failure = assertThrows(GatewayException.class,
+                () -> fixture.gateway.query("daily",
+                        mapper.createObjectNode().put("trade_date",
+                                "20260812"), List.of("ts_code"),
+                        Duration.ofSeconds(5),
+                        QueryMode.CONTROLLED_NETWORK_RECOVERY, session));
+
+        assertEquals("TUSHARE_NETWORK_ERROR", failure.safeCode());
+        assertEquals(2, failure.providerCallCount());
+        assertEquals(1, failure.rateLimitRetryCount());
+        assertEquals(2, fixture.exchange.requests.size());
+        assertEquals(1, fixture.exchange.responses.size());
+    }
+
+    @Test
+    void timeoutIsNotEligibleForNetworkRecovery() {
+        Fixture fixture = fixture(properties(), 180, 90_000);
+        LocalDate date = LocalDate.of(2026, 8, 12);
+        var session = TushareManualBoundedSession.mainboardUniverse(
+                Set.of(date), date, date, false, false, 4);
+        fixture.exchange.timeout();
+
+        GatewayException failure = assertThrows(GatewayException.class,
+                () -> fixture.gateway.query("daily",
+                        mapper.createObjectNode().put("trade_date",
+                                "20260812"), List.of("ts_code"),
+                        Duration.ofSeconds(5),
+                        QueryMode.CONTROLLED_NETWORK_RECOVERY, session));
+
+        assertEquals("TUSHARE_TIMEOUT", failure.safeCode());
+        assertEquals(1, failure.providerCallCount());
+        assertEquals(0, failure.rateLimitRetryCount());
+        assertEquals(0, session.consumedNetworkRecoveries());
+        assertEquals(0, fixture.exchange.freshConnections);
+    }
+
+    @Test
+    void interruptedRecoveryWaitDoesNotConsumePermitOrReportRetry() {
+        TushareMarketFactProperties properties = properties();
+        AtomicLong now = new AtomicLong();
+        TushareTokenRateLimiter limiter = new TushareTokenRateLimiter(
+                180, 90_000, Duration.ofMinutes(1), now::get,
+                () -> LocalDate.of(2026, 8, 18),
+                duration -> now.addAndGet(duration.toNanos()));
+        FakeHttpExchange exchange = new FakeHttpExchange();
+        TushareHttpApiGateway gateway = new TushareHttpApiGateway(
+                mapper, properties, limiter,
+                URI.create("https://api.tushare.pro"), exchange,
+                duration -> {
+                    throw new InterruptedException("synthetic interruption");
+                });
+        LocalDate date = LocalDate.of(2026, 8, 12);
+        var session = TushareManualBoundedSession.mainboardUniverse(
+                Set.of(date), date, date, false, false, 4);
+        exchange.networkFailure();
+
+        try {
+            GatewayException failure = assertThrows(GatewayException.class,
+                    () -> gateway.query("daily",
+                            mapper.createObjectNode().put("trade_date",
+                                    "20260812"), List.of("ts_code"),
+                            Duration.ofSeconds(5),
+                            QueryMode.CONTROLLED_NETWORK_RECOVERY, session));
+
+            assertEquals("TUSHARE_NETWORK_RECOVERY_INTERRUPTED",
+                    failure.safeCode());
+            assertEquals(1, failure.providerCallCount());
+            assertEquals(0, failure.rateLimitRetryCount());
+            assertEquals(0, session.consumedNetworkRecoveries());
+            assertEquals(1, exchange.requests.size());
+            assertEquals(0, exchange.freshConnections);
+        } finally {
+            Thread.interrupted();
+        }
+    }
+
+    @Test
+    void controlledNetworkRecoveryNeverRetriesProviderHttpOrJsonFailures() {
+        LocalDate date = LocalDate.of(2026, 8, 12);
+        List<FailureCase> cases = List.of(
+                new FailureCase(500, "text/plain", "server failure",
+                        "TUSHARE_HTTP_STATUS_500"),
+                new FailureCase(200, "application/json",
+                        "{\"code\":2002,\"msg\":\"permission denied\",\"data\":null}",
+                        "TUSHARE_PERMISSION_DENIED"),
+                new FailureCase(200, "text/html", "{not-json",
+                        "TUSHARE_RESPONSE_JSON_INVALID"));
+        for (FailureCase value : cases) {
+            Fixture fixture = fixture(properties(), 180, 90_000);
+            fixture.exchange.respond(value.status(), value.contentType(),
+                    value.body());
+            var session = TushareManualBoundedSession.mainboardUniverse(
+                    Set.of(date), date, date, false, false, 4);
+
+            GatewayException failure = assertThrows(GatewayException.class,
+                    () -> fixture.gateway.query("daily",
+                            mapper.createObjectNode().put("trade_date",
+                                    "20260812"), List.of("ts_code"),
+                            Duration.ofSeconds(5),
+                            QueryMode.CONTROLLED_NETWORK_RECOVERY, session));
+
+            assertEquals(value.safeCode(), failure.safeCode());
+            assertEquals(1, failure.providerCallCount());
+            assertEquals(0, failure.rateLimitRetryCount());
+            assertEquals(0, session.consumedNetworkRecoveries());
+            assertEquals(1, fixture.exchange.requests.size());
+            assertEquals(0, fixture.exchange.freshConnections);
+        }
     }
 
     @Test
@@ -480,10 +670,19 @@ class TushareHttpApiGatewayTest {
 
     private static final class FakeHttpExchange
             implements TushareHttpApiGateway.HttpExchangeStrategy {
-        private final ArrayDeque<
-                TushareHttpApiGateway.HttpExchangeResult> responses =
+        private final ArrayDeque<Object> responses =
                 new ArrayDeque<>();
         private final List<Request> requests = new ArrayList<>();
+        private int freshConnections;
+
+        private void networkFailure() {
+            responses.addLast(new IOException("synthetic no-response"));
+        }
+
+        private void timeout() {
+            responses.addLast(new HttpTimeoutException(
+                    "synthetic timeout"));
+        }
 
         private void respond(int status, String body) {
             responses.addLast(
@@ -502,9 +701,17 @@ class TushareHttpApiGatewayTest {
                 URI uri,
                 String body,
                 Duration timeout
-        ) {
+        ) throws IOException {
             requests.add(new Request(uri, body, timeout));
-            return responses.removeFirst();
+            Object next = responses.removeFirst();
+            if (next instanceof IOException failure) throw failure;
+            return (TushareHttpApiGateway.HttpExchangeResult) next;
+        }
+
+        @Override
+        public TushareHttpApiGateway.HttpExchangeStrategy freshConnection() {
+            freshConnections++;
+            return this;
         }
     }
 
@@ -512,6 +719,14 @@ class TushareHttpApiGatewayTest {
             URI uri,
             String body,
             Duration timeout
+    ) {
+    }
+
+    private record FailureCase(
+            int status,
+            String contentType,
+            String body,
+            String safeCode
     ) {
     }
 
