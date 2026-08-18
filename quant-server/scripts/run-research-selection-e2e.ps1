@@ -274,15 +274,24 @@ SELECT COALESCE(string_agg(value, ',' ORDER BY value), 'NONE')
         'RESEARCH_SELECTION_E2E_REUSE_PROVIDER_INVALID'
     Exact $repeat.retryCount 0 `
         'RESEARCH_SELECTION_E2E_REUSE_RETRY_INVALID'
-    if ([int]$repeat.candidateCount -ne [int]$value.candidateCount -or
-        [bool]$repeat.emptyResult -ne [bool]$value.emptyResult -or
-        [string]$repeat.decisionCode -ne [string]$value.decisionCode -or
-        (Scalar "SELECT result_json->'historicalResearch'->>'datasetFingerprint' FROM research_selection_runs WHERE id=2") -ne
-            $historyFingerprint -or
-        [int](Scalar "SELECT result_json->'historicalResearch'->>'availableSessions' FROM research_selection_runs WHERE id=2") -ne
-            [int]$historySessions) {
-        throw 'RESEARCH_SELECTION_E2E_REUSE_CANDIDATES_INVALID'
-    }
+    $repeatHistoryFingerprint = Scalar "SELECT result_json->'historicalResearch'->>'datasetFingerprint' FROM research_selection_runs WHERE id=2"
+    $repeatHistorySessions = Scalar "SELECT result_json->'historicalResearch'->>'availableSessions' FROM research_selection_runs WHERE id=2"
+    Write-Output ("RESEARCH_SELECTION_E2E_REUSE_COMPARISON=" +
+        "candidates:$($value.candidateCount)/$($repeat.candidateCount)," +
+        "empty:$($value.emptyResult)/$($repeat.emptyResult)," +
+        "decision:$($value.decisionCode)/$($repeat.decisionCode)," +
+        "historyFingerprintEqual:$($historyFingerprint -eq $repeatHistoryFingerprint)," +
+        "sessions:$historySessions/$repeatHistorySessions")
+    Exact $repeat.candidateCount $value.candidateCount `
+        'RESEARCH_SELECTION_E2E_REUSE_CANDIDATE_COUNT_INVALID'
+    Exact $repeat.emptyResult $value.emptyResult `
+        'RESEARCH_SELECTION_E2E_REUSE_EMPTY_RESULT_INVALID'
+    Exact $repeat.decisionCode $value.decisionCode `
+        'RESEARCH_SELECTION_E2E_REUSE_DECISION_INVALID'
+    Exact $repeatHistoryFingerprint $historyFingerprint `
+        'RESEARCH_SELECTION_E2E_REUSE_HISTORY_FINGERPRINT_INVALID'
+    Exact $repeatHistorySessions $historySessions `
+        'RESEARCH_SELECTION_E2E_REUSE_HISTORY_SESSIONS_INVALID'
     Exact $repeat.modelProviderRequestCount 0 `
         'RESEARCH_SELECTION_E2E_REUSE_MODEL_NETWORK_INVALID'
     Exact (Scalar 'SELECT count(*) FROM pit_market_fact_observations') `
