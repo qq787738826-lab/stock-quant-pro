@@ -1196,6 +1196,8 @@ function Get-M3BailianStageBudget {
 function Get-M4MonthlyBudget {
     param([Parameter(Mandatory = $true)] [object] $BrokerRequest)
     $calendarMonth = [string]$BrokerRequest.Values['budget.calendar.month']
+    [int]$monthlyTushareLimit =
+        Get-StockQuantTushareMonthlyLimit -CalendarMonth $calendarMonth
     $usage = Get-StockQuantM4MonthlyUsage `
         -CalendarMonth $calendarMonth `
         -ExcludedRequestPath $processingPath
@@ -1214,7 +1216,8 @@ function Get-M4MonthlyBudget {
     [int]$admittedProviderCalls =
         [int]$BrokerRequest.Values['maximum.provider.requests']
     if ($admittedProviderCalls -notin @(6, 8) -or
-        [int]$usage.CommittedTushareCalls + $admittedProviderCalls -gt 150 -or
+        [int]$usage.CommittedTushareCalls + $admittedProviderCalls -gt
+            $monthlyTushareLimit -or
         $llmUsed + $maximum -gt [decimal]30.00 -or
         $projectUsed + $maximum -gt [decimal]200.00) {
         throw 'M4_MONTHLY_BUDGET_EXHAUSTED'
@@ -1229,7 +1232,8 @@ function Get-M4MonthlyBudget {
         AdmittedLlmCostCny = $maximum.ToString(
             [Globalization.CultureInfo]::InvariantCulture)
         PriorTushareCalls = [int]$usage.CommittedTushareCalls
-        RemainingTushareCalls = 150 - [int]$usage.CommittedTushareCalls
+        RemainingTushareCalls = $monthlyTushareLimit -
+            [int]$usage.CommittedTushareCalls
     }
 }
 
@@ -1365,11 +1369,14 @@ function Invoke-ResearchSelection {
     $usage = Get-StockQuantM4MonthlyUsage `
         -CalendarMonth $BrokerRequest.Values['budget.calendar.month'] `
         -ExcludedRequestPath $processingPath
+    [int]$monthlyTushareLimit = Get-StockQuantTushareMonthlyLimit `
+        -CalendarMonth $BrokerRequest.Values['budget.calendar.month']
     [int]$maximumProvider =
         [int]$BrokerRequest.Values['maximum.provider.requests']
     [decimal]$maximumCost = [decimal]$BrokerRequest.Values[
         'maximum.cost.cny']
-    if ([int]$usage.CommittedTushareCalls + $maximumProvider -gt 150 -or
+    if ([int]$usage.CommittedTushareCalls + $maximumProvider -gt
+            $monthlyTushareLimit -or
         [decimal]$usage.CommittedShadowCostCny + $maximumCost -gt
             [decimal]30 -or
         [decimal]$usage.CommittedProjectCostCny + $maximumCost -gt

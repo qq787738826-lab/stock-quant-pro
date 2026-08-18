@@ -478,6 +478,18 @@ function Initialize-StockQuantHostBrokerDirectories {
     return $paths
 }
 
+function Get-StockQuantTushareMonthlyLimit {
+    param(
+        [Parameter(Mandatory = $true)]
+        [ValidatePattern('^20[0-9]{2}-(0[1-9]|1[0-2])$')]
+        [string] $CalendarMonth
+    )
+    # User-approved one-time V1.0.9 mainboard backfill capacity.  Every
+    # other calendar month retains the normal 150-request ceiling.
+    if ($CalendarMonth -ceq '2026-08') { return 250 }
+    return 150
+}
+
 function Get-StockQuantM4MonthlyUsage {
     param(
         [Parameter(Mandatory = $true)]
@@ -659,6 +671,8 @@ function Get-StockQuantM4MonthlyUsage {
                     [Globalization.NumberStyles]::Number,
                     [Globalization.CultureInfo]::InvariantCulture,
                     [ref]$reservedCost) -or
+                # The August approval raises only the aggregate monthly
+                # ledger; one pending request remains capped at 150.
                 $reservedProvider -lt 0 -or $reservedProvider -gt 150 -or
                 $reservedCost -le 0 -or $reservedCost -gt [decimal]5.00) {
                 throw 'M4_MONTHLY_BUDGET_LEDGER_INVALID'
@@ -1273,6 +1287,8 @@ function Read-StockQuantHostBrokerRequest {
             ([string]$values['created.at'])
         $selectionMonth = [TimeZoneInfo]::ConvertTimeBySystemTimeZoneId(
             $createdSelection, 'China Standard Time').ToString('yyyy-MM')
+        [int]$selectionTushareLimit =
+            Get-StockQuantTushareMonthlyLimit -CalendarMonth $selectionMonth
         if ($values['authorization.file'] -ne 'NONE' -or
             $values['selection.run.id'] -notmatch '^[1-9][0-9]{0,18}$' -or
             $values['selection.public.run.id'] -notmatch
@@ -1331,14 +1347,15 @@ function Read-StockQuantHostBrokerRequest {
             $maximumProviderRequests -ne ($stockBasicRequests +
                 $dailyRequests + $factorRequests + $calendarRequests) -or
             $values['budget.calendar.month'] -ne $selectionMonth -or
-            $values['tushare.monthly.limit'] -ne '150' -or
+            $values['tushare.monthly.limit'] -ne
+                [string]$selectionTushareLimit -or
             -not [int]::TryParse(
                 [string]$values['tushare.monthly.calls.before'],
                 [Globalization.NumberStyles]::None,
                 [Globalization.CultureInfo]::InvariantCulture,
                 [ref]$providerBefore) -or $providerBefore -lt 0 -or
             $providerBefore + $maximumProviderRequests -gt
-                150 -or
+                $selectionTushareLimit -or
             $values['llm.provider'] -ne 'BAILIAN' -or
             $values['model'] -ne 'qwen3.7-plus' -or
             $values['provider.endpoint'] -ne
@@ -1385,6 +1402,8 @@ function Read-StockQuantHostBrokerRequest {
             ([string]$values['created.at'])
         $requestMonth = [TimeZoneInfo]::ConvertTimeBySystemTimeZoneId(
             $requestCreated, 'China Standard Time').ToString('yyyy-MM')
+        [int]$requestTushareLimit =
+            Get-StockQuantTushareMonthlyLimit -CalendarMonth $requestMonth
         $requestChinaDate = [TimeZoneInfo]::ConvertTimeBySystemTimeZoneId(
             $requestCreated, 'China Standard Time').Date
         [datetime]$calendarHorizonEnd = [datetime]::MinValue
@@ -1463,14 +1482,16 @@ function Read-StockQuantHostBrokerRequest {
             [int]$values['maximum.provider.requests'] -ne
                 $expectedProviderRequests -or
             $values['budget.calendar.month'] -ne $requestMonth -or
-            $values['tushare.monthly.limit'] -ne '150' -or
+            $values['tushare.monthly.limit'] -ne
+                [string]$requestTushareLimit -or
             -not [int]::TryParse([string]$values[
                     'tushare.monthly.calls.before'],
                 [Globalization.NumberStyles]::None,
                 [Globalization.CultureInfo]::InvariantCulture,
                 [ref]$tushareCallsBefore) -or
             $tushareCallsBefore -lt 0 -or
-            $tushareCallsBefore + $expectedProviderRequests -gt 150 -or
+            $tushareCallsBefore + $expectedProviderRequests -gt
+                $requestTushareLimit -or
             $values['llm.provider'] -ne 'BAILIAN' -or
             $values['model'] -ne 'qwen3.7-plus' -or
             $values['provider.endpoint'] -ne
@@ -2279,6 +2300,7 @@ function New-StockQuantHostBrokerRequestId {
 Export-ModuleMember -Function @(
     'Get-StockQuantHostBrokerPaths'
     'Initialize-StockQuantHostBrokerDirectories'
+    'Get-StockQuantTushareMonthlyLimit'
     'Get-StockQuantM4MonthlyUsage'
     'ConvertTo-StockQuantSafeCode'
     'Assert-StockQuantPathInside'

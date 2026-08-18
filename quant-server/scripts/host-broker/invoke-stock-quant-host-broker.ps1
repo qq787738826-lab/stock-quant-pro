@@ -158,7 +158,8 @@ try {
         $branch -in @(
             'codex/1.4.0-v1.0.1-research-selection-usability',
             'codex/1.4.0-v1.0.3-research-selection-runtime-fix',
-            'codex/1.4.0-v1.0.7-intraday-research-selection-anchor-fix')) {
+            'codex/1.4.0-v1.0.7-intraday-research-selection-anchor-fix',
+            'codex/1.4.0-v1.0.9-full-mainboard-universe')) {
         $branch
     } elseif ($Operation -eq 'RUN_M4_SHADOW_RESEARCH' -and
         $branch -eq 'codex/1.4.0-m4-shadow-research-ready') {
@@ -183,7 +184,8 @@ try {
             'CHECK_RESEARCH_PRODUCTION_STATUS') -and
         $branch -in @(
             'codex/1.4.0-v1.0.3-research-selection-runtime-fix',
-            'codex/1.4.0-v1.0.7-intraday-research-selection-anchor-fix')) {
+            'codex/1.4.0-v1.0.7-intraday-research-selection-anchor-fix',
+            'codex/1.4.0-v1.0.9-full-mainboard-universe')) {
         $branch
     } elseif ($Operation -in @('START_RESEARCH_PRODUCTION',
             'STOP_RESEARCH_PRODUCTION',
@@ -360,6 +362,8 @@ try {
         $chinaNow = [TimeZoneInfo]::ConvertTime(
             [DateTimeOffset]::UtcNow, $chinaZone)
         $calendarMonth = $chinaNow.ToString('yyyy-MM')
+        [int]$monthlyTushareLimit =
+            Get-StockQuantTushareMonthlyLimit -CalendarMonth $calendarMonth
         $usage = Get-StockQuantM4MonthlyUsage `
             -CalendarMonth $calendarMonth
         [decimal]$shadowCost = [decimal]$usage.CommittedShadowCostCny
@@ -373,7 +377,7 @@ try {
             $remainingCost = [decimal]200 - $projectCost
         }
         if ($remainingCost -le 0 -or [int]$usage.CommittedTushareCalls +
-                $MaximumProviderRequests -gt 150) {
+                $MaximumProviderRequests -gt $monthlyTushareLimit) {
             throw 'RESEARCH_SELECTION_MONTHLY_BUDGET_EXHAUSTED'
         }
         $requestValues = [ordered]@{
@@ -410,7 +414,7 @@ try {
             'endpoint.trade_cal.requests' = '0'
             'maximum.provider.requests' = [string]$MaximumProviderRequests
             'budget.calendar.month' = $calendarMonth
-            'tushare.monthly.limit' = '150'
+            'tushare.monthly.limit' = [string]$monthlyTushareLimit
             'tushare.monthly.calls.before' =
                 [string]$usage.CommittedTushareCalls
             'llm.provider' = 'BAILIAN'
@@ -489,6 +493,8 @@ try {
             4
         } else { 2 }
         $calendarMonth = $chinaNow.ToString('yyyy-MM')
+        [int]$monthlyTushareLimit =
+            Get-StockQuantTushareMonthlyLimit -CalendarMonth $calendarMonth
         $usage = Get-StockQuantM4MonthlyUsage `
             -CalendarMonth $calendarMonth
         [decimal]$shadowCost = [decimal]::Parse(
@@ -507,7 +513,8 @@ try {
             $remainingCost = [decimal]200.00 - $projectCost
         }
         if ($remainingCost -le 0 -or
-            [int]$usage.CommittedTushareCalls + $m4ProviderRequests -gt 150) {
+            [int]$usage.CommittedTushareCalls + $m4ProviderRequests -gt
+                $monthlyTushareLimit) {
             throw 'M4_MONTHLY_BUDGET_EXHAUSTED'
         }
         $requestValues = [ordered]@{
@@ -553,7 +560,7 @@ try {
             'endpoint.trade_cal.requests' = [string]$m4CalendarRequests
             'maximum.provider.requests' = [string]$m4ProviderRequests
             'budget.calendar.month' = $calendarMonth
-            'tushare.monthly.limit' = '150'
+            'tushare.monthly.limit' = [string]$monthlyTushareLimit
             'tushare.monthly.calls.before' =
                 [string]$usage.CommittedTushareCalls
             'llm.provider' = 'BAILIAN'

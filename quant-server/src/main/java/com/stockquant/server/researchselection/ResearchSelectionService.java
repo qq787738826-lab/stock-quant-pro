@@ -134,8 +134,7 @@ public final class ResearchSelectionService {
                 snapshot, request, at,
                 universes.existingMarketFactSecurityCount(),
                 health.monthlyBudget(at).tushareRequests(),
-                ResearchSelectionProviderBudgetPlanner
-                        .CURRENT_MONTHLY_TUSHARE_LIMIT);
+                health.monthlyBudget(at).tushareLimit());
     }
 
     private static String safeCode(Throwable error, String fallback) {

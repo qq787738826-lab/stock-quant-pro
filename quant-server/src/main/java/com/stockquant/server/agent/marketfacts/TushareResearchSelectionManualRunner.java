@@ -330,7 +330,7 @@ public final class TushareResearchSelectionManualRunner {
                 universes.existingMarketFactSecurityCount(),
                 repository.monthlyTushareUsage(month),
                 ResearchSelectionProviderBudgetPlanner
-                        .CURRENT_MONTHLY_TUSHARE_LIMIT);
+                        .monthlyTushareLimit(month));
         if (plan.audit().calendarIncomplete()) {
             throw invalid("MAINBOARD_TRADE_CALENDAR_INCOMPLETE");
         }

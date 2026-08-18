@@ -8,7 +8,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -19,7 +18,7 @@ class ResearchSelectionMainboardBudgetTest {
     private static final LocalDate ANCHOR = LocalDate.of(2026, 8, 14);
 
     @Test
-    void initialSixtySessionBackfillIsExactAndFailsClosedAtCurrentLimit() {
+    void approvedAugustLimitAdmitsExactSixtySessionBackfillAndReserve() {
         List<LocalDate> dates = weekdaysEndingAt(ANCHOR, 60);
         var audit = new ResearchUniverseMainboardDatasetLoader.Audit(
                 dates, dates, false, true, 25);
@@ -27,7 +26,8 @@ class ResearchSelectionMainboardBudgetTest {
         var plan = ResearchSelectionProviderBudgetPlanner
                 .assembleMainboardPlan(null, audit, ANCHOR, AS_OF, 25, 96,
                         ResearchSelectionProviderBudgetPlanner
-                                .CURRENT_MONTHLY_TUSHARE_LIMIT)
+                                .monthlyTushareLimit(
+                                        java.time.YearMonth.of(2026, 8)))
                 .backfill();
 
         assertEquals(1, plan.stockBasicRequests());
@@ -38,7 +38,10 @@ class ResearchSelectionMainboardBudgetTest {
         assertEquals(24, plan.scheduledReserve());
         assertEquals(241, plan.ledgerUsed() + plan.totalRequests()
                 + plan.scheduledReserve());
-        assertFalse(plan.executableWithinBudget());
+        assertEquals(250, plan.ledgerLimit());
+        assertTrue(plan.executableWithinBudget());
+        assertEquals(9, plan.ledgerLimit() - plan.ledgerUsed()
+                - plan.totalRequests() - plan.scheduledReserve());
     }
 
     @Test

@@ -55,6 +55,13 @@ try {
     $chinaZone = [TimeZoneInfo]::FindSystemTimeZoneById(
         'China Standard Time')
     $scheduledDate = [TimeZoneInfo]::ConvertTime($created, $chinaZone).Date
+    $calendarMonth = $created.ToOffset(
+        [TimeSpan]::FromHours(8)).ToString('yyyy-MM')
+    [int]$monthlyTushareLimit = Get-StockQuantTushareMonthlyLimit `
+        -CalendarMonth $calendarMonth
+    $wrongMonthlyTushareLimit = if ($monthlyTushareLimit -eq 250) {
+        '150'
+    } else { '250' }
     $request = [ordered]@{
         'schema.version' = 'STOCK_QUANT_HOST_BROKER_REQUEST_V1'
         'request.id' = New-StockQuantHostBrokerRequestId
@@ -94,9 +101,8 @@ try {
         'endpoint.adj_factor.requests' = '2'
         'endpoint.trade_cal.requests' = '2'
         'maximum.provider.requests' = '6'
-        'budget.calendar.month' = $created.ToOffset(
-            [TimeSpan]::FromHours(8)).ToString('yyyy-MM')
-        'tushare.monthly.limit' = '150'
+        'budget.calendar.month' = $calendarMonth
+        'tushare.monthly.limit' = [string]$monthlyTushareLimit
         'tushare.monthly.calls.before' = '0'
         'llm.provider' = 'BAILIAN'
         'model' = 'qwen3.7-plus'
@@ -289,7 +295,9 @@ try {
         @('calendar.admission', 'INVALID'),
         @('calendar.horizon.end', '2026-09-11'),
         @('trigger.mode', 'MANUAL'),
-        @('tushare.monthly.calls.before', '145'),
+        @('tushare.monthly.limit', $wrongMonthlyTushareLimit),
+        @('tushare.monthly.calls.before',
+            [string]($monthlyTushareLimit - 5)),
         @('llm.monthly.cost.before.cny', '29.50'),
         @('project.monthly.cost.before.cny', '199.50'))
     foreach ($mutation in $mutations) {

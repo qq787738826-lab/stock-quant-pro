@@ -216,8 +216,7 @@ public final class PowerShellShadowResearchDispatchGateway
                 universeLoader, universes.latest().orElse(null), request,
                 asOf, universes.existingMarketFactSecurityCount(),
                 health.monthlyBudget(asOf).tushareRequests(),
-                ResearchSelectionProviderBudgetPlanner
-                        .CURRENT_MONTHLY_TUSHARE_LIMIT);
+                health.monthlyBudget(asOf).tushareLimit());
         if (plan.audit().calendarIncomplete()) {
             throw invalid("MAINBOARD_TRADE_CALENDAR_INCOMPLETE");
         }

@@ -59,6 +59,19 @@ try {
     $created = [DateTimeOffset]::UtcNow
     $china = [TimeZoneInfo]::ConvertTimeBySystemTimeZoneId(
         $created, 'China Standard Time')
+    $calendarMonth = $china.ToString('yyyy-MM')
+    [int]$monthlyTushareLimit = Get-StockQuantTushareMonthlyLimit `
+        -CalendarMonth $calendarMonth
+    $wrongMonthlyTushareLimit = if ($monthlyTushareLimit -eq 250) {
+        '150'
+    } else { '250' }
+    if ((Get-StockQuantTushareMonthlyLimit -CalendarMonth '2026-08') -ne
+            250 -or
+        (Get-StockQuantTushareMonthlyLimit -CalendarMonth '2026-09') -ne
+            150) {
+        throw 'RESEARCH_SELECTION_MONTHLY_LIMIT_POLICY_INVALID'
+    }
+    $tests++
     $publicRun = 'SELECT_' + $created.ToString('yyyyMMddTHHmmssZ') + '_' +
         ([Guid]::NewGuid().ToString('N').Substring(0, 12)).ToUpperInvariant()
     $request = [ordered]@{
@@ -90,8 +103,8 @@ try {
         'endpoint.adj_factor.requests' = '1'
         'endpoint.trade_cal.requests' = '0'
         'maximum.provider.requests' = '2'
-        'budget.calendar.month' = $china.ToString('yyyy-MM')
-        'tushare.monthly.limit' = '150'
+        'budget.calendar.month' = $calendarMonth
+        'tushare.monthly.limit' = [string]$monthlyTushareLimit
         'tushare.monthly.calls.before' = '0'
         'llm.provider' = 'BAILIAN'
         'model' = 'qwen3.7-plus'
@@ -196,7 +209,10 @@ try {
             @('retry.budget', '1', 'RETRY_ENABLED'),
             @('redirects', 'FOLLOW', 'REDIRECT_ENABLED'),
             @('model', 'dynamic-model', 'DYNAMIC_MODEL'),
-            @('tushare.monthly.calls.before', '149', 'TUSHARE_OVER_BUDGET'),
+            @('tushare.monthly.limit', $wrongMonthlyTushareLimit,
+                'TUSHARE_MONTHLY_LIMIT_MISMATCH'),
+            @('tushare.monthly.calls.before',
+                [string]($monthlyTushareLimit - 1), 'TUSHARE_OVER_BUDGET'),
             @('llm.monthly.cost.before.cny', '29.00', 'LLM_OVER_BUDGET'),
             @('project.monthly.cost.before.cny', '199.00',
                 'PROJECT_OVER_BUDGET'))) {

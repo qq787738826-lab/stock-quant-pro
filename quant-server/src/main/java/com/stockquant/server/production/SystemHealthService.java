@@ -271,7 +271,7 @@ public final class SystemHealthService {
         }
         BigDecimal nonShadow = nonShadowBaseline();
         return new BudgetHealth(month.toString(), tushare,
-                ExternalApiMonthlyBudget.SHADOW_MONTHLY_TUSHARE_REQUESTS,
+                ExternalApiMonthlyBudget.tushareRequestLimit(month),
                 shadowCost, ExternalApiMonthlyBudget.SHADOW_MONTHLY_COST_CNY,
                 nonShadow.add(shadowCost),
                 ExternalApiMonthlyBudget.PROJECT_MONTHLY_COST_CNY);

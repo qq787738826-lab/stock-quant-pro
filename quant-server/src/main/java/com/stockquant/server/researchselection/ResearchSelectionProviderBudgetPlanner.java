@@ -1,5 +1,6 @@
 package com.stockquant.server.researchselection;
 
+import com.stockquant.server.agent.evaluation.ExternalApiMonthlyBudget;
 import com.stockquant.server.agent.marketfacts.TushareManualBoundedSession;
 import com.stockquant.server.agent.marketfacts.TushareResearchUniverseDatasetLoader;
 import com.stockquant.server.researchselection.ResearchSelectionModels.SelectionRequest;
@@ -16,13 +17,16 @@ import java.util.Objects;
 
 /** Computes an exact stock_basic/date-wide budget before Broker submit. */
 public final class ResearchSelectionProviderBudgetPlanner {
-    public static final int CURRENT_MONTHLY_TUSHARE_LIMIT = 150;
     public static final int SCHEDULED_SAFETY_RESERVE = 4;
     private static final ZoneId SHANGHAI = ZoneId.of("Asia/Shanghai");
     private static final LocalTime SCHEDULED_SHADOW_SLOT =
             LocalTime.of(17, 20);
 
     private ResearchSelectionProviderBudgetPlanner() {
+    }
+
+    public static int monthlyTushareLimit(YearMonth month) {
+        return ExternalApiMonthlyBudget.tushareRequestLimit(month);
     }
 
     public static int requiredProviderRequests(
