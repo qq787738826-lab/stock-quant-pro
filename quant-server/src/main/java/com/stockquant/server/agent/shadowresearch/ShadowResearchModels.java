@@ -198,20 +198,27 @@ public final class ShadowResearchModels {
             objective = required(objective);
             researchSlot = required(researchSlot);
             strategyVersion = required(strategyVersion);
+            boolean selectionLineage = SELECTION_STRATEGY_VERSION.equals(
+                    strategyVersion);
+            int maximumTushareProviderRequests = selectionLineage
+                    ? com.stockquant.server.agent.marketfacts
+                    .TushareManualBoundedSession
+                    .MAINBOARD_UNIVERSE_MAX_PROVIDER_REQUESTS
+                    : 52;
             if (rangeStart.isAfter(tradeDate) || securities.size() < 1
                     || securities.size() > 20
                     || !securities.contains(benchmark)
                     || strategies.size() < 2 || strategies.size() > 8
                     || tushareProviderRequests < 0
-                    || tushareProviderRequests > 52
+                    || tushareProviderRequests
+                    > maximumTushareProviderRequests
                     || researchAsOf.isBefore(com.stockquant.core.research
                     .StrategyResearchModels.closeInstant(tradeDate))
                     || nextPaperExecutionTime != null
                     && !nextPaperExecutionTime.isAfter(researchAsOf)) {
                 throw invalid("M4_SHADOW_REQUEST_INVALID");
             }
-            boolean selection = SELECTION_STRATEGY_VERSION.equals(
-                    strategyVersion) && (triggerMode
+            boolean selection = selectionLineage && (triggerMode
                     == TriggerMode.ON_DEMAND_SELECTION
                     && researchSlot.matches("ON_DEMAND_[A-F0-9]{12}")
                     || triggerMode == TriggerMode.SCHEDULED

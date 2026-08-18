@@ -201,6 +201,36 @@ class ResearchSelectionCoreTest {
                 "RESEARCH_SELECTION_PAPER_EXECUTION_NOT_AFTER_AS_OF"));
     }
 
+    @Test
+    void mainboardSelectionBudgetDoesNotRelaxOrdinaryShadowBudget() {
+        LocalDate anchor = LocalDate.of(2026, 8, 14);
+        Instant researchAsOf = Instant.parse("2026-08-17T08:00:00Z");
+        List<Security> securities = ResearchUniverseV1.securities().stream()
+                .limit(10).toList();
+        List<StrategySpec> strategies = List.of(
+                StrategySpec.of("BUY_AND_HOLD_V1"),
+                StrategySpec.of("MEAN_REVERSION_V1"));
+
+        new ShadowResearchModels.ShadowRequest(
+                ShadowResearchModels.TriggerMode.ON_DEMAND_SELECTION,
+                anchor, LocalDate.of(2026, 5, 1), researchAsOf, securities,
+                securities.get(0), strategies, null, 123,
+                "full mainboard current-as-of research",
+                "ON_DEMAND_A1B2C3D4E5F6",
+                ShadowResearchModels.SELECTION_STRATEGY_VERSION);
+
+        IllegalArgumentException ordinary = assertThrows(
+                IllegalArgumentException.class, () ->
+                        new ShadowResearchModels.ShadowRequest(
+                                ShadowResearchModels.TriggerMode.SCHEDULED,
+                                anchor, LocalDate.of(2026, 5, 1),
+                                researchAsOf, securities, securities.get(0),
+                                strategies, null, 53, "ordinary shadow",
+                                ShadowResearchModels.RESEARCH_SLOT,
+                                ShadowResearchModels.STRATEGY_VERSION));
+        assertEquals("M4_SHADOW_REQUEST_INVALID", ordinary.getMessage());
+    }
+
     private static ResearchDataset dataset(int sessions) {
         List<LocalDate> dates = openDates(LocalDate.of(2026, 4, 1),
                 sessions);
