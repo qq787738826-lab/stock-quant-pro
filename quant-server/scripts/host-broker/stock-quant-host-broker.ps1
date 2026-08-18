@@ -1567,6 +1567,7 @@ function Assert-ResearchProductionBinding {
                 'codex/1.4.0-v1.0.2-startup-self-heal-fix',
                 'codex/1.4.0-v1.0.3-research-selection-runtime-fix',
                 'codex/1.4.0-v1.0.7-intraday-research-selection-anchor-fix',
+                'codex/1.4.0-v1.0.9-full-mainboard-universe',
                 'codex/1.4.0-m6-research-production-ready') -or
             $unexpected.Count -ne 0 -or
             @(git diff --cached --name-only).Count -ne 0) {

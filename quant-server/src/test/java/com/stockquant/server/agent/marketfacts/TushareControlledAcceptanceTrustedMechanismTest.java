@@ -185,8 +185,10 @@ class TushareControlledAcceptanceTrustedMechanismTest {
                 "codex/1.4.0-v1.0.1-research-selection-usability",
                 "codex/1.4.0-v1.0.2-startup-self-heal-fix",
                 "codex/1.4.0-v1.0.3-research-selection-runtime-fix",
-                "codex/1.4.0-v1.0.7-intraday-research-selection-anchor-fix")) {
-            String suffix = branch.contains("v1.0.7") ? "v107"
+                "codex/1.4.0-v1.0.7-intraday-research-selection-anchor-fix",
+                "codex/1.4.0-v1.0.9-full-mainboard-universe")) {
+            String suffix = branch.contains("v1.0.9") ? "v109"
+                    : branch.contains("v1.0.7") ? "v107"
                     : branch.contains("v1.0.3") ? "v103"
                     : branch.contains("v1.0.2") ? "v102" : "v101";
             Path selectionJar = temp.resolve(
