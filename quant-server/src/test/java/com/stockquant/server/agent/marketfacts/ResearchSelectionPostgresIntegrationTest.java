@@ -7,6 +7,9 @@ import com.stockquant.server.researchselection.ResearchSelectionAnchorResolver;
 import com.stockquant.server.researchselection.ResearchSelectionProviderBudgetPlanner;
 import com.stockquant.server.researchselection.ResearchSelectionHistoricalDatasetLoader;
 import com.stockquant.server.researchselection.ResearchSelectionRepository;
+import com.stockquant.server.researchselection.ResearchUniverseMainboard;
+import com.stockquant.server.researchselection.ResearchUniverseMainboardDatasetLoader;
+import com.stockquant.server.researchselection.ResearchUniverseMainboardRepository;
 import com.stockquant.server.researchselection.ResearchUniverseV1;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
@@ -20,8 +23,12 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -142,10 +149,128 @@ class ResearchSelectionPostgresIntegrationTest {
                 .liveShadowSampleCounts().isEmpty());
         assertEquals(ShadowResearchRepository.CalendarState.OPEN,
                 shadow.researchCalendarState(ANCHOR, AS_OF));
-        assertEquals(17, jdbc.queryForObject("""
+        assertEquals(18, jdbc.queryForObject("""
                 SELECT max(version::integer) FROM flyway_schema_history
                  WHERE success
                 """, Integer.class));
+    }
+
+    @Test
+    void v18MainboardSnapshotIsImmutableAndDateWideCaptureIsComplete() {
+        JdbcTemplate jdbc = new JdbcTemplate(dataSource);
+        ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+        var gateway = new TushareControlledAcceptanceE2eDryRunGateway();
+        Set<LocalDate> dates = Set.of(ANCHOR.minusDays(1), ANCHOR);
+        TushareMainboardUniverseCaptureService.CaptureEvidence captured;
+        try (var components = components(gateway)) {
+            captured = components.mainboardUniverseCaptureService().capture(
+                    null, true, dates, ANCHOR.minusDays(1), ANCHOR, true,
+                    "a".repeat(40), Duration.ofSeconds(5));
+        }
+
+        var snapshot = captured.snapshot();
+        assertEquals(7, captured.providerCallCount());
+        assertEquals(0, captured.retryCount());
+        assertEquals(4, captured.batchIds().size());
+        assertEquals(3_000, snapshot.snapshot().memberCount());
+        assertEquals(1_500, snapshot.snapshot().sseCount());
+        assertEquals(1_500, snapshot.snapshot().szseCount());
+        assertEquals(1, snapshot.snapshot().stCount());
+        assertEquals(3_000, snapshot.members().stream().map(
+                ResearchUniverseMainboard.Member::tsCode).distinct().count());
+        assertEquals(1, count(jdbc,
+                "research_universe_snapshot_observations"));
+        assertTrue(captured.appendedObservations() >= 12_000);
+        assertEquals(7, gateway.calls());
+
+        var repository = new ResearchUniverseMainboardRepository(jdbc);
+        var loader = new ResearchUniverseMainboardDatasetLoader(
+                new PitMarketFactRepository(jdbc, mapper));
+        var audit = loader.audit(snapshot, ANCHOR, AS_OF, 2);
+        assertTrue(audit.missingTradeDates().isEmpty());
+        assertEquals(3_000, audit.existingSecurityCount());
+
+        var unchangedMembers = snapshot.members().stream().map(value ->
+                new ResearchUniverseMainboard.Member(value.tsCode(),
+                        value.symbol(), value.exchange(), value.name(),
+                        value.industry(), value.market(), value.listStatus(),
+                        value.listDate(), value.delistDate(),
+                        AS_OF.plusSeconds(1), value.source(),
+                        value.contentHash(), value.stSecurity())).toList();
+        var unchanged = repository.saveIfChanged(unchangedMembers,
+                AS_OF.plusSeconds(1), ANCHOR,
+                snapshot.snapshot().sourceFingerprint(), "b".repeat(40));
+        assertEquals(snapshot.snapshot().databaseId(),
+                unchanged.snapshot().databaseId());
+        assertEquals(AS_OF.plusSeconds(1),
+                unchanged.snapshot().lastVerifiedAt());
+        assertEquals(1, count(jdbc, "research_universe_snapshots"));
+        assertEquals(2, count(jdbc,
+                "research_universe_snapshot_observations"));
+        assertFalse(loader.audit(unchanged, ANCHOR,
+                AS_OF.plusSeconds(2), 2).refreshStockBasic());
+        assertTrue(loader.audit(unchanged, ANCHOR,
+                AS_OF.plus(Duration.ofDays(8)), 2).refreshStockBasic());
+
+        var changedMembers = new ArrayList<>(snapshot.members());
+        var first = changedMembers.get(0);
+        changedMembers.set(0, new ResearchUniverseMainboard.Member(
+                first.tsCode(), first.symbol(), first.exchange(),
+                first.name() + "新", first.industry(), first.market(),
+                first.listStatus(), first.listDate(), first.delistDate(),
+                AS_OF.plusSeconds(2), first.source(), "c".repeat(64),
+                first.stSecurity()));
+        for (int index = 1; index < changedMembers.size(); index++) {
+            var value = changedMembers.get(index);
+            changedMembers.set(index, new ResearchUniverseMainboard.Member(
+                    value.tsCode(), value.symbol(), value.exchange(),
+                    value.name(), value.industry(), value.market(),
+                    value.listStatus(), value.listDate(), value.delistDate(),
+                    AS_OF.plusSeconds(2), value.source(), value.contentHash(),
+                    value.stSecurity()));
+        }
+        var changed = repository.saveIfChanged(changedMembers,
+                AS_OF.plusSeconds(2), ANCHOR, "d".repeat(64),
+                "b".repeat(40));
+        assertNotEquals(snapshot.snapshot().databaseId(),
+                changed.snapshot().databaseId());
+        assertEquals(2, count(jdbc, "research_universe_snapshots"));
+        assertEquals(3, count(jdbc,
+                "research_universe_snapshot_observations"));
+        assertEquals(first.name(), repository.find(
+                snapshot.snapshot().databaseId()).orElseThrow().members()
+                .get(0).name());
+
+        var revertedMembers = snapshot.members().stream().map(value ->
+                new ResearchUniverseMainboard.Member(value.tsCode(),
+                        value.symbol(), value.exchange(), value.name(),
+                        value.industry(), value.market(), value.listStatus(),
+                        value.listDate(), value.delistDate(),
+                        AS_OF.plusSeconds(3), value.source(),
+                        value.contentHash(), value.stSecurity())).toList();
+        var reverted = repository.saveIfChanged(revertedMembers,
+                AS_OF.plusSeconds(3), ANCHOR,
+                snapshot.snapshot().sourceFingerprint(), "e".repeat(40));
+        assertNotEquals(snapshot.snapshot().databaseId(),
+                reverted.snapshot().databaseId());
+        assertNotEquals(changed.snapshot().databaseId(),
+                reverted.snapshot().databaseId());
+        assertEquals(snapshot.snapshot().memberFingerprint(),
+                reverted.snapshot().memberFingerprint());
+        assertEquals(reverted.snapshot().databaseId(), repository.latest()
+                .orElseThrow().snapshot().databaseId());
+        assertEquals(3, count(jdbc, "research_universe_snapshots"));
+        assertEquals(4, count(jdbc,
+                "research_universe_snapshot_observations"));
+        assertThrows(RuntimeException.class, () -> jdbc.update("""
+                UPDATE research_universe_members SET name='禁止改写'
+                 WHERE snapshot_db_id=? AND ts_code=?
+                """, snapshot.snapshot().databaseId(), first.tsCode()));
+        assertThrows(RuntimeException.class, () -> jdbc.update("""
+                UPDATE research_universe_snapshot_observations
+                   SET observed_at=clock_timestamp()
+                 WHERE snapshot_db_id=?
+                """, snapshot.snapshot().databaseId()));
     }
 
     @Test

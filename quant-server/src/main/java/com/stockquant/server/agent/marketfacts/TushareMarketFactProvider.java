@@ -27,10 +27,16 @@ import com.stockquant.server.agent.marketfacts.TushareApiGateway.QueryResult;
 import com.stockquant.server.agent.marketfacts.TushareApiGateway.Table;
 import com.stockquant.server.agent.marketfacts.TushareReferenceDataModels.DividendEvidence;
 import com.stockquant.server.agent.marketfacts.TushareReferenceDataModels.InstrumentIdentity;
+import com.stockquant.server.agent.marketfacts.TushareReferenceDataModels.MainboardInstrument;
+import com.stockquant.server.agent.marketfacts.TushareReferenceDataModels.MainboardReferenceResponse;
 import com.stockquant.server.agent.marketfacts.TushareReferenceDataModels.ReferenceDataResponse;
+import com.stockquant.server.researchselection.ResearchUniverseMainboard;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
@@ -40,6 +46,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.HashSet;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -60,6 +67,8 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
     public static final String IMPLEMENTATION_SCOPE =
             "LIMITED_PERSONAL_RESEARCH_USE";
     public static final int STOCK_BASIC_MAX_ROWS = 1;
+    public static final int MAINBOARD_MARKET_MAX_ROWS = 6_000;
+    public static final int MAINBOARD_MINIMUM_COVERAGE_PERCENT = 95;
     public static final int DIVIDEND_EVIDENCE_MAX_ROWS = 1_000;
     private static final int MAXIMUM_NATURAL_DAYS =
             TushareManualBoundedSession.M1_MAX_NATURAL_DAYS;
@@ -80,6 +89,9 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
     private static final List<String> STOCK_BASIC_FIELDS = List.of(
             "ts_code", "symbol", "name", "market", "exchange",
             "list_status", "list_date", "delist_date");
+    private static final List<String> MAINBOARD_STOCK_BASIC_FIELDS = List.of(
+            "ts_code", "symbol", "name", "industry", "market",
+            "exchange", "list_status", "list_date", "delist_date");
     private static final List<String> DIVIDEND_FIELDS = List.of(
             "ts_code", "end_date", "ann_date", "div_proc", "stk_div",
             "stk_bo_rate", "stk_co_rate", "cash_div", "cash_div_tax",
@@ -774,6 +786,117 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
         return List.copyOf(results);
     }
 
+    /**
+     * Fetches one complete market date with exactly two upstream calls and
+     * retains only identities from the immutable stock_basic snapshot.
+     */
+    MarketFactResponse fetchMainboardMarketDate(
+            List<MainboardInstrument> members,
+            LocalDate tradeDate,
+            Duration timeout,
+            TushareManualBoundedSession session
+    ) {
+        List<MainboardInstrument> scope = List.copyOf(members);
+        if (scope.isEmpty() || tradeDate == null || timeout == null
+                || timeout.isZero() || timeout.isNegative()
+                || session == null || session.sessionProfile()
+                != TushareManualBoundedSession.SessionProfile
+                .MAINBOARD_UNIVERSE_V1
+                || !session.allowedEndpoints().containsAll(
+                Set.of("daily", "adj_factor"))) {
+            throw new IllegalArgumentException(
+                    "MAINBOARD_MARKET_DATE_SCOPE_INVALID");
+        }
+        Map<String, MainboardInstrument> allowed = scope.stream().collect(
+                java.util.stream.Collectors.toUnmodifiableMap(
+                        MainboardInstrument::tsCode, value -> value));
+        ObjectNode parameters = objectMapper.createObjectNode();
+        parameters.put("trade_date", providerDate(tradeDate));
+        QueryResult daily = gateway.query("daily", parameters, DAILY_FIELDS,
+                timeout, QueryMode.CONTROLLED_NO_RETRY, session);
+        QueryResult factors = gateway.query("adj_factor", parameters,
+                FACTOR_FIELDS, timeout, QueryMode.CONTROLLED_NO_RETRY,
+                session);
+        rejectMarketWideTruncation("daily", daily);
+        rejectMarketWideTruncation("adj_factor", factors);
+        List<RawDailyBar> bars = mapMainboardDaily(
+                daily.table(), allowed, tradeDate);
+        List<AdjustmentFactor> mappedFactors = mapMainboardFactors(
+                factors.table(), allowed, tradeDate);
+        Set<String> barCodes = bars.stream().map(value ->
+                tsCode(value.symbol(), value.exchange())).collect(
+                java.util.stream.Collectors.toUnmodifiableSet());
+        Map<String, String> exchangeBySymbol = allowed.values().stream()
+                .collect(java.util.stream.Collectors.toUnmodifiableMap(
+                        MainboardInstrument::symbol,
+                        MainboardInstrument::exchange, (left, right) -> left));
+        Set<String> factorCodes = mappedFactors.stream().map(value ->
+                tsCode(value.symbol(), exchangeBySymbol.get(value.symbol())))
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        long expected = scope.stream().filter(value ->
+                !value.listDate().isAfter(tradeDate)
+                        && (value.delistDate() == null
+                        || !value.delistDate().isBefore(tradeDate))).count();
+        if (!barCodes.equals(factorCodes) || expected == 0
+                || barCodes.size() * 100L
+                < expected * MAINBOARD_MINIMUM_COVERAGE_PERCENT) {
+            throw new GatewayException(ErrorKind.STRUCTURE_CHANGED,
+                    "MAINBOARD_MARKET_DATE_COVERAGE_INCOMPLETE",
+                    "Market-wide daily and adjustment-factor coverage is incomplete",
+                    daily.providerCallCount() + factors.providerCallCount(),
+                    daily.rateLimitRetryCount()
+                            + factors.rateLimitRetryCount(), null);
+        }
+        MainboardInstrument representative = scope.get(0);
+        MarketFactRequest request = new MarketFactRequest(
+                RunNamespace.FORMAL, PROVIDER_CODE,
+                "MAINBOARD_MARKET_WIDE|" + tradeDate,
+                representative.symbol(), representative.exchange(),
+                tradeDate, tradeDate, Set.of(FactType.RAW_DAILY_BAR,
+                FactType.ADJUSTMENT_FACTOR), timeout);
+        return response(request, true, bars, mappedFactors, List.of(),
+                List.of(), 2, 0, QueryMode.CONTROLLED_NO_RETRY, session);
+    }
+
+    MarketFactResponse fetchMainboardCalendar(
+            MainboardInstrument representative,
+            String exchange,
+            LocalDate rangeStart,
+            LocalDate rangeEnd,
+            Duration timeout,
+            TushareManualBoundedSession session
+    ) {
+        if (representative == null || !Set.of("SSE", "SZSE").contains(
+                exchange) || rangeStart == null || rangeEnd == null
+                || timeout == null || timeout.isZero() || timeout.isNegative()
+                || session == null || session.sessionProfile()
+                != TushareManualBoundedSession.SessionProfile
+                .MAINBOARD_UNIVERSE_V1
+                || !session.allowedEndpoints().contains("trade_cal")) {
+            throw new IllegalArgumentException(
+                    "MAINBOARD_CALENDAR_SCOPE_INVALID");
+        }
+        MarketFactRequest request = new MarketFactRequest(RunNamespace.FORMAL,
+                PROVIDER_CODE, calendarSourceIdentity(exchange),
+                representative.symbol(), exchange, rangeStart, rangeEnd,
+                Set.of(FactType.TRADING_CALENDAR), timeout);
+        QueryResult result = queryCalendar(request,
+                QueryMode.CONTROLLED_NO_RETRY, session);
+        List<TradingCalendar> values = mapCalendar(request, result.table());
+        long expectedDays = ChronoUnit.DAYS.between(rangeStart, rangeEnd) + 1;
+        if (values.size() != expectedDays) {
+            throw new GatewayException(ErrorKind.STRUCTURE_CHANGED,
+                    "MAINBOARD_CALENDAR_RESPONSE_INCOMPLETE",
+                    "trade_cal response does not cover every requested date",
+                    result.providerCallCount(),
+                    result.rateLimitRetryCount(), null);
+        }
+        return response(request, true, List.of(), List.of(), values,
+                List.of(), result.providerCallCount(),
+                result.rateLimitRetryCount(), QueryMode.CONTROLLED_NO_RETRY,
+                session);
+    }
+
     /** M4-only exchange calendar refresh; no price or factor endpoint. */
     MarketFactResponse fetchForM4CalendarAdmission(
             MarketFactRequest request,
@@ -1006,6 +1129,50 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
                 false);
     }
 
+    /** One official current-listed main-board snapshot; no code-prefix filter. */
+    MainboardReferenceResponse fetchMainboardUniverseSnapshot(
+            Duration timeout,
+            TushareManualBoundedSession session
+    ) {
+        properties.requireManualBoundedToken();
+        if (timeout == null || timeout.isZero() || timeout.isNegative()
+                || session == null || session.sessionProfile()
+                != TushareManualBoundedSession.SessionProfile
+                .MAINBOARD_UNIVERSE_V1
+                || !session.allowedEndpoints().contains("stock_basic")) {
+            throw new IllegalArgumentException(
+                    "MAINBOARD_STOCK_BASIC_SCOPE_INVALID");
+        }
+        ObjectNode parameters = objectMapper.createObjectNode();
+        parameters.put("market", "主板");
+        parameters.put("list_status", "L");
+        QueryResult result = gateway.query("stock_basic", parameters,
+                MAINBOARD_STOCK_BASIC_FIELDS, timeout,
+                QueryMode.CONTROLLED_NO_RETRY, session);
+        rejectMarketWideTruncation("stock_basic", result);
+        List<MainboardInstrument> instruments = mapMainboardInstruments(
+                result.table());
+        long sse = instruments.stream().filter(value ->
+                "SSE".equals(value.exchange())).count();
+        long szse = instruments.size() - sse;
+        if (instruments.size() < ResearchUniverseMainboard
+                .MINIMUM_PLAUSIBLE_MEMBER_COUNT || sse == 0 || szse == 0) {
+            throw new GatewayException(ErrorKind.STRUCTURE_CHANGED,
+                    "MAINBOARD_STOCK_BASIC_COVERAGE_INCOMPLETE",
+                    "stock_basic result cannot prove complete SSE/SZSE main-board membership",
+                    result.providerCallCount(),
+                    result.rateLimitRetryCount(), null);
+        }
+        String sourceFingerprint = sha256(MAINBOARD_STOCK_BASIC_FIELDS
+                + "|" + instruments.stream().map(value ->
+                value.tsCode() + '|' + value.contentHash() + '\n')
+                .reduce("", String::concat));
+        return new MainboardReferenceResponse("stock_basic",
+                result.table().fields(), instruments,
+                result.providerCallCount(), result.rateLimitRetryCount(),
+                sourceFingerprint, true);
+    }
+
     /**
      * Reads partial dividend evidence without creating a V13 corporate action.
      */
@@ -1087,6 +1254,156 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
                     row.nullableDate("delist_date")));
         }
         return List.copyOf(values);
+    }
+
+    private List<MainboardInstrument> mapMainboardInstruments(Table table) {
+        List<RowView> rows = rows(table, MAINBOARD_STOCK_BASIC_FIELDS);
+        Map<String, MainboardInstrument> values = new LinkedHashMap<>();
+        for (RowView row : rows) {
+            String symbol = row.text("symbol");
+            String exchange = row.text("exchange");
+            String tsCode = row.text("ts_code");
+            String market = row.text("market");
+            String listStatus = row.text("list_status");
+            LocalDate listDate = row.date("list_date");
+            LocalDate delistDate = row.nullableDate("delist_date");
+            String name = row.text("name");
+            String industry = row.nullableText("industry");
+            if (!Set.of("SSE", "SZSE").contains(exchange)
+                    || !"主板".equals(market) || !"L".equals(listStatus)
+                    || !tsCode.equals(tsCode(symbol, exchange))
+                    || delistDate != null) {
+                throw new GatewayException(ErrorKind.STRUCTURE_CHANGED,
+                        "MAINBOARD_STOCK_BASIC_ROW_INVALID",
+                        "stock_basic returned an identity outside the requested current main-board scope",
+                        1, 0, null);
+            }
+            String normalizedIndustry = industry == null
+                    || industry.isBlank() ? "未分类" : industry;
+            String contentHash = sha256(String.join("|", tsCode, symbol,
+                    exchange, name, normalizedIndustry, market, listStatus,
+                    listDate.toString(), ""));
+            MainboardInstrument instrument = new MainboardInstrument(tsCode,
+                    symbol, exchange, name, normalizedIndustry, market,
+                    listStatus, listDate, null, contentHash);
+            if (values.put(tsCode, instrument) != null) {
+                throw new GatewayException(ErrorKind.STRUCTURE_CHANGED,
+                        "MAINBOARD_STOCK_BASIC_DUPLICATE",
+                        "stock_basic returned duplicate main-board identity",
+                        1, 0, null);
+            }
+        }
+        if (values.isEmpty()) {
+            throw new GatewayException(ErrorKind.STRUCTURE_CHANGED,
+                    "MAINBOARD_STOCK_BASIC_EMPTY",
+                    "stock_basic returned no current main-board identities",
+                    1, 0, null);
+        }
+        return values.values().stream().sorted(Comparator.comparing(
+                MainboardInstrument::tsCode)).toList();
+    }
+
+    private List<RawDailyBar> mapMainboardDaily(
+            Table table,
+            Map<String, MainboardInstrument> allowed,
+            LocalDate expectedDate
+    ) {
+        List<RawDailyBar> values = new ArrayList<>();
+        Set<String> identities = new HashSet<>();
+        for (RowView row : rows(table, DAILY_FIELDS)) {
+            MainboardInstrument member = allowed.get(row.text("ts_code"));
+            if (member == null) continue;
+            LocalDate tradeDate = row.date("trade_date");
+            if (!expectedDate.equals(tradeDate)
+                    || tradeDate.isBefore(member.listDate())
+                    || member.delistDate() != null
+                    && tradeDate.isAfter(member.delistDate())
+                    || !identities.add(member.tsCode())) {
+                throw new GatewayException(ErrorKind.STRUCTURE_CHANGED,
+                        "MAINBOARD_DAILY_RESPONSE_INVALID",
+                        "Market-wide daily response has duplicate or wrong-date rows",
+                        1, 0, null);
+            }
+            BigDecimal providerVolume = row.nullableDecimal("vol");
+            BigDecimal providerAmount = row.nullableDecimal("amount");
+            values.add(new RawDailyBar(
+                    rawSourceIdentity(member.symbol(), member.exchange()),
+                    member.symbol(), member.exchange(), tradeDate,
+                    row.decimal("open"), row.decimal("high"),
+                    row.decimal("low"), row.decimal("close"),
+                    qualified(providerVolume == null ? null
+                                    : providerVolume.movePointRight(2),
+                            MarketFieldUnit.SHARES,
+                            MarketFieldSemantic.TRADED_VOLUME),
+                    qualified(providerAmount == null ? null
+                                    : providerAmount.movePointRight(3),
+                            MarketFieldUnit.CNY,
+                            MarketFieldSemantic.TRADED_AMOUNT),
+                    qualified(null, MarketFieldUnit.RATIO,
+                            MarketFieldSemantic.TURNOVER_RATE),
+                    SYSTEM_KNOWLEDGE_VERSION,
+                    rawPayload("daily", row, Map.of(
+                            "vol", "HANDS_TO_SHARES_X100",
+                            "amount", "THOUSAND_CNY_TO_CNY_X1000"))));
+        }
+        return List.copyOf(values);
+    }
+
+    private List<AdjustmentFactor> mapMainboardFactors(
+            Table table,
+            Map<String, MainboardInstrument> allowed,
+            LocalDate expectedDate
+    ) {
+        List<AdjustmentFactor> values = new ArrayList<>();
+        Set<String> identities = new HashSet<>();
+        for (RowView row : rows(table, FACTOR_FIELDS)) {
+            MainboardInstrument member = allowed.get(row.text("ts_code"));
+            if (member == null) continue;
+            LocalDate tradeDate = row.date("trade_date");
+            if (!expectedDate.equals(tradeDate)
+                    || tradeDate.isBefore(member.listDate())
+                    || member.delistDate() != null
+                    && tradeDate.isAfter(member.delistDate())
+                    || !identities.add(member.tsCode())) {
+                throw new GatewayException(ErrorKind.STRUCTURE_CHANGED,
+                        "MAINBOARD_ADJ_FACTOR_RESPONSE_INVALID",
+                        "Market-wide adjustment-factor response has duplicate or wrong-date rows",
+                        1, 0, null);
+            }
+            values.add(new AdjustmentFactor(
+                    factorSourceIdentity(member.symbol(), member.exchange()),
+                    member.symbol(), tradeDate,
+                    PitMarketFactsContracts.FACTOR_TYPE,
+                    PitMarketFactsContracts.FACTOR_COVERAGE_MODE,
+                    row.decimal("adj_factor"), SYSTEM_KNOWLEDGE_VERSION,
+                    rawPayload("adj_factor", row, Map.of())));
+        }
+        return List.copyOf(values);
+    }
+
+    private static void rejectMarketWideTruncation(
+            String endpoint,
+            QueryResult result
+    ) {
+        int rows = result.table().rows().size();
+        if (rows <= 0 || rows >= MAINBOARD_MARKET_MAX_ROWS) {
+            throw new GatewayException(ErrorKind.STRUCTURE_CHANGED,
+                    "MAINBOARD_PROVIDER_RESPONSE_TRUNCATED",
+                    "Tushare " + endpoint
+                            + " response is empty or reached the fail-closed row limit",
+                    result.providerCallCount(),
+                    result.rateLimitRetryCount(), null);
+        }
+    }
+
+    private static String sha256(String value) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance(
+                    "SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException error) {
+            throw new IllegalStateException(
+                    "MAINBOARD_SHA256_UNAVAILABLE", error);
+        }
     }
 
     private List<DividendEvidence> mapDividendEvidence(

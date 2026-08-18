@@ -111,7 +111,7 @@ try {
         -SelectionRunId 1 -PublicRunId $publicRun `
         -GitCommit $ExpectedCommit -SelectionTrigger SCHEDULED_SHADOW `
         -DatabasePort $port `
-        -MaximumProviderRequests 52 -ExecutionMode FAKE `
+        -MaximumProviderRequests 123 -ExecutionMode FAKE `
         -MaximumCostCny 5.00
     if ($LASTEXITCODE -ne 0) {
         throw 'RESEARCH_SELECTION_E2E_RUNNER_FAILED'
@@ -123,7 +123,7 @@ try {
         'RESEARCH_SELECTION_E2E_COMMIT_INVALID'
     Exact $value.selectionStatus 'COMPLETED' `
         'RESEARCH_SELECTION_E2E_SELECTION_STATE_INVALID'
-    Exact $value.universeSize 25 'RESEARCH_SELECTION_E2E_UNIVERSE_INVALID'
+    Exact $value.universeSize 3000 'RESEARCH_SELECTION_E2E_UNIVERSE_INVALID'
     Exact $value.shortlistSize 10 `
         'RESEARCH_SELECTION_E2E_SHORTLIST_INVALID'
     $historyVersion = Scalar "SELECT result_json->'historicalResearch'->>'version' FROM research_selection_runs WHERE id=1"
@@ -140,11 +140,11 @@ try {
     if ([int]$historySessions -lt 60 -or [int]$historySessions -ge 120) {
         throw 'RESEARCH_SELECTION_E2E_HISTORY_SESSIONS_INVALID'
     }
-    Exact (Scalar "SELECT jsonb_array_length(result_json->'historicalResearch'->'securities') FROM research_selection_runs WHERE id=1") 25 `
+    Exact (Scalar "SELECT jsonb_array_length(result_json->'historicalResearch'->'securities') FROM research_selection_runs WHERE id=1") 30 `
         'RESEARCH_SELECTION_E2E_HISTORY_UNIVERSE_INVALID'
     Exact (Scalar "SELECT jsonb_array_length(result_json->'historicalResearch'->'windowCoverage') FROM research_selection_runs WHERE id=1") 4 `
         'RESEARCH_SELECTION_E2E_HISTORY_WINDOWS_INVALID'
-    Exact (Scalar "SELECT result_json->'historicalResearch'->'gradeDistribution'->>'A' FROM research_selection_runs WHERE id=1") 0 `
+    Exact (Scalar "SELECT (result_json->'historicalResearch'->'gradeDistribution'->>'A')::integer + (result_json->'historicalResearch'->'gradeDistribution'->>'B')::integer + (result_json->'historicalResearch'->'gradeDistribution'->>'C')::integer FROM research_selection_runs WHERE id=1") 200 `
         'RESEARCH_SELECTION_E2E_HISTORY_GRADE_INVALID'
     $historyBoundarySql = @'
 SELECT count(*)
@@ -204,7 +204,7 @@ SELECT COALESCE(string_agg(value, ',' ORDER BY value), 'NONE')
         $experiments -match 'oos=false') {
         throw 'RESEARCH_SELECTION_E2E_CANDIDATES_INVALID'
     }
-    Exact $value.tushareProviderCallCount 52 `
+    Exact $value.tushareProviderCallCount 123 `
         'RESEARCH_SELECTION_E2E_TUSHARE_INVALID'
     Exact $value.retryCount 0 'RESEARCH_SELECTION_E2E_RETRY_INVALID'
     Exact $value.modelProviderRequestCount 0 `
@@ -227,12 +227,30 @@ SELECT COALESCE(string_agg(value, ',' ORDER BY value), 'NONE')
         'RESEARCH_SELECTION_E2E_COMPLETED_INVALID'
     Exact (Scalar "SELECT count(*) FROM research_selection_runs WHERE status NOT IN ('COMPLETED','FAILED')") 0 `
         'RESEARCH_SELECTION_E2E_ACTIVE_REMAINS'
+    Exact (Scalar 'SELECT count(*) FROM research_universe_snapshots') 1 `
+        'RESEARCH_SELECTION_E2E_SNAPSHOT_INVALID'
+    Exact (Scalar 'SELECT count(*) FROM research_universe_members') 3000 `
+        'RESEARCH_SELECTION_E2E_MEMBERS_INVALID'
+    Exact (Scalar 'SELECT count(*) FROM research_selection_member_results WHERE run_id=1') 3000 `
+        'RESEARCH_SELECTION_E2E_MEMBER_RESULTS_INVALID'
+    Exact (Scalar "SELECT result_json->'universeFunnel'->>'basicScannedCount' FROM research_selection_runs WHERE id=1") 2998 `
+        'RESEARCH_SELECTION_E2E_BASIC_FUNNEL_INVALID'
+    Exact (Scalar "SELECT result_json->'universeFunnel'->>'historicalScoredCount' FROM research_selection_runs WHERE id=1") 200 `
+        'RESEARCH_SELECTION_E2E_HISTORY_FUNNEL_INVALID'
+    Exact (Scalar "SELECT result_json->'universeFunnel'->>'strategyComparedCount' FROM research_selection_runs WHERE id=1") 30 `
+        'RESEARCH_SELECTION_E2E_STRATEGY_FUNNEL_INVALID'
+    Exact (Scalar "SELECT count(*) FROM research_selection_member_results WHERE run_id=1 AND historical_rank IS NOT NULL AND available_sessions < 60") 0 `
+        'RESEARCH_SELECTION_E2E_HISTORY_QUALIFICATION_INVALID'
+    Exact (Scalar "SELECT count(*) FROM research_selection_member_results WHERE run_id=1 AND strategy_rank IS NOT NULL AND historical_rank <> strategy_rank") 0 `
+        'RESEARCH_SELECTION_E2E_STABILITY_LAYERING_INVALID'
+    Exact (Scalar "SELECT result_json->'universeFunnel'->>'agentResearchedCount' FROM research_selection_runs WHERE id=1") 10 `
+        'RESEARCH_SELECTION_E2E_AGENT_FUNNEL_INVALID'
     Exact (Scalar "SELECT count(*) FROM shadow_research_runs WHERE status='FROZEN' AND trigger_mode='SCHEDULED'") 1 `
         'RESEARCH_SELECTION_E2E_SHADOW_INVALID'
     Exact (Scalar 'SELECT count(*) FROM shadow_paper_fills') 0 `
         'RESEARCH_SELECTION_E2E_UNEXPECTED_FILL'
     $observations = Scalar 'SELECT count(*) FROM pit_market_fact_observations'
-    if ([int]$observations -lt 3000) {
+    if ([int]$observations -lt 360000) {
         throw 'RESEARCH_SELECTION_E2E_OBSERVATIONS_INCOMPLETE'
     }
 
@@ -271,6 +289,10 @@ SELECT COALESCE(string_agg(value, ',' ORDER BY value), 'NONE')
         $observations 'RESEARCH_SELECTION_E2E_REUSE_OBSERVATIONS_CHANGED'
     Exact (Scalar "SELECT count(*) FROM research_selection_runs WHERE status='COMPLETED'") 2 `
         'RESEARCH_SELECTION_E2E_REUSE_COMPLETED_INVALID'
+    Exact (Scalar 'SELECT count(*) FROM research_selection_member_results WHERE run_id=2') 3000 `
+        'RESEARCH_SELECTION_E2E_REUSE_MEMBER_RESULTS_INVALID'
+    Exact (Scalar 'SELECT count(*) FROM research_universe_snapshots') 1 `
+        'RESEARCH_SELECTION_E2E_REUSE_SNAPSHOT_CHANGED'
     Exact (Scalar "SELECT count(*) FROM research_selection_runs WHERE status NOT IN ('COMPLETED','FAILED')") 0 `
         'RESEARCH_SELECTION_E2E_REUSE_ACTIVE_REMAINS'
     Exact (Scalar "SELECT count(*) FROM shadow_research_runs WHERE status='FROZEN' AND trigger_mode='SCHEDULED'") 1 `
@@ -280,17 +302,19 @@ SELECT COALESCE(string_agg(value, ',' ORDER BY value), 'NONE')
     Exact (Scalar 'SELECT count(*) FROM shadow_paper_fills') 0 `
         'RESEARCH_SELECTION_E2E_REUSE_FILL_DUPLICATED'
     Exact (Scalar "SELECT string_agg(version, ',' ORDER BY installed_rank) FROM flyway_schema_history WHERE success") `
-        '1,2,3,4,5,6,7,8,9,10,11,12,13,15,16,17' `
+        '1,2,3,4,5,6,7,8,9,10,11,12,13,15,16,17,18' `
         'RESEARCH_SELECTION_E2E_MIGRATION_HISTORY_INVALID'
 
     Write-Output 'RESEARCH_SELECTION_PACKAGED_FAKE_E2E=PASS'
-    Write-Output 'RESEARCH_SELECTION_TEMP_POSTGRES_V1_V17=PASS'
+    Write-Output 'RESEARCH_SELECTION_TEMP_POSTGRES_V1_V18=PASS'
     Write-Output 'RESEARCH_SELECTION_M1_M2_M3_M4_CHAIN=PASS'
     Write-Output 'RESEARCH_SELECTION_HISTORICAL_STABILITY=PASS'
     Write-Output 'RESEARCH_SELECTION_HISTORY_20_60=AVAILABLE'
     Write-Output 'RESEARCH_SELECTION_HISTORY_120_250=INSUFFICIENT_HISTORY'
     Write-Output 'RESEARCH_SELECTION_SCHEDULED_SHADOW=FROZEN'
-    Write-Output 'RESEARCH_SELECTION_FAKE_TUSHARE_CALLS=52'
+    Write-Output 'RESEARCH_SELECTION_MAINBOARD_MEMBERS=3000'
+    Write-Output 'RESEARCH_SELECTION_LAYERING=2998/200/30/10'
+    Write-Output 'RESEARCH_SELECTION_FAKE_TUSHARE_CALLS=123'
     Write-Output 'RESEARCH_SELECTION_FAKE_MODEL_CALLS=26'
     Write-Output 'RESEARCH_SELECTION_REAL_TUSHARE_CALLS=0'
     Write-Output 'RESEARCH_SELECTION_REAL_BAILIAN_CALLS=0'

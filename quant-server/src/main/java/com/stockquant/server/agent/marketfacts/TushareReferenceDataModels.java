@@ -28,6 +28,43 @@ public final class TushareReferenceDataModels {
     ) {
     }
 
+    public record MainboardInstrument(
+            String tsCode,
+            String symbol,
+            String exchange,
+            String name,
+            String industry,
+            String market,
+            String listStatus,
+            LocalDate listDate,
+            LocalDate delistDate,
+            String contentHash
+    ) {
+    }
+
+    public record MainboardReferenceResponse(
+            String endpoint,
+            List<String> responseFields,
+            List<MainboardInstrument> values,
+            int providerCallCount,
+            int rateLimitRetryCount,
+            String sourceFingerprint,
+            boolean complete
+    ) {
+        public MainboardReferenceResponse {
+            responseFields = List.copyOf(responseFields);
+            values = List.copyOf(values);
+            if (!"stock_basic".equals(endpoint) || values.isEmpty()
+                    || providerCallCount != 1 || rateLimitRetryCount != 0
+                    || sourceFingerprint == null
+                    || !sourceFingerprint.matches("[0-9a-f]{64}")
+                    || !complete) {
+                throw new IllegalArgumentException(
+                        "MAINBOARD_REFERENCE_RESPONSE_INVALID");
+            }
+        }
+    }
+
     public record DividendEvidence(
             String tsCode,
             LocalDate endDate,

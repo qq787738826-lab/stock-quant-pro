@@ -23,6 +23,25 @@ public final class ResearchSelectionRankingService {
             "15.874507866387544");
 
     public List<QuantitativeScore> rank(ResearchDataset dataset) {
+        Map<Security, ResearchUniverseMainboard.Member> metadata =
+                new LinkedHashMap<>();
+        for (ResearchUniverseV1.Constituent value
+                : ResearchUniverseV1.constituents()) {
+            metadata.put(value.security(), new ResearchUniverseMainboard.Member(
+                    TushareCode.code(value.security()),
+                    value.security().symbol(), value.security().exchange(),
+                    value.name(), value.industry(), "主板", "L",
+                    java.time.LocalDate.of(1990, 1, 1), null,
+                    java.time.Instant.EPOCH, ResearchUniverseMainboard.SOURCE,
+                    "0".repeat(64), false));
+        }
+        return rank(dataset, metadata);
+    }
+
+    public List<QuantitativeScore> rank(
+            ResearchDataset dataset,
+            Map<Security, ResearchUniverseMainboard.Member> metadata
+    ) {
         if (dataset == null || dataset.securities().size() < 3) {
             throw new IllegalArgumentException(
                     "RESEARCH_SELECTION_RANKING_DATASET_INVALID");
@@ -61,8 +80,12 @@ public final class ResearchSelectionRankingService {
         for (int index = 0; index < scored.size(); index++) {
             Scored value = scored.get(index);
             RawScore metric = value.raw();
-            ResearchUniverseV1.Constituent constituent =
-                    ResearchUniverseV1.require(metric.security);
+            ResearchUniverseMainboard.Member constituent =
+                    metadata.get(metric.security);
+            if (constituent == null) {
+                throw new IllegalStateException(
+                        "RESEARCH_SELECTION_MEMBER_METADATA_MISSING");
+            }
             result.add(new QuantitativeScore(index + 1, metric.security,
                     constituent.name(), constituent.industry(), value.score,
                     metric.fiveDayReturn, metric.twentyDayReturn,
@@ -73,6 +96,13 @@ public final class ResearchSelectionRankingService {
                     metric.dataQualityPassed));
         }
         return List.copyOf(result);
+    }
+
+    private static final class TushareCode {
+        private static String code(Security security) {
+            return security.symbol()
+                    + ("SSE".equals(security.exchange()) ? ".SH" : ".SZ");
+        }
     }
 
     private static RawScore metrics(Security security, List<DailyBar> input) {

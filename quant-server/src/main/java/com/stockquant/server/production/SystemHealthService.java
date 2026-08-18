@@ -143,16 +143,25 @@ public final class SystemHealthService {
                 broker.pending(), broker.claimed(), false);
     }
 
+    /**
+     * The host-result-aware projection used by SYSTEM_HEALTH_V1. Selection
+     * planning consumes this view so an empty database telemetry table cannot
+     * hide calls already accounted by the resident Broker.
+     */
+    public BudgetHealth monthlyBudget(Instant at) {
+        return budget(at);
+    }
+
     private void database(List<ComponentHealth> components) {
         Integer one = jdbc.queryForObject("SELECT 1", Integer.class);
         int version = StockQuantResearchProductionRunner.schemaVersion(jdbc);
-        if (!Integer.valueOf(1).equals(one) || version != 17) {
+        if (!Integer.valueOf(1).equals(one) || version != 18) {
             components.add(new ComponentHealth("Database",
-                    HealthStatus.BLOCKED, "DATABASE_V17_REQUIRED",
+                    HealthStatus.BLOCKED, "DATABASE_V18_REQUIRED",
                     Map.of("schemaVersion", version)));
             return;
         }
-        components.add(healthy("Database", "POSTGRESQL_V17_READY",
+        components.add(healthy("Database", "POSTGRESQL_V18_READY",
                 Map.of("port", 38_432, "schemaVersion", version,
                         "database", "stock_quant_research",
                         "schema", "tushare_research")));

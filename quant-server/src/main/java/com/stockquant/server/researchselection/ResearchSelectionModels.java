@@ -287,7 +287,10 @@ public final class ResearchSelectionModels {
             String gitCommit,
             String datasetFingerprint,
             String historicalDatasetFingerprint,
-            String resultFingerprint
+            String resultFingerprint,
+            String universeSnapshotId,
+            int universeMemberCount,
+            String universeMemberFingerprint
     ) {
         public Lineage {
             universeSecurities = List.copyOf(universeSecurities);
@@ -303,6 +306,7 @@ public final class ResearchSelectionModels {
             Instant researchAsOf,
             LocalDate anchorTradeDate,
             DataCoverage dataCoverage,
+            ResearchUniverseMainboard.Funnel universeFunnel,
             HistoricalResearch historicalResearch,
             List<QuantitativeScore> ranking,
             List<QuantitativeScore> shortlist,

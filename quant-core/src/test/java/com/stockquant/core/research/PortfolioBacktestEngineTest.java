@@ -209,16 +209,18 @@ class PortfolioBacktestEngineTest {
     }
 
     @Test
-    void rejectsWeekendOpenSessionsAndNonMainBoardIdentities() {
+    void rejectsWeekendOpenSessionsAndMalformedSecurityIdentities() {
         assertThrows(IllegalArgumentException.class, () ->
                 new StrategyResearchModels.TradingSession(
                         LocalDate.of(2024, 1, 6), Set.of("SSE")));
         assertThrows(IllegalArgumentException.class, () ->
-                new Security("688001", "SSE"));
+                new Security("60001", "SSE"));
         assertThrows(IllegalArgumentException.class, () ->
-                new Security("300001", "SZSE"));
-        assertThrows(IllegalArgumentException.class, () ->
-                new Security("600001", "SZSE"));
+                new Security("600001", "BSE"));
+        assertEquals("300001:SZSE",
+                new Security("300001", "SZSE").canonicalCode());
+        assertEquals("688001:SSE",
+                new Security("688001", "SSE").canonicalCode());
     }
 
     @Test

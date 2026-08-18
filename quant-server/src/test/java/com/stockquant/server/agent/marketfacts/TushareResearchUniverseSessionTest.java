@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -91,6 +92,59 @@ class TushareResearchUniverseSessionTest {
                 TushareManualBoundedSession
                         .researchUniverseDailyIncrement(selections(), tradeDate)
                         .authorizeAndReserve("daily", injected));
+    }
+
+    @Test
+    void mainboardSessionBindsExactDateWideRequestsAndNoRetry() {
+        Set<LocalDate> dates = Set.of(LocalDate.of(2026, 8, 11),
+                LocalDate.of(2026, 8, 12));
+        var session = TushareManualBoundedSession.mainboardUniverse(dates,
+                LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 12),
+                true, true);
+
+        session.authorizeAndReserve("stock_basic", MAPPER.createObjectNode()
+                .put("market", "主板").put("list_status", "L"));
+        for (LocalDate date : dates) {
+            ObjectNode parameters = MAPPER.createObjectNode()
+                    .put("trade_date", date(date));
+            session.authorizeAndReserve("daily", parameters.deepCopy());
+            session.authorizeAndReserve("adj_factor",
+                    parameters.deepCopy());
+        }
+        session.authorizeAndReserve("trade_cal",
+                MAPPER.createObjectNode().put("exchange", "SSE")
+                        .put("start_date", "20260801")
+                        .put("end_date", "20260812"));
+        session.authorizeAndReserve("trade_cal",
+                MAPPER.createObjectNode().put("exchange", "SZSE")
+                        .put("start_date", "20260801")
+                        .put("end_date", "20260812"));
+
+        assertEquals(7, session.maximumBusinessRequests());
+        assertEquals(7, session.consumedBusinessRequests());
+        assertEquals(Set.of("stock_basic", "daily", "adj_factor",
+                "trade_cal"), session.allowedEndpoints());
+        assertFalse(session.automaticRetryAllowed());
+        assertEquals(TushareManualBoundedSession.SessionProfile
+                .MAINBOARD_UNIVERSE_V1, session.sessionProfile());
+    }
+
+    @Test
+    void mainboardSessionRejectsSymbolInjectionAndUnapprovedDate() {
+        LocalDate date = LocalDate.of(2026, 8, 12);
+        var session = TushareManualBoundedSession.mainboardUniverse(
+                Set.of(date), date.minusDays(2), date, false, false);
+
+        assertThrows(IllegalArgumentException.class, () ->
+                session.authorizeAndReserve("daily",
+                        MAPPER.createObjectNode()
+                                .put("trade_date", date(date))
+                                .put("ts_code", "600000.SH")));
+        assertThrows(IllegalArgumentException.class, () ->
+                session.authorizeAndReserve("daily",
+                        MAPPER.createObjectNode().put("trade_date",
+                                date(date.minusDays(1)))));
+        assertEquals(0, session.consumedBusinessRequests());
     }
 
     private static List<SecuritySelection> selections() {

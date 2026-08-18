@@ -182,9 +182,10 @@ function Assert-GitBinding {
                 'codex/1.4.0-m6-research-production-ready'
             } elseif ($BrokerRequest.Operation -eq
                     'RUN_RESEARCH_SELECTION' -and $branch -in @(
-                    'codex/1.4.0-v1.0.1-research-selection-usability',
-                    'codex/1.4.0-v1.0.3-research-selection-runtime-fix',
-                    'codex/1.4.0-v1.0.7-intraday-research-selection-anchor-fix') -and
+                     'codex/1.4.0-v1.0.1-research-selection-usability',
+                     'codex/1.4.0-v1.0.3-research-selection-runtime-fix',
+                     'codex/1.4.0-v1.0.7-intraday-research-selection-anchor-fix',
+                     'codex/1.4.0-v1.0.9-full-mainboard-universe') -and
                 [IO.Path]::GetFullPath($BrokerRequest.JarPath).Equals(
                     (Join-Path $paths.TargetRoot `
                         'quant-server-1.3.1-research-selection-runner.jar'),
@@ -217,8 +218,9 @@ function Assert-GitBinding {
                     'STOP_RESEARCH_PRODUCTION',
                     'CHECK_RESEARCH_PRODUCTION_STATUS') -and
                 $branch -in @(
-                    'codex/1.4.0-v1.0.3-research-selection-runtime-fix',
-                    'codex/1.4.0-v1.0.7-intraday-research-selection-anchor-fix') -and
+                     'codex/1.4.0-v1.0.3-research-selection-runtime-fix',
+                     'codex/1.4.0-v1.0.7-intraday-research-selection-anchor-fix',
+                     'codex/1.4.0-v1.0.9-full-mainboard-universe') -and
                 [IO.Path]::GetFullPath($BrokerRequest.JarPath).Equals(
                     (Join-Path $paths.TargetRoot `
                         'quant-server-1.3.1-research-production.jar'),
@@ -1424,7 +1426,7 @@ function Invoke-ResearchSelection {
         throw 'STOCK_QUANT_HOST_BROKER_SELECTION_FAILED'
     }
     if ($selection.status -ne 'SUCCEEDED' -or
-        [int]$selection.universeSize -ne 25 -or
+        [int]$selection.universeSize -lt 1000 -or
         [int]$selection.shortlistSize -ne 10 -or
         [int]$selection.tushareProviderCallCount -gt $maximumProvider -or
         [int]$selection.retryCount -ne 0 -or

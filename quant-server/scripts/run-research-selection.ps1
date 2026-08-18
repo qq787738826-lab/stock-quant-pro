@@ -17,7 +17,7 @@ param(
     [Parameter(Mandatory = $true)] [ValidateRange(1, 65535)]
     [int] $DatabasePort,
     [Parameter(Mandatory = $true)]
-    [ValidateSet(0, 2, 52)]
+    [ValidateRange(0, 503)]
     [int] $MaximumProviderRequests,
     [ValidateSet('FAKE', 'FORMAL')] [string] $ExecutionMode = 'FAKE',
     [ValidateScript({ $_ -gt [decimal]0 -and $_ -le [decimal]5 })]
@@ -85,7 +85,7 @@ try {
         ConvertFrom-Json
     if ($value.schemaVersion -ne 'RESEARCH_SELECTION_RUNNER_RESULT_V1' -or
         $value.status -ne 'SUCCEEDED' -or
-        [int]$value.universeSize -ne 25 -or
+        [int]$value.universeSize -lt 1000 -or
         [int]$value.shortlistSize -ne 10 -or
         [int]$value.retryCount -ne 0 -or
         [int]$value.modelCallCount -ne 13 -or

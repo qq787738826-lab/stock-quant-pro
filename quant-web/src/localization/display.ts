@@ -150,6 +150,7 @@ const PRODUCT_LABELS: Readonly<Record<string, string>> = Object.freeze({
   RESEARCH_PRODUCTION_V1: '研究生产版 V1',
   SYSTEM_HEALTH_V1: '系统健康 V1',
   RESEARCH_UNIVERSE_V1: '研究股票池 V1',
+  RESEARCH_UNIVERSE_MAINBOARD_V1: '全主板研究股票池 V1',
   AGENT_RESEARCH_TEAM_V1: '七智能体研究团队 V1',
   STRATEGY_ENGINE_V1: '策略引擎 V1',
   BACKTEST_ENGINE_V1: '回测引擎 V1',
@@ -253,6 +254,8 @@ const REASON_LABELS: Readonly<Record<string, string>> = Object.freeze({
   REQUIRED_COMPONENT_BLOCKED: '关键组件需要处理',
   POSTGRESQL_V17_READY: '研究数据库 V17 已就绪',
   DATABASE_V17_REQUIRED: '研究数据库需要升级到 V17',
+  POSTGRESQL_V18_READY: '研究数据库 V18 已就绪',
+  DATABASE_V18_REQUIRED: '研究数据库需要升级到 V18',
   RESIDENT_BROKER_IDLE: '本地研究代理空闲',
   RESIDENT_BROKER_BUSY: '本地研究代理正在处理任务',
   HOST_BROKER_HEARTBEAT_STALE: '本地研究代理心跳已过期',
@@ -296,6 +299,20 @@ const REASON_LABELS: Readonly<Record<string, string>> = Object.freeze({
   COST_OR_LATENCY_REGRESSION: '候选版本成本或延迟退化',
 })
 
+const UNIVERSE_EXCLUSION_LABELS: Readonly<Record<string, string>> = Object.freeze({
+  ST_SECURITY: 'ST或*ST证券',
+  SUSPENDED_OR_NO_TRADE: '停牌或当日无成交',
+  LISTING_HISTORY_INSUFFICIENT: '上市历史不足',
+  TWENTY_SESSION_HISTORY_INSUFFICIENT: '20日历史不足',
+  DAILY_FACT_MISSING: '日行情缺失',
+  ADJUSTMENT_FACTOR_MISSING: '复权因子缺失',
+  TRADE_CALENDAR_INCOMPLETE: '交易日历不完整',
+  DATA_QUALITY_FAILED: '数据质量未通过',
+  EXTREMELY_LOW_LIQUIDITY: '流动性过低',
+  PRICE_OR_VOLUME_ANOMALY: '价格或成交量异常',
+  FUTURE_DATA_GUARD_FAILED: '防未来数据门禁未通过',
+})
+
 function keyOf(value: unknown): string {
   return String(value ?? '').trim().toUpperCase()
     .replace(/&/g, ' AND ')
@@ -318,6 +335,11 @@ export function displayStatus(value: unknown): string {
 export function displayRisk(value: unknown): string {
   if (value == null || String(value).trim() === '') return '—'
   return lookup(RISK_LABELS, value) ?? '风险待确认'
+}
+
+export function displayUniverseExclusion(value: unknown): string {
+  if (value == null || String(value).trim() === '') return '—'
+  return lookup(UNIVERSE_EXCLUSION_LABELS, value) ?? '未通过研究资格门禁'
 }
 
 export function displayDecision(value: unknown): string {

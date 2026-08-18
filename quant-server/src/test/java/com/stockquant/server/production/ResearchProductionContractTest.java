@@ -121,7 +121,7 @@ class ResearchProductionContractTest {
         assertTrue(runner.indexOf("ProductionSecretAudit.install()")
                 < runner.indexOf("readResearchDatabasePassword()"));
         assertTrue(runner.contains("Flyway.configure()"));
-        assertTrue(runner.contains("after != 17"));
+        assertTrue(runner.contains("after != 18"));
         assertTrue(controller.contains("@GetMapping(\"/health\")"));
         assertTrue(controller.contains("@PostMapping(\"/backups\")"));
         assertFalse(controller.toLowerCase().contains("trade"));

@@ -21,7 +21,10 @@ import com.stockquant.server.researchselection.ResearchSelectionModels.Selection
 import com.stockquant.server.researchselection.ResearchSelectionModels.Status;
 import com.stockquant.server.researchselection.ResearchSelectionRepository;
 import com.stockquant.server.researchselection.ResearchSelectionSanitizedResult;
-import com.stockquant.server.researchselection.ResearchUniverseV1;
+import com.stockquant.server.researchselection.ResearchSelectionProviderBudgetPlanner;
+import com.stockquant.server.researchselection.ResearchUniverseMainboard;
+import com.stockquant.server.researchselection.ResearchUniverseMainboardDatasetLoader;
+import com.stockquant.server.researchselection.ResearchUniverseMainboardRepository;
 import org.flywaydb.core.Flyway;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
@@ -33,10 +36,13 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.Set;
 
 /** Fixed manual V1.0.1 current-as-of selection runner; never starts Spring. */
 public final class TushareResearchSelectionManualRunner {
@@ -190,11 +196,17 @@ public final class TushareResearchSelectionManualRunner {
                 throw invalid("RESEARCH_SELECTION_RUN_BINDING_INVALID");
             }
             var facts = new PitMarketFactRepository(jdbc, mapper);
-            var loader = new TushareResearchUniverseDatasetLoader(facts);
-            LocalDate anchor = ResearchSelectionAnchorResolver.resolve(loader,
-                    config.request().auxiliaryWindow(),
-                    config.researchAsOf());
-            DataCoverage coverage;
+            var universes = new ResearchUniverseMainboardRepository(jdbc);
+            var loader = new ResearchUniverseMainboardDatasetLoader(facts);
+            ResearchUniverseMainboard.SnapshotBundle snapshot =
+                    universes.latest().orElse(null);
+            var plan = launch.mode() == ExecutionMode.FAKE
+                    ? fakePlan(loader, snapshot, config, clock.instant())
+                    : formalPlan(loader, universes, repository, snapshot,
+                    config);
+            requireBoundBudget(launch.maximumProviderRequests(),
+                    plan.backfill().totalRequests());
+            LocalDate anchor = plan.anchorTradeDate();
             StageTransition stages = new StageTransition(repository,
                     launch.selectionRunId());
             TushareDedicatedResearchRuntimeComponents components =
@@ -205,10 +217,8 @@ public final class TushareResearchSelectionManualRunner {
                             dataSource, token.clone(), clock);
             try {
                 try (components) {
-                    prepareData(loader, components, anchor,
-                            config.request().auxiliaryWindow(),
-                            config.researchAsOf(),
-                            launch.maximumProviderRequests(), progress);
+                    snapshot = prepareMainboardData(components, snapshot,
+                            plan, launch.gitCommit(), progress);
                 }
                 if (progress.providerCalls
                         > launch.maximumProviderRequests()) {
@@ -224,12 +234,12 @@ public final class TushareResearchSelectionManualRunner {
                             launch.selectionRunId(), config.researchAsOf(),
                             actualAsOf);
                 }
-                anchor = ResearchSelectionAnchorResolver.resolve(loader,
-                        config.request().auxiliaryWindow(),
-                        config.researchAsOf());
-                coverage = loader.load(ResearchUniverseV1.securities(),
-                        config.request().auxiliaryWindow(), anchor,
-                        config.researchAsOf()).coverage();
+                anchor = loader.resolveAnchor(snapshot,
+                        config.researchAsOf(), config.triggerMode()
+                                == ResearchSelectionModels.TriggerMode
+                                .SCHEDULED_SHADOW);
+                universes.bindRun(launch.selectionRunId(),
+                        snapshot.snapshot().databaseId());
             } catch (Throwable error) {
                 terminalize(repository, launch.selectionRunId(),
                         stages.current(), error, clock);
@@ -261,15 +271,16 @@ public final class TushareResearchSelectionManualRunner {
                 model = external;
             }
             try {
-                var result = engine.run(launch.selectionRunId(),
-                        launch.publicRunId(), config.request(), anchor,
-                        config.researchAsOf(), launch.gitCommit(),
-                        progress.providerCalls, 0, coverage,
+                var result = engine.runMainboard(launch.selectionRunId(),
+                        launch.publicRunId(), config.request(), snapshot,
+                        anchor, config.researchAsOf(), launch.gitCommit(),
+                        progress.providerCalls, 0,
                         repository.liveShadowSampleCounts(), model, deep,
                         stages::advance, progress.startedNanos,
                         progress.startedAt);
                 repository.complete(launch.selectionRunId(),
-                        result.selection());
+                        result.selection(), snapshot.snapshot().databaseId(),
+                        result.memberEvaluations());
                 if (external != null) {
                     progress.modelDiagnostics = external.diagnostics();
                 }
@@ -304,40 +315,91 @@ public final class TushareResearchSelectionManualRunner {
         }
     }
 
-    private static void prepareData(
-            TushareResearchUniverseDatasetLoader loader,
+    private static ResearchSelectionProviderBudgetPlanner.MainboardPlan
+    formalPlan(
+            ResearchUniverseMainboardDatasetLoader loader,
+            ResearchUniverseMainboardRepository universes,
+            ResearchSelectionRepository repository,
+            ResearchUniverseMainboard.SnapshotBundle snapshot,
+            ResearchSelectionRepository.RunConfig config
+    ) {
+        java.time.YearMonth month = java.time.YearMonth.from(
+                config.researchAsOf().atZone(ZoneId.of("Asia/Shanghai")));
+        var plan = ResearchSelectionProviderBudgetPlanner.mainboardPlan(
+                loader, snapshot, config.request(), config.researchAsOf(),
+                universes.existingMarketFactSecurityCount(),
+                repository.monthlyTushareUsage(month),
+                ResearchSelectionProviderBudgetPlanner
+                        .CURRENT_MONTHLY_TUSHARE_LIMIT);
+        if (plan.audit().calendarIncomplete()) {
+            throw invalid("MAINBOARD_TRADE_CALENDAR_INCOMPLETE");
+        }
+        if (!plan.backfill().executableWithinBudget()) {
+            throw invalid("RESEARCH_SELECTION_MONTHLY_BUDGET_EXHAUSTED");
+        }
+        return plan;
+    }
+
+    private static ResearchSelectionProviderBudgetPlanner.MainboardPlan
+    fakePlan(
+            ResearchUniverseMainboardDatasetLoader loader,
+            ResearchUniverseMainboard.SnapshotBundle snapshot,
+            ResearchSelectionRepository.RunConfig config,
+            Instant now
+    ) {
+        if (snapshot != null) {
+            return ResearchSelectionProviderBudgetPlanner.mainboardPlan(
+                    loader, snapshot, config.request(), now,
+                    snapshot.snapshot().memberCount(), 0,
+                    TushareManualBoundedSession
+                            .MAINBOARD_UNIVERSE_MAX_PROVIDER_REQUESTS);
+        }
+        List<LocalDate> dates = fakeOpenDates(now,
+                ResearchUniverseMainboard.STABILITY_MINIMUM_SESSIONS);
+        LocalDate anchor = dates.get(dates.size() - 1);
+        var audit = new ResearchUniverseMainboardDatasetLoader.Audit(
+                dates, dates, true, true, 0);
+        int total = 1 + dates.size() * 2 + 2;
+        var backfill = new ResearchUniverseMainboard.BackfillPlan(
+                ResearchUniverseMainboard.VERSION, null, 0, 0, anchor,
+                dates.get(0), anchor, dates, dates, 1, dates.size(),
+                dates.size(), 2, total, 0,
+                TushareManualBoundedSession
+                        .MAINBOARD_UNIVERSE_MAX_PROVIDER_REQUESTS,
+                0, true);
+        return new ResearchSelectionProviderBudgetPlanner.MainboardPlan(
+                anchor, audit, backfill);
+    }
+
+    private static ResearchUniverseMainboard.SnapshotBundle
+    prepareMainboardData(
             TushareDedicatedResearchRuntimeComponents components,
-            LocalDate anchor,
-            int window,
-            Instant asOf,
-            int authorizedProviderRequests,
+            ResearchUniverseMainboard.SnapshotBundle current,
+            ResearchSelectionProviderBudgetPlanner.MainboardPlan plan,
+            String gitCommit,
             Progress progress
     ) {
+        if (plan.backfill().totalRequests() == 0) {
+            return Objects.requireNonNull(current,
+                    "MAINBOARD_UNIVERSE_SNAPSHOT_MISSING");
+        }
         try {
-            loader.load(ResearchUniverseV1.securities(), window, anchor,
-                    asOf);
-            return;
-        } catch (TushareResearchUniverseDatasetLoader
-                 .IncompleteUniverseException incomplete) {
-            int required;
-            if (incomplete.incrementalAnchorOnly()) {
-                required = 2;
-            } else {
-                required = TushareManualBoundedSession
-                        .RESEARCH_UNIVERSE_MAX_PROVIDER_REQUESTS;
-            }
-            requireBoundBudget(authorizedProviderRequests, required);
-            capture(components, anchor, window, progress,
-                    required == 2);
-        } catch (IllegalStateException calendar) {
-            if (!"RESEARCH_UNIVERSE_CALENDAR_WINDOW_INCOMPLETE".equals(
-                    calendar.getMessage())) {
-                throw calendar;
-            }
-            requireBoundBudget(authorizedProviderRequests,
-                    TushareManualBoundedSession
-                            .RESEARCH_UNIVERSE_MAX_PROVIDER_REQUESTS);
-            capture(components, anchor, window, progress, false);
+            var evidence = components.mainboardUniverseCaptureService()
+                    .capture(current,
+                            plan.backfill().stockBasicRequests() == 1,
+                            Set.copyOf(plan.backfill().missingTradeDates()),
+                            plan.backfill().rangeStart(),
+                            plan.backfill().rangeEnd(),
+                            plan.backfill().tradeCalendarRequests() == 2,
+                            gitCommit, Duration.ofSeconds(30));
+            progress.providerCalls += evidence.providerCallCount();
+            progress.appended += evidence.appendedObservations();
+            progress.idempotent += evidence.idempotentChainTailHits();
+            return evidence.snapshot();
+        } catch (TushareMainboardUniverseCaptureService
+                 .CaptureFailure failure) {
+            progress.providerCalls += failure.providerCallCount();
+            throw failure;
         }
     }
 
@@ -347,38 +409,23 @@ public final class TushareResearchSelectionManualRunner {
         }
     }
 
-    private static void capture(
-            TushareDedicatedResearchRuntimeComponents components,
-            LocalDate anchor,
-            int window,
-            Progress progress,
-            boolean dailyIncrement
-    ) {
-        try {
-            TushareResearchUniverseCaptureService.CaptureEvidence evidence =
-                    dailyIncrement
-                    ? components.researchUniverseCaptureService()
-                    .captureDailyIncrement(ResearchUniverseV1.securities(),
-                            anchor, Duration.ofSeconds(30))
-                    : components.researchUniverseCaptureService().capture(
-                            ResearchUniverseV1.securities(),
-                            rangeStart(anchor, window), anchor,
-                            Duration.ofSeconds(30));
-            progress.providerCalls += evidence.providerCallCount();
-            progress.appended += evidence.appendedObservations();
-            progress.idempotent += evidence.idempotentChainTailHits();
-        } catch (TushareResearchUniverseCaptureService.CaptureFailure failure) {
-            progress.providerCalls += failure.providerCallCount();
-            throw failure;
+    private static List<LocalDate> fakeOpenDates(Instant asOf, int count) {
+        LocalDate local = asOf.atZone(ZoneId.of("Asia/Shanghai"))
+                .toLocalDate();
+        LocalDate value = asOf.isBefore(
+                com.stockquant.core.research.StrategyResearchModels
+                        .closeInstant(local)) ? local.minusDays(1) : local;
+        List<LocalDate> descending = new ArrayList<>();
+        while (descending.size() < count) {
+            if (value.getDayOfWeek() != java.time.DayOfWeek.SATURDAY
+                    && value.getDayOfWeek()
+                    != java.time.DayOfWeek.SUNDAY) {
+                descending.add(value);
+            }
+            value = value.minusDays(1);
         }
-    }
-
-    private static LocalDate rangeStart(LocalDate anchor, int window) {
-        long naturalDays = Math.min(
-                TushareManualBoundedSession
-                        .RESEARCH_UNIVERSE_MAX_MARKET_FACT_NATURAL_DAYS - 1L,
-                Math.max(100L, (window * 8L + 4L) / 5L));
-        return anchor.minusDays(naturalDays);
+        java.util.Collections.reverse(descending);
+        return List.copyOf(descending);
     }
 
     private static void verifyDedicated(JdbcTemplate jdbc) {
@@ -419,7 +466,7 @@ public final class TushareResearchSelectionManualRunner {
                 SELECT COALESCE(max(version::integer), 0)
                   FROM tushare_research.flyway_schema_history WHERE success
                 """, Integer.class);
-        if (version == null || version != 17) {
+        if (version == null || version != 18) {
             throw invalid("RESEARCH_SELECTION_SCHEMA_VERSION_INVALID");
         }
     }
@@ -541,10 +588,9 @@ public final class TushareResearchSelectionManualRunner {
                     && databasePort != FORMAL_PORT
                     || mode == ExecutionMode.FAKE
                     && databasePort == FORMAL_PORT
-                    || !List.of(0, 2,
-                    TushareManualBoundedSession
-                            .RESEARCH_UNIVERSE_MAX_PROVIDER_REQUESTS)
-                    .contains(maximumProviderRequests)
+                    || maximumProviderRequests < 0
+                    || maximumProviderRequests > TushareManualBoundedSession
+                    .MAINBOARD_UNIVERSE_MAX_PROVIDER_REQUESTS
                     || maximumCostCny.signum() <= 0
                     || maximumCostCny.compareTo(new BigDecimal("5.00")) > 0) {
                 throw invalid("RESEARCH_SELECTION_ARGUMENTS_INVALID");

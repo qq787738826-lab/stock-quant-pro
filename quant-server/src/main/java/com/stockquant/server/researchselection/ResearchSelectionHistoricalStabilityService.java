@@ -65,7 +65,7 @@ public final class ResearchSelectionHistoricalStabilityService {
                         value.marketCloseAvailableAt()));
         int available = dataset.sessions().size();
         boolean quality = dataset.securities().size()
-                == ResearchUniverseV1.securities().size()
+                == currentScores.size()
                 && dataset.barsBySecurity().values().stream().allMatch(
                 bars -> bars.size() == available && bars.stream().allMatch(
                         value -> value.tradable()

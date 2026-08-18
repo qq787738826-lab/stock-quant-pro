@@ -18,12 +18,14 @@
 - M4 最终集成 HEAD / M5 冻结集成基线：`8e5a283969416e19f1e36e42251c7dcf6007edb3`
 - M5 最终集成 HEAD / M6 冻结集成基线：`1e936ad17bcf77f4b9c4f8bb5638587e49f48385`
 - M6 真实整链运行资产 HEAD：`6f6a5c10678589c6d967ef381d48a9230518629c`
+- V1.0.8 最终集成 HEAD / V1.0.9 冻结集成基线：`572ed1c98c8e6856838ac3dc640810d31f54b003`
 - M1 长期任务分支：`codex/1.4.0-m1-research-data-ready`
 - M2 长期任务分支：`codex/1.4.0-m2-strategy-engine-ready`
 - M3 长期任务分支：`codex/1.4.0-m3-agent-research-ready`
 - M4 长期任务分支：`codex/1.4.0-m4-shadow-research-ready`
 - M5 长期任务分支：`codex/1.4.0-m5-agent-evaluation-ready`
 - M6 长期任务分支：`codex/1.4.0-m6-research-production-ready`
+- V1.0.9 长期任务分支：`codex/1.4.0-v1.0.9-full-mainboard-universe`
 - 1D-4 验收来源分支：`codex/1.4.0-1d4-acceptance`
 - 1D-4 验收基线：`5bc492a feat(agent): add safe local team runtime scripts`
 - 阶段 2A 验收来源分支：`codex/1.4.0-2a-readonly-context`
@@ -649,6 +651,17 @@ DATA_QUALITY 只作门禁和 confidence 上限，MARKET_REGIME V1 权重为 0 �
   结果固定标记为 `POST_HOC_RESEARCH/PIT_PARTIAL`，不得冒充 Live Shadow。页面明确分隔当前研究、
   历史稳定性与真实 Live Shadow 样本，七智能体仍只执行一次既有 Top10 研究流程；无新策略、迁移、
   Broker/Scheduler 合同或真实交易能力。
+- V1.0.9_FULL_MAINBOARD_UNIVERSE 当前只在长期任务分支开发，尚未验收或合入。任务分支已经实现
+  `RESEARCH_UNIVERSE_MAINBOARD_V1` 的 Tushare `stock_basic(market=主板,list_status=L)` 动态
+  不可变快照、V18、按交易日各一次的全市场 `daily/adj_factor` 批量事实、显式资格排除、全合格证券
+  确定性扫描、Top200 历史稳定性、Top30 M2、Top10 七智能体与分页 UI；旧 25 股历史仍绑定
+  `RESEARCH_UNIVERSE_V1`，A→B→A 成员变化也追加新快照。离线 3000 股 Fake 数据、V1→V18
+  PostgreSQL 16 隔离测试、Broker 合同、Java 定向和 Vue production build 均不访问真实 Provider，
+  永久库写入为 0。2026-08-18 只读审计确认永久库尚无正式全主板快照，已有 25 股不能冒充完整日期；
+  60 个完整全市场交易日需 `stock_basic=1 / daily=60 / adj_factor=60 / trade_cal=0`，即 121 次，
+  17:20 前后续当月计划运行保守预留 24 次。权威月账本为 `96/150`，完整回填与预留要求临时月上限至少 241；
+  因此真实回填、唯一真实选股 smoke 和 V18 永久迁移均保持 fail-closed，等待用户批准新增 Tushare
+  月度请求预算。任务分支本轮新增真实 Tushare/百炼调用均为 0。
 
 ## 当前后续入口与阻断
 
@@ -676,5 +689,6 @@ fail-closed。该生产运行仍不授权完整 FORMAL/正常业务库资格、�
 
 阻断项包括稳定 source instrument ID、完整公司行动、revision 语义以及 published/effective 时间语义。当前免费聚合源和 `securities` 当前态投影均不得被视为正式来源；2G 的研究级 AKShare/CNINFO 公告来源同样不得用于解除这些门禁。当前仍未实现 `PROVIDER_PIT_VERIFIED`、`SECURITY_STATUS_EVENT_V2`、`security_status_history` 正式投影、Universe snapshot、`MARKET_BREADTH_V2`、完整 MARKET_REGIME、公告 PDF 语义分析或生产扫描切换。M1 只扩展 `PROVIDER_CAPTURE/RESEARCH_ONLY/formalEligible=false` 的 Tushare raw/factor/calendar 有限个人研究路径及其只读数据集；M2 只在该边界内提供研究策略/回测能力，M3 只在同一研究边界内编排有证据的 Agent 研究，M4 只在相同研究边界内冻结 Shadow 判断并维护 Paper 账本；四者均不等于完整 FORMAL、生产运行或正常业务库资格。正常业务库尚未执行 V13；完整 F1 当前只受 `BLOCKED_TECHNICAL_EVIDENCE` 阻断，生产摄取、F2B、F3、3A-R3B-1 至 R3B-3 均未开始。M4 的单次真实 Shadow smoke 不满足长期效果观察规模门槛，因此不证明 alpha 或长期稳定性，完整 3A 未完成，3B 未开始。阶段 2D-2B 禁止外部行情补数、LLM 权威决策、投资建议和交易写操作。
 
-POST_V1_BACKLOG：只有在 V1.0.1 的真实成本、延迟与数据完整性证据支持时，才评估将固定研究池扩至
-30—50 或 100 只；不得在当前小版本建设全市场股票池平台、模型路由、新 Provider 或实盘能力。
+POST_V1_BACKLOG：V1.0.9 已明确授权的范围仅为沪深当前正常上市主板及其分层研究，不自动授权扩展至
+创业板、科创板、北交所、基金、债券、指数或全市场主数据平台；模型路由、新 Provider 和实盘能力
+继续不开发。

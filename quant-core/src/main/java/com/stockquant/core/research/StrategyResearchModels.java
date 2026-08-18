@@ -62,11 +62,8 @@ public final class StrategyResearchModels {
         public Security {
             symbol = required(symbol, "symbol");
             exchange = required(exchange, "exchange");
-            boolean mainBoardIdentity = "SSE".equals(exchange)
-                    && symbol.matches("60[0135][0-9]{3}")
-                    || "SZSE".equals(exchange)
-                    && symbol.matches("00[0123][0-9]{3}");
-            if (!mainBoardIdentity) {
+            if (!symbol.matches("[0-9]{6}")
+                    || !Set.of("SSE", "SZSE").contains(exchange)) {
                 throw invalid("M2_SECURITY_INVALID");
             }
         }

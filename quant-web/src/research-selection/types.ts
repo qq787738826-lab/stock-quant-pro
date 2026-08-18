@@ -69,6 +69,49 @@ export interface SelectionSummary {
   failureCategory?: string; failureReason?: string; createdAt: string
   completedAt?: string
 }
+export interface UniverseSnapshot {
+  databaseId: number; snapshotId: string; universeVersion: string
+  memberCount: number; sseCount: number; szseCount: number; stCount: number
+  observedAt: string; lastVerifiedAt: string; effectiveDate: string; source: string
+  memberFingerprint: string; gitCommit: string
+}
+export interface BackfillPlan {
+  universeVersion: string; currentSnapshotId?: string
+  currentMemberCount: number; existingSecurityCount: number
+  anchorTradeDate: string; rangeStart: string; rangeEnd: string
+  requiredTradeDates: string[]; missingTradeDates: string[]
+  stockBasicRequests: number; dailyRequests: number
+  adjustmentFactorRequests: number; tradeCalendarRequests: number
+  totalRequests: number; ledgerUsed: number; ledgerLimit: number
+  scheduledReserve: number; executableWithinBudget: boolean
+}
+export interface UniverseView {
+  version: string; snapshot?: UniverseSnapshot; backfillPlan: BackfillPlan
+}
+export interface UniverseFunnel {
+  universeVersion: string; snapshotId: string; memberCount: number
+  sseCount: number; szseCount: number; stCount: number
+  eligibleCount: number; excludedCount: number; suspendedCount: number
+  insufficientHistoryCount: number; basicScannedCount: number
+  historicalScoredCount: number; strategyComparedCount: number
+  agentResearchedCount: number; candidateCount: number
+  exclusionReasonCounts: Record<string, number>
+}
+export interface UniverseMemberEvaluation {
+  member: { tsCode: string; symbol: string; exchange: string; name: string
+    industry: string; market: string; listStatus: string; listDate: string
+    stSecurity: boolean }
+  status: 'ELIGIBLE' | 'EXCLUDED'; exclusionReasons: string[]
+  availableSessions: number; missingDaily: number
+  missingAdjustmentFactors: number; averageTradedAmount: number
+  basicRank?: number; basicScore?: number; historicalRank?: number
+  stabilityScore?: number; historicalGrade?: 'A' | 'B' | 'C'
+  strategyRank?: number; agentSelected: boolean; finalCandidate: boolean
+}
+export interface UniverseMemberPage {
+  runId: number; page: number; size: number; total: number
+  members: UniverseMemberEvaluation[]
+}
 export interface SelectionResult {
   contractVersion: string; runId: number; publicRunId: string; status: string
   triggerMode: string; researchAsOf: string; anchorTradeDate: string
@@ -77,6 +120,7 @@ export interface SelectionResult {
     typedFactReadback: boolean; systemKnowledgeReadback: boolean
     formulaOnlyQfq: boolean; noFutureDataLeakage: boolean }
   historicalResearch?: HistoricalResearch
+  universeFunnel?: UniverseFunnel
   ranking: QuantitativeScore[]; shortlist: QuantitativeScore[]
   candidates: Candidate[]; emptyResult: boolean; decisionCode: string
   agentReport: ResearchReport; shadowRunId?: number; paperEnabled: boolean
@@ -89,5 +133,7 @@ export interface SelectionResult {
   lineage: { researchUniverseVersion: string; primaryWindow: number
     auxiliaryWindow: number; rankingVersion: string; modelProvider: string
     model: string; strategyVersion: string; historicalStabilityVersion?: string
-    gitCommit: string; historicalDatasetFingerprint?: string }
+    gitCommit: string; historicalDatasetFingerprint?: string
+    universeSnapshotId?: string; universeMemberCount: number
+    universeMemberFingerprint?: string }
 }

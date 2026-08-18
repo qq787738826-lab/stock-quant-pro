@@ -9,6 +9,7 @@ import com.stockquant.server.agent.temporal.SecurityStatusHistoryRepository;
 import com.stockquant.server.agent.temporal.SecurityStatusStateHasher;
 import com.stockquant.server.agent.temporal.TemporalMarketFoundationService;
 import com.stockquant.server.agent.temporal.TradingCalendarRevisionRepository;
+import com.stockquant.server.researchselection.ResearchUniverseMainboardRepository;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 
@@ -34,6 +35,8 @@ final class TushareDedicatedResearchRuntimeComponents implements AutoCloseable {
     private final TushareM1ResearchDatasetService m1ResearchDatasetService;
     private final TushareResearchUniverseCaptureService
             researchUniverseCaptureService;
+    private final TushareMainboardUniverseCaptureService
+            mainboardUniverseCaptureService;
     private final TushareControlledAcceptanceReadbackService readbackService;
 
     private TushareDedicatedResearchRuntimeComponents(
@@ -46,6 +49,8 @@ final class TushareDedicatedResearchRuntimeComponents implements AutoCloseable {
             TushareM1ResearchDatasetService m1ResearchDatasetService,
             TushareResearchUniverseCaptureService
                     researchUniverseCaptureService,
+            TushareMainboardUniverseCaptureService
+                    mainboardUniverseCaptureService,
             TushareControlledAcceptanceReadbackService readbackService
     ) {
         this.mapper = mapper;
@@ -55,6 +60,7 @@ final class TushareDedicatedResearchRuntimeComponents implements AutoCloseable {
         this.m4CalendarAdmissionService = m4CalendarAdmissionService;
         this.m1ResearchDatasetService = m1ResearchDatasetService;
         this.researchUniverseCaptureService = researchUniverseCaptureService;
+        this.mainboardUniverseCaptureService = mainboardUniverseCaptureService;
         this.readbackService = readbackService;
     }
 
@@ -170,9 +176,13 @@ final class TushareDedicatedResearchRuntimeComponents implements AutoCloseable {
         TushareResearchUniverseCaptureService universe =
                 new TushareResearchUniverseCaptureService(provider,
                         dedicatedGuard, capture, clock);
+        TushareMainboardUniverseCaptureService mainboard =
+                new TushareMainboardUniverseCaptureService(provider,
+                        dedicatedGuard, capture,
+                        new ResearchUniverseMainboardRepository(jdbc), clock);
         return new TushareDedicatedResearchRuntimeComponents(
                 mapper, properties, batch, m1, m4Calendar, m1Dataset,
-                universe,
+                universe, mainboard,
                 readback);
     }
 
@@ -215,6 +225,10 @@ final class TushareDedicatedResearchRuntimeComponents implements AutoCloseable {
 
     TushareResearchUniverseCaptureService researchUniverseCaptureService() {
         return researchUniverseCaptureService;
+    }
+
+    TushareMainboardUniverseCaptureService mainboardUniverseCaptureService() {
+        return mainboardUniverseCaptureService;
     }
 
     long totalProviderAttemptCount() {

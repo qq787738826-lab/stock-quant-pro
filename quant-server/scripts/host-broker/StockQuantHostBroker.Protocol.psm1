@@ -396,6 +396,10 @@ $script:ResearchSelectionRequiredKeys = @(
     'schema.name'
     'tushare.provider'
     'tushare.endpoints'
+    'endpoint.stock_basic.requests'
+    'endpoint.daily.requests'
+    'endpoint.adj_factor.requests'
+    'endpoint.trade_cal.requests'
     'maximum.provider.requests'
     'budget.calendar.month'
     'tushare.monthly.limit'
@@ -566,6 +570,14 @@ function Get-StockQuantM4MonthlyUsage {
             if ($selection) {
                 [int]$maximumCalls = [int]$values[
                     'maximum.provider.requests']
+                $selectionUniverse = [string]$values[
+                    'selection.universe.version']
+                $universeSizeValid =
+                    ($selectionUniverse -eq
+                        'RESEARCH_UNIVERSE_MAINBOARD_V1' -and
+                        [int]$runner.universeSize -ge 1000) -or
+                    ($selectionUniverse -eq 'RESEARCH_UNIVERSE_V1' -and
+                        [int]$runner.universeSize -eq 25)
                 if ($runner.schemaVersion -ne
                         'RESEARCH_SELECTION_RUNNER_RESULT_V1' -or
                     $runner.status -notin @('SUCCEEDED', 'FAILED') -or
@@ -582,7 +594,7 @@ function Get-StockQuantM4MonthlyUsage {
                     [int]$runner.modelProviderRequestCount -gt 13 -or
                     $cost -lt 0 -or $cost -gt [decimal]5.00 -or
                     ($runner.status -eq 'SUCCEEDED' -and (
-                        [int]$runner.universeSize -ne 25 -or
+                        -not $universeSizeValid -or
                         [int]$runner.shortlistSize -ne 10 -or
                         [int]$runner.modelProviderRequestCount -ne 13 -or
                         [int]$runner.modelCallCount -ne 13 -or
@@ -1252,6 +1264,11 @@ function Read-StockQuantHostBrokerRequest {
         [decimal]$llmBefore = [decimal]-1
         [decimal]$projectBefore = [decimal]-1
         [decimal]$maximumCost = [decimal]-1
+        [int]$maximumProviderRequests = -1
+        [int]$stockBasicRequests = -1
+        [int]$dailyRequests = -1
+        [int]$factorRequests = -1
+        [int]$calendarRequests = -1
         $createdSelection = ConvertTo-StockQuantTimestamp `
             ([string]$values['created.at'])
         $selectionMonth = [TimeZoneInfo]::ConvertTimeBySystemTimeZoneId(
@@ -1263,7 +1280,7 @@ function Read-StockQuantHostBrokerRequest {
             $values['selection.trigger'] -notin @(
                 'ON_DEMAND', 'SCHEDULED_SHADOW') -or
             $values['selection.universe.version'] -ne
-                'RESEARCH_UNIVERSE_V1' -or
+                'RESEARCH_UNIVERSE_MAINBOARD_V1' -or
             $values['selection.primary.window'] -notin @(
                 '20', '60', '120', '250') -or
             $values['selection.auxiliary.window'] -notin @(
@@ -1280,8 +1297,39 @@ function Read-StockQuantHostBrokerRequest {
             $values['schema.name'] -ne 'tushare_research' -or
             $values['tushare.provider'] -ne 'TUSHARE' -or
             $values['tushare.endpoints'] -ne
-                'daily,adj_factor,trade_cal' -or
-            $values['maximum.provider.requests'] -notin @('0', '2', '52') -or
+                'stock_basic,daily,adj_factor,trade_cal' -or
+            -not [int]::TryParse(
+                [string]$values['maximum.provider.requests'],
+                [Globalization.NumberStyles]::None,
+                [Globalization.CultureInfo]::InvariantCulture,
+                [ref]$maximumProviderRequests) -or
+            $maximumProviderRequests -lt 0 -or
+            $maximumProviderRequests -gt 503 -or
+            -not [int]::TryParse(
+                [string]$values['endpoint.stock_basic.requests'],
+                [Globalization.NumberStyles]::None,
+                [Globalization.CultureInfo]::InvariantCulture,
+                [ref]$stockBasicRequests) -or
+            -not [int]::TryParse(
+                [string]$values['endpoint.daily.requests'],
+                [Globalization.NumberStyles]::None,
+                [Globalization.CultureInfo]::InvariantCulture,
+                [ref]$dailyRequests) -or
+            -not [int]::TryParse(
+                [string]$values['endpoint.adj_factor.requests'],
+                [Globalization.NumberStyles]::None,
+                [Globalization.CultureInfo]::InvariantCulture,
+                [ref]$factorRequests) -or
+            -not [int]::TryParse(
+                [string]$values['endpoint.trade_cal.requests'],
+                [Globalization.NumberStyles]::None,
+                [Globalization.CultureInfo]::InvariantCulture,
+                [ref]$calendarRequests) -or
+            $stockBasicRequests -notin @(0, 1) -or
+            $dailyRequests -lt 0 -or $factorRequests -ne $dailyRequests -or
+            $calendarRequests -ne 0 -or
+            $maximumProviderRequests -ne ($stockBasicRequests +
+                $dailyRequests + $factorRequests + $calendarRequests) -or
             $values['budget.calendar.month'] -ne $selectionMonth -or
             $values['tushare.monthly.limit'] -ne '150' -or
             -not [int]::TryParse(
@@ -1289,7 +1337,7 @@ function Read-StockQuantHostBrokerRequest {
                 [Globalization.NumberStyles]::None,
                 [Globalization.CultureInfo]::InvariantCulture,
                 [ref]$providerBefore) -or $providerBefore -lt 0 -or
-            $providerBefore + [int]$values['maximum.provider.requests'] -gt
+            $providerBefore + $maximumProviderRequests -gt
                 150 -or
             $values['llm.provider'] -ne 'BAILIAN' -or
             $values['model'] -ne 'qwen3.7-plus' -or

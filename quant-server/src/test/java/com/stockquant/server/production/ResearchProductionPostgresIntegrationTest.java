@@ -34,25 +34,25 @@ class ResearchProductionPostgresIntegrationTest {
     }
 
     @Test
-    void migratesV1ThroughV17AndCreatesSecretFreeReadOnlyBackup(
+    void migratesV1ThroughV18AndCreatesSecretFreeReadOnlyBackup(
             @TempDir Path backupRoot
     ) throws Exception {
         Assumptions.assumeTrue(dataSource != null);
         JdbcTemplate jdbc = new JdbcTemplate(dataSource);
-        assertEquals(17, StockQuantResearchProductionRunner
+        assertEquals(18, StockQuantResearchProductionRunner
                 .schemaVersion(jdbc));
         long immutableRunsBefore = count(jdbc, "shadow_research_runs");
         long immutableReportsBefore = count(jdbc,
                 "agent_evaluation_reports");
         ProductionRuntimeState.install(new ProductionRuntimeState.Snapshot(
                 "a".repeat(40), "b".repeat(64), Instant.now(), 38_432,
-                17, true, true));
+                18, true, true));
         try {
             var service = new LocalResearchBackupService(jdbc,
                     new ObjectMapper().findAndRegisterModules(), backupRoot);
             var manifest = service.create();
             assertEquals("LOCAL_BACKUP_V1", manifest.contract());
-            assertEquals(17, manifest.schemaVersion());
+            assertEquals(18, manifest.schemaVersion());
             assertFalse(manifest.secretsIncluded());
             assertFalse(manifest.immutableShadowChanged());
             assertTrue(Files.isRegularFile(Path.of(manifest.archivePath())));
@@ -65,6 +65,12 @@ class ResearchProductionPostgresIntegrationTest {
                         "data/agent_evaluation_reports.jsonl"));
                 assertNotNull(archive.getEntry(
                         "data/research_selection_runs.jsonl"));
+                assertNotNull(archive.getEntry(
+                        "data/research_universe_snapshots.jsonl"));
+                assertNotNull(archive.getEntry(
+                        "data/research_universe_snapshot_observations.jsonl"));
+                assertNotNull(archive.getEntry(
+                        "data/research_selection_member_results.jsonl"));
             }
             assertEquals(immutableRunsBefore,
                     count(jdbc, "shadow_research_runs"));

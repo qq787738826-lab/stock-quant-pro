@@ -146,10 +146,17 @@ class TushareDedicatedResearchPersistenceGuardTest {
         assertEquals(TushareDedicatedResearchPersistenceGuard
                         .RESEARCH_SELECTION_REQUIRED_MIGRATIONS,
                 guard(selection).verifyBeforeProvider().appliedMigrations());
+        var mainboard = state("stock_quant_research",
+                "stock_quant_research", localUrl("stock_quant_research"),
+                false, TushareDedicatedResearchPersistenceGuard
+                        .MAINBOARD_REQUIRED_MIGRATIONS);
+        assertEquals(TushareDedicatedResearchPersistenceGuard
+                        .MAINBOARD_REQUIRED_MIGRATIONS,
+                guard(mainboard).verifyBeforeProvider().appliedMigrations());
         java.util.ArrayList<String> future = new java.util.ArrayList<>(
                 TushareDedicatedResearchPersistenceGuard
-                        .RESEARCH_SELECTION_REQUIRED_MIGRATIONS);
-        future.add("18");
+                        .MAINBOARD_REQUIRED_MIGRATIONS);
+        future.add("19");
         assertCode(state("stock_quant_research", "stock_quant_research",
                         localUrl("stock_quant_research"), false, future),
                 "TUSHARE_DEDICATED_RESEARCH_SCHEMA_VERSION_INVALID");

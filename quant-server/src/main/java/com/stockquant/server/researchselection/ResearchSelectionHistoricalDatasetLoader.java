@@ -80,7 +80,7 @@ public final class ResearchSelectionHistoricalDatasetLoader {
         }
     }
 
-    private static List<HistoricalWindowCoverage> coverage(
+    static List<HistoricalWindowCoverage> coverage(
             List<LocalDate> sessions
     ) {
         int available = sessions.size();

@@ -1,11 +1,14 @@
 package com.stockquant.server.researchselection;
 
 import com.stockquant.server.agent.marketfacts.PitMarketFactRepository;
-import com.stockquant.server.agent.marketfacts.TushareResearchUniverseDatasetLoader;
+import com.stockquant.server.researchselection.ResearchSelectionProviderBudgetPlanner.MainboardPlan;
+import com.stockquant.server.researchselection.ResearchUniverseMainboard.MemberPage;
+import com.stockquant.server.researchselection.ResearchUniverseMainboard.SnapshotBundle;
 import com.stockquant.server.researchselection.ResearchSelectionModels.RunSummary;
 import com.stockquant.server.researchselection.ResearchSelectionModels.SelectionRequest;
 import com.stockquant.server.researchselection.ResearchSelectionModels.SelectionResult;
 import com.stockquant.server.researchselection.ResearchSelectionModels.Status;
+import com.stockquant.server.production.SystemHealthService;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
@@ -29,7 +32,9 @@ public final class ResearchSelectionService {
     private static final SecureRandom RANDOM = new SecureRandom();
     private final ResearchSelectionRepository repository;
     private final ResearchSelectionDispatchGateway dispatcher;
-    private final TushareResearchUniverseDatasetLoader loader;
+    private final ResearchUniverseMainboardRepository universes;
+    private final ResearchUniverseMainboardDatasetLoader loader;
+    private final SystemHealthService health;
     private final Clock clock;
     private final String gitCommit;
 
@@ -37,11 +42,14 @@ public final class ResearchSelectionService {
             org.springframework.jdbc.core.JdbcTemplate jdbc,
             com.fasterxml.jackson.databind.ObjectMapper mapper,
             ResearchSelectionDispatchGateway dispatcher,
+            SystemHealthService health,
             @Qualifier("agentTemporalClock") Clock clock
     ) {
         this.repository = new ResearchSelectionRepository(jdbc, mapper);
         this.dispatcher = dispatcher;
-        this.loader = new TushareResearchUniverseDatasetLoader(
+        this.health = health;
+        this.universes = new ResearchUniverseMainboardRepository(jdbc);
+        this.loader = new ResearchUniverseMainboardDatasetLoader(
                 new PitMarketFactRepository(jdbc, mapper));
         this.clock = clock;
         this.gitCommit = com.stockquant.server.production
@@ -84,9 +92,50 @@ public final class ResearchSelectionService {
         return repository.latestResult();
     }
 
+    public UniverseView universe() {
+        Instant now = clock.instant();
+        SnapshotBundle snapshot = universes.latest().orElse(null);
+        MainboardPlan plan = plan(SelectionRequest.immediate(), now,
+                snapshot);
+        return new UniverseView(ResearchUniverseMainboard.VERSION,
+                snapshot == null ? null : snapshot.snapshot(),
+                plan.backfill());
+    }
+
+    public MemberPage members(
+            long runId,
+            int page,
+            int size,
+            String eligibility
+    ) {
+        return universes.memberPage(runId, page, size, eligibility);
+    }
+
     private int maximumProviderRequests(SelectionRequest request) {
-        return ResearchSelectionProviderBudgetPlanner
-                .requiredProviderRequests(loader, request, clock.instant());
+        MainboardPlan plan = plan(request, clock.instant(),
+                universes.latest().orElse(null));
+        if (plan.audit().calendarIncomplete()) {
+            throw new IllegalStateException(
+                    "MAINBOARD_TRADE_CALENDAR_INCOMPLETE");
+        }
+        if (!plan.backfill().executableWithinBudget()) {
+            throw new IllegalStateException(
+                    "RESEARCH_SELECTION_MONTHLY_BUDGET_EXHAUSTED");
+        }
+        return plan.backfill().totalRequests();
+    }
+
+    private MainboardPlan plan(
+            SelectionRequest request,
+            Instant at,
+            SnapshotBundle snapshot
+    ) {
+        return ResearchSelectionProviderBudgetPlanner.mainboardPlan(loader,
+                snapshot, request, at,
+                universes.existingMarketFactSecurityCount(),
+                health.monthlyBudget(at).tushareRequests(),
+                ResearchSelectionProviderBudgetPlanner
+                        .CURRENT_MONTHLY_TUSHARE_LIMIT);
     }
 
     private static String safeCode(Throwable error, String fallback) {
@@ -106,6 +155,13 @@ public final class ResearchSelectionService {
             RunSummary run,
             String userVisibleStage,
             boolean accepted
+    ) {
+    }
+
+    public record UniverseView(
+            String version,
+            ResearchUniverseMainboard.Snapshot snapshot,
+            ResearchUniverseMainboard.BackfillPlan backfillPlan
     ) {
     }
 }

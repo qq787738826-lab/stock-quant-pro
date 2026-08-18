@@ -1,5 +1,5 @@
 import { api } from '../api'
-import type { SelectionResult, SelectionSummary } from './types'
+import type { SelectionResult, SelectionSummary, UniverseMemberPage, UniverseView } from './types'
 
 export const startSelection = (primaryWindow = 20) =>
   api.post('/research-selection/runs', { primaryWindow }) as Promise<{
@@ -12,4 +12,6 @@ export const getSelectionHistory = (limit = 20) =>
 export const getLatestSelection = () =>
   api.get('/research-selection/latest') as Promise<SelectionResult | undefined>
 export const getResearchUniverse = () =>
-  api.get('/research-selection/universe') as Promise<any>
+  api.get('/research-selection/universe') as Promise<UniverseView>
+export const getSelectionMembers = (id: number, page = 0, size = 50,
+  eligibility = '') => api.get(`/research-selection/runs/${id}/members?page=${page}&size=${size}${eligibility ? `&eligibility=${encodeURIComponent(eligibility)}` : ''}`) as Promise<UniverseMemberPage>

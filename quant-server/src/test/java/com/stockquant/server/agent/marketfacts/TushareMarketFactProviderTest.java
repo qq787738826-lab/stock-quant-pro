@@ -15,6 +15,7 @@ import com.stockquant.server.agent.marketfacts.TushareApiGateway.QueryMode;
 import com.stockquant.server.agent.marketfacts.TushareApiGateway.QueryResult;
 import com.stockquant.server.agent.marketfacts.TushareApiGateway.Table;
 import com.stockquant.server.agent.marketfacts.TushareReferenceDataModels.DividendEvidence;
+import com.stockquant.server.agent.marketfacts.TushareReferenceDataModels.MainboardInstrument;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -665,6 +666,201 @@ class TushareMarketFactProviderTest {
                 response.errors().get(0).type());
     }
 
+    @Test
+    void mainboardSnapshotUsesProviderFieldsInsteadOfCodePrefixes() {
+        FixtureGateway gateway = new FixtureGateway(mapper);
+        gateway.mainboardRows = completeMainboardRows();
+        var session = TushareManualBoundedSession.mainboardUniverse(Set.of(
+                LocalDate.of(2026, 8, 12)), LocalDate.of(2026, 8, 12),
+                LocalDate.of(2026, 8, 12), true, false);
+
+        var response = provider(gateway).fetchMainboardUniverseSnapshot(
+                Duration.ofSeconds(5), session);
+
+        assertEquals(1_000, response.values().size());
+        assertTrue(response.values().stream().map(
+                MainboardInstrument::tsCode).toList().containsAll(
+                List.of("300001.SZ", "600001.SH")));
+        assertTrue(response.complete());
+        assertEquals("主板", gateway.calls.get(0).parameters()
+                .path("market").asText());
+        assertEquals("L", gateway.calls.get(0).parameters()
+                .path("list_status").asText());
+    }
+
+    @Test
+    void mainboardSnapshotRejectsProviderClassificationMismatch() {
+        FixtureGateway gateway = new FixtureGateway(mapper);
+        gateway.mainboardRows = List.of(mainboardRow("600001.SH", "600001",
+                "错误分类", "制造", "创业板", "SSE"));
+        var session = TushareManualBoundedSession.mainboardUniverse(Set.of(
+                LocalDate.of(2026, 8, 12)), LocalDate.of(2026, 8, 12),
+                LocalDate.of(2026, 8, 12), true, false);
+
+        GatewayException failure = assertThrows(GatewayException.class, () ->
+                provider(gateway).fetchMainboardUniverseSnapshot(
+                        Duration.ofSeconds(5), session));
+
+        assertEquals("MAINBOARD_STOCK_BASIC_ROW_INVALID",
+                failure.safeCode());
+    }
+
+    @Test
+    void mainboardSnapshotFailsClosedWhenMembershipCannotBeComplete() {
+        FixtureGateway gateway = new FixtureGateway(mapper);
+        gateway.mainboardRows = completeMainboardRows().subList(0, 999);
+        var session = TushareManualBoundedSession.mainboardUniverse(Set.of(
+                LocalDate.of(2026, 8, 12)), LocalDate.of(2026, 8, 12),
+                LocalDate.of(2026, 8, 12), true, false);
+
+        GatewayException failure = assertThrows(GatewayException.class, () ->
+                provider(gateway).fetchMainboardUniverseSnapshot(
+                        Duration.ofSeconds(5), session));
+
+        assertEquals("MAINBOARD_STOCK_BASIC_COVERAGE_INCOMPLETE",
+                failure.safeCode());
+    }
+
+    @Test
+    void mainboardMarketDateUsesTwoCallsAndFiltersToSnapshot() {
+        FixtureGateway gateway = new FixtureGateway(mapper);
+        LocalDate date = LocalDate.of(2026, 8, 12);
+        gateway.mainboardDailyRows = List.of(
+                dailyRow("600001.SH", date), dailyRow("000001.SZ", date),
+                dailyRow("300001.SZ", date));
+        gateway.mainboardFactorRows = List.of(
+                factorRow("600001.SH", date), factorRow("000001.SZ", date),
+                factorRow("300001.SZ", date));
+        List<MainboardInstrument> members = List.of(
+                mainboard("600001.SH", "600001", "SSE"),
+                mainboard("000001.SZ", "000001", "SZSE"));
+        var session = TushareManualBoundedSession.mainboardUniverse(
+                Set.of(date), date, date, false, false);
+
+        var response = provider(gateway).fetchMainboardMarketDate(members,
+                date, Duration.ofSeconds(5), session);
+
+        assertTrue(response.complete());
+        assertEquals(2, response.providerMetadata()
+                .path("providerCallCount").asInt());
+        assertEquals(2, response.rawDailyBars().size());
+        assertEquals(2, response.adjustmentFactors().size());
+        assertEquals(List.of("daily", "adj_factor"), gateway.calls.stream()
+                .map(Call::endpoint).toList());
+        assertTrue(gateway.calls.stream().allMatch(call ->
+                call.parameters().size() == 1
+                        && call.parameters().path("trade_date").asText()
+                        .equals("20260812")));
+    }
+
+    @Test
+    void mainboardMarketDateFailsClosedOnTruncationOrMismatchedFacts() {
+        FixtureGateway truncated = new FixtureGateway(mapper);
+        LocalDate date = LocalDate.of(2026, 8, 12);
+        truncated.mainboardDailyRows = java.util.Collections.nCopies(
+                TushareMarketFactProvider.MAINBOARD_MARKET_MAX_ROWS,
+                dailyRow("600001.SH", date));
+        truncated.mainboardFactorRows = List.of(factorRow("600001.SH", date));
+        List<MainboardInstrument> members = List.of(
+                mainboard("600001.SH", "600001", "SSE"));
+        var truncatedSession = TushareManualBoundedSession.mainboardUniverse(
+                Set.of(date), date, date, false, false);
+        GatewayException rowLimit = assertThrows(GatewayException.class,
+                () -> provider(truncated).fetchMainboardMarketDate(members,
+                        date, Duration.ofSeconds(5), truncatedSession));
+        assertEquals("MAINBOARD_PROVIDER_RESPONSE_TRUNCATED",
+                rowLimit.safeCode());
+
+        FixtureGateway mismatch = new FixtureGateway(mapper);
+        mismatch.mainboardDailyRows = List.of(dailyRow("600001.SH", date));
+        mismatch.mainboardFactorRows = List.of(factorRow("000001.SZ", date));
+        var mismatchSession = TushareManualBoundedSession.mainboardUniverse(
+                Set.of(date), date, date, false, false);
+        GatewayException coverage = assertThrows(GatewayException.class,
+                () -> provider(mismatch).fetchMainboardMarketDate(members,
+                        date, Duration.ofSeconds(5), mismatchSession));
+        assertEquals("MAINBOARD_MARKET_DATE_COVERAGE_INCOMPLETE",
+                coverage.safeCode());
+
+        FixtureGateway preListing = new FixtureGateway(mapper);
+        preListing.mainboardDailyRows = List.of(
+                dailyRow("600001.SH", date));
+        preListing.mainboardFactorRows = List.of(
+                factorRow("600001.SH", date));
+        List<MainboardInstrument> futureMember = List.of(
+                new MainboardInstrument("600001.SH", "600001", "SSE",
+                        "未来上市样本", "制造", "主板", "L",
+                        date.plusDays(1), null, "b".repeat(64)));
+        var preListingSession = TushareManualBoundedSession
+                .mainboardUniverse(Set.of(date), date, date, false, false);
+        GatewayException identityDate = assertThrows(GatewayException.class,
+                () -> provider(preListing).fetchMainboardMarketDate(
+                        futureMember, date, Duration.ofSeconds(5),
+                        preListingSession));
+        assertEquals("MAINBOARD_DAILY_RESPONSE_INVALID",
+                identityDate.safeCode());
+    }
+
+    private static MainboardInstrument mainboard(
+            String tsCode, String symbol, String exchange
+    ) {
+        return new MainboardInstrument(tsCode, symbol, exchange, symbol,
+                "制造", "主板", "L", LocalDate.of(2000, 1, 1), null,
+                "a".repeat(64));
+    }
+
+    private static List<JsonNode> mainboardRow(
+            String tsCode, String symbol, String name, String industry,
+            String market, String exchange
+    ) {
+        return List.of(FixtureGateway.textNode(tsCode),
+                FixtureGateway.textNode(symbol),
+                FixtureGateway.textNode(name),
+                FixtureGateway.textNode(industry),
+                FixtureGateway.textNode(market),
+                FixtureGateway.textNode(exchange),
+                FixtureGateway.textNode("L"),
+                FixtureGateway.textNode("20000101"),
+                com.fasterxml.jackson.databind.node.NullNode.getInstance());
+    }
+
+    private static List<List<JsonNode>> completeMainboardRows() {
+        List<List<JsonNode>> values = new ArrayList<>();
+        values.add(mainboardRow("300001.SZ", "300001", "主板前缀反例",
+                "制造", "主板", "SZSE"));
+        values.add(mainboardRow("600001.SH", "600001", "沪市样本",
+                "银行", "主板", "SSE"));
+        for (int index = 0; index < 998; index++) {
+            boolean sse = index % 2 == 0;
+            int number = (sse ? 601_000 : 1_000) + index / 2;
+            String symbol = String.format("%06d", number);
+            String tsCode = symbol + (sse ? ".SH" : ".SZ");
+            values.add(mainboardRow(tsCode, symbol, "主板样本" + index,
+                    sse ? "工业" : "消费", "主板",
+                    sse ? "SSE" : "SZSE"));
+        }
+        return List.copyOf(values);
+    }
+
+    private static List<JsonNode> dailyRow(String tsCode, LocalDate date) {
+        return List.of(FixtureGateway.textNode(tsCode),
+                FixtureGateway.textNode(date.format(
+                        java.time.format.DateTimeFormatter.BASIC_ISO_DATE)),
+                FixtureGateway.decimalNode("10.0"),
+                FixtureGateway.decimalNode("10.5"),
+                FixtureGateway.decimalNode("9.8"),
+                FixtureGateway.decimalNode("10.2"),
+                FixtureGateway.decimalNode("100000"),
+                FixtureGateway.decimalNode("200000"));
+    }
+
+    private static List<JsonNode> factorRow(String tsCode, LocalDate date) {
+        return List.of(FixtureGateway.textNode(tsCode),
+                FixtureGateway.textNode(date.format(
+                        java.time.format.DateTimeFormatter.BASIC_ISO_DATE)),
+                FixtureGateway.decimalNode("1.0"));
+    }
+
     private TushareMarketFactProvider provider(
             TushareApiGateway gateway
     ) {
@@ -720,6 +916,9 @@ class TushareMarketFactProviderTest {
         private String failureEndpoint;
         private int stockBasicRowCount = 1;
         private int dividendRowCount = 1;
+        private List<List<JsonNode>> mainboardRows;
+        private List<List<JsonNode>> mainboardDailyRows;
+        private List<List<JsonNode>> mainboardFactorRows;
 
         private FixtureGateway(ObjectMapper mapper) {
             this.mapper = mapper;
@@ -753,7 +952,7 @@ class TushareMarketFactProviderTest {
                 QueryMode mode,
                 TushareManualBoundedSession session
         ) {
-            calls.add(new Call(endpoint, mode));
+            calls.add(new Call(endpoint, mode, parameters.deepCopy()));
             if (endpoint.equals(failureEndpoint)) {
                 throw new GatewayException(
                         ErrorKind.PERMISSION_DENIED,
@@ -765,10 +964,12 @@ class TushareMarketFactProviderTest {
             }
             return new QueryResult(
                     switch (endpoint) {
-                        case "daily" -> new Table(fields, dailyRows);
+                        case "daily" -> new Table(fields,
+                                mainboardDailyRows == null ? dailyRows
+                                        : mainboardDailyRows);
                         case "adj_factor" -> new Table(
                                 fields,
-                                List.of(
+                                mainboardFactorRows == null ? List.of(
                                         List.of(
                                                 textNode("600000.SH"),
                                                 textNode("20250107"),
@@ -776,7 +977,8 @@ class TushareMarketFactProviderTest {
                                         List.of(
                                                 textNode("600000.SH"),
                                                 textNode("20250106"),
-                                                decimalNode("1.2"))));
+                                                decimalNode("1.2")))
+                                        : mainboardFactorRows);
                         case "trade_cal" -> new Table(
                                 fields,
                                 List.of(
@@ -790,9 +992,9 @@ class TushareMarketFactProviderTest {
                                                 textNode("20250106"),
                                                 integerNode(1),
                                                 textNode("20250103"))));
-                        case "stock_basic" -> new Table(
-                                fields,
-                                repeated(
+                        case "stock_basic" -> new Table(fields,
+                                mainboardRows != null ? mainboardRows
+                                : repeated(
                                         stockBasicRowCount,
                                         List.of(
                                         textNode("600000.SH"),
@@ -852,6 +1054,10 @@ class TushareMarketFactProviderTest {
         }
     }
 
-    private record Call(String endpoint, QueryMode mode) {
+    private record Call(
+            String endpoint,
+            QueryMode mode,
+            ObjectNode parameters
+    ) {
     }
 }

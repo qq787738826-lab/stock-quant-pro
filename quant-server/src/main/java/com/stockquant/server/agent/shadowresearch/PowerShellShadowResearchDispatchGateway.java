@@ -1,11 +1,12 @@
 package com.stockquant.server.agent.shadowresearch;
 
 import com.stockquant.server.agent.marketfacts.PitMarketFactRepository;
-import com.stockquant.server.agent.marketfacts.TushareResearchUniverseDatasetLoader;
 import com.stockquant.server.researchselection.ResearchSelectionModels;
 import com.stockquant.server.researchselection.ResearchSelectionRepository;
 import com.stockquant.server.researchselection.ResearchSelectionProviderBudgetPlanner;
-import com.stockquant.server.researchselection.ResearchUniverseV1;
+import com.stockquant.server.researchselection.ResearchUniverseMainboardDatasetLoader;
+import com.stockquant.server.researchselection.ResearchUniverseMainboardRepository;
+import com.stockquant.server.production.SystemHealthService;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
@@ -45,21 +46,26 @@ public final class PowerShellShadowResearchDispatchGateway
     private final ShadowResearchScheduleProperties properties;
     private final java.time.Clock clock;
     private final ResearchSelectionRepository selections;
-    private final TushareResearchUniverseDatasetLoader universeLoader;
+    private final ResearchUniverseMainboardRepository universes;
+    private final ResearchUniverseMainboardDatasetLoader universeLoader;
+    private final SystemHealthService health;
 
     public PowerShellShadowResearchDispatchGateway(
             ShadowResearchRepository repository,
             ShadowResearchScheduleProperties properties,
             org.springframework.jdbc.core.JdbcTemplate jdbc,
             com.fasterxml.jackson.databind.ObjectMapper mapper,
+            SystemHealthService health,
             @org.springframework.beans.factory.annotation.Qualifier(
                     "agentTemporalClock") java.time.Clock clock
     ) {
         this.repository = Objects.requireNonNull(repository, "repository");
         this.properties = Objects.requireNonNull(properties, "properties");
         this.clock = Objects.requireNonNull(clock, "clock");
+        this.health = Objects.requireNonNull(health, "health");
         this.selections = new ResearchSelectionRepository(jdbc, mapper);
-        this.universeLoader = new TushareResearchUniverseDatasetLoader(
+        this.universes = new ResearchUniverseMainboardRepository(jdbc);
+        this.universeLoader = new ResearchUniverseMainboardDatasetLoader(
                 new PitMarketFactRepository(jdbc, mapper));
     }
 
@@ -206,8 +212,19 @@ public final class PowerShellShadowResearchDispatchGateway
             ResearchSelectionModels.SelectionRequest request,
             Instant asOf
     ) {
-        return ResearchSelectionProviderBudgetPlanner
-                .requiredProviderRequests(universeLoader, request, asOf);
+        var plan = ResearchSelectionProviderBudgetPlanner.mainboardPlan(
+                universeLoader, universes.latest().orElse(null), request,
+                asOf, universes.existingMarketFactSecurityCount(),
+                health.monthlyBudget(asOf).tushareRequests(),
+                ResearchSelectionProviderBudgetPlanner
+                        .CURRENT_MONTHLY_TUSHARE_LIMIT);
+        if (plan.audit().calendarIncomplete()) {
+            throw invalid("MAINBOARD_TRADE_CALENDAR_INCOMPLETE");
+        }
+        if (!plan.backfill().executableWithinBudget()) {
+            throw invalid("RESEARCH_SELECTION_MONTHLY_BUDGET_EXHAUSTED");
+        }
+        return plan.backfill().totalRequests();
     }
 
     private void terminalizeSelection(

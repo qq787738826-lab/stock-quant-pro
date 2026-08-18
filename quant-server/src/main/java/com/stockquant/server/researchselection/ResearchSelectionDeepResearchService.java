@@ -105,7 +105,7 @@ public final class ResearchSelectionDeepResearchService
                 Collectors.toUnmodifiableMap(value ->
                         value.security().canonicalCode(), value -> value));
         StringBuilder value = new StringBuilder("基于 ")
-                .append(ResearchUniverseV1.VERSION)
+                .append(ResearchUniverseMainboard.VERSION)
                 .append(" 开展当前时点研究；历史稳定性=")
                 .append(historical.version()).append('/')
                 .append(historical.researchLabel()).append('/')

@@ -525,6 +525,60 @@ public class PitMarketFactRepository {
                 from, to, Timestamp.from(cutoff));
     }
 
+    /** One batch query for every member of an immutable main-board snapshot. */
+    public List<RawDailyBarObservation> findRawBarsForSnapshotAsOf(
+            long snapshotDatabaseId,
+            LocalDate from,
+            LocalDate to,
+            Instant cutoff
+    ) {
+        String sql = """
+                WITH visible AS (
+                    SELECT %s, b.symbol, b.exchange, b.trade_date,
+                           b.open, b.high, b.low, b.close, b.volume,
+                           b.volume_qualification, b.volume_unit_code,
+                           b.volume_semantic_code,
+                           b.amount, b.amount_qualification,
+                           b.amount_unit_code, b.amount_semantic_code,
+                           b.turnover_rate, b.turnover_rate_qualification,
+                           b.turnover_rate_unit_code,
+                           b.turnover_rate_semantic_code,
+                           row_number() OVER (
+                               PARTITION BY b.symbol, b.exchange, b.trade_date
+                               ORDER BY
+                                    CASE o.revision_qualification
+                                      WHEN 'PROVIDER_VERIFIED' THEN 4
+                                      WHEN 'SYSTEM_KNOWLEDGE_ONLY' THEN 3
+                                      WHEN 'PROVIDER_UNVERIFIED' THEN 2
+                                      WHEN 'PROVIDER_UNAVAILABLE' THEN 1
+                                      ELSE 0
+                                    END DESC,
+                                    o.known_at DESC,
+                                    o.chain_sequence DESC, o.id DESC
+                           ) AS selected_version
+                      FROM research_universe_members member
+                      JOIN raw_daily_bar_facts_v2 b
+                        ON b.symbol=member.symbol
+                       AND b.exchange=member.exchange
+                      JOIN pit_market_fact_observations o
+                        ON o.id=b.observation_id
+                       AND o.fact_type='RAW_DAILY_BAR'
+                       AND o.source_code='TUSHARE_PRO'
+                       AND o.source_instrument_id=
+                           'TUSHARE:SECURITY:' || member.ts_code
+                      JOIN pit_market_fact_batches capture
+                        ON capture.id=o.batch_id AND capture.response_complete
+                     WHERE member.snapshot_db_id=?
+                       AND b.trade_date BETWEEN ? AND ?
+                       AND o.known_at<=?
+                )
+                SELECT * FROM visible WHERE selected_version=1
+                 ORDER BY exchange, symbol, trade_date
+                """.formatted(ENVELOPE_COLUMNS);
+        return jdbcTemplate.query(sql, this::mapRaw, snapshotDatabaseId,
+                from, to, Timestamp.from(cutoff));
+    }
+
     public List<AdjustmentFactorObservation> findFactorsAsOf(
             String sourceCode,
             String sourceInstrumentId,
@@ -572,6 +626,56 @@ public class PitMarketFactRepository {
                 """.formatted(ENVELOPE_COLUMNS);
         return jdbcTemplate.query(sql, this::mapFactor,
                 sourceCode, sourceInstrumentId, symbol,
+                PitMarketFactsContracts.FACTOR_TYPE,
+                PitMarketFactsContracts.FACTOR_COVERAGE_MODE,
+                from, to, Timestamp.from(cutoff));
+    }
+
+    /** One batch factor query for every member of one main-board snapshot. */
+    public List<AdjustmentFactorObservation> findFactorsForSnapshotAsOf(
+            long snapshotDatabaseId,
+            LocalDate from,
+            LocalDate to,
+            Instant cutoff
+    ) {
+        String sql = """
+                WITH visible AS (
+                    SELECT %s, f.symbol, f.factor_effective_trade_date,
+                           f.factor_type, f.coverage_mode, f.factor,
+                           row_number() OVER (
+                               PARTITION BY f.symbol, f.factor_type,
+                                            f.factor_effective_trade_date
+                               ORDER BY
+                                    CASE o.revision_qualification
+                                      WHEN 'PROVIDER_VERIFIED' THEN 4
+                                      WHEN 'SYSTEM_KNOWLEDGE_ONLY' THEN 3
+                                      WHEN 'PROVIDER_UNVERIFIED' THEN 2
+                                      WHEN 'PROVIDER_UNAVAILABLE' THEN 1
+                                      ELSE 0
+                                    END DESC,
+                                    o.known_at DESC,
+                                    o.chain_sequence DESC, o.id DESC
+                           ) AS selected_version
+                      FROM research_universe_members member
+                      JOIN adjustment_factor_facts_v1 f
+                        ON f.symbol=member.symbol
+                      JOIN pit_market_fact_observations o
+                        ON o.id=f.observation_id
+                       AND o.fact_type='ADJUSTMENT_FACTOR'
+                       AND o.source_code='TUSHARE_PRO'
+                       AND o.source_instrument_id=
+                           'TUSHARE:ADJ_FACTOR:' || member.ts_code
+                      JOIN pit_market_fact_batches capture
+                        ON capture.id=o.batch_id AND capture.response_complete
+                     WHERE member.snapshot_db_id=?
+                       AND f.factor_type=? AND f.coverage_mode=?
+                       AND f.factor_effective_trade_date BETWEEN ? AND ?
+                       AND o.known_at<=?
+                )
+                SELECT * FROM visible WHERE selected_version=1
+                 ORDER BY symbol, factor_effective_trade_date
+                """.formatted(ENVELOPE_COLUMNS);
+        return jdbcTemplate.query(sql, this::mapFactor, snapshotDatabaseId,
                 PitMarketFactsContracts.FACTOR_TYPE,
                 PitMarketFactsContracts.FACTOR_COVERAGE_MODE,
                 from, to, Timestamp.from(cutoff));

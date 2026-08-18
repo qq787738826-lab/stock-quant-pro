@@ -59,7 +59,7 @@ public final class StockQuantResearchProductionRunner {
             }
             JdbcTemplate jdbc = new JdbcTemplate(dataSource);
             int before = schemaVersion(jdbc);
-            if (before < 15 || before > 17) {
+            if (before < 15 || before > 18) {
                 throw new IllegalStateException(
                         "M6_DATABASE_CONTROLLED_START_VERSION_INVALID");
             }
@@ -69,7 +69,7 @@ public final class StockQuantResearchProductionRunner {
                     .load().migrate();
             verifyDedicated(jdbc);
             int after = schemaVersion(jdbc);
-            if (after != 17 || before > after) {
+            if (after != 18 || before > after) {
                 throw new IllegalStateException("M6_DATABASE_VERSION_INVALID");
             }
             migrationApplied = before < after;

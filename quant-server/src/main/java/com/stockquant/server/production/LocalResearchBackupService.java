@@ -53,7 +53,10 @@ public class LocalResearchBackupService {
             "shadow_outcomes", "agent_evaluation_versions",
             "agent_evaluation_reports", "agent_evaluation_decisions",
             "external_api_monthly_usage_ledger",
-            "research_selection_runs",
+            "research_universe_snapshots",
+            "research_universe_members",
+            "research_universe_snapshot_observations",
+            "research_selection_runs", "research_selection_member_results",
             "flyway_schema_history");
 
     private final JdbcTemplate jdbc;

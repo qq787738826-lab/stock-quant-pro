@@ -25,10 +25,8 @@ public final class ResearchSelectionController {
     }
 
     @GetMapping("/universe")
-    public Map<String, Object> universe() {
-        return Map.of("version", ResearchUniverseV1.VERSION,
-                "size", ResearchUniverseV1.constituents().size(),
-                "securities", ResearchUniverseV1.constituents());
+    public Object universe() {
+        return service.universe();
     }
 
     @PostMapping("/runs")
@@ -46,6 +44,16 @@ public final class ResearchSelectionController {
                 .orElseGet(() -> service.summary(id)
                         .<ResponseEntity<?>>map(ResponseEntity::ok)
                         .orElseGet(() -> ResponseEntity.notFound().build()));
+    }
+
+    @GetMapping("/runs/{id}/members")
+    public Object members(
+            @PathVariable long id,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "50") int size,
+            @RequestParam(required = false) String eligibility
+    ) {
+        return service.members(id, page, size, eligibility);
     }
 
     @GetMapping("/runs")

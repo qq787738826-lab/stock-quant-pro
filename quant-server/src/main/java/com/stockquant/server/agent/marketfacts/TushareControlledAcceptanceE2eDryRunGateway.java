@@ -2,6 +2,7 @@ package com.stockquant.server.agent.marketfacts;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.DecimalNode;
+import com.fasterxml.jackson.databind.node.NullNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 
@@ -16,6 +17,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 /** Network-free gateway used only by an explicitly marked packaged E2E dry run. */
 final class TushareControlledAcceptanceE2eDryRunGateway
         implements TushareApiGateway, F1cRateLimitedGateway {
+    static final int MAINBOARD_FAKE_MEMBER_COUNT = 3_000;
     private final TushareTokenRateLimiter limiter = new TushareTokenRateLimiter(
             TushareEndpointRateLimitPolicy.frozenF1cPolicy());
     private final AtomicInteger calls = new AtomicInteger();
@@ -60,12 +62,19 @@ final class TushareControlledAcceptanceE2eDryRunGateway
         String tsCode = parameters.path("ts_code").asText("600000.SH");
         String exchange = parameters.path("exchange").asText("SSE");
         List<List<JsonNode>> rows = switch (endpoint) {
+            case "stock_basic" -> mainboardStockBasic();
             case "daily" -> parameters.has("trade_date")
-                    ? dailyMarket(date) : parameters.has("ts_code")
+                    ? session.sessionProfile() == TushareManualBoundedSession
+                    .SessionProfile.MAINBOARD_UNIVERSE_V1
+                    ? mainboardDailyMarket(date) : dailyMarket(date)
+                    : parameters.has("ts_code")
                     ? dailyWindow(tsCode, date, endDate)
                     : dailyMarketWindow(date, endDate);
             case "adj_factor" -> parameters.has("trade_date")
-                    ? factorMarket(date) : parameters.has("ts_code")
+                    ? session.sessionProfile() == TushareManualBoundedSession
+                    .SessionProfile.MAINBOARD_UNIVERSE_V1
+                    ? mainboardFactorMarket(date) : factorMarket(date)
+                    : parameters.has("ts_code")
                     ? factorWindow(tsCode, date, endDate)
                     : factorMarketWindow(date, endDate);
             case "trade_cal" -> calendarWindow(exchange, date, endDate);
@@ -146,6 +155,93 @@ final class TushareControlledAcceptanceE2eDryRunGateway
         return List.copyOf(result);
     }
 
+    private static List<List<JsonNode>> mainboardStockBasic() {
+        List<List<JsonNode>> result = new ArrayList<>(
+                MAINBOARD_FAKE_MEMBER_COUNT);
+        for (int index = 0; index < MAINBOARD_FAKE_MEMBER_COUNT; index++) {
+            String exchange = index < MAINBOARD_FAKE_MEMBER_COUNT / 2
+                    ? "SSE" : "SZSE";
+            int local = index < MAINBOARD_FAKE_MEMBER_COUNT / 2
+                    ? 600000 + index
+                    : 1 + index - MAINBOARD_FAKE_MEMBER_COUNT / 2;
+            String symbol = String.format("%06d", local);
+            String tsCode = tsCode(symbol, exchange);
+            String name = index == 7 ? "ST离线样本"
+                    : "主板离线样本" + symbol;
+            String industry = "行业" + (index % 20 + 1);
+            result.add(List.of(text(tsCode), text(symbol), text(name),
+                    text(industry), text("主板"), text(exchange), text("L"),
+                    text(index == 11 ? "20260801" : "20000101"),
+                    NullNode.instance));
+        }
+        return List.copyOf(result);
+    }
+
+    private static List<List<JsonNode>> mainboardDailyMarket(String date) {
+        List<List<JsonNode>> result = new ArrayList<>(
+                MAINBOARD_FAKE_MEMBER_COUNT);
+        LocalDate tradeDate = LocalDate.parse(date,
+                DateTimeFormatter.BASIC_ISO_DATE);
+        for (int index = 0; index < MAINBOARD_FAKE_MEMBER_COUNT; index++) {
+            if (index == 11 && tradeDate.isBefore(
+                    LocalDate.of(2026, 8, 1))) continue;
+            String exchange = index < MAINBOARD_FAKE_MEMBER_COUNT / 2
+                    ? "SSE" : "SZSE";
+            int local = index < MAINBOARD_FAKE_MEMBER_COUNT / 2
+                    ? 600000 + index
+                    : 1 + index - MAINBOARD_FAKE_MEMBER_COUNT / 2;
+            result.add(mainboardDaily(tsCode(String.format("%06d", local),
+                    exchange), date, index));
+        }
+        return List.copyOf(result);
+    }
+
+    private static List<List<JsonNode>> mainboardFactorMarket(String date) {
+        List<List<JsonNode>> result = new ArrayList<>(
+                MAINBOARD_FAKE_MEMBER_COUNT);
+        LocalDate tradeDate = LocalDate.parse(date,
+                DateTimeFormatter.BASIC_ISO_DATE);
+        for (int index = 0; index < MAINBOARD_FAKE_MEMBER_COUNT; index++) {
+            if (index == 11 && tradeDate.isBefore(
+                    LocalDate.of(2026, 8, 1))) continue;
+            String exchange = index < MAINBOARD_FAKE_MEMBER_COUNT / 2
+                    ? "SSE" : "SZSE";
+            int local = index < MAINBOARD_FAKE_MEMBER_COUNT / 2
+                    ? 600000 + index
+                    : 1 + index - MAINBOARD_FAKE_MEMBER_COUNT / 2;
+            result.add(factor(tsCode(String.format("%06d", local), exchange),
+                    date));
+        }
+        return List.copyOf(result);
+    }
+
+    private static List<JsonNode> mainboardDaily(
+            String tsCode,
+            String date,
+            int index
+    ) {
+        long day = LocalDate.parse(date, DateTimeFormatter.BASIC_ISO_DATE)
+                .toEpochDay();
+        BigDecimal base = BigDecimal.valueOf(500 + index % 300, 2);
+        BigDecimal drift = BigDecimal.valueOf(
+                ((day + index * 7L) % 41L) - 20L, 3);
+        BigDecimal open = base.add(drift).max(new BigDecimal("1.00"));
+        BigDecimal close = open.add(BigDecimal.valueOf(
+                ((day * 3L + index) % 11L) - 5L, 2));
+        if (close.signum() <= 0) close = new BigDecimal("1.00");
+        BigDecimal high = open.max(close).add(new BigDecimal("0.15"));
+        BigDecimal low = open.min(close).subtract(new BigDecimal("0.12"))
+                .max(new BigDecimal("0.01"));
+        BigDecimal volume = BigDecimal.valueOf(150_000L
+                + (index % 700) * 1_000L + Math.floorMod(day, 10) * 500L);
+        BigDecimal amount = volume.multiply(close)
+                .divide(new BigDecimal("10"), 3,
+                        java.math.RoundingMode.HALF_EVEN);
+        return List.of(text(tsCode), text(date), decimal(open), decimal(high),
+                decimal(low), decimal(close), decimal(volume),
+                decimal(amount));
+    }
+
     private static String tsCode(String symbol, String exchange) {
         return symbol + ("SSE".equals(exchange) ? ".SH" : ".SZ");
     }
@@ -219,5 +315,9 @@ final class TushareControlledAcceptanceE2eDryRunGateway
 
     private static JsonNode decimal(String value) {
         return DecimalNode.valueOf(new BigDecimal(value));
+    }
+
+    private static JsonNode decimal(BigDecimal value) {
+        return DecimalNode.valueOf(value);
     }
 }

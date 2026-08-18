@@ -9,12 +9,15 @@ import com.stockquant.server.researchselection.ResearchSelectionModels.Selection
 import com.stockquant.server.researchselection.ResearchSelectionModels.Status;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.DataSourceTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -26,6 +29,8 @@ public final class ResearchSelectionRepository {
     private final JdbcTemplate jdbc;
     private final ObjectMapper mapper;
     private final BacktestCanonicalHashService canonical;
+    private final ResearchUniverseMainboardRepository universes;
+    private final TransactionTemplate transactions;
 
     public ResearchSelectionRepository(
             JdbcTemplate jdbc,
@@ -34,6 +39,10 @@ public final class ResearchSelectionRepository {
         this.jdbc = Objects.requireNonNull(jdbc, "jdbc");
         this.mapper = Objects.requireNonNull(mapper, "mapper");
         this.canonical = new BacktestCanonicalHashService(mapper);
+        this.universes = new ResearchUniverseMainboardRepository(jdbc);
+        this.transactions = new TransactionTemplate(
+                new DataSourceTransactionManager(Objects.requireNonNull(
+                        jdbc.getDataSource(), "research selection dataSource")));
     }
 
     public RunSummary create(
@@ -54,7 +63,7 @@ public final class ResearchSelectionRepository {
                         universe_version, ranking_version, git_commit,
                         request_fingerprint
                     ) VALUES (?, 'RESEARCH_SELECTION_V1', 'QUEUED', ?, ?, ?,
-                              ?, ?, ?, ?, ?, 'RESEARCH_UNIVERSE_V1',
+                              ?, ?, ?, ?, ?, 'RESEARCH_UNIVERSE_MAINBOARD_V1',
                               'RESEARCH_SELECTION_RANKING_V1', ?, ?)
                     RETURNING id
                     """, Long.class, publicRunId, request.triggerMode().name(),
@@ -126,6 +135,21 @@ public final class ResearchSelectionRepository {
                 result.anchorTradeDate(), result.shadowRunId(), null, null);
     }
 
+    public void complete(
+            long id,
+            SelectionResult result,
+            long snapshotDatabaseId,
+            List<ResearchUniverseMainboard.MemberEvaluation> evaluations
+    ) {
+        Objects.requireNonNull(evaluations, "evaluations");
+        Objects.requireNonNull(transactions.execute(status -> {
+            universes.insertRunMembers(id, snapshotDatabaseId, evaluations);
+            writeTerminal(id, Status.CRITIC_REVIEW, Status.COMPLETED, result,
+                    result.anchorTradeDate(), result.shadowRunId(), null, null);
+            return Boolean.TRUE;
+        }), "research selection completion transaction");
+    }
+
     public void fail(
             long id,
             Status current,
@@ -149,7 +173,7 @@ public final class ResearchSelectionRepository {
         SelectionResult result = new SelectionResult(
                 ResearchSelectionModels.VERSION, id, config.publicRunId(),
                 Status.FAILED, config.triggerMode(), config.researchAsOf(),
-                null, null, null, List.of(), List.of(), List.of(), true,
+                null, null, null, null, List.of(), List.of(), List.of(), true,
                 "FAILED", null, null, config.paperEnabled(), false, false,
                 new ResearchSelectionModels.Timings(0, 0, 0, 0, 0),
                 new ResearchSelectionModels.Usage(0, 0, 0, 0, 0, 0, 0,
@@ -222,7 +246,8 @@ public final class ResearchSelectionRepository {
         return jdbc.query("""
                 SELECT public_run_id, trigger_mode, research_as_of,
                        primary_window, auxiliary_window, shortlist_limit,
-                       final_limit, paper_enabled, git_commit, status
+                       final_limit, paper_enabled, git_commit, status,
+                       universe_snapshot_db_id, universe_version
                   FROM research_selection_runs WHERE id=?
                 """, (row, ignored) -> new RunConfig(id,
                 row.getString("public_run_id"),
@@ -234,7 +259,9 @@ public final class ResearchSelectionRepository {
                 row.getInt("shortlist_limit"), row.getInt("final_limit"),
                 row.getBoolean("paper_enabled"),
                 row.getString("git_commit"),
-                Status.valueOf(row.getString("status"))), id).stream()
+                Status.valueOf(row.getString("status")),
+                (Long) row.getObject("universe_snapshot_db_id"),
+                row.getString("universe_version")), id).stream()
                 .findFirst().orElseThrow(() -> new IllegalStateException(
                         "RESEARCH_SELECTION_RUN_MISSING"));
     }
@@ -277,6 +304,16 @@ public final class ResearchSelectionRepository {
                 """, this::mapSummary, bounded);
     }
 
+    public int monthlyTushareUsage(YearMonth month) {
+        Objects.requireNonNull(month, "month");
+        Integer value = jdbc.queryForObject("""
+                SELECT COALESCE(sum(request_count), 0)
+                  FROM external_api_monthly_usage_ledger
+                 WHERE calendar_month=? AND provider='TUSHARE'
+                """, Integer.class, month.toString());
+        return value == null ? 0 : value;
+    }
+
     /** Read-only count of genuine scheduled frozen samples per security. */
     public Map<String, Integer> liveShadowSampleCounts() {
         Map<String, Integer> result = new LinkedHashMap<>();
@@ -304,13 +341,15 @@ public final class ResearchSelectionRepository {
             throws SQLException {
         String json = row.getString("result_json");
         int candidateCount = 0;
-        int universeSize = ResearchUniverseV1.constituents().size();
+        int universeSize = 0;
         int shortlistSize = 0;
         String decisionCode = "PENDING";
         if (json != null) {
             SelectionResult result = parse(json);
             candidateCount = result.candidates().size();
             universeSize = result.lineage() == null ? universeSize
+                    : result.lineage().universeMemberCount() > 0
+                    ? result.lineage().universeMemberCount()
                     : result.lineage().universeSecurities().size();
             shortlistSize = result.shortlist().size();
             decisionCode = result.decisionCode();
@@ -363,7 +402,9 @@ public final class ResearchSelectionRepository {
             int finalLimit,
             boolean paperEnabled,
             String gitCommit,
-            Status status
+            Status status,
+            Long universeSnapshotDatabaseId,
+            String universeVersion
     ) {
         public SelectionRequest request() {
             return new SelectionRequest(triggerMode, primaryWindow,

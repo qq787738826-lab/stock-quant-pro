@@ -307,6 +307,53 @@ public class PitMarketFactCaptureService {
                 }), "research universe capture result"));
     }
 
+    /**
+     * Persists one complete V1.0.9 market-wide date or calendar response in
+     * one transaction. A date response may contain thousands of identities,
+     * but still represents only the two declared upstream endpoint calls.
+     */
+    public CaptureResult captureAuthorizedMainboardResponse(
+            MarketFactResponse response,
+            Instant observedAt,
+            TushareDedicatedResearchPersistenceGuard.Verification
+                    preProviderVerification
+    ) {
+        Objects.requireNonNull(response, "response");
+        boolean marketDate = !response.rawDailyBars().isEmpty()
+                || !response.adjustmentFactors().isEmpty();
+        boolean calendar = !response.tradingCalendar().isEmpty();
+        if (!response.complete() || !response.errors().isEmpty()
+                || marketDate == calendar
+                || marketDate && (response.rawDailyBars().isEmpty()
+                || response.rawDailyBars().size()
+                != response.adjustmentFactors().size())
+                || !response.corporateActions().isEmpty()) {
+            throw new IllegalArgumentException(
+                    "MAINBOARD_CAPTURE_RESPONSE_INVALID");
+        }
+        PreparedCaptureInput prepared = prepareCaptureInput(response,
+                observedAt, LimitedPersonalFormalCaptureAuthorization
+                        .tushareF1A());
+        return Objects.requireNonNull(transactionTemplate.execute(status -> {
+            var before = tushareDedicatedResearchPersistenceGuard
+                    .verifyTransactional();
+            tushareDedicatedResearchPersistenceGuard.verifySameTarget(
+                    preProviderVerification, before);
+            CaptureResult result = capturePreparedWithinTransaction(prepared);
+            if (!result.complete() || result.receivedCount() <= 0
+                    || result.appendedCount() + result.idempotentCount()
+                    != result.receivedCount()) {
+                throw new IllegalStateException(
+                        "MAINBOARD_CAPTURE_RESULT_INVALID");
+            }
+            var after = tushareDedicatedResearchPersistenceGuard
+                    .verifyTransactional();
+            tushareDedicatedResearchPersistenceGuard
+                    .verifySameTransactionalConnection(before, after);
+            return result;
+        }), "mainboard market capture result");
+    }
+
     private M1ResearchCaptureResult
     captureAuthorizedM1ResearchBatchWithinTransaction(
             TushareM1ResearchCaptureContract captureContract,

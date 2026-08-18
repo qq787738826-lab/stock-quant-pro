@@ -53,7 +53,7 @@ param(
     [ValidateSet(60, 120, 250)]
     [int] $AuxiliaryWindow = 60,
 
-    [ValidateSet(0, 2, 52)]
+    [ValidateRange(0, 503)]
     [int] $MaximumProviderRequests = 52,
 
     [ValidateSet('1.50', '5.00')]
@@ -387,7 +387,8 @@ try {
             'selection.run.id' = [string]$SelectionRunId
             'selection.public.run.id' = $SelectionPublicRunId
             'selection.trigger' = $SelectionTrigger
-            'selection.universe.version' = 'RESEARCH_UNIVERSE_V1'
+            'selection.universe.version' =
+                'RESEARCH_UNIVERSE_MAINBOARD_V1'
             'selection.primary.window' = [string]$PrimaryWindow
             'selection.auxiliary.window' = [string]$AuxiliaryWindow
             'selection.shortlist.limit' = '10'
@@ -399,7 +400,14 @@ try {
             'database.user' = 'stock_quant_research'
             'schema.name' = 'tushare_research'
             'tushare.provider' = 'TUSHARE'
-            'tushare.endpoints' = 'daily,adj_factor,trade_cal'
+            'tushare.endpoints' =
+                'stock_basic,daily,adj_factor,trade_cal'
+            'endpoint.stock_basic.requests' = [string]($MaximumProviderRequests % 2)
+            'endpoint.daily.requests' = [string][math]::Floor(
+                $MaximumProviderRequests / 2)
+            'endpoint.adj_factor.requests' = [string][math]::Floor(
+                $MaximumProviderRequests / 2)
+            'endpoint.trade_cal.requests' = '0'
             'maximum.provider.requests' = [string]$MaximumProviderRequests
             'budget.calendar.month' = $calendarMonth
             'tushare.monthly.limit' = '150'
