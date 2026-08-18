@@ -231,6 +231,24 @@ class ResearchSelectionCoreTest {
         assertEquals("M4_SHADOW_REQUEST_INVALID", ordinary.getMessage());
     }
 
+    @Test
+    void mainboardSubsetFingerprintIsIndependentOfCollectionOrder() {
+        List<Security> securities = ResearchUniverseV1.securities().stream()
+                .limit(3).toList();
+        List<LocalDate> dates = List.of(LocalDate.of(2026, 8, 12),
+                LocalDate.of(2026, 8, 13), LocalDate.of(2026, 8, 14));
+        List<Security> reversedSecurities = new ArrayList<>(securities);
+        java.util.Collections.reverse(reversedSecurities);
+        List<LocalDate> reversedDates = new ArrayList<>(dates);
+        java.util.Collections.reverse(reversedDates);
+
+        assertEquals(ResearchSelectionEngine.subsetDatasetVersion(
+                        "SOURCE_V1", securities, dates, "TOP200_HISTORY"),
+                ResearchSelectionEngine.subsetDatasetVersion(
+                        "SOURCE_V1", reversedSecurities, reversedDates,
+                        "TOP200_HISTORY"));
+    }
+
     private static ResearchDataset dataset(int sessions) {
         List<LocalDate> dates = openDates(LocalDate.of(2026, 4, 1),
                 sessions);

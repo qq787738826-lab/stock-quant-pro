@@ -389,10 +389,28 @@ public final class ResearchSelectionEngine {
                     "MAINBOARD_SUBSET_HISTORY_INCOMPLETE");
         }
         return new ResearchDataset(source.contractVersion(),
-                "MAINBOARD_" + label + '_' + BacktestCanonicalHashService
-                .sha256(source.datasetVersion() + securities + dates),
+                subsetDatasetVersion(source.datasetVersion(), securities,
+                        dates, label),
                 source.knowledgeMode(), source.knowledgeCutoff(),
                 selectedSessions, bars);
+    }
+
+    static String subsetDatasetVersion(
+            String sourceDatasetVersion,
+            java.util.Collection<Security> securities,
+            java.util.Collection<LocalDate> dates,
+            String label
+    ) {
+        String securityCodes = securities.stream().map(
+                        Security::canonicalCode).distinct().sorted()
+                .collect(java.util.stream.Collectors.joining(","));
+        String tradeDates = dates.stream().distinct().sorted()
+                .map(LocalDate::toString).collect(
+                        java.util.stream.Collectors.joining(","));
+        return "MAINBOARD_" + label + '_'
+                + BacktestCanonicalHashService.sha256(
+                sourceDatasetVersion + "|securities=" + securityCodes
+                        + "|dates=" + tradeDates);
     }
 
     private static int available(
