@@ -155,10 +155,23 @@ public final class TushareMainboardUniverseCaptureService {
                 value.delistDate(), value.contentHash());
     }
 
-    private static String safeCode(Throwable error) {
-        String message = error.getMessage();
-        return message != null && message.matches("[A-Z][A-Z0-9_]{3,127}")
-                ? message : "MAINBOARD_CAPTURE_FAILED";
+    static String safeCode(Throwable error) {
+        for (Throwable current = error; current != null;
+             current = current.getCause()) {
+            if (current instanceof TushareApiGateway.GatewayException gateway
+                    && validCode(gateway.safeCode())) {
+                return gateway.safeCode();
+            }
+            String message = current.getMessage();
+            if (validCode(message)) {
+                return message;
+            }
+        }
+        return "MAINBOARD_CAPTURE_FAILED";
+    }
+
+    private static boolean validCode(String value) {
+        return value != null && value.matches("[A-Z][A-Z0-9_]{3,127}");
     }
 
     private static IllegalStateException invalid(String code) {

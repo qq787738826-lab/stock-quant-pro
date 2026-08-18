@@ -754,6 +754,48 @@ class TushareMarketFactProviderTest {
     }
 
     @Test
+    void mainboardMarketDateAcceptsFactorOnlySuspendedMemberSuperset() {
+        FixtureGateway gateway = new FixtureGateway(mapper);
+        LocalDate date = LocalDate.of(2026, 8, 12);
+        List<MainboardInstrument> members = new ArrayList<>();
+        List<List<JsonNode>> daily = new ArrayList<>();
+        List<List<JsonNode>> factors = new ArrayList<>();
+        for (int index = 1; index <= 20; index++) {
+            String symbol = String.format("60%04d", index);
+            String tsCode = symbol + ".SH";
+            members.add(mainboard(tsCode, symbol, "SSE"));
+            factors.add(factorRow(tsCode, date));
+            if (index < 20) {
+                daily.add(dailyRow(tsCode, date));
+            }
+        }
+        gateway.mainboardDailyRows = List.copyOf(daily);
+        gateway.mainboardFactorRows = List.copyOf(factors);
+        var session = TushareManualBoundedSession.mainboardUniverse(
+                Set.of(date), date, date, false, false);
+
+        var response = provider(gateway).fetchMainboardMarketDate(members,
+                date, Duration.ofSeconds(5), session);
+
+        assertTrue(response.complete());
+        assertEquals(19, response.rawDailyBars().size());
+        assertEquals(19, response.adjustmentFactors().size());
+        assertFalse(response.adjustmentFactors().stream().anyMatch(value ->
+                value.symbol().equals("600020")));
+    }
+
+    @Test
+    void mainboardCapturePreservesGatewaySafeFailureCode() {
+        GatewayException failure = new GatewayException(
+                ErrorKind.STRUCTURE_CHANGED,
+                "MAINBOARD_MARKET_DATE_COVERAGE_INCOMPLETE",
+                "safe structural description", 2, 0, null);
+
+        assertEquals("MAINBOARD_MARKET_DATE_COVERAGE_INCOMPLETE",
+                TushareMainboardUniverseCaptureService.safeCode(failure));
+    }
+
+    @Test
     void mainboardMarketDateFailsClosedOnTruncationOrMismatchedFacts() {
         FixtureGateway truncated = new FixtureGateway(mapper);
         LocalDate date = LocalDate.of(2026, 8, 12);

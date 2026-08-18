@@ -826,18 +826,18 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
         Set<String> barCodes = bars.stream().map(value ->
                 tsCode(value.symbol(), value.exchange())).collect(
                 java.util.stream.Collectors.toUnmodifiableSet());
-        Map<String, String> exchangeBySymbol = allowed.values().stream()
-                .collect(java.util.stream.Collectors.toUnmodifiableMap(
-                        MainboardInstrument::symbol,
-                        MainboardInstrument::exchange, (left, right) -> left));
-        Set<String> factorCodes = mappedFactors.stream().map(value ->
-                tsCode(value.symbol(), exchangeBySymbol.get(value.symbol())))
+        Set<String> requiredFactorIdentities = bars.stream().map(value ->
+                factorSourceIdentity(value.symbol(), value.exchange()))
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        Set<String> availableFactorIdentities = mappedFactors.stream()
+                .map(AdjustmentFactor::sourceIdentity)
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
         long expected = scope.stream().filter(value ->
                 !value.listDate().isAfter(tradeDate)
                         && (value.delistDate() == null
                         || !value.delistDate().isBefore(tradeDate))).count();
-        if (!barCodes.equals(factorCodes) || expected == 0
+        if (!availableFactorIdentities.containsAll(requiredFactorIdentities)
+                || expected == 0
                 || barCodes.size() * 100L
                 < expected * MAINBOARD_MINIMUM_COVERAGE_PERCENT) {
             throw new GatewayException(ErrorKind.STRUCTURE_CHANGED,
@@ -847,6 +847,13 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
                     daily.rateLimitRetryCount()
                             + factors.rateLimitRetryCount(), null);
         }
+        // adj_factor may legally contain a row for a suspended member for
+        // which daily has no traded bar. Persist only the exact traded-date
+        // intersection, while still requiring a factor for every daily bar.
+        List<AdjustmentFactor> alignedFactors = mappedFactors.stream()
+                .filter(value -> requiredFactorIdentities.contains(
+                        value.sourceIdentity()))
+                .toList();
         MainboardInstrument representative = scope.get(0);
         MarketFactRequest request = new MarketFactRequest(
                 RunNamespace.FORMAL, PROVIDER_CODE,
@@ -854,7 +861,7 @@ public final class TushareMarketFactProvider implements MarketFactProvider {
                 representative.symbol(), representative.exchange(),
                 tradeDate, tradeDate, Set.of(FactType.RAW_DAILY_BAR,
                 FactType.ADJUSTMENT_FACTOR), timeout);
-        return response(request, true, bars, mappedFactors, List.of(),
+        return response(request, true, bars, alignedFactors, List.of(),
                 List.of(), 2, 0, QueryMode.CONTROLLED_NO_RETRY, session);
     }
 
