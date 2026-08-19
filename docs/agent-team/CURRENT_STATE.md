@@ -19,6 +19,7 @@
 - M5 最终集成 HEAD / M6 冻结集成基线：`1e936ad17bcf77f4b9c4f8bb5638587e49f48385`
 - M6 真实整链运行资产 HEAD：`6f6a5c10678589c6d967ef381d48a9230518629c`
 - V1.0.8 最终集成 HEAD / V1.0.9 冻结集成基线：`572ed1c98c8e6856838ac3dc640810d31f54b003`
+- V1.0.9 全主板真实回填与选股运行资产 HEAD：`cb52caf9a0b21d147ce07ed7bbb3eb88daf120bf`
 - M1 长期任务分支：`codex/1.4.0-m1-research-data-ready`
 - M2 长期任务分支：`codex/1.4.0-m2-strategy-engine-ready`
 - M3 长期任务分支：`codex/1.4.0-m3-agent-research-ready`
@@ -304,7 +305,7 @@
 - 3A-R3B-F1F-B2-RUNNER 任务书 / 阶段记录：[tasks/3ar3b-f1f-b2-controlled-runner.md](tasks/3ar3b-f1f-b2-controlled-runner.md) / [stage-3ar3b-f1f-b2-controlled-runner.md](stage-3ar3b-f1f-b2-controlled-runner.md)。
 - 3A-R3B-F1F-B2-DBPREP 任务书 / 阶段记录：[tasks/3ar3b-f1f-b2-database-preparation.md](tasks/3ar3b-f1f-b2-database-preparation.md) / [stage-3ar3b-f1f-b2-database-preparation.md](stage-3ar3b-f1f-b2-database-preparation.md)；首次冻结记录：[stage-3ar3b-f1f-b2-freeze.md](stage-3ar3b-f1f-b2-freeze.md)。
 - 3A-R3B-F1F-B2-E2E-CLOSEOUT 任务书 / 阶段记录：[tasks/3ar3b-f1f-b2-e2e-closeout.md](tasks/3ar3b-f1f-b2-e2e-closeout.md) / [stage-3ar3b-f1f-b2-e2e-closeout.md](stage-3ar3b-f1f-b2-e2e-closeout.md)。
-- 当前正式状态：`F0_AUDIT_RESULT=PARTIAL`、`FREE_IMPLEMENTATION_PATH=RESEARCH_PREVIEW_FIRST`、`FREE_PRODUCT_PREVIEW_GATE=PASS`、`FREE_PROVIDER_VALIDATION_GATE=BLOCKED`、`PAID_PROVIDER_UPGRADE_DECISION=PENDING`、`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`。Track A 的免费研究预览产品形态验证已经完成；该 PASS 不改变 Provider、PIT、付费数据或交易资格。F1A—F1E、F1F-A、F1F-B1、F1F-B2-RUNNER、DBPREP、事务、typed fact identity、SYSTEM_KNOWLEDGE 回读修复与 E2E-CLOSEOUT 均已验收合入。F1D 已把当前个人研究书面许可闭环为 PASS；最终真实 F1F-B2 已持久化为 `PASSED`，因此 `CONTROLLED_ACCEPTANCE_STATUS=PASSED`、`REDUCED_RESEARCH_OPERATIONAL_READY=true`。M1 缩减研究数据层、M2 策略与回测引擎、M3 七 Agent 研究团队、M4 Shadow/Paper、M5 Agent 评测和 M6 个人研究生产运行均为 PASS。完整技术合同仍有十项阻断，所以 `F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE`、`fullF1EntryReady=false`；M1—M6 PASS 不等于真实订单、实盘或自动交易就绪。Tushare 累计真实业务请求为 97，iFinD 真实调用数为 0；当前月持续 Shadow 账本为 Tushare `42/150`、百炼 CNY `3.104280000000/30`、项目 CNY `9.881880000000/200`。F2B/F3 与 3A-R3B-1 均未开始。
+- 当前正式状态：`F0_AUDIT_RESULT=PARTIAL`、`FREE_IMPLEMENTATION_PATH=RESEARCH_PREVIEW_FIRST`、`FREE_PRODUCT_PREVIEW_GATE=PASS`、`FREE_PROVIDER_VALIDATION_GATE=BLOCKED`、`PAID_PROVIDER_UPGRADE_DECISION=PENDING`、`IFIND_TRIAL_ACTIVATION_GATE=BLOCKED`。Track A 的免费研究预览产品形态验证已经完成；该 PASS 不改变 Provider、PIT、付费数据或交易资格。F1A—F1E、F1F-A、F1F-B1、F1F-B2-RUNNER、DBPREP、事务、typed fact identity、SYSTEM_KNOWLEDGE 回读修复与 E2E-CLOSEOUT 均已验收合入。F1D 已把当前个人研究书面许可闭环为 PASS；最终真实 F1F-B2 已持久化为 `PASSED`，因此 `CONTROLLED_ACCEPTANCE_STATUS=PASSED`、`REDUCED_RESEARCH_OPERATIONAL_READY=true`。M1 缩减研究数据层、M2 策略与回测引擎、M3 七 Agent 研究团队、M4 Shadow/Paper、M5 Agent 评测、M6 个人研究生产运行和 V1.0.9 全主板研究均为 PASS。完整技术合同仍有十项阻断，所以 `F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE`、`fullF1EntryReady=false`；这些 PASS 不等于真实订单、实盘或自动交易就绪。2026-08 权威账本为 Tushare `222/250`、百炼 Shadow CNY `12.257620000000/30`、项目 CNY `19.035220000000/200`，iFinD 真实调用数为 0。F2B/F3 与 3A-R3B-1 均未开始。
 - `master`：`27d9099 chore: checkpoint Stock Quant Pro 1.3.1 and remove tracked cache`
 - 版本号仍保持 `1.3.1`；尚未发布 `1.4.0`。
 
@@ -651,26 +652,26 @@ DATA_QUALITY 只作门禁和 confidence 上限，MARKET_REGIME V1 权重为 0 �
   结果固定标记为 `POST_HOC_RESEARCH/PIT_PARTIAL`，不得冒充 Live Shadow。页面明确分隔当前研究、
   历史稳定性与真实 Live Shadow 样本，七智能体仍只执行一次既有 Top10 研究流程；无新策略、迁移、
   Broker/Scheduler 合同或真实交易能力。
-- V1.0.9_FULL_MAINBOARD_UNIVERSE 当前只在长期任务分支开发，尚未验收或合入。任务分支已经实现
-  `RESEARCH_UNIVERSE_MAINBOARD_V1` 的 Tushare `stock_basic(market=主板,list_status=L)` 动态
-  不可变快照、V18、按交易日各一次的全市场 `daily/adj_factor` 批量事实、显式资格排除、全合格证券
-  确定性扫描、Top200 历史稳定性、Top30 M2、Top10 七智能体与分页 UI；旧 25 股历史仍绑定
-  `RESEARCH_UNIVERSE_V1`，A→B→A 成员变化也追加新快照。离线 3000 股 Fake 数据、V1→V18
-  PostgreSQL 16 隔离测试、Broker 合同、Java 定向和 Vue production build 均不访问真实 Provider，
-  永久库写入为 0。2026-08-18 只读审计确认永久库尚无正式全主板快照，已有 25 股不能冒充完整日期；
-  60 个完整全市场交易日需 `stock_basic=1 / daily=60 / adj_factor=60 / trade_cal=0`，即 121 次，
-  17:20 前后续当月计划运行保守预留 24 次。用户已把 2026-08 项目内部 Tushare 月度上限一次性
-  从 150 批准到 250；其他月份仍为 150。权威月账本为 `96/250`，回填后为 217，预留后为 241，
-  其余 9 次仅为安全余量。Java、Broker 请求生成、严格协议、宿主准入和健康投影均使用同一日期感知
-  上限并保持 retry=0。2026-08-18 首个正式请求 `SELECT_20260818T061526Z_D783A1B0593C`
-  在零重试下消费 `stock_basic/daily/adj_factor=1/1/1` 后安全失败；`stock_basic` 已冻结不可变快照
-  `MAINBOARD_20260818T061536729675Z_c320bcaf76a4`，成员 3193（SSE 1699 / SZSE 1494 / ST 147），
-  首个市场日期没有形成事实批次，百炼调用为 0。旧 Runner 把带独立 `safeCode` 的 Gateway 异常按
-  普通异常消息处理，因而只留下 `MAINBOARD_CAPTURE_FAILED`；离线复现同时发现全市场捕获错误地要求
-  原始 `daily` 与 `adj_factor` 身份集合完全相等，未先把合法的停牌因子超集严格收敛到实际成交证券。
-  任务分支已改为“每条 daily 必须有同日因子、因子额外行不持久化”，缺因子、日期错误、覆盖不足与
-  截断仍 fail-closed，并保留 Gateway 精确脱敏错误码。受影响 Java 38/0/0/0 与临时 PostgreSQL
-  V1→V18 4/0/0/0 已通过，真实调用未重试；当前权威 Tushare 月账本为 `99/250`，本轮百炼调用为 0。
+- `V1_0_9_FULL_MAINBOARD_UNIVERSE=PASS`：`RESEARCH_UNIVERSE_MAINBOARD_V1` 已由正式
+  `stock_basic(market=主板,list_status=L)` 冻结不可变快照
+  `MAINBOARD_20260818T061536729675Z_c320bcaf76a4`，成员 3193（SSE 1699 / SZSE 1494 / ST 147）。
+  永久研究库已前进到 V18；旧 25 股历史继续绑定 `RESEARCH_UNIVERSE_V1`，所有旧 Shadow、Paper、
+  Agent Eval 和预算事实均未改写。60 个完整交易日范围为 `2026-05-26..2026-08-18`，最终
+  `daily/adj_factor` 缺失均为 0，集合一致、重复事实为 0，20/60 日可用，120/250 日明确为
+  `INSUFFICIENT_HISTORY`。
+- 正式回填 run 20、21、22 永久保持原 FAILED 终态；run 22 的 `TUSHARE_TIMEOUT` 精确发生在 Java
+  `HttpClient.send` Provider 请求等待边界、尚未取得 HTTP status/response body/合法 JSON，已排除
+  Broker/Runner 本地等待超时。旧分类未保留 connect 与 request timeout 子类型；现已分别映射并记录
+  `TUSHARE_CONNECT_TIMEOUT_NO_RESPONSE` / `TUSHARE_REQUEST_TIMEOUT_NO_RESPONSE`，connect timeout
+  固定 5 秒、普通请求 30 秒、全市场 `daily/adj_factor` 请求 60 秒。仅无响应 transport timeout 允许
+  单请求最多一次、全 run 最多四次受控恢复；HTTP、Provider body、JSON、截断、覆盖和质量错误均不重试。
+- 唯一最终续跑 `SELECT_20260819T092135Z_4937A6CC655B` 已 `COMPLETED/RESEARCH_PREFERENCE`：
+  从数据库动态读取 15 个缺失日期，实际 `daily=15 / adj_factor=15 / stock_basic=0 / trade_cal=0`，
+  retry/recovery 为 0；资格漏斗为 `3193 → 3034 → Top200 → Top30 → Top10 → 5`，排除 159 只，
+  Top200 研究等级为 A/B/C=`0/146/54`。七智能体、Critic、typed fact、SYSTEM_KNOWLEDGE、
+  formula-only QFQ、防未来函数和输出审计均通过；百炼 13 次，input/output/reasoning/total token 为
+  `33446/3991/0/37437`，成本 CNY `1.068020000000`。本次 Tushare 30 次后 2026-08 权威账本为
+  `222/250`，仍保留 28 次；真实交易、券商和真实资金继续关闭。
 
 ## 当前后续入口与阻断
 
@@ -691,12 +692,12 @@ Paper 组合、历史 Replay 和真实当前时点 Shadow smoke；M5 已交付 A
 `M6_RESEARCH_PRODUCTION_READY=PASS`；完整 F1 仍为 `F1_ENTRY_READINESS=BLOCKED_TECHNICAL_EVIDENCE`，
 十项技术阻断不变。** Tushare 保持 `V13_LINEAGE_PARTIAL/PIT_PARTIAL`、稳定证券 ID `PARTIAL`，
 不声明完整公司行动、Provider PIT 或永久身份资格。四项正式门禁仍为
-`PASS/BLOCKED/PENDING/BLOCKED`。Tushare 累计真实业务请求为 97，iFinD 为 0；M6 正式服务中的
+`PASS/BLOCKED/PENDING/BLOCKED`。2026-08 Tushare 权威月账本为 `222/250`，iFinD 为 0；M6 正式服务中的
 Shadow scheduler 已按用户授权启用为 Asia/Shanghai 17:20、仅交易日且同 slot 最多一次，月度预算
 fail-closed。该生产运行仍不授权完整 FORMAL/正常业务库资格、真实订单、实盘、自动交易、F2B/F3、
 3A-R3B-1、3B 或其他阶段。
 
-阻断项包括稳定 source instrument ID、完整公司行动、revision 语义以及 published/effective 时间语义。当前免费聚合源和 `securities` 当前态投影均不得被视为正式来源；2G 的研究级 AKShare/CNINFO 公告来源同样不得用于解除这些门禁。当前仍未实现 `PROVIDER_PIT_VERIFIED`、`SECURITY_STATUS_EVENT_V2`、`security_status_history` 正式投影、Universe snapshot、`MARKET_BREADTH_V2`、完整 MARKET_REGIME、公告 PDF 语义分析或生产扫描切换。M1 只扩展 `PROVIDER_CAPTURE/RESEARCH_ONLY/formalEligible=false` 的 Tushare raw/factor/calendar 有限个人研究路径及其只读数据集；M2 只在该边界内提供研究策略/回测能力，M3 只在同一研究边界内编排有证据的 Agent 研究，M4 只在相同研究边界内冻结 Shadow 判断并维护 Paper 账本；四者均不等于完整 FORMAL、生产运行或正常业务库资格。正常业务库尚未执行 V13；完整 F1 当前只受 `BLOCKED_TECHNICAL_EVIDENCE` 阻断，生产摄取、F2B、F3、3A-R3B-1 至 R3B-3 均未开始。M4 的单次真实 Shadow smoke 不满足长期效果观察规模门槛，因此不证明 alpha 或长期稳定性，完整 3A 未完成，3B 未开始。阶段 2D-2B 禁止外部行情补数、LLM 权威决策、投资建议和交易写操作。
+阻断项包括稳定 source instrument ID、完整公司行动、revision 语义以及 published/effective 时间语义。当前免费聚合源和 `securities` 当前态投影均不得被视为正式来源；2G 的研究级 AKShare/CNINFO 公告来源同样不得用于解除这些门禁。当前仍未实现 `PROVIDER_PIT_VERIFIED`、`SECURITY_STATUS_EVENT_V2`、`security_status_history` 正式投影、`MARKET_BREADTH_V2`、完整 MARKET_REGIME 或公告 PDF 语义分析；V18 的研究 Universe snapshot 和全主板扫描仍严格是 `RESEARCH_ONLY/PIT_PARTIAL`，不能解除这些门禁。M1 只扩展 `PROVIDER_CAPTURE/RESEARCH_ONLY/formalEligible=false` 的 Tushare raw/factor/calendar 有限个人研究路径及其只读数据集；M2 只在该边界内提供研究策略/回测能力，M3 只在同一研究边界内编排有证据的 Agent 研究，M4 只在相同研究边界内冻结 Shadow 判断并维护 Paper 账本；四者均不等于完整 FORMAL 或正常业务库资格。完整 F1 当前只受 `BLOCKED_TECHNICAL_EVIDENCE` 阻断，完整 FORMAL 生产摄取、F2B、F3、3A-R3B-1 至 R3B-3 均未开始。M4 的单次真实 Shadow smoke 不满足长期效果观察规模门槛，因此不证明 alpha 或长期稳定性，完整 3A 未完成，3B 未开始。阶段 2D-2B 禁止未授权外部行情补数、LLM 权威决策、投资建议和交易写操作。
 
 POST_V1_BACKLOG：V1.0.9 已明确授权的范围仅为沪深当前正常上市主板及其分层研究，不自动授权扩展至
 创业板、科创板、北交所、基金、债券、指数或全市场主数据平台；模型路由、新 Provider 和实盘能力
