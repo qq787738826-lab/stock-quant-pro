@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.net.URI;
+import java.net.http.HttpConnectTimeoutException;
 import java.net.http.HttpTimeoutException;
 import java.time.Duration;
 import java.time.LocalDate;
@@ -233,7 +234,11 @@ class TushareHttpApiGatewayTest {
                 Set.copyOf(dates), dates.get(0), dates.get(4), false,
                 false, 4);
         for (int index = 0; index < 4; index++) {
-            fixture.exchange.networkFailure();
+            if (index % 2 == 0) {
+                fixture.exchange.requestTimeout();
+            } else {
+                fixture.exchange.connectTimeout();
+            }
             fixture.exchange.respond(200, successEmpty());
             var result = fixture.gateway.query("daily",
                     mapper.createObjectNode().put("trade_date",
@@ -243,7 +248,7 @@ class TushareHttpApiGatewayTest {
             assertEquals(2, result.providerCallCount());
             assertEquals(1, result.rateLimitRetryCount());
         }
-        fixture.exchange.networkFailure();
+        fixture.exchange.requestTimeout();
         GatewayException exhausted = assertThrows(GatewayException.class,
                 () -> fixture.gateway.query("daily",
                         mapper.createObjectNode().put("trade_date",
@@ -251,7 +256,8 @@ class TushareHttpApiGatewayTest {
                         Duration.ofSeconds(5),
                         QueryMode.CONTROLLED_NETWORK_RECOVERY, session));
 
-        assertEquals("TUSHARE_NETWORK_ERROR", exhausted.safeCode());
+        assertEquals("TUSHARE_REQUEST_TIMEOUT_NO_RESPONSE",
+                exhausted.safeCode());
         assertEquals(1, exhausted.providerCallCount());
         assertEquals(0, exhausted.rateLimitRetryCount());
         assertEquals(4, session.consumedNetworkRecoveries());
@@ -285,25 +291,119 @@ class TushareHttpApiGatewayTest {
     }
 
     @Test
-    void timeoutIsNotEligibleForNetworkRecovery() {
+    void requestTimeoutWithoutResponseRecoversOnceWithFreshConnection() {
         Fixture fixture = fixture(properties(), 180, 90_000);
         LocalDate date = LocalDate.of(2026, 8, 12);
         var session = TushareManualBoundedSession.mainboardUniverse(
                 Set.of(date), date, date, false, false, 4);
-        fixture.exchange.timeout();
+        fixture.exchange.requestTimeout();
+        fixture.exchange.respond(200, successEmpty());
+
+        var result = fixture.gateway.query("daily",
+                mapper.createObjectNode().put("trade_date", "20260812"),
+                List.of("ts_code"), Duration.ofSeconds(60),
+                QueryMode.CONTROLLED_NETWORK_RECOVERY, session);
+
+        assertEquals(2, result.providerCallCount());
+        assertEquals(1, result.rateLimitRetryCount());
+        assertEquals(1, session.consumedNetworkRecoveries());
+        assertEquals(1, fixture.exchange.freshConnections);
+        assertEquals(Duration.ofSeconds(60),
+                fixture.exchange.requests.get(0).timeout());
+    }
+
+    @Test
+    void connectTimeoutWithoutResponseRecoversOnceWithFreshConnection() {
+        Fixture fixture = fixture(properties(), 180, 90_000);
+        LocalDate date = LocalDate.of(2026, 8, 12);
+        var session = TushareManualBoundedSession.mainboardUniverse(
+                Set.of(date), date, date, false, false, 4);
+        fixture.exchange.connectTimeout();
+        fixture.exchange.respond(200, successEmpty());
+
+        var result = fixture.gateway.query("adj_factor",
+                mapper.createObjectNode().put("trade_date", "20260812"),
+                List.of("ts_code"), Duration.ofSeconds(60),
+                QueryMode.CONTROLLED_NETWORK_RECOVERY, session);
+
+        assertEquals(2, result.providerCallCount());
+        assertEquals(1, result.rateLimitRetryCount());
+        assertEquals(1, session.consumedNetworkRecoveries());
+        assertEquals(1, fixture.exchange.freshConnections);
+    }
+
+    @Test
+    void secondRequestTimeoutStopsWithoutAThirdAttempt() {
+        Fixture fixture = fixture(properties(), 180, 90_000);
+        LocalDate date = LocalDate.of(2026, 8, 12);
+        var session = TushareManualBoundedSession.mainboardUniverse(
+                Set.of(date), date, date, false, false, 4);
+        fixture.exchange.requestTimeout();
+        fixture.exchange.requestTimeout();
+        fixture.exchange.respond(200, successEmpty());
 
         GatewayException failure = assertThrows(GatewayException.class,
                 () -> fixture.gateway.query("daily",
                         mapper.createObjectNode().put("trade_date",
                                 "20260812"), List.of("ts_code"),
-                        Duration.ofSeconds(5),
+                        Duration.ofSeconds(60),
                         QueryMode.CONTROLLED_NETWORK_RECOVERY, session));
 
-        assertEquals("TUSHARE_TIMEOUT", failure.safeCode());
+        assertEquals("TUSHARE_REQUEST_TIMEOUT_NO_RESPONSE",
+                failure.safeCode());
+        assertEquals(2, failure.providerCallCount());
+        assertEquals(1, failure.rateLimitRetryCount());
+        assertEquals(2, fixture.exchange.requests.size());
+        assertEquals(1, fixture.exchange.responses.size());
+    }
+
+    @Test
+    void controlledNoRetryKeepsTimeoutFailClosedWithExactEvidence() {
+        Fixture fixture = fixture(properties(), 180, 90_000);
+        fixture.exchange.requestTimeout();
+
+        GatewayException failure = assertThrows(GatewayException.class,
+                () -> fixture.gateway.query("daily",
+                        datedSecurityParameters(), List.of("ts_code"),
+                        Duration.ofSeconds(60),
+                        QueryMode.CONTROLLED_NO_RETRY,
+                        session(0, false)));
+
+        assertEquals("TUSHARE_REQUEST_TIMEOUT_NO_RESPONSE",
+                failure.safeCode());
         assertEquals(1, failure.providerCallCount());
         assertEquals(0, failure.rateLimitRetryCount());
-        assertEquals(0, session.consumedNetworkRecoveries());
-        assertEquals(0, fixture.exchange.freshConnections);
+        assertEquals("REQUEST_TIMEOUT",
+                failure.noResponseDiagnostic().stage());
+        assertFalse(failure.noResponseDiagnostic().httpStatusPresent());
+        assertFalse(failure.noResponseDiagnostic().responseBytesPresent());
+        assertFalse(failure.noResponseDiagnostic().responseJsonValid());
+        assertEquals(1, fixture.exchange.requests.size());
+        assertEquals(Duration.ofSeconds(30),
+                fixture.exchange.requests.get(0).timeout());
+    }
+
+    @Test
+    void fullMarketTimeoutIsSixtySecondsWithoutBroadeningShortRequests() {
+        Fixture fixture = fixture(properties(), 180, 90_000);
+        LocalDate date = LocalDate.of(2026, 8, 12);
+        var mainboard = TushareManualBoundedSession.mainboardUniverse(
+                Set.of(date), date, date, false, false, 4);
+        fixture.exchange.respond(200, successEmpty());
+        fixture.exchange.respond(200, successEmpty());
+
+        fixture.gateway.query("daily",
+                mapper.createObjectNode().put("trade_date", "20260812"),
+                List.of("ts_code"), Duration.ofSeconds(90),
+                QueryMode.CONTROLLED_NETWORK_RECOVERY, mainboard);
+        fixture.gateway.query("daily", datedSecurityParameters(),
+                List.of("ts_code"), Duration.ofSeconds(90),
+                QueryMode.CONTROLLED_NO_RETRY, session(0, false));
+
+        assertEquals(Duration.ofSeconds(60),
+                fixture.exchange.requests.get(0).timeout());
+        assertEquals(Duration.ofSeconds(30),
+                fixture.exchange.requests.get(1).timeout());
     }
 
     @Test
@@ -679,9 +779,14 @@ class TushareHttpApiGatewayTest {
             responses.addLast(new IOException("synthetic no-response"));
         }
 
-        private void timeout() {
+        private void requestTimeout() {
             responses.addLast(new HttpTimeoutException(
                     "synthetic timeout"));
+        }
+
+        private void connectTimeout() {
+            responses.addLast(new HttpConnectTimeoutException(
+                    "synthetic connect timeout"));
         }
 
         private void respond(int status, String body) {

@@ -38,6 +38,7 @@ public class TushareMarketFactProperties {
             DEFAULT_MAXIMUM_RATE_LIMIT_RETRIES;
     private Duration connectTimeout = Duration.ofSeconds(5);
     private Duration readTimeout = Duration.ofSeconds(30);
+    private Duration mainboardReadTimeout = Duration.ofSeconds(60);
     private Duration retryBackoff = Duration.ofSeconds(1);
 
     public Mode getMode() {
@@ -143,6 +144,14 @@ public class TushareMarketFactProperties {
         this.readTimeout = readTimeout;
     }
 
+    public Duration getMainboardReadTimeout() {
+        return mainboardReadTimeout;
+    }
+
+    public void setMainboardReadTimeout(Duration mainboardReadTimeout) {
+        this.mainboardReadTimeout = mainboardReadTimeout;
+    }
+
     public Duration getRetryBackoff() {
         return retryBackoff;
     }
@@ -227,6 +236,13 @@ public class TushareMarketFactProperties {
         }
         requirePositive(connectTimeout, "connectTimeout");
         requirePositive(readTimeout, "readTimeout");
+        requirePositive(mainboardReadTimeout, "mainboardReadTimeout");
+        if (mainboardReadTimeout.compareTo(readTimeout) < 0
+                || mainboardReadTimeout.compareTo(
+                Duration.ofMinutes(2)) > 0) {
+            throw new IllegalArgumentException(
+                    "invalid Tushare mainboardReadTimeout");
+        }
         requireNonNegative(retryBackoff, "retryBackoff");
     }
 

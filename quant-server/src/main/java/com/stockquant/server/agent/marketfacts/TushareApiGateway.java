@@ -78,6 +78,39 @@ public interface TushareApiGateway {
         }
     }
 
+    /** Secret-free proof that the transport produced no HTTP response. */
+    record NoResponseDiagnostic(
+            String stage,
+            String endpoint,
+            List<String> requestParameterNames,
+            long configuredTimeoutMillis,
+            long elapsedMillis,
+            boolean httpStatusPresent,
+            boolean responseBytesPresent,
+            boolean responseJsonValid
+    ) {
+        public NoResponseDiagnostic {
+            if (!List.of("CONNECT_TIMEOUT", "REQUEST_TIMEOUT")
+                    .contains(stage)
+                    || endpoint == null
+                    || !endpoint.matches("[a-z][a-z0-9_]{0,63}")
+                    || configuredTimeoutMillis <= 0 || elapsedMillis < 0
+                    || httpStatusPresent || responseBytesPresent
+                    || responseJsonValid) {
+                throw new IllegalArgumentException(
+                        "invalid Tushare no-response diagnostic");
+            }
+            requestParameterNames = List.copyOf(requestParameterNames);
+            if (requestParameterNames.isEmpty()
+                    || requestParameterNames.stream().anyMatch(name ->
+                    name == null
+                            || !name.matches("[a-z][a-z0-9_]{0,63}"))) {
+                throw new IllegalArgumentException(
+                        "invalid Tushare no-response diagnostic");
+            }
+        }
+    }
+
     record Table(
             List<String> fields,
             List<List<JsonNode>> rows
@@ -112,6 +145,7 @@ public interface TushareApiGateway {
         private final int providerCallCount;
         private final int rateLimitRetryCount;
         private final GatewayDiagnostic diagnostic;
+        private final NoResponseDiagnostic noResponseDiagnostic;
 
         public GatewayException(
                 ErrorKind kind,
@@ -122,7 +156,7 @@ public interface TushareApiGateway {
                 Throwable cause
         ) {
             this(kind, safeCode, safeMessage, providerCallCount,
-                    rateLimitRetryCount, cause, null);
+                    rateLimitRetryCount, cause, null, null);
         }
 
         public GatewayException(
@@ -134,12 +168,27 @@ public interface TushareApiGateway {
                 Throwable cause,
                 GatewayDiagnostic diagnostic
         ) {
+            this(kind, safeCode, safeMessage, providerCallCount,
+                    rateLimitRetryCount, cause, diagnostic, null);
+        }
+
+        public GatewayException(
+                ErrorKind kind,
+                String safeCode,
+                String safeMessage,
+                int providerCallCount,
+                int rateLimitRetryCount,
+                Throwable cause,
+                GatewayDiagnostic diagnostic,
+                NoResponseDiagnostic noResponseDiagnostic
+        ) {
             super(safeMessage, cause);
             this.kind = kind;
             this.safeCode = safeCode;
             this.providerCallCount = providerCallCount;
             this.rateLimitRetryCount = rateLimitRetryCount;
             this.diagnostic = diagnostic;
+            this.noResponseDiagnostic = noResponseDiagnostic;
         }
 
         public ErrorKind kind() {
@@ -160,6 +209,10 @@ public interface TushareApiGateway {
 
         public GatewayDiagnostic diagnostic() {
             return diagnostic;
+        }
+
+        public NoResponseDiagnostic noResponseDiagnostic() {
+            return noResponseDiagnostic;
         }
     }
 }

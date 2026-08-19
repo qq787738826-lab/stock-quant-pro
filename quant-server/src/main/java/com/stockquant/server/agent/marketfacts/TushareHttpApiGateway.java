@@ -16,6 +16,7 @@ import org.springframework.stereotype.Component;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
+import java.net.http.HttpConnectTimeoutException;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.net.http.HttpTimeoutException;
@@ -123,7 +124,7 @@ public final class TushareHttpApiGateway
             try {
                 ResponseEnvelope response = execute(
                         endpoint, parameters, fields, timeout,
-                        exchangeStrategy);
+                        mode, exchangeStrategy);
                 return new QueryResult(
                         parse(response), calls, retries);
             } catch (GatewayException error) {
@@ -158,6 +159,7 @@ public final class TushareHttpApiGateway
             ObjectNode parameters,
             List<String> fields,
             Duration timeout,
+            QueryMode mode,
             HttpExchangeStrategy exchangeStrategy
     ) {
         ObjectNode body = objectMapper.createObjectNode();
@@ -175,21 +177,26 @@ public final class TushareHttpApiGateway
                     "Tushare request could not be serialized",
                     error);
         }
+        List<String> parameterNames = new ArrayList<>();
+        parameters.fieldNames().forEachRemaining(parameterNames::add);
+        parameterNames.sort(String::compareTo);
         HttpExchangeResult exchange;
+        long startedNanos = System.nanoTime();
+        Duration effectiveTimeout = effectiveTimeout(endpoint, timeout, mode);
         try {
-            Duration effectiveTimeout = timeout.compareTo(
-                    properties.getReadTimeout()) <= 0
-                    ? timeout : properties.getReadTimeout();
             exchange = exchangeStrategy.post(
                     baseUri,
                     requestBody,
                     effectiveTimeout);
+        } catch (HttpConnectTimeoutException error) {
+            throw noResponseTimeout("CONNECT_TIMEOUT",
+                    "TUSHARE_CONNECT_TIMEOUT_NO_RESPONSE", endpoint,
+                    parameterNames, properties.getConnectTimeout(),
+                    startedNanos, error);
         } catch (HttpTimeoutException error) {
-            throw failure(
-                    ErrorKind.TIMEOUT,
-                    "TUSHARE_TIMEOUT",
-                    "Tushare request timed out",
-                    error);
+            throw noResponseTimeout("REQUEST_TIMEOUT",
+                    "TUSHARE_REQUEST_TIMEOUT_NO_RESPONSE", endpoint,
+                    parameterNames, effectiveTimeout, startedNanos, error);
         } catch (InterruptedException error) {
             Thread.currentThread().interrupt();
             throw failure(
@@ -204,9 +211,6 @@ public final class TushareHttpApiGateway
                     "Tushare network request failed",
                     error);
         }
-        List<String> parameterNames = new ArrayList<>();
-        parameters.fieldNames().forEachRemaining(parameterNames::add);
-        parameterNames.sort(String::compareTo);
         GatewayDiagnostic transport = diagnostic(
                 exchange, endpoint, parameterNames, null,
                 "NOT_PARSED", false);
@@ -395,11 +399,51 @@ public final class TushareHttpApiGateway
             QueryMode mode,
             boolean recoveryUsed
     ) {
+        boolean exactNoResponseFailure = error.kind()
+                == ErrorKind.NETWORK_ERROR
+                && "TUSHARE_NETWORK_ERROR".equals(error.safeCode())
+                && error.diagnostic() == null
+                || error.kind() == ErrorKind.TIMEOUT
+                && Set.of("TUSHARE_CONNECT_TIMEOUT_NO_RESPONSE",
+                "TUSHARE_REQUEST_TIMEOUT_NO_RESPONSE")
+                .contains(error.safeCode())
+                && error.noResponseDiagnostic() != null;
         return mode == QueryMode.CONTROLLED_NETWORK_RECOVERY
                 && !recoveryUsed
-                && error.kind() == ErrorKind.NETWORK_ERROR
-                && "TUSHARE_NETWORK_ERROR".equals(error.safeCode())
-                && error.diagnostic() == null;
+                && exactNoResponseFailure;
+    }
+
+    private Duration effectiveTimeout(
+            String endpoint,
+            Duration requested,
+            QueryMode mode
+    ) {
+        Duration ceiling = mode == QueryMode.CONTROLLED_NETWORK_RECOVERY
+                && Set.of("daily", "adj_factor").contains(endpoint)
+                ? properties.getMainboardReadTimeout()
+                : properties.getReadTimeout();
+        return requested.compareTo(ceiling) <= 0 ? requested : ceiling;
+    }
+
+    private static GatewayException noResponseTimeout(
+            String stage,
+            String code,
+            String endpoint,
+            List<String> parameterNames,
+            Duration configuredTimeout,
+            long startedNanos,
+            HttpTimeoutException cause
+    ) {
+        long elapsedMillis = Math.max(0L,
+                Duration.ofNanos(System.nanoTime() - startedNanos)
+                        .toMillis());
+        var evidence = new TushareApiGateway.NoResponseDiagnostic(
+                stage, endpoint, parameterNames,
+                configuredTimeout.toMillis(), elapsedMillis,
+                false, false, false);
+        return new GatewayException(ErrorKind.TIMEOUT, code,
+                "Tushare transport timed out without an HTTP response",
+                0, 0, cause, null, evidence);
     }
 
     private String safeProviderMessage(String message) {
@@ -526,7 +570,8 @@ public final class TushareHttpApiGateway
                 calls,
                 retries,
                 error.getCause(),
-                error.diagnostic());
+                error.diagnostic(),
+                error.noResponseDiagnostic());
     }
 
     private static GatewayException failure(

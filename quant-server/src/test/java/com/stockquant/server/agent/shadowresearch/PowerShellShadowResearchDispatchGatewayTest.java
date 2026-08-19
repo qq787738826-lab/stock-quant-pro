@@ -51,6 +51,18 @@ class PowerShellShadowResearchDispatchGatewayTest {
                 .isEmpty());
     }
 
+    @Test
+    void incompleteInitialBackfillSkipsButOneDailyIncrementIsAllowed() {
+        assertTrue(PowerShellShadowResearchDispatchGateway
+                .fullBackfillIncomplete(true, 60, 15));
+        assertTrue(PowerShellShadowResearchDispatchGateway
+                .fullBackfillIncomplete(false, 60, 0));
+        assertFalse(PowerShellShadowResearchDispatchGateway
+                .fullBackfillIncomplete(true, 60, 1));
+        assertFalse(PowerShellShadowResearchDispatchGateway
+                .fullBackfillIncomplete(true, 60, 0));
+    }
+
     private static void assertPair(
             List<String> command,
             String key,

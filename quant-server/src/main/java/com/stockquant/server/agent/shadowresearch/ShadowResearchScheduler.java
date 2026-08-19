@@ -82,7 +82,7 @@ public final class ShadowResearchScheduler {
         if (result.accepted()) {
             runtimeState.dispatched(clock.instant());
         } else {
-            runtimeState.checked(clock.instant(), "DISPATCH_IDEMPOTENT");
+            runtimeState.checked(clock.instant(), result.reason());
         }
     }
 

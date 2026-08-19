@@ -221,4 +221,34 @@ class ShadowResearchSchedulerTest {
                 runtime.snapshot().lastReason());
         assertEquals(null, runtime.snapshot().lastDispatchedAt());
     }
+
+    @Test
+    void incompleteMainboardBackfillSkipKeepsSchedulerHealthy() {
+        ShadowResearchRepository repository = mock(
+                ShadowResearchRepository.class);
+        AtomicInteger dispatchCalls = new AtomicInteger();
+        ShadowResearchDispatchGateway gateway = (date, asOf, calendar) -> {
+            dispatchCalls.incrementAndGet();
+            return new ShadowResearchDispatchGateway.DispatchResult(
+                    "SQHB_20250910T092000Z_A1B2C3D4E5F6", false,
+                    "SCHEDULED_SHADOW_SKIPPED_BACKFILL_INCOMPLETE");
+        };
+        Instant now = Instant.parse("2025-09-10T09:20:00Z");
+        when(repository.frozenSlot(any(), any(), any()))
+                .thenReturn(Optional.empty());
+        when(repository.researchCalendarState(any(), any()))
+                .thenReturn(ShadowResearchRepository.CalendarState.OPEN);
+        when(repository.nextCommonOpenKnown(any(), any())).thenReturn(true);
+        var runtime = new ShadowSchedulerRuntimeState();
+
+        new ShadowResearchScheduler(repository, gateway,
+                new ShadowResearchScheduleProperties(),
+                Clock.fixed(now, ZoneOffset.UTC), runtime)
+                .dispatchAfterClose();
+
+        assertEquals(1, dispatchCalls.get());
+        assertEquals("SCHEDULED_SHADOW_SKIPPED_BACKFILL_INCOMPLETE",
+                runtime.snapshot().lastReason());
+        verify(repository, never()).activeRun();
+    }
 }

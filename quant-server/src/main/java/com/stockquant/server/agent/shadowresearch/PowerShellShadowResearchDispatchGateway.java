@@ -6,6 +6,7 @@ import com.stockquant.server.researchselection.ResearchSelectionRepository;
 import com.stockquant.server.researchselection.ResearchSelectionProviderBudgetPlanner;
 import com.stockquant.server.researchselection.ResearchUniverseMainboardDatasetLoader;
 import com.stockquant.server.researchselection.ResearchUniverseMainboardRepository;
+import com.stockquant.server.researchselection.ResearchUniverseMainboard;
 import com.stockquant.server.production.SystemHealthService;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
@@ -37,6 +38,8 @@ import java.util.concurrent.TimeUnit;
         name = "enabled", havingValue = "true")
 public final class PowerShellShadowResearchDispatchGateway
         implements ShadowResearchDispatchGateway {
+    static final String BACKFILL_SKIP_REASON =
+            "SCHEDULED_SHADOW_SKIPPED_BACKFILL_INCOMPLETE";
     private static final DateTimeFormatter REQUEST_TIME =
             DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'")
                     .withZone(ZoneOffset.UTC);
@@ -69,6 +72,25 @@ public final class PowerShellShadowResearchDispatchGateway
                 new PitMarketFactRepository(jdbc, mapper));
     }
 
+    private Optional<String> preflightSkipReason(
+            LocalDate tradeDate,
+            Instant researchAsOf,
+            ShadowResearchRepository.CalendarState calendarState
+    ) {
+        Objects.requireNonNull(tradeDate, "tradeDate");
+        Objects.requireNonNull(researchAsOf, "researchAsOf");
+        Objects.requireNonNull(calendarState, "calendarState");
+        var plan = mainboardPlan(selectionRequest(), researchAsOf);
+        if (plan.audit().calendarIncomplete()) {
+            throw invalid("MAINBOARD_TRADE_CALENDAR_INCOMPLETE");
+        }
+        return fullBackfillIncomplete(
+                universes.latest().isPresent(),
+                plan.audit().requiredTradeDates().size(),
+                plan.audit().missingTradeDates().size())
+                ? Optional.of(BACKFILL_SKIP_REASON) : Optional.empty();
+    }
+
     @Override
     public DispatchResult dispatch(
             LocalDate tradeDate,
@@ -82,6 +104,12 @@ public final class PowerShellShadowResearchDispatchGateway
             throw invalid("M4_SCHEDULER_CLOSED_DATE_DISPATCH_FORBIDDEN");
         }
         String requestId = requestId(researchAsOf);
+        Optional<String> skip = preflightSkipReason(tradeDate,
+                researchAsOf, calendarState);
+        if (skip.isPresent()) {
+            return new DispatchResult(requestId, false,
+                    skip.orElseThrow());
+        }
         if (!repository.claimScheduledDispatch(tradeDate, requestId,
                 researchAsOf)) {
             return new DispatchResult(requestId, false);
@@ -89,10 +117,7 @@ public final class PowerShellShadowResearchDispatchGateway
         ResearchSelectionModels.RunSummary selection = null;
         try {
             ResearchSelectionModels.SelectionRequest selectionRequest =
-                    new ResearchSelectionModels.SelectionRequest(
-                            ResearchSelectionModels.TriggerMode
-                                    .SCHEDULED_SHADOW,
-                            20, 60, 10, 5, true);
+                    selectionRequest();
             selection = selections.create(selectionPublicId(researchAsOf),
                     selectionRequest, researchAsOf,
                     com.stockquant.server.production.ProductionRuntimeState
@@ -212,11 +237,7 @@ public final class PowerShellShadowResearchDispatchGateway
             ResearchSelectionModels.SelectionRequest request,
             Instant asOf
     ) {
-        var plan = ResearchSelectionProviderBudgetPlanner.mainboardPlan(
-                universeLoader, universes.latest().orElse(null), request,
-                asOf, universes.existingMarketFactSecurityCount(),
-                health.monthlyBudget(asOf).tushareRequests(),
-                health.monthlyBudget(asOf).tushareLimit());
+        var plan = mainboardPlan(request, asOf);
         if (plan.audit().calendarIncomplete()) {
             throw invalid("MAINBOARD_TRADE_CALENDAR_INCOMPLETE");
         }
@@ -224,6 +245,40 @@ public final class PowerShellShadowResearchDispatchGateway
             throw invalid("RESEARCH_SELECTION_MONTHLY_BUDGET_EXHAUSTED");
         }
         return plan.backfill().totalRequests();
+    }
+
+    private ResearchSelectionProviderBudgetPlanner.MainboardPlan
+    mainboardPlan(
+            ResearchSelectionModels.SelectionRequest request,
+            Instant asOf
+    ) {
+        return ResearchSelectionProviderBudgetPlanner.mainboardPlan(
+                universeLoader, universes.latest().orElse(null), request,
+                asOf, universes.existingMarketFactSecurityCount(),
+                health.monthlyBudget(asOf).tushareRequests(),
+                health.monthlyBudget(asOf).tushareLimit());
+    }
+
+    private static ResearchSelectionModels.SelectionRequest
+    selectionRequest() {
+        return new ResearchSelectionModels.SelectionRequest(
+                ResearchSelectionModels.TriggerMode.SCHEDULED_SHADOW,
+                20, 60, 10, 5, true);
+    }
+
+    static boolean fullBackfillIncomplete(
+            boolean snapshotPresent,
+            int requiredDates,
+            int missingDates
+    ) {
+        if (!snapshotPresent || requiredDates < ResearchUniverseMainboard
+                .STABILITY_MINIMUM_SESSIONS
+                || missingDates < 0 || missingDates > requiredDates) {
+            return true;
+        }
+        int completeDates = requiredDates - missingDates;
+        return completeDates < ResearchUniverseMainboard
+                .STABILITY_MINIMUM_SESSIONS - 1;
     }
 
     private void terminalizeSelection(

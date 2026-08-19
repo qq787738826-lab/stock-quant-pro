@@ -46,6 +46,8 @@ import java.util.Set;
 
 /** Fixed manual V1.0.1 current-as-of selection runner; never starts Spring. */
 public final class TushareResearchSelectionManualRunner {
+    private static final Duration MAINBOARD_BATCH_TIMEOUT =
+            Duration.ofSeconds(60);
     static final int EXIT_SUCCESS = 0;
     static final int EXIT_REJECTED = 20;
     private static final int FORMAL_PORT = 38_432;
@@ -395,7 +397,7 @@ public final class TushareResearchSelectionManualRunner {
                             plan.backfill().rangeStart(),
                             plan.backfill().rangeEnd(),
                             plan.backfill().tradeCalendarRequests() == 2,
-                            gitCommit, Duration.ofSeconds(30),
+                            gitCommit, MAINBOARD_BATCH_TIMEOUT,
                             plan.backfill().networkRecoveryRequests());
             progress.providerCalls += evidence.providerCallCount();
             progress.retryCount += evidence.retryCount();
@@ -513,7 +515,8 @@ public final class TushareResearchSelectionManualRunner {
                     progress.providerCalls, progress.retryCount,
                     progress.modelDiagnostics == null ? 0
                             : progress.modelDiagnostics.networkCallCount(),
-                    progress.modelDiagnostics, reason, auditClean));
+                    progress.modelDiagnostics, reason, auditClean,
+                    noResponseDiagnostic(error)));
         }
         System.err.println("RESEARCH_SELECTION_FAILURE_REASON=" + reason);
     }
@@ -523,6 +526,18 @@ public final class TushareResearchSelectionManualRunner {
         return message != null && message.matches(
                 "[A-Z][A-Z0-9_]{3,127}") ? message
                 : "RESEARCH_SELECTION_EXECUTION_FAILED";
+    }
+
+    private static TushareApiGateway.NoResponseDiagnostic
+    noResponseDiagnostic(Throwable error) {
+        for (Throwable current = error; current != null;
+             current = current.getCause()) {
+            if (current instanceof TushareApiGateway.GatewayException gateway
+                    && gateway.noResponseDiagnostic() != null) {
+                return gateway.noResponseDiagnostic();
+            }
+        }
+        return null;
     }
 
     private static IllegalStateException invalid(String code) {

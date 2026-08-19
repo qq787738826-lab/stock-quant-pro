@@ -90,6 +90,7 @@ stockquant:
       maximum-rate-limit-retries: 2
       connect-timeout: 5s
       read-timeout: 30s
+      mainboard-read-timeout: 60s
       retry-backoff: 1s
 logging:
   file:

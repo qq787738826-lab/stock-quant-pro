@@ -63,7 +63,7 @@ public final class ResearchSelectionSanitizedResult {
                 selection.timings().strategyAnalysisMillis(),
                 selection.timings().agentResearchMillis(),
                 selection.timings().totalMillis(), fake, auditClean, true,
-                false, diagnostics, null);
+                false, diagnostics, null, null);
     }
 
     public static Result failure(
@@ -79,6 +79,28 @@ public final class ResearchSelectionSanitizedResult {
             FailureDiagnostics diagnostics,
             String reason,
             boolean auditClean
+    ) {
+        return failure(executionId, gitCommit, startedAt, completedAt,
+                runId, publicRunId, providerCalls, retryCount,
+                modelProviderRequests, diagnostics, reason, auditClean,
+                null);
+    }
+
+    public static Result failure(
+            String executionId,
+            String gitCommit,
+            Instant startedAt,
+            Instant completedAt,
+            long runId,
+            String publicRunId,
+            int providerCalls,
+            int retryCount,
+            int modelProviderRequests,
+            FailureDiagnostics diagnostics,
+            String reason,
+            boolean auditClean,
+            com.stockquant.server.agent.marketfacts.TushareApiGateway
+                    .NoResponseDiagnostic providerTransportDiagnostic
     ) {
         int modelCalls = diagnostics == null ? 0
                 : diagnostics.completedCallCount();
@@ -99,7 +121,8 @@ public final class ResearchSelectionSanitizedResult {
                 outputTokens, reasoningTokens, totalTokens, cost, 0, 0,
                 false, false, false, false, 0,
                 List.of(), List.of(), 0, 0, 0, 0, 0, false, auditClean,
-                true, false, diagnostics, reason);
+                true, false, diagnostics, reason,
+                providerTransportDiagnostic);
     }
 
     public record Result(
@@ -149,7 +172,9 @@ public final class ResearchSelectionSanitizedResult {
             boolean researchOnly,
             boolean realTradingStarted,
             FailureDiagnostics modelDiagnostics,
-            String failureReason
+            String failureReason,
+            com.stockquant.server.agent.marketfacts.TushareApiGateway
+                    .NoResponseDiagnostic providerTransportDiagnostic
     ) {
         public Result {
             agentRoles = List.copyOf(agentRoles);
