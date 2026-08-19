@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -78,6 +79,32 @@ class ResearchSelectionMainboardBudgetTest {
         assertThrows(IllegalArgumentException.class, () ->
                 ResearchSelectionProviderBudgetPlanner.assembleMainboardPlan(
                         null, audit, ANCHOR, AS_OF, 0, 151, 150));
+    }
+
+    @Test
+    void interruptedBackfillRetainsTheMostCompleteSixtySessionWindow() {
+        List<LocalDate> dates = weekdaysEndingAt(
+                LocalDate.of(2026, 8, 19), 61);
+        var completed = new LinkedHashSet<>(dates.subList(0, 45));
+
+        LocalDate anchor = ResearchUniverseMainboardDatasetLoader
+                .bestPartialBackfillAnchor(dates, completed, 59,
+                        dates.get(60));
+
+        assertEquals(dates.get(59), anchor);
+        assertEquals(LocalDate.of(2026, 8, 18), anchor);
+    }
+
+    @Test
+    void emptyInitialBackfillStillStartsAtNewestClosedSession() {
+        List<LocalDate> dates = weekdaysEndingAt(
+                LocalDate.of(2026, 8, 19), 61);
+
+        LocalDate anchor = ResearchUniverseMainboardDatasetLoader
+                .bestPartialBackfillAnchor(dates, java.util.Set.of(), 59,
+                        dates.get(60));
+
+        assertEquals(dates.get(60), anchor);
     }
 
     private static ResearchUniverseMainboard.SnapshotBundle snapshot() {

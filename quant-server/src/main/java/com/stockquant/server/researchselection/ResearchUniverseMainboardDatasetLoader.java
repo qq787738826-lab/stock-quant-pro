@@ -228,7 +228,38 @@ public final class ResearchUniverseMainboardDatasetLoader {
                 return openDates.get(index);
             }
         }
-        return newest;
+        return bestPartialBackfillAnchor(openDates, complete,
+                firstCandidate, newest);
+    }
+
+    /**
+     * Keeps an interrupted initial backfill on the 60-session window with the
+     * most already-complete dates. A wall-clock day change must not discard
+     * the oldest completed date and silently add a new Provider obligation.
+     */
+    static LocalDate bestPartialBackfillAnchor(
+            List<LocalDate> openDates,
+            Set<LocalDate> complete,
+            int firstCandidate,
+            LocalDate newest
+    ) {
+        int bestCount = 0;
+        LocalDate best = newest;
+        for (int index = firstCandidate; index < openDates.size(); index++) {
+            int start = index - ResearchUniverseMainboard
+                    .STABILITY_MINIMUM_SESSIONS + 1;
+            if (start < 0) continue;
+            int count = 0;
+            for (LocalDate date : openDates.subList(start, index + 1)) {
+                if (complete.contains(date)) count++;
+            }
+            if (count > bestCount || count == bestCount
+                    && openDates.get(index).isAfter(best)) {
+                bestCount = count;
+                best = openDates.get(index);
+            }
+        }
+        return bestCount == 0 ? newest : best;
     }
 
     public List<LocalDate> commonOpenDatesThrough(
