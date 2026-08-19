@@ -5,6 +5,7 @@ import AgentConclusionPanel from '../components/AgentConclusionPanel.vue'
 import {
   getResearchUniverse,
   getSelectionHistory,
+  getLatestSelection,
   getSelectionMembers,
   getSelectionRun,
   startSelection,
@@ -47,6 +48,10 @@ const memberEligibility = ref('')
 const running = ref(false)
 const error = ref('')
 const diagnosticReason = ref('')
+const universeLoading = ref(false)
+const universeLoadError = ref('')
+const historyLoadError = ref('')
+const resultLoadError = ref('')
 const selectedWindow = ref(20)
 const activeRunId = ref<number | null>(null)
 const route = useRoute()
@@ -75,28 +80,66 @@ const exclusionEntries = computed(() => Object.entries(
   result.value?.universeFunnel?.exclusionReasonCounts ?? {})
   .sort((left, right) => right[1] - left[1]))
 
-async function load() {
-  [history.value, universe.value] = await Promise.all([
-    getSelectionHistory(), getResearchUniverse()
-  ])
-  const requestedId = Number(route.query.run)
-  const latest = Number.isSafeInteger(requestedId) && requestedId > 0
-    ? await getSelectionRun(requestedId) as SelectionSummary
-    : history.value[0]
-  if (latest?.status === 'COMPLETED') {
-    result.value = await getSelectionRun(latest.runId) as SelectionResult
-    await loadMembers(latest.runId)
-  } else if (latest && latest.status !== 'FAILED') {
-    running.value = true
-    activeRunId.value = latest.runId
-    poll(latest.runId)
+async function loadUniversePanel() {
+  universeLoading.value = true
+  universeLoadError.value = ''
+  try {
+    universe.value = await getResearchUniverse()
+  } catch (cause) {
+    universeLoadError.value = loadFriendly('UNIVERSE', cause)
+  } finally {
+    universeLoading.value = false
   }
 }
+async function loadHistoryAndResult() {
+  historyLoadError.value = ''
+  resultLoadError.value = ''
+  try {
+    history.value = await getSelectionHistory()
+  } catch (cause) {
+    historyLoadError.value = loadFriendly('HISTORY', cause)
+  }
+  try {
+    const requestedId = Number(route.query.run)
+    let latest: SelectionSummary | SelectionResult | undefined
+    if (Number.isSafeInteger(requestedId) && requestedId > 0) {
+      latest = await getSelectionRun(requestedId)
+    } else {
+      const newest = history.value[0]
+      latest = newest && newest.status !== 'FAILED'
+        ? newest
+        : history.value.find(item => item.status === 'COMPLETED')
+      if (!latest) latest = await getLatestSelection()
+    }
+    if (latest?.status === 'COMPLETED') {
+      const completed = 'contractVersion' in latest
+        ? latest : await getSelectionRun(latest.runId)
+      if ('contractVersion' in completed) {
+        result.value = completed
+        await loadMembers(completed.runId)
+      }
+    } else if (latest && latest.status !== 'FAILED') {
+      running.value = true
+      activeRunId.value = latest.runId
+      poll(latest.runId)
+    }
+  } catch (cause) {
+    resultLoadError.value = loadFriendly('RESULT', cause)
+  }
+}
+async function load() {
+  await Promise.allSettled([loadHistoryAndResult(), loadUniversePanel()])
+}
 async function openRun(id: number) {
-  const value = await getSelectionRun(id)
-  if ('contractVersion' in value && value.status === 'COMPLETED') {
-    result.value = value
-    await loadMembers(id)
+  resultLoadError.value = ''
+  try {
+    const value = await getSelectionRun(id)
+    if ('contractVersion' in value && value.status === 'COMPLETED') {
+      result.value = value
+      await loadMembers(id)
+    }
+  } catch (cause) {
+    resultLoadError.value = loadFriendly('RESULT', cause)
   }
 }
 async function loadMembers(id: number, page = 0) {
@@ -130,6 +173,7 @@ async function start() {
     running.value = false
     error.value = startFriendly(cause)
     diagnosticReason.value = safeDiagnostic(cause instanceof Error ? cause.message : '')
+    if (isRequestTimeout(cause)) await loadHistoryAndResult()
   }
 }
 function poll(id: number) {
@@ -172,6 +216,9 @@ function friendly(category?: string, reason?: string) {
 }
 function startFriendly(cause: unknown) {
   const message = cause instanceof Error ? cause.message : ''
+  if (isRequestTimeout(cause)) {
+    return '全主板数据核验响应超时；系统可能已经接收任务，正在从历史记录核对，请勿重复提交。'
+  }
   if (message.includes('RESEARCH_SELECTION_ALREADY_RUNNING')) {
     return '已有一次立即选股正在进行，请查看当前进度。'
   }
@@ -187,7 +234,27 @@ function startFriendly(cause: unknown) {
   if (message.startsWith('BROKER:') || message.startsWith('BUILD:')) {
     return '本地研究服务暂不可用，请等待系统自动恢复。'
   }
-  return '研究启动失败，系统未产生真实交易。'
+  return '研究请求未能确认；请查看历史结果或等待系统恢复，系统不会自动重复创建任务。'
+}
+function isRequestTimeout(cause: unknown) {
+  const message = cause instanceof Error ? cause.message : String(cause || '')
+  return /timeout|ECONNABORTED/i.test(message)
+}
+function loadFriendly(scope: 'UNIVERSE' | 'HISTORY' | 'RESULT', cause: unknown) {
+  const timeout = isRequestTimeout(cause)
+  if (scope === 'UNIVERSE') {
+    return timeout
+      ? '全主板股票池核验超时；历史选股结果仍可独立查看，系统未创建新任务。'
+      : '全主板股票池暂时无法加载；历史选股结果仍可独立查看。'
+  }
+  if (scope === 'HISTORY') {
+    return timeout
+      ? '历史选股结果加载超时；股票池和指定结果仍可独立查看。'
+      : '历史选股结果暂时无法加载；股票池信息不受影响。'
+  }
+  return timeout
+    ? '选股结果详情加载超时；请稍后重新打开该历史结果。'
+    : '选股结果详情暂时无法加载；历史记录没有被修改。'
 }
 function safeDiagnostic(value?: string) {
   const match = String(value || '').match(/[A-Z][A-Z0-9_]{3,127}/)
@@ -209,6 +276,11 @@ onBeforeUnmount(() => window.clearInterval(timer))
       </select><button class="select-now" :disabled="running || selectionBlocked" @click="start">{{ running ? '研究进行中…' : selectionBlocked ? '等待数据预算' : '立即选股' }}</button></div>
     </header>
     <div class="boundary">仅限研究与模拟 · 真实交易已关闭 · 当前分析不是历史实时影子记录</div>
+    <el-alert v-if="universeLoading" title="正在核验全主板股票池，本页其他历史结果会先行加载。"
+      type="info" :closable="false" show-icon />
+    <el-alert v-if="universeLoadError" :title="universeLoadError" type="warning" :closable="false" show-icon />
+    <el-alert v-if="historyLoadError" :title="historyLoadError" type="warning" :closable="false" show-icon />
+    <el-alert v-if="resultLoadError" :title="resultLoadError" type="warning" :closable="false" show-icon />
     <section v-if="universe?.snapshot" class="universe-snapshot">
       <header><div><h2>全主板股票池快照</h2><p>{{ universe.snapshot.snapshotId }} · 生效日 {{ universe.snapshot.effectiveDate }}</p></div><b>{{ universe.snapshot.memberCount }} 只</b></header>
       <div class="universe-facts">
