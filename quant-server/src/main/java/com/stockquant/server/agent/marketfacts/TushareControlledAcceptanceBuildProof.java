@@ -47,6 +47,9 @@ public final class TushareControlledAcceptanceBuildProof {
     public static final String RESEARCH_SELECTION_RUNNER_START_CLASS =
             "com.stockquant.server.agent.marketfacts."
                     + "TushareResearchSelectionManualRunner";
+    public static final String MAINBOARD_DAILY_INCREMENT_RUNNER_START_CLASS =
+            "com.stockquant.server.agent.marketfacts."
+                    + "TushareMainboardDailyIncrementManualRunner";
     static final String M1_STAGE_BRANCH =
             "codex/1.4.0-m1-research-data-ready";
     private static final Set<String> REQUIRED_PROPERTIES = Set.of(
@@ -290,7 +293,8 @@ public final class TushareControlledAcceptanceBuildProof {
                     M3_RUNNER_START_CLASS,
                     M4_RUNNER_START_CLASS,
                     M6_RUNNER_START_CLASS,
-                    RESEARCH_SELECTION_RUNNER_START_CLASS).contains(
+                    RESEARCH_SELECTION_RUNNER_START_CLASS,
+                    MAINBOARD_DAILY_INCREMENT_RUNNER_START_CLASS).contains(
                             manifest.startClass())
                     || !gitCommit.equals(manifest.gitCommit())
                     || !remoteGitCommit.equals(manifest.remoteGitCommit())
@@ -412,6 +416,17 @@ public final class TushareControlledAcceptanceBuildProof {
         public boolean researchSelectionEligible() {
             validate();
             return RESEARCH_SELECTION_RUNNER_START_CLASS.equals(
+                    runnerStartClass()) && (source
+                    == ProofSource.RESEARCH_SELECTION_CONTROLLED_BUILD_ARTIFACT
+                    && buildMode
+                    == BuildMode.RESEARCH_SELECTION_CONTROLLED_BUILD_ARTIFACT
+                    || source == ProofSource.CONTROLLED_BUILD_ARTIFACT
+                    && buildMode == BuildMode.CONTROLLED_BUILD_ARTIFACT);
+        }
+
+        public boolean mainboardDailyIncrementEligible() {
+            validate();
+            return MAINBOARD_DAILY_INCREMENT_RUNNER_START_CLASS.equals(
                     runnerStartClass()) && (source
                     == ProofSource.RESEARCH_SELECTION_CONTROLLED_BUILD_ARTIFACT
                     && buildMode
@@ -613,7 +628,8 @@ public final class TushareControlledAcceptanceBuildProof {
                     "codex/1.4.0-v1.0.2-startup-self-heal-fix",
                     "codex/1.4.0-v1.0.3-research-selection-runtime-fix",
                     "codex/1.4.0-v1.0.7-intraday-research-selection-anchor-fix",
-                    "codex/1.4.0-v1.0.9-full-mainboard-universe")
+                    "codex/1.4.0-v1.0.9-full-mainboard-universe",
+                    "codex/1.4.0-v1.0.11-mainboard-daily-increment")
                     .contains(branchName);
         }
         return REQUIRED_INTEGRATION_BRANCH.equals(branchName)

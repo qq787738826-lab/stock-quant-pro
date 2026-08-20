@@ -11,14 +11,17 @@ param(
 
     [ValidateSet('F1F_B2', 'REDUCED_RESEARCH_DAY001', 'M1_RESEARCH_DATA',
         'M2_STRATEGY_RESEARCH', 'M3_AGENT_RESEARCH', 'M4_SHADOW_RESEARCH',
-        'M6_RESEARCH_PRODUCTION', 'RESEARCH_SELECTION')]
+        'M6_RESEARCH_PRODUCTION', 'RESEARCH_SELECTION',
+        'MAINBOARD_DAILY_INCREMENT')]
     [string] $RunnerProfile = 'F1F_B2'
 )
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $requiredBranch = 'feature/1.4.0-agent-team'
-$artifactName = if ($RunnerProfile -eq 'RESEARCH_SELECTION') {
+$artifactName = if ($RunnerProfile -eq 'MAINBOARD_DAILY_INCREMENT') {
+    'quant-server-1.3.1-mainboard-daily-increment-runner.jar'
+} elseif ($RunnerProfile -eq 'RESEARCH_SELECTION') {
     'quant-server-1.3.1-research-selection-runner.jar'
 } elseif ($RunnerProfile -eq 'M6_RESEARCH_PRODUCTION') {
     'quant-server-1.3.1-research-production.jar'
@@ -35,7 +38,9 @@ $artifactName = if ($RunnerProfile -eq 'RESEARCH_SELECTION') {
 } else {
     'quant-server-1.3.1-f1f-b2-runner.jar'
 }
-$runnerStartClass = if ($RunnerProfile -eq 'RESEARCH_SELECTION') {
+$runnerStartClass = if ($RunnerProfile -eq 'MAINBOARD_DAILY_INCREMENT') {
+    'com.stockquant.server.agent.marketfacts.TushareMainboardDailyIncrementManualRunner'
+} elseif ($RunnerProfile -eq 'RESEARCH_SELECTION') {
     'com.stockquant.server.agent.marketfacts.TushareResearchSelectionManualRunner'
 } elseif ($RunnerProfile -eq 'M6_RESEARCH_PRODUCTION') {
     'com.stockquant.server.production.StockQuantResearchProductionRunner'
@@ -156,10 +161,12 @@ try {
                 'codex/1.4.0-v1.0.2-startup-self-heal-fix',
                 'codex/1.4.0-v1.0.3-research-selection-runtime-fix',
                 'codex/1.4.0-v1.0.7-intraday-research-selection-anchor-fix',
-                'codex/1.4.0-v1.0.9-full-mainboard-universe') -or
+                'codex/1.4.0-v1.0.9-full-mainboard-universe',
+                'codex/1.4.0-v1.0.11-mainboard-daily-increment') -or
             $remoteCommit -ne $ExpectedCommit -or
             $RunnerProfile -notin @(
-                'RESEARCH_SELECTION', 'M6_RESEARCH_PRODUCTION')) {
+                'RESEARCH_SELECTION', 'M6_RESEARCH_PRODUCTION',
+                'MAINBOARD_DAILY_INCREMENT')) {
             throw 'RESEARCH_SELECTION_BUILD_BASELINE_REQUIRED'
         }
     } elseif ($actualBranch -ne $requiredBranch -and

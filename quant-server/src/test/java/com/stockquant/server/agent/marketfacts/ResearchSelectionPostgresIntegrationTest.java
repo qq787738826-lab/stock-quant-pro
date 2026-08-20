@@ -428,6 +428,120 @@ class ResearchSelectionPostgresIntegrationTest {
         assertEquals(3, count(jdbc, "research_selection_runs"));
     }
 
+    @Test
+    void dataOnlyMainboardIncrementWritesOneCompleteDateAndThenNoOps() {
+        JdbcTemplate jdbc = new JdbcTemplate(dataSource);
+        ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+        var setupGateway = new TushareControlledAcceptanceE2eDryRunGateway();
+        ResearchUniverseMainboard.SnapshotBundle snapshot;
+        try (var setup = components(setupGateway)) {
+            snapshot = setup.mainboardUniverseCaptureService().capture(
+                    null, true, Set.of(), ANCHOR, ANCHOR, true,
+                    "a".repeat(40), Duration.ofSeconds(5)).snapshot();
+        }
+        assertEquals(3, setupGateway.calls());
+        int selectionBefore = count(jdbc, "research_selection_runs");
+        int shadowBefore = count(jdbc, "shadow_research_runs");
+        int paperBefore = count(jdbc, "shadow_paper_orders");
+        int evaluationBefore = count(jdbc, "agent_evaluation_reports");
+
+        var incrementGateway = new TushareControlledAcceptanceE2eDryRunGateway();
+        MainboardDailyIncrementService.Outcome first;
+        try (var components = components(incrementGateway)) {
+            var progress = new MainboardDailyIncrementService.Progress();
+            first = new MainboardDailyIncrementService(jdbc, mapper,
+                    components.mainboardUniverseCaptureService(),
+                    Clock.fixed(AS_OF, ZoneOffset.UTC))
+                    .execute(ANCHOR, "b".repeat(40), progress);
+        }
+        assertEquals(2, first.providerCalls());
+        assertEquals(0, first.retryCount());
+        assertEquals(1, first.batchIds().size());
+        assertEquals(3_000, first.dailyAdded());
+        assertEquals(3_000, first.factorAdded());
+        assertEquals(6_000, first.appended());
+        assertEquals(ANCHOR, first.latestCompleteDate());
+        assertTrue(first.validation().coverageComplete());
+        assertTrue(first.validation().knownAtValid());
+        assertEquals(2, incrementGateway.calls());
+
+        var repeatGateway = new TushareControlledAcceptanceE2eDryRunGateway();
+        MainboardDailyIncrementService.Outcome repeat;
+        try (var components = components(repeatGateway,
+                AS_OF.plusSeconds(1))) {
+            repeat = new MainboardDailyIncrementService(jdbc, mapper,
+                    components.mainboardUniverseCaptureService(),
+                    Clock.fixed(AS_OF.plusSeconds(1), ZoneOffset.UTC))
+                    .execute(ANCHOR, "c".repeat(40),
+                            new MainboardDailyIncrementService.Progress());
+        }
+        assertEquals(0, repeat.providerCalls());
+        assertEquals(0, repeat.dailyAdded());
+        assertEquals(0, repeat.factorAdded());
+        assertEquals(0, repeatGateway.calls());
+        assertEquals(snapshot.snapshot().databaseId(),
+                repeat.snapshot().snapshot().databaseId());
+        assertEquals(selectionBefore, count(jdbc, "research_selection_runs"));
+        assertEquals(shadowBefore, count(jdbc, "shadow_research_runs"));
+        assertEquals(paperBefore, count(jdbc, "shadow_paper_orders"));
+        assertEquals(evaluationBefore,
+                count(jdbc, "agent_evaluation_reports"));
+    }
+
+    @Test
+    void dataOnlyMainboardIncrementRollsBackDailyWhenFactorPersistenceFails() {
+        JdbcTemplate jdbc = new JdbcTemplate(dataSource);
+        ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+        try (var setup = components(
+                new TushareControlledAcceptanceE2eDryRunGateway())) {
+            setup.mainboardUniverseCaptureService().capture(null, true,
+                    Set.of(), ANCHOR, ANCHOR, true, "a".repeat(40),
+                    Duration.ofSeconds(5));
+        }
+        int batchesBefore = count(jdbc, "pit_market_fact_batches");
+        jdbc.execute("""
+                CREATE FUNCTION reject_increment_factor()
+                RETURNS TRIGGER LANGUAGE plpgsql AS $$
+                BEGIN
+                    IF NEW.symbol='600019' THEN
+                        RAISE EXCEPTION 'synthetic increment rollback';
+                    END IF;
+                    RETURN NEW;
+                END;
+                $$
+                """);
+        jdbc.execute("""
+                CREATE TRIGGER trg_reject_increment_factor
+                BEFORE INSERT ON adjustment_factor_facts_v1
+                FOR EACH ROW EXECUTE FUNCTION reject_increment_factor()
+                """);
+
+        var gateway = new TushareControlledAcceptanceE2eDryRunGateway();
+        var progress = new MainboardDailyIncrementService.Progress();
+        try (var components = components(gateway)) {
+            var service = new MainboardDailyIncrementService(jdbc, mapper,
+                    components.mainboardUniverseCaptureService(),
+                    Clock.fixed(AS_OF, ZoneOffset.UTC));
+            assertThrows(TushareMainboardUniverseCaptureService
+                    .CaptureFailure.class, () -> service.execute(ANCHOR,
+                    "b".repeat(40), progress));
+        }
+        assertEquals(2, progress.providerCalls);
+        assertEquals(0, progress.retryCount);
+        assertEquals(2, gateway.calls());
+        assertEquals(batchesBefore, count(jdbc, "pit_market_fact_batches"));
+        assertEquals(0, jdbc.queryForObject("""
+                SELECT count(*) FROM raw_daily_bar_facts_v2
+                 WHERE trade_date=?
+                """, Integer.class, ANCHOR));
+        assertEquals(0, jdbc.queryForObject("""
+                SELECT count(*) FROM adjustment_factor_facts_v1
+                 WHERE factor_effective_trade_date=?
+                """, Integer.class, ANCHOR));
+        assertEquals(0, count(jdbc, "research_selection_runs"));
+        assertEquals(0, count(jdbc, "shadow_research_runs"));
+    }
+
     private static TushareDedicatedResearchRuntimeComponents components(
             TushareApiGateway gateway
     ) {

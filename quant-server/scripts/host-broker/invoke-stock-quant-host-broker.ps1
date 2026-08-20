@@ -13,6 +13,7 @@ param(
         'RUN_M3_AGENT_RESEARCH_SMOKE',
         'RUN_M4_SHADOW_RESEARCH',
         'RUN_RESEARCH_SELECTION',
+        'MAINBOARD_DAILY_INCREMENT',
         'START_RESEARCH_PRODUCTION',
         'STOP_RESEARCH_PRODUCTION',
         'CHECK_RESEARCH_PRODUCTION_STATUS',
@@ -78,7 +79,7 @@ if (($RequestId -ne 'AUTO' -or $TradeDate -ne 'AUTO' -or
         $ShadowDispatchMode -ne 'AUTO' -or $SelectionRunId -ne 0 -or
         $SelectionPublicRunId -ne 'NONE' -or $SubmitOnly) -and
     $Operation -notin @('RUN_M4_SHADOW_RESEARCH',
-        'RUN_RESEARCH_SELECTION',
+        'RUN_RESEARCH_SELECTION', 'MAINBOARD_DAILY_INCREMENT',
         'START_RESEARCH_PRODUCTION', 'STOP_RESEARCH_PRODUCTION',
         'CHECK_RESEARCH_PRODUCTION_STATUS')) {
     throw 'STOCK_QUANT_HOST_BROKER_FIXED_DISPATCH_ARGUMENT_INVALID'
@@ -104,6 +105,8 @@ if ([string]::IsNullOrWhiteSpace($ArtifactPath)) {
             'STOP_RESEARCH_PRODUCTION',
             'CHECK_RESEARCH_PRODUCTION_STATUS')) {
         'quant-server-1.3.1-research-production.jar'
+    } elseif ($Operation -eq 'MAINBOARD_DAILY_INCREMENT') {
+        'quant-server-1.3.1-mainboard-daily-increment-runner.jar'
     } elseif ($Operation -eq 'RUN_RESEARCH_SELECTION') {
         'quant-server-1.3.1-research-selection-runner.jar'
     } elseif ($Operation -eq 'RUN_M4_SHADOW_RESEARCH') {
@@ -160,6 +163,10 @@ try {
             'codex/1.4.0-v1.0.3-research-selection-runtime-fix',
             'codex/1.4.0-v1.0.7-intraday-research-selection-anchor-fix',
             'codex/1.4.0-v1.0.9-full-mainboard-universe')) {
+        $branch
+    } elseif ($Operation -eq 'MAINBOARD_DAILY_INCREMENT' -and
+        $branch -eq
+            'codex/1.4.0-v1.0.11-mainboard-daily-increment') {
         $branch
     } elseif ($Operation -eq 'RUN_M4_SHADOW_RESEARCH' -and
         $branch -eq 'codex/1.4.0-m4-shadow-research-ready') {
@@ -234,6 +241,7 @@ try {
             'RUN_M3_AGENT_RESEARCH_SMOKE',
             'RUN_M4_SHADOW_RESEARCH',
             'RUN_RESEARCH_SELECTION',
+            'MAINBOARD_DAILY_INCREMENT',
             'START_RESEARCH_PRODUCTION',
             'STOP_RESEARCH_PRODUCTION',
             'CHECK_RESEARCH_PRODUCTION_STATUS')) {
@@ -350,6 +358,55 @@ try {
             'execution.source' = 'M3_AGENT_RESEARCH_REAL_LLM_SMOKE'
             'no.retry' = 'true'
             'source.request.id' = $SourceRequestId
+        }
+    } elseif ($Operation -eq 'MAINBOARD_DAILY_INCREMENT') {
+        if ($TradeDate -eq 'AUTO' -or $MaximumProviderRequests -ne 2) {
+            throw 'MAINBOARD_DAILY_INCREMENT_FIXED_SCOPE_INVALID'
+        }
+        $chinaNow = [TimeZoneInfo]::ConvertTimeBySystemTimeZoneId(
+            [DateTimeOffset]::UtcNow, 'China Standard Time')
+        $calendarMonth = $chinaNow.ToString('yyyy-MM')
+        [int]$monthlyTushareLimit = Get-StockQuantTushareMonthlyLimit `
+            -CalendarMonth $calendarMonth
+        $usage = Get-StockQuantM4MonthlyUsage `
+            -CalendarMonth $calendarMonth
+        if ([int]$usage.CommittedTushareCalls + 2 -gt
+                $monthlyTushareLimit) {
+            throw 'MAINBOARD_DAILY_INCREMENT_MONTHLY_BUDGET_EXHAUSTED'
+        }
+        $requestValues = [ordered]@{
+            'schema.version' = 'STOCK_QUANT_HOST_BROKER_REQUEST_V1'
+            'request.id' = $requestId
+            'operation' = $Operation
+            'git.commit' = $head
+            'jar.path' = $artifact
+            'jar.sha256' = $artifactHash
+            'authorization.file' = 'NONE'
+            'trade.date' = $TradeDate
+            'universe.version' = 'RESEARCH_UNIVERSE_MAINBOARD_V1'
+            'database.host' = '127.0.0.1'
+            'database.port' = '38432'
+            'database.name' = 'stock_quant_research'
+            'database.user' = 'stock_quant_research'
+            'schema.name' = 'tushare_research'
+            'provider' = 'TUSHARE'
+            'provider.endpoints' = 'daily,adj_factor'
+            'endpoint.daily.requests' = '1'
+            'endpoint.adj_factor.requests' = '1'
+            'maximum.provider.requests' = '2'
+            'budget.calendar.month' = $calendarMonth
+            'tushare.monthly.limit' = [string]$monthlyTushareLimit
+            'tushare.monthly.calls.before' =
+                [string]$usage.CommittedTushareCalls
+            'retry.budget' = '0'
+            'redirects' = 'NEVER'
+            'user.approval.reference' =
+                'USER_APPROVED_V1_0_11_MAINBOARD_DAILY_INCREMENT'
+            'created.at' = $createdAt.ToString('o')
+            'expires.at' = $expiresAt.ToString('o')
+            'execution.source' = 'MAINBOARD_DAILY_INCREMENT'
+            'no.retry' = 'true'
+            'source.request.id' = 'NONE'
         }
     } elseif ($Operation -eq 'RUN_RESEARCH_SELECTION') {
         if ($SelectionRunId -lt 1 -or

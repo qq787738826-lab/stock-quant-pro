@@ -36,6 +36,8 @@ $m4RunnerScript = Join-Path $paths.RepositoryRoot `
     'quant-server\scripts\run-m4-shadow-research.ps1'
 $researchSelectionRunnerScript = Join-Path $paths.RepositoryRoot `
     'quant-server\scripts\run-research-selection.ps1'
+$mainboardDailyIncrementRunnerScript = Join-Path $paths.RepositoryRoot `
+    'quant-server\scripts\run-mainboard-daily-increment.ps1'
 $productionRoot = Join-Path $paths.TargetRoot 'stock-quant-production'
 $productionPidFile = Join-Path $productionRoot 'backend.pid.json'
 $productionAutostartFile = Join-Path $productionRoot 'backend.autostart.json'
@@ -138,6 +140,7 @@ function Assert-GitBinding {
                 'RUN_M3_AGENT_RESEARCH_SMOKE',
                 'RUN_M4_SHADOW_RESEARCH',
                 'RUN_RESEARCH_SELECTION',
+                'MAINBOARD_DAILY_INCREMENT',
                 'START_RESEARCH_PRODUCTION',
                 'STOP_RESEARCH_PRODUCTION',
                 'CHECK_RESEARCH_PRODUCTION_STATUS')) {
@@ -189,6 +192,14 @@ function Assert-GitBinding {
                 [IO.Path]::GetFullPath($BrokerRequest.JarPath).Equals(
                     (Join-Path $paths.TargetRoot `
                         'quant-server-1.3.1-research-selection-runner.jar'),
+                    [StringComparison]::OrdinalIgnoreCase)) {
+                $branch
+            } elseif ($BrokerRequest.Operation -eq
+                    'MAINBOARD_DAILY_INCREMENT' -and $branch -eq
+                    'codex/1.4.0-v1.0.11-mainboard-daily-increment' -and
+                [IO.Path]::GetFullPath($BrokerRequest.JarPath).Equals(
+                    (Join-Path $paths.TargetRoot `
+                        'quant-server-1.3.1-mainboard-daily-increment-runner.jar'),
                     [StringComparison]::OrdinalIgnoreCase)) {
                 $branch
             } elseif ($BrokerRequest.Operation -in @(
@@ -1455,6 +1466,95 @@ function Invoke-ResearchSelection {
     return $summary
 }
 
+function Invoke-MainboardDailyIncrement {
+    param([Parameter(Mandatory = $true)] [object] $BrokerRequest)
+    if ($BrokerRequest.AuthorizationStatus -ne
+            'V1_0_11_MAINBOARD_DAILY_INCREMENT_APPROVED' -or
+        $null -ne $BrokerRequest.AuthorizationFile) {
+        throw 'STOCK_QUANT_HOST_BROKER_MAINBOARD_INCREMENT_SCOPE_INVALID'
+    }
+    $usage = Get-StockQuantM4MonthlyUsage `
+        -CalendarMonth $BrokerRequest.Values['budget.calendar.month'] `
+        -ExcludedRequestPath $processingPath
+    [int]$monthlyLimit = Get-StockQuantTushareMonthlyLimit `
+        -CalendarMonth $BrokerRequest.Values['budget.calendar.month']
+    if ([int]$usage.CommittedTushareCalls + 2 -gt $monthlyLimit) {
+        throw 'MAINBOARD_DAILY_INCREMENT_MONTHLY_BUDGET_EXHAUSTED'
+    }
+    $runnerResult = Join-Path $paths.Results `
+        "$($BrokerRequest.RequestId).mainboard-daily-increment.json"
+    if (Test-Path -LiteralPath $runnerResult) {
+        throw 'STOCK_QUANT_HOST_BROKER_RUNNER_RESULT_ALREADY_EXISTS'
+    }
+    $executionId = $BrokerRequest.RequestId -replace '^SQHB_', 'MBINC_'
+    $output = @(& $mainboardDailyIncrementRunnerScript `
+        -ResultFile $runnerResult -ArtifactPath $BrokerRequest.JarPath `
+        -ExecutionId $executionId -GitCommit $BrokerRequest.GitCommit `
+        -TradeDate $BrokerRequest.Values['trade.date'] `
+        -DatabasePort 38432 -MaximumProviderRequests 2 `
+        -ExecutionMode FORMAL 2>&1 | ForEach-Object { [string]$_ })
+    $runnerExitCode = $LASTEXITCODE
+    if (-not (Test-Path -LiteralPath $runnerResult -PathType Leaf)) {
+        throw 'STOCK_QUANT_HOST_BROKER_RUNNER_RESULT_MISSING'
+    }
+    $increment = Get-Content -LiteralPath $runnerResult -Raw -Encoding UTF8 |
+        ConvertFrom-Json
+    $summary = [ordered]@{
+        tradeDate = [string]$increment.tradeDate
+        universeSnapshotId = [string]$increment.universeSnapshotId
+        universeMemberCount = [int]$increment.universeMemberCount
+        providerCallCount = [int]$increment.tushareProviderCallCount
+        dailyProviderCallCount = [int]$increment.dailyProviderCallCount
+        adjustmentFactorProviderCallCount =
+            [int]$increment.adjustmentFactorProviderCallCount
+        retryCount = [int]$increment.retryCount
+        dailyAddedCount = [int]$increment.dailyAddedCount
+        adjustmentFactorAddedCount =
+            [int]$increment.adjustmentFactorAddedCount
+        latestCompleteTradeDate =
+            [string]$increment.latestCompleteTradeDate
+        modelCallCount = [int]$increment.modelCallCount
+        sanitizedResult = $runnerResult
+        outputAudit = $(if ($increment.outputAuditClean) {
+            'PASSED'
+        } else { 'FAILED' })
+    }
+    if ($runnerExitCode -ne 0) {
+        $script:failureSummary = $summary
+        $reason = [string]$increment.failureReason
+        if ($reason -match '^[A-Z][A-Z0-9_]{3,127}$') { throw $reason }
+        throw 'STOCK_QUANT_HOST_BROKER_MAINBOARD_INCREMENT_FAILED'
+    }
+    if ($increment.schemaVersion -ne
+            'MAINBOARD_DAILY_INCREMENT_RESULT_V1' -or
+        $increment.status -ne 'SUCCEEDED' -or
+        [string]$increment.executionId -ne $executionId -or
+        [string]$increment.gitCommit -ne $BrokerRequest.GitCommit -or
+        [string]$increment.tradeDate -ne
+            [string]$BrokerRequest.Values['trade.date'] -or
+        [int]$increment.universeMemberCount -lt 1000 -or
+        [int]$increment.tushareProviderCallCount -notin @(0, 2) -or
+        [int]$increment.dailyProviderCallCount -ne
+            $(if ([int]$increment.tushareProviderCallCount -eq 2) { 1 } else { 0 }) -or
+        [int]$increment.adjustmentFactorProviderCallCount -ne
+            $(if ([int]$increment.tushareProviderCallCount -eq 2) { 1 } else { 0 }) -or
+        [int]$increment.retryCount -ne 0 -or
+        [int]$increment.modelCallCount -ne 0 -or
+        -not $increment.coverageComplete -or
+        -not $increment.knownAtValid -or
+        -not $increment.pitAdmissionPassed -or
+        -not $increment.universeUnchanged -or
+        -not $increment.outputAuditClean -or
+        -not $increment.dataOnly -or $increment.realTradingStarted -or
+        [long]$increment.researchSelectionRunsCreated -ne 0 -or
+        [long]$increment.shadowRunsCreated -ne 0 -or
+        [long]$increment.paperOrdersCreated -ne 0 -or
+        [long]$increment.evaluationRowsCreated -ne 0) {
+        throw 'STOCK_QUANT_HOST_BROKER_MAINBOARD_INCREMENT_RESULT_INVALID'
+    }
+    return $summary
+}
+
 function Resolve-ResearchProductionJavaExecutable {
     $command = 'java.exe'
     $oldPreference = $ErrorActionPreference
@@ -2120,6 +2220,10 @@ function Invoke-ClaimedRequest {
             }
             'RUN_RESEARCH_SELECTION' {
                 Invoke-ResearchSelection -BrokerRequest $request
+                break
+            }
+            'MAINBOARD_DAILY_INCREMENT' {
+                Invoke-MainboardDailyIncrement -BrokerRequest $request
                 break
             }
             'START_RESEARCH_PRODUCTION' {

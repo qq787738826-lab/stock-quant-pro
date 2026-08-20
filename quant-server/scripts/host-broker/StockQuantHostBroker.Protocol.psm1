@@ -17,6 +17,7 @@ $script:AllowedOperations = @(
     'RUN_M3_AGENT_RESEARCH_SMOKE'
     'RUN_M4_SHADOW_RESEARCH'
     'RUN_RESEARCH_SELECTION'
+    'MAINBOARD_DAILY_INCREMENT'
     'START_RESEARCH_PRODUCTION'
     'STOP_RESEARCH_PRODUCTION'
     'CHECK_RESEARCH_PRODUCTION_STATUS'
@@ -425,6 +426,39 @@ $script:ResearchSelectionRequiredKeys = @(
     'source.request.id'
 )
 
+$script:MainboardDailyIncrementRequiredKeys = @(
+    'schema.version'
+    'request.id'
+    'operation'
+    'git.commit'
+    'jar.path'
+    'jar.sha256'
+    'authorization.file'
+    'trade.date'
+    'universe.version'
+    'database.host'
+    'database.port'
+    'database.name'
+    'database.user'
+    'schema.name'
+    'provider'
+    'provider.endpoints'
+    'endpoint.daily.requests'
+    'endpoint.adj_factor.requests'
+    'maximum.provider.requests'
+    'budget.calendar.month'
+    'tushare.monthly.limit'
+    'tushare.monthly.calls.before'
+    'retry.budget'
+    'redirects'
+    'user.approval.reference'
+    'created.at'
+    'expires.at'
+    'execution.source'
+    'no.retry'
+    'source.request.id'
+)
+
 $script:M6RequiredKeys = @(
     'schema.version'
     'request.id'
@@ -545,7 +579,8 @@ function Get-StockQuantM4MonthlyUsage {
         $values = Read-StrictStockQuantProperties -Path $file.FullName
         if (-not $values.Contains('operation') -or
             $values['operation'] -notin @(
-                'RUN_M4_SHADOW_RESEARCH', 'RUN_RESEARCH_SELECTION')) {
+                'RUN_M4_SHADOW_RESEARCH', 'RUN_RESEARCH_SELECTION',
+                'MAINBOARD_DAILY_INCREMENT')) {
             continue
         }
         if (-not $values.Contains('request.id') -or
@@ -566,21 +601,49 @@ function Get-StockQuantM4MonthlyUsage {
         if ($china.ToString('yyyy-MM') -ne $CalendarMonth) { continue }
         $requestCount++
         $selection = $values['operation'] -eq 'RUN_RESEARCH_SELECTION'
+        $increment = $values['operation'] -eq 'MAINBOARD_DAILY_INCREMENT'
         $runnerPath = Join-Path $paths.Results $(if ($selection) {
                 "$id.research-selection.json"
+            } elseif ($increment) {
+                "$id.mainboard-daily-increment.json"
             } else { "$id.m4-shadow.json" })
         if (Test-Path -LiteralPath $runnerPath -PathType Leaf) {
             try {
                 $runner = Get-Content -LiteralPath $runnerPath -Raw `
                     -Encoding UTF8 | ConvertFrom-Json
-                [decimal]$cost = [decimal]::Parse(
-                    [string]$runner.conservativeCostCny,
-                    [Globalization.NumberStyles]::Number,
-                    [Globalization.CultureInfo]::InvariantCulture)
+                [decimal]$cost = if ($increment) { [decimal]0.00 } else {
+                    [decimal]::Parse(
+                        [string]$runner.conservativeCostCny,
+                        [Globalization.NumberStyles]::Number,
+                        [Globalization.CultureInfo]::InvariantCulture)
+                }
             } catch {
                 throw 'M4_MONTHLY_BUDGET_LEDGER_INVALID'
             }
-            if ($selection) {
+            if ($increment) {
+                if ($runner.schemaVersion -ne
+                        'MAINBOARD_DAILY_INCREMENT_RESULT_V1' -or
+                    $runner.status -notin @('SUCCEEDED', 'FAILED') -or
+                    [string]$runner.executionId -ne
+                        ($id -replace '^SQHB_', 'MBINC_') -or
+                    [string]$runner.tradeDate -ne
+                        [string]$values['trade.date'] -or
+                    [int]$runner.tushareProviderCallCount -lt 0 -or
+                    [int]$runner.tushareProviderCallCount -gt 2 -or
+                    [int]$runner.retryCount -ne 0 -or
+                    [int]$runner.modelCallCount -ne 0 -or
+                    -not $runner.dataOnly -or $runner.realTradingStarted -or
+                    ($runner.status -eq 'SUCCEEDED' -and (
+                        [int]$runner.tushareProviderCallCount -notin @(0, 2) -or
+                        [int]$runner.universeMemberCount -lt 1000 -or
+                        -not $runner.coverageComplete -or
+                        -not $runner.knownAtValid -or
+                        -not $runner.pitAdmissionPassed -or
+                        -not $runner.universeUnchanged -or
+                        -not $runner.outputAuditClean))) {
+                    throw 'M4_MONTHLY_BUDGET_LEDGER_INVALID'
+                }
+            } elseif ($selection) {
                 [int]$maximumCalls = [int]$values[
                     'maximum.provider.requests']
                 [int]$networkRecoveryBudget = if (
@@ -653,7 +716,7 @@ function Get-StockQuantM4MonthlyUsage {
                     throw 'M4_MONTHLY_BUDGET_LEDGER_INVALID'
                 }
             }
-            $shadowCost += $cost
+            if (-not $increment) { $shadowCost += $cost }
             $tushareCalls += [int]$runner.tushareProviderCallCount
             continue
         }
@@ -662,29 +725,33 @@ function Get-StockQuantM4MonthlyUsage {
             if ($file.Name -notmatch
                     '\.(request|processing)\.properties$' -or
                 -not $values.Contains('maximum.provider.requests') -or
-                -not $values.Contains('maximum.cost.cny')) {
+                (-not $increment -and
+                    -not $values.Contains('maximum.cost.cny'))) {
                 throw 'M4_MONTHLY_BUDGET_LEDGER_INCOMPLETE'
             }
             [int]$reservedProvider = -1
-            [decimal]$reservedCost = [decimal]-1
+            [decimal]$reservedCost = if ($increment) {
+                [decimal]0.00
+            } else { [decimal]-1 }
             if (-not [int]::TryParse(
                     [string]$values['maximum.provider.requests'],
                     [Globalization.NumberStyles]::None,
                     [Globalization.CultureInfo]::InvariantCulture,
                     [ref]$reservedProvider) -or
-                -not [decimal]::TryParse(
+                (-not $increment -and -not [decimal]::TryParse(
                     [string]$values['maximum.cost.cny'],
                     [Globalization.NumberStyles]::Number,
                     [Globalization.CultureInfo]::InvariantCulture,
-                    [ref]$reservedCost) -or
+                    [ref]$reservedCost)) -or
                 # The August approval raises only the aggregate monthly
                 # ledger; one pending request remains capped at 150.
                 $reservedProvider -lt 0 -or $reservedProvider -gt 150 -or
-                $reservedCost -le 0 -or $reservedCost -gt [decimal]5.00) {
+                (-not $increment -and ($reservedCost -le 0 -or
+                    $reservedCost -gt [decimal]5.00))) {
                 throw 'M4_MONTHLY_BUDGET_LEDGER_INVALID'
             }
             $reservedTushareCalls += $reservedProvider
-            $reservedShadowCost += $reservedCost
+            if (-not $increment) { $reservedShadowCost += $reservedCost }
             continue
         }
         try {
@@ -1163,6 +1230,10 @@ function Read-StockQuantHostBrokerRequest {
                 $script:ResearchSelectionRequiredKeys
                 break
             }
+            'MAINBOARD_DAILY_INCREMENT' {
+                $script:MainboardDailyIncrementRequiredKeys
+                break
+            }
             { $_ -in @('START_RESEARCH_PRODUCTION',
                     'STOP_RESEARCH_PRODUCTION',
                     'CHECK_RESEARCH_PRODUCTION_STATUS') } {
@@ -1276,6 +1347,52 @@ function Read-StockQuantHostBrokerRequest {
                 'USER_APPROVED_M3_BAILIAN_SMOKE_TRANCHE_2_CNY_5_00' -or
             $values['execution.source'] -ne
                 'M3_AGENT_RESEARCH_REAL_LLM_SMOKE' -or
+            $values['no.retry'] -ne 'true') {
+            throw 'STOCK_QUANT_HOST_BROKER_REQUEST_SCOPE_INVALID'
+        }
+    } elseif ($values['operation'] -eq 'MAINBOARD_DAILY_INCREMENT') {
+        [int]$providerBefore = -1
+        [datetime]$incrementDate = [datetime]::MinValue
+        $createdIncrement = ConvertTo-StockQuantTimestamp `
+            ([string]$values['created.at'])
+        $incrementMonth = [TimeZoneInfo]::ConvertTimeBySystemTimeZoneId(
+            $createdIncrement, 'China Standard Time').ToString('yyyy-MM')
+        [int]$incrementLimit = Get-StockQuantTushareMonthlyLimit `
+            -CalendarMonth $incrementMonth
+        if ($values['authorization.file'] -ne 'NONE' -or
+            -not [datetime]::TryParseExact(
+                [string]$values['trade.date'], 'yyyy-MM-dd',
+                [Globalization.CultureInfo]::InvariantCulture,
+                [Globalization.DateTimeStyles]::None,
+                [ref]$incrementDate) -or
+            $incrementDate.Date -gt [TimeZoneInfo]::ConvertTimeBySystemTimeZoneId(
+                $Now, 'China Standard Time').Date -or
+            $values['universe.version'] -ne
+                'RESEARCH_UNIVERSE_MAINBOARD_V1' -or
+            $values['database.host'] -ne '127.0.0.1' -or
+            $values['database.port'] -ne '38432' -or
+            $values['database.name'] -ne 'stock_quant_research' -or
+            $values['database.user'] -ne 'stock_quant_research' -or
+            $values['schema.name'] -ne 'tushare_research' -or
+            $values['provider'] -ne 'TUSHARE' -or
+            $values['provider.endpoints'] -ne 'daily,adj_factor' -or
+            $values['endpoint.daily.requests'] -ne '1' -or
+            $values['endpoint.adj_factor.requests'] -ne '1' -or
+            $values['maximum.provider.requests'] -ne '2' -or
+            $values['budget.calendar.month'] -ne $incrementMonth -or
+            $values['tushare.monthly.limit'] -ne [string]$incrementLimit -or
+            -not [int]::TryParse(
+                [string]$values['tushare.monthly.calls.before'],
+                [Globalization.NumberStyles]::None,
+                [Globalization.CultureInfo]::InvariantCulture,
+                [ref]$providerBefore) -or $providerBefore -lt 0 -or
+            $providerBefore + 2 -gt $incrementLimit -or
+            $values['retry.budget'] -ne '0' -or
+            $values['redirects'] -ne 'NEVER' -or
+            $values['user.approval.reference'] -ne
+                'USER_APPROVED_V1_0_11_MAINBOARD_DAILY_INCREMENT' -or
+            $values['execution.source'] -ne
+                'MAINBOARD_DAILY_INCREMENT' -or
             $values['no.retry'] -ne 'true') {
             throw 'STOCK_QUANT_HOST_BROKER_REQUEST_SCOPE_INVALID'
         }
@@ -1658,7 +1775,8 @@ function Read-StockQuantHostBrokerRequest {
             throw 'STOCK_QUANT_HOST_BROKER_SOURCE_REQUEST_INVALID'
         }
     } elseif ($values['operation'] -in @(
-            'RUN_M4_SHADOW_RESEARCH', 'RUN_RESEARCH_SELECTION')) {
+            'RUN_M4_SHADOW_RESEARCH', 'RUN_RESEARCH_SELECTION',
+            'MAINBOARD_DAILY_INCREMENT')) {
         if ($values['source.request.id'] -ne 'NONE') {
             throw 'STOCK_QUANT_HOST_BROKER_SOURCE_REQUEST_INVALID'
         }
@@ -1689,12 +1807,12 @@ function Read-StockQuantHostBrokerRequest {
         throw 'STOCK_QUANT_HOST_BROKER_BUILD_PROOF_MISSING'
     }
     if ($values['operation'] -in @('RUN_M4_SHADOW_RESEARCH',
-            'RUN_RESEARCH_SELECTION',
+            'RUN_RESEARCH_SELECTION', 'MAINBOARD_DAILY_INCREMENT',
             'START_RESEARCH_PRODUCTION', 'STOP_RESEARCH_PRODUCTION',
             'CHECK_RESEARCH_PRODUCTION_STATUS')) {
         $proofValues = Read-StrictStockQuantProperties -Path $proof
-        $allowedModes = if ($values['operation'] -eq
-                'RUN_RESEARCH_SELECTION') {
+        $allowedModes = if ($values['operation'] -in @(
+                'RUN_RESEARCH_SELECTION', 'MAINBOARD_DAILY_INCREMENT')) {
             @('RESEARCH_SELECTION_CONTROLLED_BUILD_ARTIFACT',
                 'CONTROLLED_BUILD_ARTIFACT')
         } elseif ($values['operation'] -eq
@@ -1766,6 +1884,12 @@ function Read-StockQuantHostBrokerRequest {
         }
         $authorizationStatus =
             'M3_USER_APPROVED_BAILIAN_SMOKE_TRANCHE_2_CNY_5_00'
+    } elseif ($values['operation'] -eq 'MAINBOARD_DAILY_INCREMENT') {
+        if ($values['authorization.file'] -ne 'NONE') {
+            throw 'STOCK_QUANT_HOST_BROKER_AUTHORIZATION_MODE_INVALID'
+        }
+        $authorizationStatus =
+            'V1_0_11_MAINBOARD_DAILY_INCREMENT_APPROVED'
     } elseif ($values['operation'] -eq 'RUN_RESEARCH_SELECTION') {
         if ($values['authorization.file'] -ne 'NONE') {
             throw 'STOCK_QUANT_HOST_BROKER_AUTHORIZATION_MODE_INVALID'
@@ -1978,6 +2102,10 @@ function Write-StockQuantHostBrokerRequest {
             }
             'RUN_RESEARCH_SELECTION' {
                 $script:ResearchSelectionRequiredKeys
+                break
+            }
+            'MAINBOARD_DAILY_INCREMENT' {
+                $script:MainboardDailyIncrementRequiredKeys
                 break
             }
             { $_ -in @('START_RESEARCH_PRODUCTION',
