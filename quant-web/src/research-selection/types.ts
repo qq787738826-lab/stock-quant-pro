@@ -19,6 +19,58 @@ export interface Candidate {
     sharpeRatio: number; turnover: number; excessReturn: number }>
   criticIssues: string[]
 }
+export interface EligibilityCheck {
+  code: string; passed: boolean; detail: string
+}
+export interface ScoreContribution {
+  metric: string; rawValue: number; percentileScore: number
+  weight: number; weightedContribution: number
+}
+export interface HistoricalComponentScore {
+  component: string; componentScore: number; weight: number
+  weightedContribution: number
+}
+export interface GateCheck { code: string; passed: boolean; detail: string }
+export interface FirstExcludedComparison {
+  security: Security; name: string; basicRank?: number; historicalRank?: number
+  strategyRank?: number; agentRank?: number; currentScore: number
+  historicalScore?: number; failedChecks: string[]
+}
+export interface SelectionExplanation {
+  version: 'SELECTION_EXPLANATION_V1'; security: Security
+  eligibilityPassed: boolean; eligibilityChecks: EligibilityCheck[]
+  basicRank: number; basicUniverseSize: number; currentScore: number
+  currentScoreContributions: ScoreContribution[]
+  metricPercentiles: Record<string, number>
+  historicalRank?: number; historicalPoolSize: number
+  historicalScore: number; historicalGrade: 'A' | 'B' | 'C'
+  historicalComponentScores: HistoricalComponentScore[]
+  strategyRank?: number; strategyPoolSize: number
+  agentRank?: number; agentPoolSize: number
+  finalCandidateRank: number; finalCandidateLimit: number
+  strategyComparison: Candidate['strategyComparison']
+  supportingFindings: string[]; opposingFindings: string[]
+  criticIssues: string[]; criticCorrections: string[]
+  finalGateChecks: GateCheck[]
+  firstExcludedComparison?: FirstExcludedComparison
+  evidenceIds: string[]; limitations: string[]
+}
+export interface ResearchTradePlan {
+  version: 'RESEARCH_TRADE_PLAN_V1'; security: Security
+  anchorTradeDate: string; rawReferenceClose?: number
+  qfqReferenceClose?: number; atr14?: number; entryBandPercent?: number
+  plannedEntryLower?: number; plannedEntryUpper?: number
+  maximumAcceptableEntryPrice?: number; plannedExecutionDate?: string
+  plannedExecutionTime?: string; stopLossPrice?: number
+  targetExitPrice?: number; riskAmountPerShare?: number
+  riskRewardRatio?: number; preferredStrategy?: string
+  expectedHoldingMinSessions?: number; expectedHoldingMaxSessions?: number
+  maximumHoldingSessions?: number; strategyInvalidationRule?: string
+  exitConditions: string[]; planStatus: string; statusReason?: string
+  actualPaperEntryPrice?: number; actualPaperExitPrice?: number
+  actualHoldingSessions?: number; actualFees?: number; actualPnl?: number
+  calculationVersion: string; sourceFingerprint: string
+}
 export interface HistoricalWindowCoverage {
   requestedSessions: number; status: 'AVAILABLE' | 'INSUFFICIENT_HISTORY'
   availableSessions: number; rangeStart: string; rangeEnd: string
@@ -122,7 +174,9 @@ export interface SelectionResult {
   historicalResearch?: HistoricalResearch
   universeFunnel?: UniverseFunnel
   ranking: QuantitativeScore[]; shortlist: QuantitativeScore[]
-  candidates: Candidate[]; emptyResult: boolean; decisionCode: string
+  candidates: Candidate[]; selectionExplanations?: SelectionExplanation[]
+  researchTradePlans?: ResearchTradePlan[]
+  emptyResult: boolean; decisionCode: string
   agentReport: ResearchReport; shadowRunId?: number; paperEnabled: boolean
   realTradingEnabled: boolean; historicalLiveShadow: boolean
   timings: { dataPreparationMillis: number; quantitativeScanMillis: number

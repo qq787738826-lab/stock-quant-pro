@@ -24,6 +24,7 @@ import com.stockquant.server.agent.shadowresearch.ShadowResearchModels.ShadowReq
 import com.stockquant.server.agent.shadowresearch.ShadowResearchModels.TriggerMode;
 import com.stockquant.server.agent.shadowresearch.ShadowResearchRepository;
 import com.stockquant.server.agent.shadowresearch.ShadowResearchRuntime;
+import com.stockquant.server.researchselection.ResearchSelectionPaperEntryGuard;
 import org.flywaydb.core.Flyway;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
@@ -279,7 +280,9 @@ public final class TushareM4ShadowResearchManualRunner {
             var repository = new ShadowResearchRepository(jdbc, mapper);
             var tx = new TransactionTemplate(
                     new DataSourceTransactionManager(dataSource));
-            var paper = new ShadowPaperPortfolioService(repository, tx);
+            var paper = new ShadowPaperPortfolioService(repository, tx,
+                    new ResearchSelectionPaperEntryGuard(jdbc, mapper,
+                            clock));
             var observedDataset = TushareM2StrategyResearchDatasetAdapter
                     .adapt(captured.dataset()).dataset();
             var maintenance = new ShadowContinuousDailyMaintenanceService(

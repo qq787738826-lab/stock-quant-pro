@@ -4,11 +4,13 @@ import com.stockquant.core.research.StrategyResearchModels.DailyBar;
 import com.stockquant.core.research.StrategyResearchModels.ResearchDataset;
 import com.stockquant.core.research.StrategyResearchModels.Security;
 import com.stockquant.server.researchselection.ResearchSelectionModels.QuantitativeScore;
+import com.stockquant.server.researchselection.ResearchSelectionModels.ScoreContribution;
 
 import java.math.BigDecimal;
 import java.math.MathContext;
 import java.math.RoundingMode;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -23,6 +25,10 @@ public final class ResearchSelectionRankingService {
             "15.874507866387544");
 
     public List<QuantitativeScore> rank(ResearchDataset dataset) {
+        return rankExplained(dataset).scores();
+    }
+
+    public RankingResult rankExplained(ResearchDataset dataset) {
         Map<Security, ResearchUniverseMainboard.Member> metadata =
                 new LinkedHashMap<>();
         for (ResearchUniverseV1.Constituent value
@@ -35,10 +41,17 @@ public final class ResearchSelectionRankingService {
                     java.time.Instant.EPOCH, ResearchUniverseMainboard.SOURCE,
                     "0".repeat(64), false));
         }
-        return rank(dataset, metadata);
+        return rankExplained(dataset, metadata);
     }
 
     public List<QuantitativeScore> rank(
+            ResearchDataset dataset,
+            Map<Security, ResearchUniverseMainboard.Member> metadata
+    ) {
+        return rankExplained(dataset, metadata).scores();
+    }
+
+    public RankingResult rankExplained(
             ResearchDataset dataset,
             Map<Security, ResearchUniverseMainboard.Member> metadata
     ) {
@@ -63,20 +76,26 @@ public final class ResearchSelectionRankingService {
                 value -> value.annualizedVolatility, true);
 
         List<Scored> scored = raw.stream().map(value -> {
-            BigDecimal score = weighted(r5.get(value.security), "0.10")
-                    .add(weighted(r20.get(value.security), "0.25"))
-                    .add(weighted(r60.get(value.security), "0.20"))
-                    .add(weighted(trendScore(value.trend), "0.15"))
-                    .add(weighted(sharpe.get(value.security), "0.10"))
-                    .add(weighted(drawdown.get(value.security), "0.10"))
-                    .add(weighted(volatility.get(value.security), "0.05"))
-                    .add(weighted(qualityScore(value), "0.05"));
+            List<ScoreContribution> contributions = contributions(value,
+                    r5.get(value.security), r20.get(value.security),
+                    r60.get(value.security), sharpe.get(value.security),
+                    drawdown.get(value.security),
+                    volatility.get(value.security));
+            BigDecimal score = contributions.stream().map(
+                            ScoreContribution::weightedContribution)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            Map<String, BigDecimal> percentiles = new LinkedHashMap<>();
+            contributions.forEach(contribution -> percentiles.put(
+                    contribution.metric(), contribution.percentileScore()));
             return new Scored(value, score.setScale(4,
-                    RoundingMode.HALF_EVEN));
+                    RoundingMode.HALF_EVEN), contributions,
+                    Collections.unmodifiableMap(percentiles));
         }).sorted(Comparator.comparing(Scored::score).reversed()
                 .thenComparing(value -> value.raw().security())).toList();
 
         List<QuantitativeScore> result = new ArrayList<>();
+        Map<Security, ScoreExplanation> scoreExplanations =
+                new LinkedHashMap<>();
         for (int index = 0; index < scored.size(); index++) {
             Scored value = scored.get(index);
             RawScore metric = value.raw();
@@ -94,8 +113,60 @@ public final class ResearchSelectionRankingService {
                     metric.meanReversionZ, metric.trend,
                     metric.observationCount, explanations(metric),
                     metric.dataQualityPassed));
+            scoreExplanations.put(metric.security, new ScoreExplanation(
+                    value.contributions(), value.metricPercentiles()));
         }
-        return List.copyOf(result);
+        return new RankingResult(List.copyOf(result),
+                Collections.unmodifiableMap(scoreExplanations));
+    }
+
+    private static List<ScoreContribution> contributions(
+            RawScore value,
+            BigDecimal fiveDayPercentile,
+            BigDecimal twentyDayPercentile,
+            BigDecimal sixtyDayPercentile,
+            BigDecimal sharpePercentile,
+            BigDecimal drawdownPercentile,
+            BigDecimal volatilityPercentile
+    ) {
+        return List.of(
+                contribution("FIVE_DAY_RETURN", value.fiveDayReturn,
+                        fiveDayPercentile, "0.10"),
+                contribution("TWENTY_DAY_RETURN", value.twentyDayReturn,
+                        twentyDayPercentile, "0.25"),
+                contribution("SIXTY_DAY_RETURN", value.sixtyDayReturn,
+                        sixtyDayPercentile, "0.20"),
+                contribution("TREND", trendRaw(value.trend),
+                        trendScore(value.trend), "0.15"),
+                contribution("SHARPE", value.sharpe, sharpePercentile,
+                        "0.10"),
+                contribution("MAX_DRAWDOWN", value.maxDrawdown,
+                        drawdownPercentile, "0.10"),
+                contribution("VOLATILITY", value.annualizedVolatility,
+                        volatilityPercentile, "0.05"),
+                contribution("DATA_QUALITY",
+                        value.dataQualityPassed ? BigDecimal.ONE
+                                : BigDecimal.ZERO,
+                        qualityScore(value), "0.05"));
+    }
+
+    private static ScoreContribution contribution(
+            String metric,
+            BigDecimal raw,
+            BigDecimal percentile,
+            String weight
+    ) {
+        BigDecimal decimalWeight = new BigDecimal(weight);
+        return new ScoreContribution(metric, raw, percentile,
+                decimalWeight, weighted(percentile, weight));
+    }
+
+    private static BigDecimal trendRaw(String trend) {
+        return switch (trend) {
+            case "UPTREND" -> BigDecimal.ONE;
+            case "NEUTRAL" -> new BigDecimal("0.5");
+            default -> BigDecimal.ZERO;
+        };
     }
 
     private static final class TushareCode {
@@ -271,6 +342,33 @@ public final class ResearchSelectionRankingService {
     ) {
     }
 
-    private record Scored(RawScore raw, BigDecimal score) {
+    public record RankingResult(
+            List<QuantitativeScore> scores,
+            Map<Security, ScoreExplanation> explanations
+    ) {
+        public RankingResult {
+            scores = List.copyOf(scores);
+            explanations = Collections.unmodifiableMap(
+                    new LinkedHashMap<>(explanations));
+        }
+    }
+
+    public record ScoreExplanation(
+            List<ScoreContribution> contributions,
+            Map<String, BigDecimal> metricPercentiles
+    ) {
+        public ScoreExplanation {
+            contributions = List.copyOf(contributions);
+            metricPercentiles = Collections.unmodifiableMap(
+                    new LinkedHashMap<>(metricPercentiles));
+        }
+    }
+
+    private record Scored(
+            RawScore raw,
+            BigDecimal score,
+            List<ScoreContribution> contributions,
+            Map<String, BigDecimal> metricPercentiles
+    ) {
     }
 }

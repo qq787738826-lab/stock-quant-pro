@@ -59,7 +59,8 @@ class ResearchSelectionCoreTest {
         ResearchDataset dataset = dataset(60);
         var service = new ResearchSelectionRankingService();
 
-        var first = service.rank(dataset);
+        var explained = service.rankExplained(dataset);
+        var first = explained.scores();
         var second = service.rank(dataset);
 
         assertEquals(first, second);
@@ -79,6 +80,17 @@ class ResearchSelectionCoreTest {
                 first.get(first.size() - 1).twentyDayReturn()) > 0);
         assertFalse(first.get(0).name().isBlank());
         assertFalse(first.get(0).industry().isBlank());
+        assertTrue(first.stream().allMatch(value -> {
+            var detail = explained.explanations().get(value.security());
+            BigDecimal total = detail.contributions().stream().map(
+                            ResearchSelectionModels.ScoreContribution
+                                    ::weightedContribution)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add)
+                    .setScale(4, java.math.RoundingMode.HALF_EVEN);
+            return detail.contributions().size() == 8
+                    && detail.metricPercentiles().size() == 8
+                    && total.compareTo(value.score()) == 0;
+        }));
     }
 
     @Test
@@ -155,6 +167,24 @@ class ResearchSelectionCoreTest {
         assertEquals(BigDecimal.ZERO, empty.suggestedGrossExposure());
         assertTrue(empty.limitations().contains(
                 "NO_SECURITY_PASSED_SELECTION_THRESHOLD"));
+    }
+
+    @Test
+    void firstExcludedComparisonUsesTheActualNextAgentPoolSecurity() {
+        var ranking = new ResearchSelectionRankingService().rank(dataset(60))
+                .subList(0, 10);
+        var selected = ranking.subList(0, 5).stream().map(value ->
+                new ResearchSelectionModels.Candidate(value.rank(),
+                        value.security(), value.name(), value.industry(),
+                        value.score(), ResearchSelectionModels
+                        .RecommendationStatus.WATCH, "MODERATE",
+                        new BigDecimal("0.60"), List.of(), List.of(),
+                        "MEAN_REVERSION_V1", List.of(),
+                        value.maxDrawdown(), value.trend(), List.of()))
+                .toList();
+
+        assertEquals(ranking.get(5), ResearchSelectionExplanationService
+                .firstExcludedScore(ranking, selected));
     }
 
     @Test

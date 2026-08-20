@@ -173,7 +173,8 @@ public final class ResearchSelectionRepository {
         SelectionResult result = new SelectionResult(
                 ResearchSelectionModels.VERSION, id, config.publicRunId(),
                 Status.FAILED, config.triggerMode(), config.researchAsOf(),
-                null, null, null, null, List.of(), List.of(), List.of(), true,
+                null, null, null, null, List.of(), List.of(), List.of(),
+                List.of(), List.of(), true,
                 "FAILED", null, null, config.paperEnabled(), false, false,
                 new ResearchSelectionModels.Timings(0, 0, 0, 0, 0),
                 new ResearchSelectionModels.Usage(0, 0, 0, 0, 0, 0, 0,

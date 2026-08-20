@@ -12,6 +12,8 @@ import {
 } from '../research-selection/api'
 import type {
   Candidate,
+  ResearchTradePlan,
+  SelectionExplanation,
   SelectionResult,
   SelectionSummary,
   UniverseMemberPage,
@@ -71,6 +73,18 @@ const stabilityMap = computed(() => historicalBySecurity(
   result.value?.historicalResearch))
 const historyFor = (candidate: Candidate) => stabilityMap.value.get(
   securityKey(candidate.security))
+const explanationMap = computed(() => new Map(
+  (result.value?.selectionExplanations || []).map(value => [
+    securityKey(value.security), value,
+  ])))
+const tradePlanMap = computed(() => new Map(
+  (result.value?.researchTradePlans || []).map(value => [
+    securityKey(value.security), value,
+  ])))
+const explanationFor = (candidate: Candidate): SelectionExplanation | undefined =>
+  explanationMap.value.get(securityKey(candidate.security))
+const tradePlanFor = (candidate: Candidate): ResearchTradePlan | undefined =>
+  tradePlanMap.value.get(securityKey(candidate.security))
 const gradeClass = (grade?: string) => `history-grade grade-${grade || 'C'}`
 const universeSize = computed(() => result.value?.universeFunnel?.memberCount
   ?? universe.value?.snapshot?.memberCount ?? 0)
@@ -79,6 +93,38 @@ const selectionBlocked = computed(() => universe.value != null
 const exclusionEntries = computed(() => Object.entries(
   result.value?.universeFunnel?.exclusionReasonCounts ?? {})
   .sort((left, right) => right[1] - left[1]))
+const metricLabels: Record<string, string> = {
+  FIVE_DAY_RETURN: '5日收益', TWENTY_DAY_RETURN: '20日收益',
+  SIXTY_DAY_RETURN: '60日收益', TREND: '趋势', SHARPE: '夏普比率',
+  MAX_DRAWDOWN: '最大回撤', VOLATILITY: '波动率', DATA_QUALITY: '数据质量',
+  DATA_COMPLETENESS: '数据完整性',
+  MULTI_WINDOW_AND_STRATEGY_CONSISTENCY: '多窗口/多策略一致性',
+  OUT_OF_SAMPLE: '样本外表现', DRAWDOWN_AND_VOLATILITY: '回撤与波动',
+  COST_ADJUSTED_AND_SAMPLE_SIZE: '成本后表现与样本量',
+}
+const checkLabels: Record<string, string> = {
+  CURRENTLY_LISTED_MAINBOARD: '当前正常上市主板', NOT_ST: '非ST/*ST',
+  DAILY_COMPLETE: '日线完整', ADJUSTMENT_FACTOR_COMPLETE: '复权因子完整',
+  MINIMUM_TWENTY_SESSIONS: '至少20个交易日', TRADABLE_AT_ANCHOR: '锚点日可交易',
+  LIQUIDITY_GATE: '流动性门槛', PRICE_AND_VOLUME_QUALITY: '价格/成交量质量',
+  NO_FUTURE_DATA: '防未来数据', RESEARCH_PREFERENCE: '研究结论存在偏好',
+  DATA_QUALITY: '研究数据质量', ACCOUNTING_INVARIANT: '模拟会计守恒',
+  LOOK_AHEAD_GUARD: '防未来函数', CURRENT_SCORE_AT_LEAST_55: '当前分不低于55',
+  FINAL_CANDIDATE_LIMIT: '最终候选数量门槛',
+  NOT_SELECTED_BY_AGENT_PORTFOLIO: '未进入智能体组合优先序',
+  FINAL_CANDIDATE_LIMIT_REACHED: '已达到最终候选上限',
+  CURRENT_SCORE_BELOW_55: '当前分低于55',
+  LOWER_FINAL_RESEARCH_PRIORITY: '最终研究优先级较低',
+}
+const planStatusLabels: Record<string, string> = {
+  PLANNED: '计划中', OBSERVATION_ONLY: '仅观察', SKIPPED: '已跳过',
+  ENTERED: '已模拟买入', EXIT_INTENT: '等待模拟退出', CLOSED: '已模拟结束',
+  INVALIDATED: '计划已失效',
+}
+const label = (value: string) => metricLabels[value] || checkLabels[value]
+  || displayValue(value)
+const price = (value?: number) => value == null ? '—' : `¥${Number(value).toFixed(2)}`
+const score = (value?: number) => value == null ? '—' : Number(value).toFixed(2)
 
 async function loadUniversePanel() {
   universeLoading.value = true
@@ -379,6 +425,72 @@ onBeforeUnmount(() => window.clearInterval(timer))
             <div class="strategy-row"><span v-for="strategy in candidate.strategyComparison" :key="strategy.strategyCode"><b>{{ displayStrategy(strategy.strategyCode) }}</b> 收益 {{ pct(strategy.totalReturn) }} · 夏普比率 {{ Number(strategy.sharpeRatio).toFixed(2) }} · 回撤 {{ pct(strategy.maxDrawdown) }}</span></div>
             <p><strong>批判审查：</strong>{{ displayResearchList(candidate.criticIssues) || '未发现阻断性问题' }}</p>
             <p class="opposing"><strong>当前研究限制：</strong>{{ displayResearchList(candidate.opposingReasons) || '无额外限制' }}</p>
+            <details class="selection-explanation">
+              <summary>为什么入选与研究计划</summary>
+              <template v-if="explanationFor(candidate)">
+                <div class="explanation-grid">
+                  <section><h4>1. 入选路径</h4>
+                    <p>全主板数据合格 → 基础第 {{ explanationFor(candidate)?.basicRank }} / {{ explanationFor(candidate)?.basicUniverseSize }} → 历史稳定性第 {{ explanationFor(candidate)?.historicalRank ?? '—' }} / {{ explanationFor(candidate)?.historicalPoolSize }} → 策略比较池第 {{ explanationFor(candidate)?.strategyRank ?? '—' }} / {{ explanationFor(candidate)?.strategyPoolSize }} → 七智能体第 {{ explanationFor(candidate)?.agentRank ?? '—' }} / {{ explanationFor(candidate)?.agentPoolSize }} → 最终第 {{ explanationFor(candidate)?.finalCandidateRank }} / {{ explanationFor(candidate)?.finalCandidateLimit }}。</p>
+                    <p class="explanation-note">Top10按历史稳定性顺序进入七智能体研究；四策略比较不对Top10进行二次重排。</p>
+                    <div class="check-list"><span v-for="item in explanationFor(candidate)?.eligibilityChecks" :key="item.code" :class="item.passed ? 'passed' : 'failed'">{{ item.passed ? '✓' : '×' }} {{ label(item.code) }}</span></div>
+                  </section>
+                  <section><h4>2. 当前量化分解</h4>
+                    <table><thead><tr><th>指标</th><th>百分位</th><th>权重</th><th>贡献</th></tr></thead><tbody>
+                      <tr v-for="item in explanationFor(candidate)?.currentScoreContributions" :key="item.metric"><td>{{ label(item.metric) }}</td><td>{{ score(item.percentileScore) }}</td><td>{{ pct(item.weight) }}</td><td>{{ score(item.weightedContribution) }}</td></tr>
+                    </tbody></table>
+                    <p><strong>贡献合计：</strong>{{ score(explanationFor(candidate)?.currentScore) }}（由Java确定性计算）</p>
+                  </section>
+                  <section><h4>3. 历史稳定性分解</h4>
+                    <table><thead><tr><th>子项</th><th>子项分</th><th>权重</th><th>贡献</th></tr></thead><tbody>
+                      <tr v-for="item in explanationFor(candidate)?.historicalComponentScores" :key="item.component"><td>{{ label(item.component) }}</td><td>{{ score(item.componentScore) }}</td><td>{{ pct(item.weight) }}</td><td>{{ score(item.weightedContribution) }}</td></tr>
+                    </tbody></table>
+                    <p>历史总分 {{ score(explanationFor(candidate)?.historicalScore) }} · 研究等级 {{ explanationFor(candidate)?.historicalGrade }}</p>
+                  </section>
+                  <section><h4>4. 四策略比较</h4>
+                    <p v-for="item in explanationFor(candidate)?.strategyComparison" :key="item.strategyCode">{{ displayStrategy(item.strategyCode) }}：收益 {{ pct(item.totalReturn) }}，回撤 {{ pct(item.maxDrawdown) }}，夏普 {{ Number(item.sharpeRatio).toFixed(2) }}</p>
+                  </section>
+                  <section><h4>5. 七智能体支持 / 反对</h4>
+                    <p><strong>支持：</strong>{{ displayResearchList(explanationFor(candidate)?.supportingFindings || []) || '没有额外可证据化支持' }}</p>
+                    <p class="opposing"><strong>反对：</strong>{{ displayResearchList(explanationFor(candidate)?.opposingFindings || []) || '无额外反对意见' }}</p>
+                  </section>
+                  <section><h4>6. Critic意见和修正</h4>
+                    <p>{{ displayResearchList(explanationFor(candidate)?.criticIssues || []) || '未发现阻断性问题' }}</p>
+                    <p>{{ displayResearchList(explanationFor(candidate)?.criticCorrections || []) || '本轮无需修订' }}</p>
+                  </section>
+                  <section><h4>7. 最终门槛检查</h4>
+                    <div class="check-list"><span v-for="item in explanationFor(candidate)?.finalGateChecks" :key="item.code" :class="item.passed ? 'passed' : 'failed'">{{ item.passed ? '✓' : '×' }} {{ label(item.code) }}</span></div>
+                    <template v-if="explanationFor(candidate)?.firstExcludedComparison">
+                      <p class="first-excluded"><strong>第一只未入选：</strong>{{ explanationFor(candidate)?.firstExcludedComparison?.name }}（{{ explanationFor(candidate)?.firstExcludedComparison?.security.symbol }}）· {{ (explanationFor(candidate)?.firstExcludedComparison?.failedChecks || []).map(label).join('、') }}</p>
+                    </template>
+                  </section>
+                  <section v-if="tradePlanFor(candidate)" class="trade-plan"><h4>8. 研究买入计划</h4>
+                    <p><strong>状态：</strong>{{ planStatusLabels[tradePlanFor(candidate)?.planStatus || ''] || tradePlanFor(candidate)?.planStatus }}</p>
+                    <template v-if="tradePlanFor(candidate)?.planStatus !== 'OBSERVATION_ONLY'">
+                      <p>锚点未复权收盘 {{ price(tradePlanFor(candidate)?.rawReferenceClose) }}；QFQ参考收盘 {{ price(tradePlanFor(candidate)?.qfqReferenceClose) }}；ATR14 {{ price(tradePlanFor(candidate)?.atr14) }}</p>
+                      <p><strong>计划买入区间：</strong>{{ price(tradePlanFor(candidate)?.plannedEntryLower) }} ～ {{ price(tradePlanFor(candidate)?.plannedEntryUpper) }}；最高可接受价 {{ price(tradePlanFor(candidate)?.maximumAcceptableEntryPrice) }}</p>
+                      <p>计划时点：{{ tradePlanFor(candidate)?.plannedExecutionDate || '待交易日历确认' }} {{ tradePlanFor(candidate)?.plannedExecutionTime || '' }}，下一合法交易日开盘；超出区间、停牌或质量门禁失败均跳过。</p>
+                    </template>
+                    <p v-else>仅观察，不生成研究买卖计划。</p>
+                  </section>
+                  <section v-if="tradePlanFor(candidate)" class="trade-plan"><h4>9. 研究卖出计划</h4>
+                    <template v-if="tradePlanFor(candidate)?.planStatus !== 'OBSERVATION_ONLY'">
+                      <p>止损 {{ price(tradePlanFor(candidate)?.stopLossPrice) }}；目标 {{ price(tradePlanFor(candidate)?.targetExitPrice) }}；每股风险 {{ price(tradePlanFor(candidate)?.riskAmountPerShare) }}；风险收益比 {{ tradePlanFor(candidate)?.riskRewardRatio }}。</p>
+                      <p>{{ (tradePlanFor(candidate)?.exitConditions || []).join('；') }}</p>
+                    </template><p v-else>不生成可执行价格。</p>
+                  </section>
+                  <section v-if="tradePlanFor(candidate)" class="trade-plan"><h4>10. 预计持有期限</h4>
+                    <p v-if="tradePlanFor(candidate)?.expectedHoldingMinSessions">{{ displayStrategy(tradePlanFor(candidate)?.preferredStrategy || '') }}：预计 {{ tradePlanFor(candidate)?.expectedHoldingMinSessions }}～{{ tradePlanFor(candidate)?.expectedHoldingMaxSessions }} 个交易日，最长 {{ tradePlanFor(candidate)?.maximumHoldingSessions }} 个交易日。</p>
+                    <p>{{ tradePlanFor(candidate)?.strategyInvalidationRule }}</p>
+                  </section>
+                  <section v-if="tradePlanFor(candidate)" class="trade-plan"><h4>11. Paper实际执行</h4>
+                    <p><strong>计划价格不等于成交价格。</strong></p>
+                    <p>实际模拟买入 {{ price(tradePlanFor(candidate)?.actualPaperEntryPrice) }}；实际模拟卖出 {{ price(tradePlanFor(candidate)?.actualPaperExitPrice) }}；持有 {{ tradePlanFor(candidate)?.actualHoldingSessions ?? '—' }} 个交易日；费用 {{ price(tradePlanFor(candidate)?.actualFees) }}；PnL {{ price(tradePlanFor(candidate)?.actualPnl) }}。</p>
+                    <p>真实交易始终关闭。</p>
+                  </section>
+                </div>
+              </template>
+              <p v-else class="historical-contract-missing">历史版本未保存 Selection Explanation / Research Trade Plan；不会补造量化贡献或计划价格。</p>
+            </details>
           </div>
         </article>
       </section>
@@ -416,4 +528,5 @@ onBeforeUnmount(() => window.clearInterval(timer))
 .selection-page{display:grid;gap:18px}.selection-hero{height:auto;background:linear-gradient(135deg,#102a46,#101d30);border:1px solid #2b4c6d;border-radius:12px;padding:24px;display:flex;justify-content:space-between;align-items:center}.selection-hero p{color:#63b7ff;font-size:12px;letter-spacing:.12em}.selection-hero h1{font-size:30px;margin:4px 0}.selection-hero span,.boundary{color:#94a5bb}.selection-action{display:flex;gap:10px}.selection-action select{background:#0c1a2a;border:1px solid #34506d;color:#d9e6f5;border-radius:8px;padding:0 14px}.select-now{background:#1d8cff;border:0;color:white;border-radius:8px;font-size:16px;font-weight:700;padding:14px 26px;cursor:pointer}.select-now:disabled{opacity:.6}.boundary{font-size:12px;background:#121e2e;border-left:3px solid #e0a84e;padding:10px 14px}.anchor-notice{font-size:13px;color:#a9c6e5;background:#10243a;border-left:3px solid #4ca4f5;padding:11px 14px}.anchor-notice strong{color:#e4f1ff}.diagnostic{font-size:12px;color:#7f91a8;background:#101b2a;border:1px solid #263951;border-radius:6px;padding:9px 12px}.diagnostic code{display:block;color:#9db0c8;margin-top:8px}.stage-track{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}.stage-track div{display:flex;align-items:center;gap:8px;color:#65778f;background:#101b2a;padding:12px}.stage-track i{font-style:normal;border:1px solid #3c4d63;width:24px;height:24px;border-radius:50%;display:grid;place-items:center}.stage-track .active{color:#dcecff}.stage-track .active i{background:#1d8cff;border-color:#1d8cff}.summary-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.summary-strip article,.result-panel,.result-grid article,.history-panel,.agent-panel{background:#0f1b2c;border:1px solid #263951;border-radius:10px;padding:18px}.summary-strip span{display:block;color:#7f91a8;font-size:12px}.summary-strip b{display:block;margin-top:8px}.result-panel h2,.result-grid h2,.history-panel h2,.agent-panel h2{margin:0 0 14px}.empty-result{display:grid;text-align:center;padding:36px;color:#8fa2ba}.empty-result strong{font-size:22px;color:#e2eaf5}.candidate-card{display:grid;grid-template-columns:54px 1fr;gap:14px;padding:16px 0;border-top:1px solid #25364c}.candidate-rank{height:42px;width:42px;border-radius:8px;background:#183b60;color:#73bcff;display:grid;place-items:center;font-size:20px;font-weight:700}.candidate-main h3{margin:0}.candidate-main small,.candidate-main p{color:#8ea0b7}.candidate-main p{margin:9px 0}.candidate-tags{display:flex;gap:8px;margin:10px 0;flex-wrap:wrap}.candidate-tags>*{background:#152a43;border-radius:4px;padding:4px 8px;font-size:12px}.candidate-tags b{color:#6bb8ff}.strategy-row{display:flex;gap:8px;overflow:auto;padding:5px 0 9px}.strategy-row span{min-width:225px;background:#111f31;border:1px solid #263a52;border-radius:6px;padding:8px;color:#8ea0b7;font-size:11px}.strategy-row b{display:block;color:#cfe3fa;margin-bottom:4px}.opposing{color:#c5a76e!important}.result-grid{display:grid;grid-template-columns:2fr 1fr;gap:12px}.result-grid p{color:#91a2b8}.result-grid a{color:#5eb1ff}.agent-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.agent-grid article{background:#111f31;border:1px solid #263a52;border-radius:7px;padding:12px}.agent-grid header{display:flex;justify-content:space-between;color:#dcecff}.agent-grid header span,.agent-grid small{color:#70839a;font-size:11px}.agent-grid p{font-size:12px;color:#9aacc1}.agent-grid em{font-style:normal;color:#5db2ff;margin-right:7px}.critic-box,.paper-box{margin-top:12px;display:flex;gap:12px;align-items:center;background:#16263a;padding:12px;border-radius:6px}.critic-box span,.paper-box span{color:#a6b5c7;flex:1}.critic-box small{color:#7589a0}.history-row{cursor:pointer}.history-row:hover{background:#14253a}table{width:100%;border-collapse:collapse;font-size:12px}th{text-align:left;color:#71839b;padding:8px;border-bottom:1px solid #2a3a50}td{padding:10px 8px;border-bottom:1px solid #1d2c40}td small{display:block;color:#64778f;margin-top:2px}@media(max-width:1100px){.selection-hero{align-items:flex-start;gap:16px}.summary-strip,.result-grid,.agent-grid{grid-template-columns:1fr}.stage-track{grid-template-columns:repeat(3,1fr)}}
 .historical-overview{background:#0f1b2c;border:1px solid #2d4966;border-radius:10px;padding:18px}.historical-overview header{display:flex;justify-content:space-between;gap:16px;align-items:flex-start}.historical-overview h2{margin:0 0 6px}.historical-overview p{margin:0;color:#8fa4bb;font-size:12px}.grade-distribution{display:flex;gap:8px}.grade-distribution b{padding:6px 10px;border-radius:5px;background:#182a3d;color:#b9d1e9}.coverage-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;margin-top:14px}.coverage-grid article{background:#13263a;border:1px solid #2b4d6c;border-radius:7px;padding:10px}.coverage-grid article.insufficient{border-color:#66553b;background:#272318}.coverage-grid span,.coverage-grid strong,.coverage-grid small{display:block}.coverage-grid span{color:#71b9fb}.coverage-grid strong{margin:5px 0;color:#d8e7f6;font-size:12px}.coverage-grid small{color:#71849a}.historical-boundary{margin-top:12px!important;padding-top:10px;border-top:1px solid #20374d}.historical-legacy{border-color:#5d523d}.candidate-evidence-grid{display:grid;grid-template-columns:1fr 1.25fr .75fr;gap:10px;margin:12px 0}.candidate-evidence-grid section{background:#101f31;border:1px solid #263a52;border-radius:7px;padding:11px}.candidate-evidence-grid h4{margin:0 0 8px;color:#cfe3f7}.history-grade{font-weight:700}.grade-A{color:#67d5a0}.grade-B{color:#77bfff}.grade-C{color:#e0ae62}@media(max-width:1100px){.coverage-grid,.candidate-evidence-grid{grid-template-columns:1fr}.historical-overview header{display:block}.grade-distribution{margin-top:10px}}
 .universe-snapshot,.universe-funnel,.member-panel{background:#0f1b2c;border:1px solid #2d4966;border-radius:10px;padding:18px}.universe-snapshot header,.universe-funnel header,.member-panel header{display:flex;justify-content:space-between;align-items:flex-start;gap:18px}.universe-snapshot h2,.universe-funnel h2,.member-panel h2{margin:0 0 5px}.universe-snapshot p,.universe-funnel p,.member-panel p{margin:0;color:#7f93aa;font-size:12px}.universe-snapshot header>b,.universe-funnel header>b{font-size:24px;color:#64bbff}.universe-facts,.exclusion-reasons{display:flex;flex-wrap:wrap;gap:8px;margin-top:13px}.universe-facts span,.exclusion-reasons span{padding:6px 9px;background:#13263a;border:1px solid #29445f;border-radius:5px;color:#9fb4ca;font-size:12px}.funnel-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px;margin-top:14px}.funnel-grid article{padding:10px;background:#12243a;border:1px solid #29435f;border-radius:6px}.funnel-grid span,.funnel-grid b{display:block}.funnel-grid span{color:#7f93aa;font-size:11px}.funnel-grid b{margin-top:6px;color:#d8e9fa;font-size:18px}.member-panel header select{background:#0c1a2a;border:1px solid #34506d;color:#d9e6f5;border-radius:7px;padding:8px 12px}.member-panel table{margin:12px 0}.member-panel .el-pagination{justify-content:flex-end}@media(max-width:1100px){.funnel-grid{grid-template-columns:repeat(2,1fr)}.universe-snapshot header,.universe-funnel header,.member-panel header{display:block}.member-panel header select{margin-top:10px}}
+.selection-explanation{margin-top:14px;background:#0c1928;border:1px solid #31516f;border-radius:8px;padding:12px}.selection-explanation>summary{cursor:pointer;color:#70bdff;font-weight:700}.explanation-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:12px}.explanation-grid section{background:#111f31;border:1px solid #263a52;border-radius:7px;padding:12px;min-width:0}.explanation-grid h4{margin:0 0 9px;color:#d4e8fb}.explanation-grid table{font-size:11px}.explanation-note,.historical-contract-missing{color:#d5aa67!important}.check-list{display:flex;gap:6px;flex-wrap:wrap}.check-list span{font-size:11px;padding:4px 7px;border-radius:4px;background:#192b3e}.check-list .passed{color:#70d5a4;border:1px solid #285f49}.check-list .failed{color:#ef9c92;border:1px solid #6a3936}.first-excluded{border-top:1px solid #273c52;padding-top:9px}.trade-plan strong{color:#e4eef8}.historical-contract-missing{margin:12px 0 0!important}@media(max-width:1100px){.explanation-grid{grid-template-columns:1fr}}
 </style>

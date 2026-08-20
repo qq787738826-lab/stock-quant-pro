@@ -7,6 +7,7 @@ import com.stockquant.server.agent.research.AgentResearchModels.ResearchReport;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.Map;
 
@@ -17,6 +18,10 @@ public final class ResearchSelectionModels {
             "RESEARCH_SELECTION_RANKING_V1";
     public static final String HISTORICAL_STABILITY_VERSION =
             "HISTORICAL_STABILITY_SCORE_V1";
+    public static final String SELECTION_EXPLANATION_VERSION =
+            "SELECTION_EXPLANATION_V1";
+    public static final String RESEARCH_TRADE_PLAN_VERSION =
+            "RESEARCH_TRADE_PLAN_V1";
     public static final int DEFAULT_PRIMARY_WINDOW = 20;
     public static final int DEFAULT_AUXILIARY_WINDOW = 60;
     public static final int DEFAULT_SHORTLIST_SIZE = 10;
@@ -250,6 +255,183 @@ public final class ResearchSelectionModels {
         }
     }
 
+    public record EligibilityCheck(
+            String code,
+            boolean passed,
+            String detail
+    ) {
+    }
+
+    public record ScoreContribution(
+            String metric,
+            BigDecimal rawValue,
+            BigDecimal percentileScore,
+            BigDecimal weight,
+            BigDecimal weightedContribution
+    ) {
+    }
+
+    public record HistoricalComponentScore(
+            String component,
+            BigDecimal componentScore,
+            BigDecimal weight,
+            BigDecimal weightedContribution
+    ) {
+    }
+
+    public record GateCheck(
+            String code,
+            boolean passed,
+            String detail
+    ) {
+    }
+
+    public record FirstExcludedComparison(
+            Security security,
+            String name,
+            Integer basicRank,
+            Integer historicalRank,
+            Integer strategyRank,
+            Integer agentRank,
+            BigDecimal currentScore,
+            BigDecimal historicalScore,
+            List<String> failedChecks
+    ) {
+        public FirstExcludedComparison {
+            failedChecks = failedChecks == null
+                    ? List.of() : List.copyOf(failedChecks);
+        }
+    }
+
+    /** Deterministic provenance for every final selection decision. */
+    public record SelectionExplanation(
+            String version,
+            Security security,
+            boolean eligibilityPassed,
+            List<EligibilityCheck> eligibilityChecks,
+            int basicRank,
+            int basicUniverseSize,
+            BigDecimal currentScore,
+            List<ScoreContribution> currentScoreContributions,
+            Map<String, BigDecimal> metricPercentiles,
+            Integer historicalRank,
+            int historicalPoolSize,
+            BigDecimal historicalScore,
+            HistoricalGrade historicalGrade,
+            List<HistoricalComponentScore> historicalComponentScores,
+            Integer strategyRank,
+            int strategyPoolSize,
+            Integer agentRank,
+            int agentPoolSize,
+            int finalCandidateRank,
+            int finalCandidateLimit,
+            List<StrategyComparison> strategyComparison,
+            List<String> supportingFindings,
+            List<String> opposingFindings,
+            List<String> criticIssues,
+            List<String> criticCorrections,
+            List<GateCheck> finalGateChecks,
+            FirstExcludedComparison firstExcludedComparison,
+            List<String> evidenceIds,
+            List<String> limitations
+    ) {
+        public SelectionExplanation {
+            if (!SELECTION_EXPLANATION_VERSION.equals(version)
+                    || security == null || basicRank < 1
+                    || basicUniverseSize < basicRank
+                    || finalCandidateRank < 1
+                    || finalCandidateLimit < finalCandidateRank) {
+                throw new IllegalArgumentException(
+                        "SELECTION_EXPLANATION_INVALID");
+            }
+            eligibilityChecks = immutable(eligibilityChecks);
+            currentScoreContributions = immutable(
+                    currentScoreContributions);
+            metricPercentiles = metricPercentiles == null
+                    ? Map.of() : Map.copyOf(metricPercentiles);
+            historicalComponentScores = immutable(
+                    historicalComponentScores);
+            strategyComparison = immutable(strategyComparison);
+            supportingFindings = immutable(supportingFindings);
+            opposingFindings = immutable(opposingFindings);
+            criticIssues = immutable(criticIssues);
+            criticCorrections = immutable(criticCorrections);
+            finalGateChecks = immutable(finalGateChecks);
+            evidenceIds = immutable(evidenceIds);
+            limitations = immutable(limitations);
+        }
+    }
+
+    public enum ResearchTradePlanStatus {
+        PLANNED, OBSERVATION_ONLY, SKIPPED, ENTERED, EXIT_INTENT,
+        CLOSED, INVALIDATED
+    }
+
+    /** Research-only price plan. It is never an order or brokerage command. */
+    public record ResearchTradePlan(
+            String version,
+            Security security,
+            LocalDate anchorTradeDate,
+            BigDecimal rawReferenceClose,
+            BigDecimal qfqReferenceClose,
+            BigDecimal atr14,
+            BigDecimal entryBandPercent,
+            BigDecimal plannedEntryLower,
+            BigDecimal plannedEntryUpper,
+            BigDecimal maximumAcceptableEntryPrice,
+            LocalDate plannedExecutionDate,
+            LocalTime plannedExecutionTime,
+            BigDecimal stopLossPrice,
+            BigDecimal targetExitPrice,
+            BigDecimal riskAmountPerShare,
+            BigDecimal riskRewardRatio,
+            String preferredStrategy,
+            Integer expectedHoldingMinSessions,
+            Integer expectedHoldingMaxSessions,
+            Integer maximumHoldingSessions,
+            String strategyInvalidationRule,
+            List<String> exitConditions,
+            ResearchTradePlanStatus planStatus,
+            String statusReason,
+            BigDecimal actualPaperEntryPrice,
+            BigDecimal actualPaperExitPrice,
+            Integer actualHoldingSessions,
+            BigDecimal actualFees,
+            BigDecimal actualPnl,
+            String calculationVersion,
+            String sourceFingerprint
+    ) {
+        public ResearchTradePlan {
+            if (!RESEARCH_TRADE_PLAN_VERSION.equals(version)
+                    || security == null || anchorTradeDate == null
+                    || planStatus == null || calculationVersion == null
+                    || calculationVersion.isBlank()
+                    || sourceFingerprint == null
+                    || !sourceFingerprint.matches("[0-9a-f]{64}")) {
+                throw new IllegalArgumentException(
+                        "RESEARCH_TRADE_PLAN_INVALID");
+            }
+            exitConditions = immutable(exitConditions);
+            if (planStatus == ResearchTradePlanStatus.PLANNED
+                    && (rawReferenceClose == null || qfqReferenceClose == null
+                    || atr14 == null || entryBandPercent == null
+                    || plannedEntryLower == null || plannedEntryUpper == null
+                    || maximumAcceptableEntryPrice == null
+                    || plannedExecutionDate == null
+                    || plannedExecutionTime == null
+                    || stopLossPrice == null || targetExitPrice == null
+                    || riskAmountPerShare == null
+                    || riskRewardRatio == null
+                    || preferredStrategy == null
+                    || expectedHoldingMinSessions == null
+                    || expectedHoldingMaxSessions == null
+                    || maximumHoldingSessions == null)) {
+                throw new IllegalArgumentException(
+                        "RESEARCH_TRADE_PLAN_EXECUTABLE_FIELDS_INVALID");
+            }
+        }
+    }
+
     public record Timings(
             long dataPreparationMillis,
             long quantitativeScanMillis,
@@ -311,6 +493,8 @@ public final class ResearchSelectionModels {
             List<QuantitativeScore> ranking,
             List<QuantitativeScore> shortlist,
             List<Candidate> candidates,
+            List<SelectionExplanation> selectionExplanations,
+            List<ResearchTradePlan> researchTradePlans,
             boolean emptyResult,
             String decisionCode,
             ResearchReport agentReport,
@@ -330,6 +514,10 @@ public final class ResearchSelectionModels {
             ranking = List.copyOf(ranking);
             shortlist = List.copyOf(shortlist);
             candidates = List.copyOf(candidates);
+            selectionExplanations = selectionExplanations == null
+                    ? List.of() : List.copyOf(selectionExplanations);
+            researchTradePlans = researchTradePlans == null
+                    ? List.of() : List.copyOf(researchTradePlans);
             if (!VERSION.equals(contractVersion) || publicRunId == null
                     || publicRunId.isBlank() || status == null
                     || triggerMode == null || realTradingEnabled
@@ -338,6 +526,23 @@ public final class ResearchSelectionModels {
                         "RESEARCH_SELECTION_RESULT_INVALID");
             }
         }
+
+        public SelectionResult withResearchTradePlans(
+                List<ResearchTradePlan> updatedPlans
+        ) {
+            return new SelectionResult(contractVersion, runId, publicRunId,
+                    status, triggerMode, researchAsOf, anchorTradeDate,
+                    dataCoverage, universeFunnel, historicalResearch, ranking,
+                    shortlist, candidates, selectionExplanations,
+                    updatedPlans, emptyResult, decisionCode, agentReport,
+                    shadowRunId, paperEnabled, realTradingEnabled,
+                    historicalLiveShadow, timings, usage, lineage,
+                    failureCategory, failureReason, startedAt, completedAt);
+        }
+    }
+
+    private static <T> List<T> immutable(List<T> values) {
+        return values == null ? List.of() : List.copyOf(values);
     }
 
     public record RunSummary(

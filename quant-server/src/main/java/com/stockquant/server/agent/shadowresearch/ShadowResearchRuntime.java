@@ -175,7 +175,8 @@ public final class ShadowResearchRuntime {
                                     .orElseThrow();
                             List<PaperOrder> orders = paper.createOrders(
                                     frozen, frozenRecommendation,
-                                    request.nextPaperExecutionTime());
+                                    request.nextPaperExecutionTime(),
+                                    dataset);
                             var portfolio = repository.lockPortfolio();
                             PortfolioSnapshot portfolioSnapshot =
                                     paper.snapshot(portfolio, frozen.id(),

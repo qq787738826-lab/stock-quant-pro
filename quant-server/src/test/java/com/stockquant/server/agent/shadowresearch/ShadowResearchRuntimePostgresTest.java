@@ -188,6 +188,57 @@ class ShadowResearchRuntimePostgresTest {
         assertEquals(1, jdbc.queryForObject(
                 "SELECT count(*) FROM shadow_paper_fills WHERE run_id=?",
                 Integer.class, run.id()));
+
+        ShadowResearchModels.ShadowRun rebalance = createFrozenRun(repository,
+                LocalDate.of(2025, 9, 11), 2002);
+        var replacementRecommendation =
+                new ShadowResearchModels.ShadowRecommendation(
+                        "RESEARCH_PREFERENCE", List.of("BUY_AND_HOLD"),
+                        List.of(security.canonicalCode()),
+                        "BUY_AND_HOLD", "LOW", new BigDecimal("0.55"),
+                        new BigDecimal("0.40"), List.of("EVIDENCE_2"),
+                        List.of(), true, true);
+        Instant nextExecution = StrategyResearchModels.openInstant(
+                LocalDate.of(2025, 9, 12));
+        var exitGuard = new ShadowPaperPortfolioService.PaperEntryGuard() {
+            @Override
+            public java.util.Optional<String> rejectionReason(
+                    ShadowResearchModels.PaperOrder order,
+                    LocalDate executionDate,
+                    BigDecimal referenceOpen
+            ) {
+                return java.util.Optional.empty();
+            }
+
+            @Override
+            public Map<StrategyResearchModels.Security, String> exitReasons(
+                    ShadowResearchModels.ShadowRun currentRun,
+                    StrategyResearchModels.ResearchDataset dataset,
+                    ShadowResearchModels.PaperPortfolio portfolio
+            ) {
+                return Map.of(security, "STOP_LOSS_TOUCHED");
+            }
+        };
+        var guardedPaper = new ShadowPaperPortfolioService(repository,
+                new TransactionTemplate(
+                        new DataSourceTransactionManager(dataSource)),
+                exitGuard);
+        guardedPaper.createOrders(rebalance, replacementRecommendation,
+                nextExecution, ShadowResearchTestFixtures.dataset()
+                        .dataset());
+        var rebalanced = guardedPaper.executeDue(LocalDate.of(2025, 9, 12),
+                nextExecution, ShadowResearchTestFixtures.dataset()
+                        .dataset(), null);
+
+        assertTrue(rebalanced.fills().stream().anyMatch(value ->
+                value.security().equals(security)
+                        && value.side() == ShadowResearchModels.Side.SELL));
+        var lifecycle = repository.paperLifecycleFills(run.id());
+        assertEquals(2, lifecycle.size());
+        assertEquals(ShadowResearchModels.Side.BUY,
+                lifecycle.get(0).side());
+        assertEquals(ShadowResearchModels.Side.SELL,
+                lifecycle.get(1).side());
     }
 
     @Test

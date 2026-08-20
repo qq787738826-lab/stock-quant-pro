@@ -762,7 +762,68 @@ public class ShadowResearchRepository {
                         row.getBigDecimal("realized_pnl"),
                         row.getBigDecimal("cash_after"),
                         row.getInt("position_after"),
-                        row.getString("fill_fingerprint")), runId);
+                                row.getString("fill_fingerprint")), runId);
+    }
+
+    /** Read-only first Paper lifecycle originating from one frozen run. */
+    public List<PaperFill> paperLifecycleFills(long entryRunId) {
+        return jdbc.query("""
+                WITH entry AS (
+                    SELECT o.portfolio_id, o.symbol, o.exchange,
+                           min(f.id) AS entry_fill_id
+                      FROM shadow_paper_fills f
+                      JOIN shadow_paper_orders o ON o.id=f.order_id
+                     WHERE f.run_id=? AND o.side='BUY'
+                     GROUP BY o.portfolio_id, o.symbol, o.exchange
+                ), bounded AS (
+                    SELECT entry.*,
+                           (SELECT min(future.id)
+                              FROM shadow_paper_fills future
+                              JOIN shadow_paper_orders future_order
+                                ON future_order.id=future.order_id
+                             WHERE future_order.portfolio_id=
+                                       entry.portfolio_id
+                               AND future_order.symbol=entry.symbol
+                               AND future_order.exchange=entry.exchange
+                               AND future_order.side='BUY'
+                               AND future.id>entry.entry_fill_id
+                           ) AS next_entry_fill_id
+                      FROM entry
+                )
+                SELECT f.id, f.order_id, f.run_id, f.execution_date,
+                       f.execution_time, f.reference_price, f.execution_price,
+                       f.quantity, f.gross_amount, f.commission, f.stamp_duty,
+                       f.slippage_cost, f.realized_pnl, f.cash_after,
+                       f.position_after, f.fill_fingerprint,
+                       o.symbol, o.exchange, o.side
+                  FROM bounded lifecycle
+                  JOIN shadow_paper_orders o
+                    ON o.portfolio_id=lifecycle.portfolio_id
+                   AND o.symbol=lifecycle.symbol
+                   AND o.exchange=lifecycle.exchange
+                  JOIN shadow_paper_fills f ON f.order_id=o.id
+                 WHERE f.id>=lifecycle.entry_fill_id
+                   AND (lifecycle.next_entry_fill_id IS NULL
+                        OR f.id<lifecycle.next_entry_fill_id)
+                 ORDER BY f.execution_time, f.id
+                """, (row, number) -> new PaperFill(
+                row.getLong("id"), row.getLong("order_id"),
+                row.getLong("run_id"),
+                row.getObject("execution_date", LocalDate.class),
+                instant(row, "execution_time"),
+                new Security(row.getString("symbol"),
+                        row.getString("exchange")),
+                Side.valueOf(row.getString("side")),
+                row.getBigDecimal("reference_price"),
+                row.getBigDecimal("execution_price"),
+                row.getInt("quantity"), row.getBigDecimal("gross_amount"),
+                row.getBigDecimal("commission"),
+                row.getBigDecimal("stamp_duty"),
+                row.getBigDecimal("slippage_cost"),
+                row.getBigDecimal("realized_pnl"),
+                row.getBigDecimal("cash_after"),
+                row.getInt("position_after"),
+                row.getString("fill_fingerprint")), entryRunId);
     }
 
     public ShadowOutcome insertOutcome(

@@ -204,6 +204,43 @@ SELECT COALESCE(string_agg(value, ',' ORDER BY value), 'NONE')
         $experiments -match 'oos=false') {
         throw 'RESEARCH_SELECTION_E2E_CANDIDATES_INVALID'
     }
+    Exact (Scalar "SELECT jsonb_array_length(result_json->'selectionExplanations') FROM research_selection_runs WHERE id=1") ([int]$value.candidateCount) `
+        'RESEARCH_SELECTION_E2E_EXPLANATION_COUNT_INVALID'
+    Exact (Scalar "SELECT jsonb_array_length(result_json->'researchTradePlans') FROM research_selection_runs WHERE id=1") ([int]$value.candidateCount) `
+        'RESEARCH_SELECTION_E2E_TRADE_PLAN_COUNT_INVALID'
+    $explanationInvalidSql = @'
+SELECT count(*)
+  FROM research_selection_runs run,
+       LATERAL jsonb_array_elements(
+           run.result_json->'selectionExplanations') explanation(value)
+ WHERE run.id=1
+   AND (explanation.value->>'version'<>'SELECTION_EXPLANATION_V1'
+        OR jsonb_array_length(
+             explanation.value->'currentScoreContributions')<>8
+        OR abs((explanation.value->>'currentScore')::numeric -
+          (SELECT sum((item.value->>'weightedContribution')::numeric)
+             FROM jsonb_array_elements(
+               explanation.value->'currentScoreContributions') item(value)
+          ))>0.0001)
+'@
+    Exact (Scalar $explanationInvalidSql) 0 `
+        'RESEARCH_SELECTION_E2E_EXPLANATION_INVALID'
+    $planInvalidSql = @'
+SELECT count(*)
+  FROM research_selection_runs run,
+       LATERAL jsonb_array_elements(
+           run.result_json->'researchTradePlans') plan(value)
+ WHERE run.id=1
+   AND (plan.value->>'version'<>'RESEARCH_TRADE_PLAN_V1'
+        OR plan.value->>'planStatus' NOT IN ('PLANNED','OBSERVATION_ONLY','SKIPPED')
+        OR plan.value->>'planStatus'='PLANNED'
+           AND ((plan.value->>'riskRewardRatio')::numeric<>2
+                OR (plan.value->>'plannedEntryLower')::numeric>
+                   (plan.value->>'plannedEntryUpper')::numeric
+                OR plan.value->>'plannedExecutionDate' IS NULL))
+'@
+    Exact (Scalar $planInvalidSql) 0 `
+        'RESEARCH_SELECTION_E2E_TRADE_PLAN_INVALID'
     Exact $value.tushareProviderCallCount 123 `
         'RESEARCH_SELECTION_E2E_TUSHARE_INVALID'
     Exact $value.retryCount 0 'RESEARCH_SELECTION_E2E_RETRY_INVALID'
@@ -318,6 +355,8 @@ SELECT COALESCE(string_agg(value, ',' ORDER BY value), 'NONE')
     Write-Output 'RESEARCH_SELECTION_TEMP_POSTGRES_V1_V18=PASS'
     Write-Output 'RESEARCH_SELECTION_M1_M2_M3_M4_CHAIN=PASS'
     Write-Output 'RESEARCH_SELECTION_HISTORICAL_STABILITY=PASS'
+    Write-Output 'RESEARCH_SELECTION_EXPLANATION_V1=PASS'
+    Write-Output 'RESEARCH_TRADE_PLAN_V1=PASS'
     Write-Output 'RESEARCH_SELECTION_HISTORY_20_60=AVAILABLE'
     Write-Output 'RESEARCH_SELECTION_HISTORY_120_250=INSUFFICIENT_HISTORY'
     Write-Output 'RESEARCH_SELECTION_SCHEDULED_SHADOW=FROZEN'

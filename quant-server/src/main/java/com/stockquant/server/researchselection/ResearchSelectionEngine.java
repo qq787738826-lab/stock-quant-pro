@@ -22,6 +22,8 @@ import com.stockquant.server.researchselection.ResearchSelectionModels.Quantitat
 import com.stockquant.server.researchselection.ResearchSelectionModels.RecommendationStatus;
 import com.stockquant.server.researchselection.ResearchSelectionModels.SelectionRequest;
 import com.stockquant.server.researchselection.ResearchSelectionModels.SelectionResult;
+import com.stockquant.server.researchselection.ResearchSelectionModels.SelectionExplanation;
+import com.stockquant.server.researchselection.ResearchSelectionModels.ResearchTradePlan;
 import com.stockquant.server.researchselection.ResearchSelectionModels.Status;
 import com.stockquant.server.researchselection.ResearchSelectionModels.Timings;
 import com.stockquant.server.researchselection.ResearchSelectionModels.Usage;
@@ -171,7 +173,7 @@ public final class ResearchSelectionEngine {
                 Status.COMPLETED, request.triggerMode(), asOf, anchor,
                 preparedCoverage == null ? loaded.coverage()
                         : preparedCoverage, null, historical, fullRanking,
-                shortlist, candidates,
+                shortlist, candidates, List.of(), List.of(),
                 candidates.isEmpty(), candidates.isEmpty()
                 ? AgentResearchModels.DecisionCode.INSUFFICIENT_EVIDENCE.name()
                 : report.finalDecision().code().name(),
@@ -212,8 +214,9 @@ public final class ResearchSelectionEngine {
         Map<Security, Member> metadata = snapshot.members().stream().collect(
                 java.util.stream.Collectors.toUnmodifiableMap(
                         Member::security, value -> value));
-        List<QuantitativeScore> fullRanking = ranking.rank(loaded.dataset(),
-                metadata);
+        ResearchSelectionRankingService.RankingResult explainedRanking =
+                ranking.rankExplained(loaded.dataset(), metadata);
+        List<QuantitativeScore> fullRanking = explainedRanking.scores();
         List<QuantitativeScore> historicalPool = fullRanking.stream()
                 .filter(score -> available(loaded.evaluations(),
                         score.security()) >= ResearchUniverseMainboard
@@ -267,6 +270,16 @@ public final class ResearchSelectionEngine {
         List<Candidate> candidates = candidates(shortlist, comparison, report,
                 shadow.snapshot().recommendation().rankedSecurities(),
                 request.finalLimit());
+        List<SelectionExplanation> explanations =
+                new ResearchSelectionExplanationService().explain(
+                        explainedRanking, fullHistorical, strategyPool,
+                        shortlist, candidates,
+                        shadow.snapshot().recommendation().rankedSecurities(),
+                        comparison, report, loaded.evaluations(),
+                        request.finalLimit());
+        List<ResearchTradePlan> tradePlans =
+                new ResearchTradePlanService().create(candidates, historical,
+                        loaded.tradePlanPrices(), loaded.dataset(), shadow);
         List<MemberEvaluation> evaluations = enrich(loaded.evaluations(),
                 fullRanking, fullHistorical, strategyPool, shortlist,
                 candidates);
@@ -288,6 +301,8 @@ public final class ResearchSelectionEngine {
         String resultFingerprint = hash(Map.of(
                 "ranking", persistedRanking, "shortlist", shortlist,
                 "candidates", candidates, "funnel", funnel,
+                "selectionExplanations", explanations,
+                "researchTradePlans", tradePlans,
                 "research", report.researchFingerprint(),
                 "historical", historical, "asOf", asOf));
         Lineage lineage = new Lineage(ResearchUniverseMainboard.VERSION,
@@ -305,7 +320,8 @@ public final class ResearchSelectionEngine {
                 ResearchSelectionModels.VERSION, runId, publicRunId,
                 Status.COMPLETED, request.triggerMode(), asOf, anchor,
                 loaded.coverage(), funnel, historical, persistedRanking,
-                shortlist, candidates, candidates.isEmpty(),
+                shortlist, candidates, explanations, tradePlans,
+                candidates.isEmpty(),
                 candidates.isEmpty()
                         ? AgentResearchModels.DecisionCode
                         .INSUFFICIENT_EVIDENCE.name()

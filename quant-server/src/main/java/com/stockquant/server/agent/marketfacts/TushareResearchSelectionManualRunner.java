@@ -19,6 +19,7 @@ import com.stockquant.server.researchselection.ResearchSelectionModels;
 import com.stockquant.server.researchselection.ResearchSelectionModels.DataCoverage;
 import com.stockquant.server.researchselection.ResearchSelectionModels.SelectionResult;
 import com.stockquant.server.researchselection.ResearchSelectionModels.Status;
+import com.stockquant.server.researchselection.ResearchSelectionPaperEntryGuard;
 import com.stockquant.server.researchselection.ResearchSelectionRepository;
 import com.stockquant.server.researchselection.ResearchSelectionSanitizedResult;
 import com.stockquant.server.researchselection.ResearchSelectionProviderBudgetPlanner;
@@ -251,7 +252,9 @@ public final class TushareResearchSelectionManualRunner {
             var transaction = new TransactionTemplate(
                     new DataSourceTransactionManager(dataSource));
             var paper = new ShadowPaperPortfolioService(shadowRepository,
-                    transaction);
+                    transaction,
+                    new ResearchSelectionPaperEntryGuard(jdbc, mapper,
+                            clock));
             var deep = new ResearchSelectionDeepResearchService(
                     shadowRepository, paper, transaction, clock,
                     (signalDate, cutoff) -> new

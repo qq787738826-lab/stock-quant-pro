@@ -18,6 +18,7 @@ import com.stockquant.server.researchselection.ResearchUniverseMainboard.Exclusi
 import com.stockquant.server.researchselection.ResearchUniverseMainboard.Member;
 import com.stockquant.server.researchselection.ResearchUniverseMainboard.MemberEvaluation;
 import com.stockquant.server.researchselection.ResearchUniverseMainboard.SnapshotBundle;
+import com.stockquant.server.researchselection.ResearchTradePlanService.PriceBar;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -83,6 +84,7 @@ public final class ResearchUniverseMainboardDatasetLoader {
                 factorBySecurity = groupFactors(factors);
         List<MemberEvaluation> evaluations = new ArrayList<>();
         List<DailyBar> bars = new ArrayList<>();
+        Map<Security, List<PriceBar>> tradePlanPrices = new LinkedHashMap<>();
         int totalMissingDaily = 0;
         int totalMissingFactors = 0;
         for (Member member : snapshot.members()) {
@@ -95,6 +97,10 @@ public final class ResearchUniverseMainboardDatasetLoader {
                     memberFactors, cutoff);
             evaluations.add(projection.evaluation());
             bars.addAll(projection.bars());
+            if (!projection.priceBars().isEmpty()) {
+                tradePlanPrices.put(member.security(),
+                        projection.priceBars());
+            }
             totalMissingDaily += projection.evaluation().missingDaily();
             totalMissingFactors += projection.evaluation()
                     .missingAdjustmentFactors();
@@ -119,7 +125,7 @@ public final class ResearchUniverseMainboardDatasetLoader {
                 true, bars.stream().noneMatch(value ->
                 value.sourceKnownAt().isAfter(cutoff)));
         return new LoadedMainboard(snapshot, dataset, coverage, evaluations,
-                selected);
+                selected, tradePlanPrices);
     }
 
     public Audit audit(
@@ -330,17 +336,42 @@ public final class ResearchUniverseMainboardDatasetLoader {
         List<DailyBar> bars = reasons.isEmpty()
                 ? qfq(member.security(), sessions, raw, factors, available)
                 : List.of();
+        List<PriceBar> priceBars = reasons.isEmpty()
+                ? tradePlanPrices(sessions, raw, factors, available)
+                : List.of();
         if (reasons.isEmpty() && bars.size()
                 < ResearchUniverseMainboard.BASIC_MINIMUM_SESSIONS) {
             reasons.add(ExclusionReason.DATA_QUALITY_FAILED);
             bars = List.of();
+            priceBars = List.of();
         }
         EligibilityStatus status = reasons.isEmpty()
                 ? EligibilityStatus.ELIGIBLE : EligibilityStatus.EXCLUDED;
         return new MemberProjection(new MemberEvaluation(member, status,
                 List.copyOf(reasons), available, missingDaily,
                 missingFactors, averageAmount, null, null, null, null, null,
-                null, false, false), bars);
+                null, false, false), bars, priceBars);
+    }
+
+    private static List<PriceBar> tradePlanPrices(
+            List<LocalDate> sessions,
+            Map<LocalDate, RawDailyBarObservation> raw,
+            Map<LocalDate, AdjustmentFactorObservation> factors,
+            int available
+    ) {
+        int count = Math.min(15, available);
+        int start = sessions.size() - count;
+        List<PriceBar> result = new ArrayList<>();
+        for (LocalDate date : sessions.subList(start, sessions.size())) {
+            RawDailyBarObservation daily = raw.get(date);
+            AdjustmentFactorObservation factor = factors.get(date);
+            if (daily == null || factor == null) return List.of();
+            result.add(new PriceBar(date, daily.open(), daily.high(),
+                    daily.low(), daily.close(), factor.factor(),
+                    daily.envelope().canonicalContentHash(),
+                    factor.envelope().canonicalContentHash()));
+        }
+        return List.copyOf(result);
     }
 
     private static List<DailyBar> qfq(
@@ -517,11 +548,16 @@ public final class ResearchUniverseMainboardDatasetLoader {
             ResearchDataset dataset,
             DataCoverage coverage,
             List<MemberEvaluation> evaluations,
-            List<LocalDate> sessions
+            List<LocalDate> sessions,
+            Map<Security, List<PriceBar>> tradePlanPrices
     ) {
         public LoadedMainboard {
             evaluations = List.copyOf(evaluations);
             sessions = List.copyOf(sessions);
+            Map<Security, List<PriceBar>> copied = new LinkedHashMap<>();
+            tradePlanPrices.forEach((security, values) -> copied.put(
+                    security, List.copyOf(values)));
+            tradePlanPrices = java.util.Collections.unmodifiableMap(copied);
         }
     }
 
@@ -540,7 +576,8 @@ public final class ResearchUniverseMainboardDatasetLoader {
 
     record MemberProjection(
             MemberEvaluation evaluation,
-            List<DailyBar> bars
+            List<DailyBar> bars,
+            List<PriceBar> priceBars
     ) {
     }
 }

@@ -24,6 +24,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 /** Deterministic, transaction-scoped paper accounting; no broker boundary. */
 public final class ShadowPaperPortfolioService {
@@ -32,13 +33,23 @@ public final class ShadowPaperPortfolioService {
     private final TransactionTemplate transaction;
     private final PaperExecutionEngine engine;
     private final BacktestConfig config;
+    private final PaperEntryGuard entryGuard;
 
     public ShadowPaperPortfolioService(
             ShadowResearchRepository repository,
             TransactionTemplate transaction
     ) {
         this(repository, transaction, new PaperExecutionEngine(),
-                BacktestConfig.standard());
+                BacktestConfig.standard(), PaperEntryGuard.allowAll());
+    }
+
+    public ShadowPaperPortfolioService(
+            ShadowResearchRepository repository,
+            TransactionTemplate transaction,
+            PaperEntryGuard entryGuard
+    ) {
+        this(repository, transaction, new PaperExecutionEngine(),
+                BacktestConfig.standard(), entryGuard);
     }
 
     ShadowPaperPortfolioService(
@@ -47,10 +58,22 @@ public final class ShadowPaperPortfolioService {
             PaperExecutionEngine engine,
             BacktestConfig config
     ) {
+        this(repository, transaction, engine, config,
+                PaperEntryGuard.allowAll());
+    }
+
+    ShadowPaperPortfolioService(
+            ShadowResearchRepository repository,
+            TransactionTemplate transaction,
+            PaperExecutionEngine engine,
+            BacktestConfig config,
+            PaperEntryGuard entryGuard
+    ) {
         this.repository = Objects.requireNonNull(repository, "repository");
         this.transaction = Objects.requireNonNull(transaction, "transaction");
         this.engine = Objects.requireNonNull(engine, "engine");
         this.config = Objects.requireNonNull(config, "config");
+        this.entryGuard = Objects.requireNonNull(entryGuard, "entryGuard");
     }
 
     /**
@@ -63,15 +86,30 @@ public final class ShadowPaperPortfolioService {
             ShadowRecommendation recommendation,
             Instant nextExecution
     ) {
-        if (recommendation.suggestedGrossExposure().signum() == 0
-                || nextExecution == null) {
+        return createOrders(run, recommendation, nextExecution, null);
+    }
+
+    public List<PaperOrder> createOrders(
+            ShadowRun run,
+            ShadowRecommendation recommendation,
+            Instant nextExecution,
+            ResearchDataset asOfDataset
+    ) {
+        if (nextExecution == null) {
             return List.of();
         }
         PaperPortfolio portfolio = repository.lockPortfolio();
+        Map<Security, String> forcedExits = asOfDataset == null
+                ? Map.of() : entryGuard.exitReasons(run, asOfDataset,
+                portfolio);
+        if (recommendation.suggestedGrossExposure().signum() == 0
+                && forcedExits.isEmpty()) {
+            return List.of();
+        }
         List<Security> candidates = recommendation.rankedSecurities()
                 .stream().map(ShadowPaperPortfolioService::security)
                 .limit(Math.min(config.maxPositions(), 3)).toList();
-        if (candidates.isEmpty()) {
+        if (candidates.isEmpty() && forcedExits.isEmpty()) {
             return List.of();
         }
         BigDecimal each = recommendation.suggestedGrossExposure()
@@ -80,6 +118,7 @@ public final class ShadowPaperPortfolioService {
                 .min(config.maxSinglePositionWeight());
         Map<Security, BigDecimal> targets = new LinkedHashMap<>();
         candidates.forEach(value -> targets.put(value, each));
+        forcedExits.keySet().forEach(value -> targets.put(value, ZERO));
         BigDecimal equity = portfolio.cash();
         for (PaperPosition position : portfolio.positions()) {
             equity = equity.add(position.lastPrice().multiply(
@@ -140,6 +179,15 @@ public final class ShadowPaperPortfolioService {
                     repository.rejectOrder(order.id(),
                             "NO_LEGAL_NEXT_SESSION_PRICE");
                     continue;
+                }
+                if (order.side() == Side.BUY) {
+                    Optional<String> rejection = entryGuard.rejectionReason(
+                            order, executionDate, reference);
+                    if (rejection.isPresent()) {
+                        repository.rejectOrder(order.id(),
+                                rejection.orElseThrow());
+                        continue;
+                    }
                 }
                 PaperExecutionEngine.State before = state(portfolio);
                 PaperExecutionEngine.Result result = engine.execute(
@@ -286,5 +334,26 @@ public final class ShadowPaperPortfolioService {
             PaperPortfolio portfolio,
             PortfolioSnapshot snapshot
     ) {
+    }
+
+    @FunctionalInterface
+    public interface PaperEntryGuard {
+        Optional<String> rejectionReason(
+                PaperOrder order,
+                LocalDate executionDate,
+                BigDecimal referenceOpen
+        );
+
+        static PaperEntryGuard allowAll() {
+            return (order, date, price) -> Optional.empty();
+        }
+
+        default Map<Security, String> exitReasons(
+                ShadowRun run,
+                ResearchDataset asOfDataset,
+                PaperPortfolio portfolio
+        ) {
+            return Map.of();
+        }
     }
 }

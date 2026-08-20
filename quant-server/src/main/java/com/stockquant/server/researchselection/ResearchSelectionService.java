@@ -1,6 +1,7 @@
 package com.stockquant.server.researchselection;
 
 import com.stockquant.server.agent.marketfacts.PitMarketFactRepository;
+import com.stockquant.server.agent.shadowresearch.ShadowResearchRepository;
 import com.stockquant.server.researchselection.ResearchSelectionProviderBudgetPlanner.MainboardPlan;
 import com.stockquant.server.researchselection.ResearchUniverseMainboard.MemberPage;
 import com.stockquant.server.researchselection.ResearchUniverseMainboard.SnapshotBundle;
@@ -34,6 +35,7 @@ public final class ResearchSelectionService {
     private final ResearchSelectionDispatchGateway dispatcher;
     private final ResearchUniverseMainboardRepository universes;
     private final ResearchUniverseMainboardDatasetLoader loader;
+    private final ShadowResearchRepository shadows;
     private final SystemHealthService health;
     private final Clock clock;
     private final String gitCommit;
@@ -51,6 +53,7 @@ public final class ResearchSelectionService {
         this.universes = new ResearchUniverseMainboardRepository(jdbc);
         this.loader = new ResearchUniverseMainboardDatasetLoader(
                 new PitMarketFactRepository(jdbc, mapper));
+        this.shadows = new ShadowResearchRepository(jdbc, mapper);
         this.clock = clock;
         this.gitCommit = com.stockquant.server.production
                 .ProductionRuntimeState.require().gitCommit();
@@ -77,7 +80,7 @@ public final class ResearchSelectionService {
     }
 
     public Optional<SelectionResult> result(long id) {
-        return repository.result(id);
+        return repository.result(id).map(this::withPaperActuals);
     }
 
     public Optional<RunSummary> summary(long id) {
@@ -89,7 +92,38 @@ public final class ResearchSelectionService {
     }
 
     public Optional<SelectionResult> latest() {
-        return repository.latestResult();
+        return repository.latestResult().map(this::withPaperActuals);
+    }
+
+    private SelectionResult withPaperActuals(SelectionResult value) {
+        if (value.shadowRunId() == null
+                || value.researchTradePlans().isEmpty()) {
+            return value;
+        }
+        var fills = shadows.paperLifecycleFills(value.shadowRunId());
+        var orders = shadows.orders(value.shadowRunId());
+        if (fills.isEmpty() && orders.isEmpty()) return value;
+        java.time.LocalDate latest = fills.stream().map(
+                        com.stockquant.server.agent.shadowresearch
+                                .ShadowResearchModels.PaperFill::executionDate)
+                .max(java.time.LocalDate::compareTo).orElse(null);
+        List<java.time.LocalDate> resolvedSessions;
+        try {
+            if (latest == null) throw new IllegalStateException(
+                    "PAPER_FILL_NOT_AVAILABLE");
+            resolvedSessions = loader.commonOpenDatesThrough(latest,
+                    clock.instant());
+        } catch (RuntimeException ignored) {
+            resolvedSessions = List.of();
+        }
+        final List<java.time.LocalDate> sessions = resolvedSessions;
+        ResearchTradePlanService service = new ResearchTradePlanService();
+        List<ResearchSelectionModels.ResearchTradePlan> plans =
+                value.researchTradePlans().stream().map(plan -> {
+                    var actual = service.applyOrderStatus(plan, orders);
+                    return service.applyFills(actual, fills, sessions);
+                }).toList();
+        return value.withResearchTradePlans(plans);
     }
 
     public UniverseView universe() {
