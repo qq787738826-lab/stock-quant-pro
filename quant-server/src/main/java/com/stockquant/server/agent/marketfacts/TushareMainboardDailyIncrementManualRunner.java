@@ -101,7 +101,7 @@ public final class TushareMainboardDailyIncrementManualRunner {
             MainboardDailyIncrementService.Progress progress
     ) throws Exception {
         return TushareControlledAcceptanceOutputAudit
-                .captureM4ShadowResearchE2eProcess(registry -> {
+                .captureControlledProcess(registry -> {
                     char[] password = "MAINBOARD_INCREMENT_E2E_DB".toCharArray();
                     char[] token = "MAINBOARD_INCREMENT_E2E_TOKEN".toCharArray();
                     try {
@@ -122,7 +122,7 @@ public final class TushareMainboardDailyIncrementManualRunner {
             MainboardDailyIncrementService.Progress progress
     ) throws Exception {
         return TushareControlledAcceptanceOutputAudit
-                .captureM4ShadowResearchProcess(registry -> {
+                .captureControlledProcess(registry -> {
                     try (SecretProvider secrets =
                                  CompositeSecretProvider.formalLocal(
                                          Mode.WINDOWS_CREDENTIAL_MANAGER);
