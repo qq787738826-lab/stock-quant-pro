@@ -1,6 +1,7 @@
 package com.stockquant.server.agent.marketfacts;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -15,7 +16,8 @@ public final class MainboardDailyIncrementSanitizedResult {
     public static final String VERSION =
             "MAINBOARD_DAILY_INCREMENT_RESULT_V1";
     private static final ObjectMapper MAPPER = new ObjectMapper()
-            .findAndRegisterModules();
+            .findAndRegisterModules()
+            .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
     private MainboardDailyIncrementSanitizedResult() {
     }

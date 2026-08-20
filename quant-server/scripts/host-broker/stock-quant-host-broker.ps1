@@ -1550,6 +1550,7 @@ function Invoke-MainboardDailyIncrement {
         [long]$increment.shadowRunsCreated -ne 0 -or
         [long]$increment.paperOrdersCreated -ne 0 -or
         [long]$increment.evaluationRowsCreated -ne 0) {
+        $script:failureSummary = $summary
         throw 'STOCK_QUANT_HOST_BROKER_MAINBOARD_INCREMENT_RESULT_INVALID'
     }
     return $summary

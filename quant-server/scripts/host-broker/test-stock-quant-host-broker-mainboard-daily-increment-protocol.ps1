@@ -147,7 +147,10 @@ try {
         status = 'SUCCEEDED'
         executionId = ($ledger['request.id'] -replace '^SQHB_', 'MBINC_')
         gitCommit = $head
-        tradeDate = '2026-08-19'
+        # The first formally consumed V1.0.11 result used Jackson's legacy
+        # LocalDate array shape. The ledger accepts that one safe shape while
+        # all newly built runners emit ISO-8601 text.
+        tradeDate = @(2026, 8, 19)
         universeMemberCount = 3193
         tushareProviderCallCount = 2
         retryCount = 0

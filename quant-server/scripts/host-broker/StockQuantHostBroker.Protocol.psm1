@@ -621,12 +621,27 @@ function Get-StockQuantM4MonthlyUsage {
                 throw 'M4_MONTHLY_BUDGET_LEDGER_INVALID'
             }
             if ($increment) {
+                $runnerTradeDate = if ($runner.tradeDate -is [string]) {
+                    [string]$runner.tradeDate
+                } else {
+                    $parts = @($runner.tradeDate)
+                    try {
+                        if ($parts.Count -ne 3) {
+                            throw 'INVALID_DATE_SHAPE'
+                        }
+                        [datetime]::new([int]$parts[0], [int]$parts[1],
+                            [int]$parts[2]).ToString('yyyy-MM-dd',
+                            [Globalization.CultureInfo]::InvariantCulture)
+                    } catch {
+                        throw 'M4_MONTHLY_BUDGET_LEDGER_INVALID'
+                    }
+                }
                 if ($runner.schemaVersion -ne
                         'MAINBOARD_DAILY_INCREMENT_RESULT_V1' -or
                     $runner.status -notin @('SUCCEEDED', 'FAILED') -or
                     [string]$runner.executionId -ne
                         ($id -replace '^SQHB_', 'MBINC_') -or
-                    [string]$runner.tradeDate -ne
+                    $runnerTradeDate -ne
                         [string]$values['trade.date'] -or
                     [int]$runner.tushareProviderCallCount -lt 0 -or
                     [int]$runner.tushareProviderCallCount -gt 2 -or
