@@ -64,6 +64,25 @@ class ResearchSelectionMainboardBudgetTest {
     }
 
     @Test
+    void stockBasicRefreshAloneProducesOneLegalBaseEndpointRequest() {
+        List<LocalDate> dates = weekdaysEndingAt(ANCHOR, 60);
+        var audit = new ResearchUniverseMainboardDatasetLoader.Audit(
+                dates, List.of(), false, true, 3_000);
+
+        var plan = ResearchSelectionProviderBudgetPlanner
+                .assembleMainboardPlan(snapshot(), audit, ANCHOR, AS_OF,
+                        3_000, 96, 150).backfill();
+        var budget = ResearchSelectionProviderBudget.from(plan);
+
+        assertEquals(1, budget.stockBasicRequests());
+        assertEquals(0, budget.dailyRequests());
+        assertEquals(0, budget.adjustmentFactorRequests());
+        assertEquals(0, budget.tradeCalendarRequests());
+        assertEquals(4, budget.networkRecoveryRequests());
+        assertEquals(5, budget.maximumProviderRequests());
+    }
+
+    @Test
     void reserveIncludesTodayBeforeSlotAndStartsTomorrowAfterSlot() {
         assertEquals(24, ResearchSelectionProviderBudgetPlanner
                 .scheduledReserve(AS_OF));

@@ -64,9 +64,10 @@ public final class ResearchSelectionService {
         RunSummary run = repository.create(publicRunId(asOf), request, asOf,
                 gitCommit);
         try {
-            int maximumProviderRequests = maximumProviderRequests(request);
+            ResearchSelectionProviderBudget providerBudget =
+                    providerBudget(request);
             String brokerRequest = dispatcher.dispatch(run, request,
-                    maximumProviderRequests);
+                    providerBudget);
             repository.bindBrokerRequest(run.runId(), brokerRequest);
             return new StartResponse(run, "PREPARING_DATA", true);
         } catch (RuntimeException error) {
@@ -145,7 +146,9 @@ public final class ResearchSelectionService {
         return universes.memberPage(runId, page, size, eligibility);
     }
 
-    private int maximumProviderRequests(SelectionRequest request) {
+    private ResearchSelectionProviderBudget providerBudget(
+            SelectionRequest request
+    ) {
         MainboardPlan plan = plan(request, clock.instant(),
                 universes.latest().orElse(null));
         if (plan.audit().calendarIncomplete()) {
@@ -156,7 +159,7 @@ public final class ResearchSelectionService {
             throw new IllegalStateException(
                     "RESEARCH_SELECTION_MONTHLY_BUDGET_EXHAUSTED");
         }
-        return plan.backfill().totalRequests();
+        return ResearchSelectionProviderBudget.from(plan.backfill());
     }
 
     private MainboardPlan plan(

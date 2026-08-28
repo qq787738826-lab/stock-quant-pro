@@ -44,7 +44,7 @@ public final class PowerShellResearchSelectionDispatchGateway
     public String dispatch(
             ResearchSelectionModels.RunSummary run,
             SelectionRequest request,
-            int maximumProviderRequests
+            ResearchSelectionProviderBudget providerBudget
     ) {
         String requestId = requestId();
         try {
@@ -56,21 +56,8 @@ public final class PowerShellResearchSelectionDispatchGateway
                     "quant-server/target/quant-server-1.3.1-"
                             + "research-selection-runner.jar");
             fixedFile(root, artifact + ".f1f-b2-proof.properties");
-            List<String> command = List.of(powershell().toString(),
-                    "-NoProfile", "-NonInteractive", "-ExecutionPolicy",
-                    "Bypass", "-File", script.toString(), "-Operation",
-                    "RUN_RESEARCH_SELECTION", "-ArtifactPath",
-                    artifact.toString(), "-RequestId", requestId,
-                    "-SelectionRunId", Long.toString(run.runId()),
-                    "-SelectionPublicRunId", run.publicRunId(),
-                    "-SelectionTrigger", request.triggerMode().name(),
-                    "-PrimaryWindow", Integer.toString(
-                            request.primaryWindow()), "-AuxiliaryWindow",
-                    Integer.toString(request.auxiliaryWindow()),
-                    "-MaximumProviderRequests",
-                    Integer.toString(maximumProviderRequests),
-                    "-MaximumCostCny", MAXIMUM_COST_CNY, "-SubmitOnly",
-                    "-TimeoutSeconds", "30");
+            List<String> command = brokerCommand(powershell(), script,
+                    artifact, requestId, run, request, providerBudget);
             Process process = new ProcessBuilder(command)
                     .directory(root.toFile()).redirectErrorStream(true)
                     .start();
@@ -93,6 +80,40 @@ public final class PowerShellResearchSelectionDispatchGateway
         } catch (IOException error) {
             throw invalid("RESEARCH_SELECTION_DISPATCH_FAILED");
         }
+    }
+
+    static List<String> brokerCommand(
+            Path powershell,
+            Path script,
+            Path artifact,
+            String requestId,
+            ResearchSelectionModels.RunSummary run,
+            SelectionRequest request,
+            ResearchSelectionProviderBudget providerBudget
+    ) {
+        return List.of(powershell.toString(), "-NoProfile",
+                "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File",
+                script.toString(), "-Operation", "RUN_RESEARCH_SELECTION",
+                "-ArtifactPath", artifact.toString(), "-RequestId",
+                requestId, "-SelectionRunId", Long.toString(run.runId()),
+                "-SelectionPublicRunId", run.publicRunId(),
+                "-SelectionTrigger", request.triggerMode().name(),
+                "-PrimaryWindow", Integer.toString(request.primaryWindow()),
+                "-AuxiliaryWindow", Integer.toString(
+                        request.auxiliaryWindow()), "-StockBasicRequests",
+                Integer.toString(providerBudget.stockBasicRequests()),
+                "-DailyRequests", Integer.toString(
+                        providerBudget.dailyRequests()),
+                "-AdjustmentFactorRequests", Integer.toString(
+                        providerBudget.adjustmentFactorRequests()),
+                "-TradeCalendarRequests", Integer.toString(
+                        providerBudget.tradeCalendarRequests()),
+                "-NetworkRecoveryRequests", Integer.toString(
+                        providerBudget.networkRecoveryRequests()),
+                "-MaximumProviderRequests", Integer.toString(
+                        providerBudget.maximumProviderRequests()),
+                "-MaximumCostCny", MAXIMUM_COST_CNY, "-SubmitOnly",
+                "-TimeoutSeconds", "30");
     }
 
     private static List<String> readBounded(Process process)

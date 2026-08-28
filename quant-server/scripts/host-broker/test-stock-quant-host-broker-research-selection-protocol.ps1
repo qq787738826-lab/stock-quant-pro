@@ -134,7 +134,7 @@ try {
         'build.mode=RESEARCH_SELECTION_CONTROLLED_BUILD_ARTIFACT'
     ) -join "`n") + "`n", [Text.UTF8Encoding]::new($false))
 
-    foreach ($maximum in @(0, 6, 125)) {
+    foreach ($maximum in @(0, 5, 6, 125)) {
         $value = Copy-Values $request
         $value['request.id'] = New-StockQuantHostBrokerRequestId
         $value['maximum.provider.requests'] = [string]$maximum
@@ -171,6 +171,71 @@ try {
         $tests++
     }
 
+    $invalidBudgets = @(
+        @{
+            Case = 'DAILY_WITHOUT_FACTOR'
+            Stock = '0'; Daily = '1'; Factor = '0'; Calendar = '0'
+            Recovery = '4'; Maximum = '5'
+        }
+        @{
+            Case = 'FACTOR_WITHOUT_DAILY'
+            Stock = '0'; Daily = '0'; Factor = '1'; Calendar = '0'
+            Recovery = '4'; Maximum = '5'
+        }
+        @{
+            Case = 'DAILY_FACTOR_COUNT_MISMATCH_HIGH_DAILY'
+            Stock = '0'; Daily = '2'; Factor = '1'; Calendar = '0'
+            Recovery = '4'; Maximum = '7'
+        }
+        @{
+            Case = 'DAILY_FACTOR_COUNT_MISMATCH_HIGH_FACTOR'
+            Stock = '0'; Daily = '1'; Factor = '2'; Calendar = '0'
+            Recovery = '4'; Maximum = '7'
+        }
+        @{
+            Case = 'NEGATIVE_ENDPOINT_BUDGET'
+            Stock = '-1'; Daily = '0'; Factor = '0'; Calendar = '0'
+            Recovery = '4'; Maximum = '3'
+        }
+        @{
+            Case = 'TRADE_CAL_SCOPE_EXPANSION'
+            Stock = '0'; Daily = '0'; Factor = '0'; Calendar = '1'
+            Recovery = '4'; Maximum = '5'
+        }
+        @{
+            Case = 'RECOVERY_WITHOUT_BASE_ENDPOINT'
+            Stock = '0'; Daily = '0'; Factor = '0'; Calendar = '0'
+            Recovery = '4'; Maximum = '4'
+        }
+        @{
+            Case = 'BASE_ENDPOINT_WITHOUT_RECOVERY_BUDGET'
+            Stock = '1'; Daily = '0'; Factor = '0'; Calendar = '0'
+            Recovery = '0'; Maximum = '1'
+        }
+        @{
+            Case = 'TOTAL_ENDPOINT_MISMATCH'
+            Stock = '1'; Daily = '0'; Factor = '0'; Calendar = '0'
+            Recovery = '4'; Maximum = '6'
+        }
+        @{
+            Case = 'FIXED_MAXIMUM_EXCEEDED'
+            Stock = '0'; Daily = '250'; Factor = '250'; Calendar = '0'
+            Recovery = '4'; Maximum = '504'
+        }
+    )
+    foreach ($budgetCase in $invalidBudgets) {
+        $invalid = Copy-Values $request
+        $invalid['request.id'] = New-StockQuantHostBrokerRequestId
+        $invalid['endpoint.stock_basic.requests'] = $budgetCase.Stock
+        $invalid['endpoint.daily.requests'] = $budgetCase.Daily
+        $invalid['endpoint.adj_factor.requests'] = $budgetCase.Factor
+        $invalid['endpoint.trade_cal.requests'] = $budgetCase.Calendar
+        $invalid['network.recovery.budget'] = $budgetCase.Recovery
+        $invalid['maximum.provider.requests'] = $budgetCase.Maximum
+        Reject $invalid 'STOCK_QUANT_HOST_BROKER_REQUEST_SCOPE_INVALID' `
+            $budgetCase.Case
+    }
+
     $scheduled = Copy-Values $request
     $scheduled['request.id'] = New-StockQuantHostBrokerRequestId
     $scheduled['selection.trigger'] = 'SCHEDULED_SHADOW'
@@ -201,6 +266,24 @@ try {
         $protocolSource.Contains(
             'Read-StockQuantHostBrokerRequest -Path $destination')) {
         throw 'RESEARCH_SELECTION_REQUEST_PUBLICATION_RACE_NOT_CLOSED'
+    }
+    $tests++
+
+    $invokeSource = Get-Content -LiteralPath (Join-Path $PSScriptRoot `
+        'invoke-stock-quant-host-broker.ps1') -Raw -Encoding UTF8
+    foreach ($binding in @(
+            '-StockBasicRequests $StockBasicRequests',
+            '-DailyRequests $DailyRequests',
+            '-AdjustmentFactorRequests $AdjustmentFactorRequests',
+            '-TradeCalendarRequests $TradeCalendarRequests',
+            '-NetworkRecoveryRequests $NetworkRecoveryRequests',
+            '-MaximumProviderRequests $MaximumProviderRequests')) {
+        if (-not $invokeSource.Contains($binding)) {
+            throw 'RESEARCH_SELECTION_EXPLICIT_ENDPOINT_BINDING_MISSING'
+        }
+    }
+    if ($invokeSource.Contains('$baseProviderRequests')) {
+        throw 'RESEARCH_SELECTION_TOTAL_BUDGET_INFERENCE_REMAINS'
     }
     $tests++
 

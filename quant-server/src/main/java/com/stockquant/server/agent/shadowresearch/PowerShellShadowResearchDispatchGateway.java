@@ -2,6 +2,7 @@ package com.stockquant.server.agent.shadowresearch;
 
 import com.stockquant.server.agent.marketfacts.PitMarketFactRepository;
 import com.stockquant.server.researchselection.ResearchSelectionModels;
+import com.stockquant.server.researchselection.ResearchSelectionProviderBudget;
 import com.stockquant.server.researchselection.ResearchSelectionRepository;
 import com.stockquant.server.researchselection.ResearchSelectionProviderBudgetPlanner;
 import com.stockquant.server.researchselection.ResearchUniverseMainboardDatasetLoader;
@@ -134,7 +135,7 @@ public final class PowerShellShadowResearchDispatchGateway
             Path powershell = powershell();
             List<String> command = brokerCommand(powershell, script,
                     artifact, requestId, selection.runId(),
-                    selection.publicRunId(), maximumProviderRequests(
+                    selection.publicRunId(), providerBudget(
                             selectionRequest, researchAsOf));
             Process process = new ProcessBuilder(command)
                     .directory(root.toFile()).redirectErrorStream(true)
@@ -199,7 +200,7 @@ public final class PowerShellShadowResearchDispatchGateway
             String requestId,
             long selectionRunId,
             String selectionPublicRunId,
-            int maximumProviderRequests
+            ResearchSelectionProviderBudget providerBudget
     ) {
         return List.of(
                 powershell.toString(), "-NoProfile", "-NonInteractive",
@@ -210,8 +211,18 @@ public final class PowerShellShadowResearchDispatchGateway
                 "-SelectionPublicRunId", selectionPublicRunId,
                 "-SelectionTrigger", "SCHEDULED_SHADOW",
                 "-PrimaryWindow", "20", "-AuxiliaryWindow", "60",
-                "-MaximumProviderRequests",
-                Integer.toString(maximumProviderRequests), "-SubmitOnly",
+                "-StockBasicRequests", Integer.toString(
+                        providerBudget.stockBasicRequests()),
+                "-DailyRequests", Integer.toString(
+                        providerBudget.dailyRequests()),
+                "-AdjustmentFactorRequests", Integer.toString(
+                        providerBudget.adjustmentFactorRequests()),
+                "-TradeCalendarRequests", Integer.toString(
+                        providerBudget.tradeCalendarRequests()),
+                "-NetworkRecoveryRequests", Integer.toString(
+                        providerBudget.networkRecoveryRequests()),
+                "-MaximumProviderRequests", Integer.toString(
+                        providerBudget.maximumProviderRequests()), "-SubmitOnly",
                 "-TimeoutSeconds", "30");
     }
 
@@ -233,7 +244,7 @@ public final class PowerShellShadowResearchDispatchGateway
                 : Optional.empty();
     }
 
-    private int maximumProviderRequests(
+    private ResearchSelectionProviderBudget providerBudget(
             ResearchSelectionModels.SelectionRequest request,
             Instant asOf
     ) {
@@ -244,7 +255,7 @@ public final class PowerShellShadowResearchDispatchGateway
         if (!plan.backfill().executableWithinBudget()) {
             throw invalid("RESEARCH_SELECTION_MONTHLY_BUDGET_EXHAUSTED");
         }
-        return plan.backfill().totalRequests();
+        return ResearchSelectionProviderBudget.from(plan.backfill());
     }
 
     private ResearchSelectionProviderBudgetPlanner.MainboardPlan

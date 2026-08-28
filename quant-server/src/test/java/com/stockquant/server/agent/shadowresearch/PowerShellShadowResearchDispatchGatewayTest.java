@@ -1,5 +1,6 @@
 package com.stockquant.server.agent.shadowresearch;
 
+import com.stockquant.server.researchselection.ResearchSelectionProviderBudget;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Path;
@@ -18,13 +19,20 @@ class PowerShellShadowResearchDispatchGatewayTest {
                         Path.of("invoke-stock-quant-host-broker.ps1"),
                         Path.of("research-selection-runner.jar"),
                         "SQHB_20260817T092000Z_A1B2C3D4E5F6", 11,
-                        "SELECT_20260817T092000Z_A1B2C3D4E5F6", 2);
+                        "SELECT_20260817T092000Z_A1B2C3D4E5F6",
+                        new ResearchSelectionProviderBudget(
+                                0, 1, 1, 0, 4, 6));
 
         assertPair(command, "-Operation", "RUN_RESEARCH_SELECTION");
         assertPair(command, "-SelectionTrigger", "SCHEDULED_SHADOW");
         assertPair(command, "-PrimaryWindow", "20");
         assertPair(command, "-AuxiliaryWindow", "60");
-        assertPair(command, "-MaximumProviderRequests", "2");
+        assertPair(command, "-StockBasicRequests", "0");
+        assertPair(command, "-DailyRequests", "1");
+        assertPair(command, "-AdjustmentFactorRequests", "1");
+        assertPair(command, "-TradeCalendarRequests", "0");
+        assertPair(command, "-NetworkRecoveryRequests", "4");
+        assertPair(command, "-MaximumProviderRequests", "6");
         assertTrue(command.contains("-SubmitOnly"));
         assertFalse(command.stream().anyMatch(value -> value.contains(
                 "schtasks") || value.contains("Token")

@@ -57,6 +57,16 @@ param(
     [ValidateRange(0, 503)]
     [int] $MaximumProviderRequests = 52,
 
+    [int] $StockBasicRequests = -1,
+
+    [int] $DailyRequests = -1,
+
+    [int] $AdjustmentFactorRequests = -1,
+
+    [int] $TradeCalendarRequests = -1,
+
+    [int] $NetworkRecoveryRequests = -1,
+
     [ValidateSet('1.50', '5.00')]
     [string] $MaximumCostCny = '5.00',
 
@@ -85,6 +95,13 @@ if (($RequestId -ne 'AUTO' -or $TradeDate -ne 'AUTO' -or
     throw 'STOCK_QUANT_HOST_BROKER_FIXED_DISPATCH_ARGUMENT_INVALID'
 }
 if ($MaximumCostCny -ne '5.00' -and
+    $Operation -ne 'RUN_RESEARCH_SELECTION') {
+    throw 'STOCK_QUANT_HOST_BROKER_FIXED_DISPATCH_ARGUMENT_INVALID'
+}
+if (($StockBasicRequests -ne -1 -or $DailyRequests -ne -1 -or
+        $AdjustmentFactorRequests -ne -1 -or
+        $TradeCalendarRequests -ne -1 -or
+        $NetworkRecoveryRequests -ne -1) -and
     $Operation -ne 'RUN_RESEARCH_SELECTION') {
     throw 'STOCK_QUANT_HOST_BROKER_FIXED_DISPATCH_ARGUMENT_INVALID'
 }
@@ -437,15 +454,14 @@ try {
                 $MaximumProviderRequests -gt $monthlyTushareLimit) {
             throw 'RESEARCH_SELECTION_MONTHLY_BUDGET_EXHAUSTED'
         }
-        [int]$networkRecoveryBudget = if (
-            $MaximumProviderRequests -eq 0) { 0 } else { 4 }
-        [int]$baseProviderRequests =
-            $MaximumProviderRequests - $networkRecoveryBudget
-        if ($baseProviderRequests -lt 0 -or
-            ($MaximumProviderRequests -gt 0 -and
-                $baseProviderRequests -lt 2)) {
-            throw 'RESEARCH_SELECTION_FIXED_SCOPE_INVALID'
-        }
+        Assert-StockQuantResearchSelectionProviderBudget `
+            -StockBasicRequests $StockBasicRequests `
+            -DailyRequests $DailyRequests `
+            -AdjustmentFactorRequests $AdjustmentFactorRequests `
+            -TradeCalendarRequests $TradeCalendarRequests `
+            -NetworkRecoveryRequests $NetworkRecoveryRequests `
+            -MaximumProviderRequests $MaximumProviderRequests `
+            -FailureReason 'RESEARCH_SELECTION_FIXED_SCOPE_INVALID'
         $requestValues = [ordered]@{
             'schema.version' = 'STOCK_QUANT_HOST_BROKER_REQUEST_V1'
             'request.id' = $requestId
@@ -472,12 +488,12 @@ try {
             'tushare.provider' = 'TUSHARE'
             'tushare.endpoints' =
                 'stock_basic,daily,adj_factor,trade_cal'
-            'endpoint.stock_basic.requests' = [string]($baseProviderRequests % 2)
-            'endpoint.daily.requests' = [string][math]::Floor(
-                $baseProviderRequests / 2)
-            'endpoint.adj_factor.requests' = [string][math]::Floor(
-                $baseProviderRequests / 2)
-            'endpoint.trade_cal.requests' = '0'
+            'endpoint.stock_basic.requests' = [string]$StockBasicRequests
+            'endpoint.daily.requests' = [string]$DailyRequests
+            'endpoint.adj_factor.requests' =
+                [string]$AdjustmentFactorRequests
+            'endpoint.trade_cal.requests' =
+                [string]$TradeCalendarRequests
             'maximum.provider.requests' = [string]$MaximumProviderRequests
             'budget.calendar.month' = $calendarMonth
             'tushare.monthly.limit' = [string]$monthlyTushareLimit
@@ -498,7 +514,7 @@ try {
             'project.monthly.cost.before.cny' =
                 [string]$usage.CommittedProjectCostCny
             'retry.budget' = '0'
-            'network.recovery.budget' = [string]$networkRecoveryBudget
+            'network.recovery.budget' = [string]$NetworkRecoveryRequests
             'redirects' = 'NEVER'
             'user.approval.reference' =
                 'USER_APPROVED_STOCK_QUANT_PRO_V1_MONTHLY'

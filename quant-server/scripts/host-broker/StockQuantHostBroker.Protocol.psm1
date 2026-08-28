@@ -836,6 +836,38 @@ function ConvertTo-StockQuantSafeCode {
     return $Fallback
 }
 
+function Assert-StockQuantResearchSelectionProviderBudget {
+    param(
+        [int] $StockBasicRequests,
+        [int] $DailyRequests,
+        [int] $AdjustmentFactorRequests,
+        [int] $TradeCalendarRequests,
+        [int] $NetworkRecoveryRequests,
+        [int] $MaximumProviderRequests,
+        [ValidatePattern('^[A-Z][A-Z0-9_]{3,127}$')]
+        [string] $FailureReason =
+            'STOCK_QUANT_HOST_BROKER_REQUEST_SCOPE_INVALID'
+    )
+    [long]$baseRequests = [long]$StockBasicRequests +
+        [long]$DailyRequests + [long]$AdjustmentFactorRequests +
+        [long]$TradeCalendarRequests
+    [long]$expectedTotal = $baseRequests +
+        [long]$NetworkRecoveryRequests
+    if ($StockBasicRequests -notin @(0, 1) -or
+        $DailyRequests -lt 0 -or
+        $AdjustmentFactorRequests -lt 0 -or
+        $DailyRequests -ne $AdjustmentFactorRequests -or
+        $TradeCalendarRequests -ne 0 -or
+        $NetworkRecoveryRequests -notin @(0, 4) -or
+        ($baseRequests -eq 0 -and $NetworkRecoveryRequests -ne 0) -or
+        ($baseRequests -gt 0 -and $NetworkRecoveryRequests -ne 4) -or
+        $MaximumProviderRequests -lt 0 -or
+        $MaximumProviderRequests -gt 503 -or
+        $expectedTotal -ne $MaximumProviderRequests) {
+        throw $FailureReason
+    }
+}
+
 function Assert-StockQuantPathInside {
     param(
         [Parameter(Mandatory = $true)]
@@ -1458,8 +1490,6 @@ function Read-StockQuantHostBrokerRequest {
                 [Globalization.NumberStyles]::None,
                 [Globalization.CultureInfo]::InvariantCulture,
                 [ref]$maximumProviderRequests) -or
-            $maximumProviderRequests -lt 0 -or
-            $maximumProviderRequests -gt 503 -or
             -not [int]::TryParse(
                 [string]$values['endpoint.stock_basic.requests'],
                 [Globalization.NumberStyles]::None,
@@ -1485,20 +1515,6 @@ function Read-StockQuantHostBrokerRequest {
                 [Globalization.NumberStyles]::None,
                 [Globalization.CultureInfo]::InvariantCulture,
                 [ref]$networkRecoveryRequests) -or
-            $stockBasicRequests -notin @(0, 1) -or
-            $dailyRequests -lt 0 -or $factorRequests -ne $dailyRequests -or
-            $calendarRequests -ne 0 -or
-            $networkRecoveryRequests -notin @(0, 4) -or
-            ($maximumProviderRequests -eq 0 -and (
-                $stockBasicRequests + $dailyRequests + $factorRequests +
-                $calendarRequests -ne 0 -or
-                $networkRecoveryRequests -ne 0)) -or
-            ($maximumProviderRequests -gt 0 -and (
-                $dailyRequests -lt 1 -or
-                $networkRecoveryRequests -ne 4)) -or
-            $maximumProviderRequests -ne ($stockBasicRequests +
-                $dailyRequests + $factorRequests + $calendarRequests +
-                $networkRecoveryRequests) -or
             $values['budget.calendar.month'] -ne $selectionMonth -or
             $values['tushare.monthly.limit'] -ne
                 [string]$selectionTushareLimit -or
@@ -1544,6 +1560,13 @@ function Read-StockQuantHostBrokerRequest {
             $values['no.retry'] -ne 'true') {
             throw 'STOCK_QUANT_HOST_BROKER_REQUEST_SCOPE_INVALID'
         }
+        Assert-StockQuantResearchSelectionProviderBudget `
+            -StockBasicRequests $stockBasicRequests `
+            -DailyRequests $dailyRequests `
+            -AdjustmentFactorRequests $factorRequests `
+            -TradeCalendarRequests $calendarRequests `
+            -NetworkRecoveryRequests $networkRecoveryRequests `
+            -MaximumProviderRequests $maximumProviderRequests
     } elseif ($values['operation'] -eq 'RUN_M4_SHADOW_RESEARCH') {
         [int]$tushareCallsBefore = -1
         [decimal]$llmCostBefore = [decimal]-1.00
@@ -2467,6 +2490,7 @@ Export-ModuleMember -Function @(
     'Get-StockQuantTushareMonthlyLimit'
     'Get-StockQuantM4MonthlyUsage'
     'ConvertTo-StockQuantSafeCode'
+    'Assert-StockQuantResearchSelectionProviderBudget'
     'Assert-StockQuantPathInside'
     'Get-StockQuantHostBrokerDeclaredOperation'
     'Read-StockQuantHostBrokerRequest'

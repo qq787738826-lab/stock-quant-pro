@@ -6,6 +6,6 @@ public interface ResearchSelectionDispatchGateway {
     String dispatch(
             ResearchSelectionModels.RunSummary run,
             SelectionRequest request,
-            int maximumProviderRequests
+            ResearchSelectionProviderBudget providerBudget
     );
 }
