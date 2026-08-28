@@ -16,7 +16,7 @@ class ExternalApiMonthlyBudgetTest {
                 YearMonth.of(2026, 8), new BigDecimal("10"),
                 new BigDecimal("2"), 6, new BigDecimal("1"), 6);
         assertTrue(admitted.allowed());
-        assertEquals(244, admitted.tushareRequestsRemaining());
+        assertEquals(619, admitted.tushareRequestsRemaining());
 
         var shadowBlocked = ExternalApiMonthlyBudget.admitShadow(
                 YearMonth.of(2026, 8), new BigDecimal("30"),
@@ -34,8 +34,8 @@ class ExternalApiMonthlyBudgetTest {
     }
 
     @Test
-    void augustTemporaryLimitIsTwoHundredFiftyAndOtherMonthsStayAtOneFifty() {
-        assertEquals(250, ExternalApiMonthlyBudget.tushareRequestLimit(
+    void augustBackfillLimitIsSixHundredTwentyFiveAndOtherMonthsStayAtOneFifty() {
+        assertEquals(625, ExternalApiMonthlyBudget.tushareRequestLimit(
                 YearMonth.of(2026, 8)));
         assertEquals(150, ExternalApiMonthlyBudget.tushareRequestLimit(
                 YearMonth.of(2026, 9)));

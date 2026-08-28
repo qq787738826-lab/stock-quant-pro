@@ -12,8 +12,8 @@ public final class ExternalApiMonthlyBudget {
             new BigDecimal("30.00");
     /** Normal monthly Tushare ceiling outside an explicitly approved month. */
     public static final int SHADOW_MONTHLY_TUSHARE_REQUESTS = 150;
-    /** One-time V1.0.9 mainboard backfill authorization for 2026-08 only. */
-    public static final int AUGUST_2026_TUSHARE_REQUESTS = 250;
+    /** One-time mainboard 250-session backfill authorization for 2026-08. */
+    public static final int AUGUST_2026_TUSHARE_REQUESTS = 625;
     private static final YearMonth AUGUST_2026 = YearMonth.of(2026, 8);
     public static final BigDecimal M5_DEVELOPMENT_COST_CNY =
             new BigDecimal("5.00");

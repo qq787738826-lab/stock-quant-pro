@@ -9,6 +9,8 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -87,6 +89,8 @@ public final class TushareManualBoundedSession {
     private final SessionProfile sessionProfile;
     private final int maximumNaturalDays;
     private final Set<LocalDate> allowedTradeDates;
+    private final Map<String, Integer> consumedRequestsByEndpoint =
+            new LinkedHashMap<>();
     private int consumedBusinessRequests;
     private int consumedNetworkRecoveries;
 
@@ -535,6 +539,7 @@ public final class TushareManualBoundedSession {
                     null);
         }
         consumedBusinessRequests++;
+        consumedRequestsByEndpoint.merge(endpoint, 1, Integer::sum);
     }
 
     /** Reports whether a global main-board no-response recovery is available. */
@@ -677,6 +682,11 @@ public final class TushareManualBoundedSession {
 
     public synchronized int consumedNetworkRecoveries() {
         return consumedNetworkRecoveries;
+    }
+
+    /** Immutable endpoint-level attempt telemetry, including recoveries. */
+    public synchronized Map<String, Integer> consumedRequestsByEndpoint() {
+        return Map.copyOf(consumedRequestsByEndpoint);
     }
 
     public Set<String> allowedSymbols() {

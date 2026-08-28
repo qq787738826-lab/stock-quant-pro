@@ -40,9 +40,9 @@ class ResearchSelectionMainboardBudgetTest {
         assertEquals(24, plan.scheduledReserve());
         assertEquals(245, plan.ledgerUsed() + plan.totalRequests()
                 + plan.scheduledReserve());
-        assertEquals(250, plan.ledgerLimit());
+        assertEquals(625, plan.ledgerLimit());
         assertTrue(plan.executableWithinBudget());
-        assertEquals(5, plan.ledgerLimit() - plan.ledgerUsed()
+        assertEquals(380, plan.ledgerLimit() - plan.ledgerUsed()
                 - plan.totalRequests() - plan.scheduledReserve());
     }
 

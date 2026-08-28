@@ -62,11 +62,11 @@ try {
     $calendarMonth = $china.ToString('yyyy-MM')
     [int]$monthlyTushareLimit = Get-StockQuantTushareMonthlyLimit `
         -CalendarMonth $calendarMonth
-    $wrongMonthlyTushareLimit = if ($monthlyTushareLimit -eq 250) {
+    $wrongMonthlyTushareLimit = if ($monthlyTushareLimit -eq 625) {
         '150'
-    } else { '250' }
+    } else { '625' }
     if ((Get-StockQuantTushareMonthlyLimit -CalendarMonth '2026-08') -ne
-            250 -or
+            625 -or
         (Get-StockQuantTushareMonthlyLimit -CalendarMonth '2026-09') -ne
             150) {
         throw 'RESEARCH_SELECTION_MONTHLY_LIMIT_POLICY_INVALID'

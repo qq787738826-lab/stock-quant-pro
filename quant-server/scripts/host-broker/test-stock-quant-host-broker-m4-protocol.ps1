@@ -59,9 +59,9 @@ try {
         [TimeSpan]::FromHours(8)).ToString('yyyy-MM')
     [int]$monthlyTushareLimit = Get-StockQuantTushareMonthlyLimit `
         -CalendarMonth $calendarMonth
-    $wrongMonthlyTushareLimit = if ($monthlyTushareLimit -eq 250) {
+    $wrongMonthlyTushareLimit = if ($monthlyTushareLimit -eq 625) {
         '150'
-    } else { '250' }
+    } else { '625' }
     $request = [ordered]@{
         'schema.version' = 'STOCK_QUANT_HOST_BROKER_REQUEST_V1'
         'request.id' = New-StockQuantHostBrokerRequestId

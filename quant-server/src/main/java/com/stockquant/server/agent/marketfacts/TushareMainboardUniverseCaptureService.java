@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -68,7 +69,35 @@ public final class TushareMainboardUniverseCaptureService {
             Duration timeout,
             int maximumNetworkRecoveries
     ) {
-        if (missingTradeDates == null || calendarStart == null
+        if (missingTradeDates == null) {
+            throw invalid("MAINBOARD_CAPTURE_REQUEST_INVALID");
+        }
+        return captureOrdered(current, refreshStockBasic,
+                missingTradeDates.stream().sorted().toList(), calendarStart,
+                calendarEnd, refreshCalendar, gitCommit, timeout,
+                maximumNetworkRecoveries);
+    }
+
+    /**
+     * Captures an explicitly ordered, unique date plan in one bounded
+     * session.  Historical backfills use newest-first order so the 120-day
+     * contiguous milestone is reached without issuing a second task.
+     */
+    public CaptureEvidence captureOrdered(
+            SnapshotBundle current,
+            boolean refreshStockBasic,
+            List<LocalDate> orderedTradeDates,
+            LocalDate calendarStart,
+            LocalDate calendarEnd,
+            boolean refreshCalendar,
+            String gitCommit,
+            Duration timeout,
+            int maximumNetworkRecoveries
+    ) {
+        if (orderedTradeDates == null
+                || orderedTradeDates.stream().anyMatch(Objects::isNull)
+                || orderedTradeDates.stream().distinct().count()
+                != orderedTradeDates.size() || calendarStart == null
                 || calendarEnd == null || gitCommit == null
                 || !gitCommit.matches("[0-9a-f]{40}") || timeout == null
                 || timeout.isZero() || timeout.isNegative()
@@ -80,13 +109,15 @@ public final class TushareMainboardUniverseCaptureService {
             throw invalid("MAINBOARD_CAPTURE_REQUEST_INVALID");
         }
         var preProvider = guard.verifyBeforeProvider();
+        List<LocalDate> orderedDates = List.copyOf(orderedTradeDates);
         var session = TushareManualBoundedSession.mainboardUniverse(
-                missingTradeDates, calendarStart, calendarEnd,
+                Set.copyOf(orderedDates), calendarStart, calendarEnd,
                 refreshStockBasic, refreshCalendar,
                 maximumNetworkRecoveries);
         int appended = 0;
         int idempotent = 0;
         List<Long> batches = new ArrayList<>();
+        List<LocalDate> completedDates = new ArrayList<>();
         SnapshotBundle snapshot = current;
         try {
             if (refreshStockBasic) {
@@ -112,7 +143,7 @@ public final class TushareMainboardUniverseCaptureService {
             List<MainboardInstrument> providerMembers = snapshot.members()
                     .stream().map(TushareMainboardUniverseCaptureService
                             ::providerMember).toList();
-            for (LocalDate date : missingTradeDates.stream().sorted().toList()) {
+            for (LocalDate date : orderedDates) {
                 var response = provider.fetchMainboardMarketDate(
                         providerMembers, date, timeout, session);
                 CaptureResult result = capture
@@ -121,6 +152,7 @@ public final class TushareMainboardUniverseCaptureService {
                 batches.add(result.batchId());
                 appended += result.appendedCount();
                 idempotent += result.idempotentCount();
+                completedDates.add(date);
             }
             if (refreshCalendar) {
                 for (String exchange : List.of("SSE", "SZSE")) {
@@ -148,11 +180,15 @@ public final class TushareMainboardUniverseCaptureService {
             return new CaptureEvidence(snapshot,
                     session.consumedBusinessRequests(),
                     session.consumedNetworkRecoveries(), batches,
-                    appended, idempotent, clock.instant());
+                    appended, idempotent,
+                    session.consumedRequestsByEndpoint(), completedDates,
+                    clock.instant());
         } catch (RuntimeException failure) {
             throw new CaptureFailure(safeCode(failure),
                     session.consumedBusinessRequests(),
-                    session.consumedNetworkRecoveries(), failure);
+                    session.consumedNetworkRecoveries(),
+                    session.consumedRequestsByEndpoint(), batches,
+                    appended, idempotent, completedDates, failure);
         }
     }
 
@@ -209,23 +245,42 @@ public final class TushareMainboardUniverseCaptureService {
             List<Long> batchIds,
             int appendedObservations,
             int idempotentChainTailHits,
+            Map<String, Integer> endpointCallCounts,
+            List<LocalDate> completedTradeDates,
             Instant completedAt
     ) {
         public CaptureEvidence {
             batchIds = List.copyOf(batchIds);
+            endpointCallCounts = Map.copyOf(endpointCallCounts);
+            completedTradeDates = List.copyOf(completedTradeDates);
         }
     }
 
     public static final class CaptureFailure extends IllegalStateException {
         private final int providerCallCount;
         private final int retryCount;
+        private final Map<String, Integer> endpointCallCounts;
+        private final List<Long> batchIds;
+        private final int appendedObservations;
+        private final int idempotentChainTailHits;
+        private final List<LocalDate> completedTradeDates;
 
         private CaptureFailure(String reason, int providerCallCount,
                                int retryCount,
+                               Map<String, Integer> endpointCallCounts,
+                               List<Long> batchIds,
+                               int appendedObservations,
+                               int idempotentChainTailHits,
+                               List<LocalDate> completedTradeDates,
                                RuntimeException cause) {
             super(reason, cause);
             this.providerCallCount = providerCallCount;
             this.retryCount = retryCount;
+            this.endpointCallCounts = Map.copyOf(endpointCallCounts);
+            this.batchIds = List.copyOf(batchIds);
+            this.appendedObservations = appendedObservations;
+            this.idempotentChainTailHits = idempotentChainTailHits;
+            this.completedTradeDates = List.copyOf(completedTradeDates);
         }
 
         public int providerCallCount() {
@@ -234,6 +289,26 @@ public final class TushareMainboardUniverseCaptureService {
 
         public int retryCount() {
             return retryCount;
+        }
+
+        public Map<String, Integer> endpointCallCounts() {
+            return endpointCallCounts;
+        }
+
+        public List<Long> batchIds() {
+            return batchIds;
+        }
+
+        public int appendedObservations() {
+            return appendedObservations;
+        }
+
+        public int idempotentChainTailHits() {
+            return idempotentChainTailHits;
+        }
+
+        public List<LocalDate> completedTradeDates() {
+            return completedTradeDates;
         }
     }
 }

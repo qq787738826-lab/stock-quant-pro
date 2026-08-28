@@ -38,6 +38,8 @@ $researchSelectionRunnerScript = Join-Path $paths.RepositoryRoot `
     'quant-server\scripts\run-research-selection.ps1'
 $mainboardDailyIncrementRunnerScript = Join-Path $paths.RepositoryRoot `
     'quant-server\scripts\run-mainboard-daily-increment.ps1'
+$mainboardHistoryBackfillRunnerScript = Join-Path $paths.RepositoryRoot `
+    'quant-server\scripts\run-mainboard-history-backfill.ps1'
 $productionRoot = Join-Path $paths.TargetRoot 'stock-quant-production'
 $productionPidFile = Join-Path $productionRoot 'backend.pid.json'
 $productionAutostartFile = Join-Path $productionRoot 'backend.autostart.json'
@@ -141,6 +143,7 @@ function Assert-GitBinding {
                 'RUN_M4_SHADOW_RESEARCH',
                 'RUN_RESEARCH_SELECTION',
                 'MAINBOARD_DAILY_INCREMENT',
+                'MAINBOARD_HISTORY_BACKFILL',
                 'START_RESEARCH_PRODUCTION',
                 'STOP_RESEARCH_PRODUCTION',
                 'CHECK_RESEARCH_PRODUCTION_STATUS')) {
@@ -200,6 +203,14 @@ function Assert-GitBinding {
                 [IO.Path]::GetFullPath($BrokerRequest.JarPath).Equals(
                     (Join-Path $paths.TargetRoot `
                         'quant-server-1.3.1-mainboard-daily-increment-runner.jar'),
+                    [StringComparison]::OrdinalIgnoreCase)) {
+                $branch
+            } elseif ($BrokerRequest.Operation -eq
+                    'MAINBOARD_HISTORY_BACKFILL' -and $branch -eq
+                    'codex/1.4.0-mainboard-250-session-history-backfill' -and
+                [IO.Path]::GetFullPath($BrokerRequest.JarPath).Equals(
+                    (Join-Path $paths.TargetRoot `
+                        'quant-server-1.3.1-mainboard-history-backfill-runner.jar'),
                     [StringComparison]::OrdinalIgnoreCase)) {
                 $branch
             } elseif ($BrokerRequest.Operation -in @(
@@ -1556,6 +1567,136 @@ function Invoke-MainboardDailyIncrement {
     return $summary
 }
 
+function Invoke-MainboardHistoryBackfill {
+    param([Parameter(Mandatory = $true)] [object] $BrokerRequest)
+    if ($BrokerRequest.AuthorizationStatus -ne
+            'V1_MAINBOARD_250_SESSION_HISTORY_BACKFILL_APPROVED' -or
+        $null -ne $BrokerRequest.AuthorizationFile) {
+        throw 'STOCK_QUANT_HOST_BROKER_MAINBOARD_BACKFILL_SCOPE_INVALID'
+    }
+    $usage = Get-StockQuantM4MonthlyUsage `
+        -CalendarMonth $BrokerRequest.Values['budget.calendar.month'] `
+        -ExcludedRequestPath $processingPath
+    [int]$monthlyLimit = Get-StockQuantTushareMonthlyLimit `
+        -CalendarMonth $BrokerRequest.Values['budget.calendar.month']
+    [int]$maximumProvider =
+        [int]$BrokerRequest.Values['maximum.provider.requests']
+    [int]$expectedMissing =
+        [int]$BrokerRequest.Values['expected.missing.sessions']
+    if ([int]$usage.CommittedTushareCalls + $maximumProvider -gt
+            $monthlyLimit) {
+        throw 'MAINBOARD_HISTORY_BACKFILL_MONTHLY_BUDGET_EXHAUSTED'
+    }
+    $runnerResult = Join-Path $paths.Results `
+        "$($BrokerRequest.RequestId).mainboard-history-backfill.json"
+    if (Test-Path -LiteralPath $runnerResult) {
+        throw 'STOCK_QUANT_HOST_BROKER_RUNNER_RESULT_ALREADY_EXISTS'
+    }
+    $executionId = $BrokerRequest.RequestId -replace '^SQHB_', 'MBH250_'
+    $output = @(& $mainboardHistoryBackfillRunnerScript `
+        -ResultFile $runnerResult -ArtifactPath $BrokerRequest.JarPath `
+        -ExecutionId $executionId -GitCommit $BrokerRequest.GitCommit `
+        -AnchorTradeDate $BrokerRequest.Values['anchor.trade.date'] `
+        -TargetSessions 250 `
+        -ExpectedMissingSessions $expectedMissing `
+        -DatabasePort 38432 `
+        -MaximumProviderRequests $maximumProvider `
+        -NetworkRecoveryBudget 4 -ExecutionMode FORMAL 2>&1 |
+        ForEach-Object { [string]$_ })
+    $runnerExitCode = $LASTEXITCODE
+    if (-not (Test-Path -LiteralPath $runnerResult -PathType Leaf)) {
+        throw 'STOCK_QUANT_HOST_BROKER_RUNNER_RESULT_MISSING'
+    }
+    $backfill = Get-Content -LiteralPath $runnerResult -Raw -Encoding UTF8 |
+        ConvertFrom-Json
+    $summary = [ordered]@{
+        anchorTradeDate = [string]$backfill.anchorTradeDate
+        targetRangeStart = [string]$backfill.targetRangeStart
+        targetRangeEnd = [string]$backfill.targetRangeEnd
+        targetSessions = [int]$backfill.targetSessions
+        originalCompleteSessions = [int]$backfill.originalCompleteSessions
+        expectedMissingSessions = [int]$backfill.expectedMissingSessions
+        completedTradeDateCount = @($backfill.completedTradeDates).Count
+        finalCompleteSessions = [int]$backfill.finalCompleteSessions
+        milestone120Complete = [bool]$backfill.milestone120Complete
+        final250Complete = [bool]$backfill.final250Complete
+        universeSnapshotId = [string]$backfill.universeSnapshotId
+        universeMemberCount = [int]$backfill.universeMemberCount
+        providerCallCount = [int]$backfill.tushareProviderCallCount
+        dailyProviderCallCount = [int]$backfill.dailyProviderCallCount
+        adjustmentFactorProviderCallCount =
+            [int]$backfill.adjustmentFactorProviderCallCount
+        retryCount = [int]$backfill.retryCount
+        dailyAddedCount = [int]$backfill.dailyAddedCount
+        adjustmentFactorAddedCount =
+            [int]$backfill.adjustmentFactorAddedCount
+        averageDailyRowsPerBackfilledSession =
+            [string]$backfill.averageDailyRowsPerBackfilledSession
+        historicalResearchClassification =
+            [string]$backfill.historicalResearchClassification
+        pitClassification = [string]$backfill.pitClassification
+        sanitizedResult = $runnerResult
+        outputAudit = $(if ($backfill.outputAuditClean) {
+            'PASSED'
+        } else { 'FAILED' })
+    }
+    if ($runnerExitCode -ne 0) {
+        $script:failureSummary = $summary
+        $reason = [string]$backfill.failureReason
+        if ($reason -match '^[A-Z][A-Z0-9_]{3,127}$') { throw $reason }
+        throw 'STOCK_QUANT_HOST_BROKER_MAINBOARD_BACKFILL_FAILED'
+    }
+    if ($backfill.schemaVersion -ne
+            'MAINBOARD_250_SESSION_HISTORY_BACKFILL_RESULT_V1' -or
+        $backfill.status -ne 'SUCCEEDED' -or
+        [string]$backfill.executionId -ne $executionId -or
+        [string]$backfill.gitCommit -ne $BrokerRequest.GitCommit -or
+        [string]$backfill.anchorTradeDate -ne
+            [string]$BrokerRequest.Values['anchor.trade.date'] -or
+        [int]$backfill.targetSessions -ne 250 -or
+        [int]$backfill.expectedMissingSessions -ne $expectedMissing -or
+        [int]$backfill.maximumProviderRequests -ne $maximumProvider -or
+        [int]$backfill.finalCompleteSessions -ne 250 -or
+        -not $backfill.milestone120Complete -or
+        -not $backfill.final250Complete -or
+        [int]$backfill.milestone120MissingCount -ne 0 -or
+        [int]$backfill.final250MissingCount -ne 0 -or
+        [int]$backfill.partialDateCount -ne 0 -or
+        [int]$backfill.duplicateCount -ne 0 -or
+        [int]$backfill.universeMemberCount -lt 1000 -or
+        [int]$backfill.stockBasicProviderCallCount -ne 0 -or
+        [int]$backfill.tradeCalendarProviderCallCount -ne 0 -or
+        [int]$backfill.dailyProviderCallCount -lt $expectedMissing -or
+        [int]$backfill.adjustmentFactorProviderCallCount -lt
+            $expectedMissing -or
+        [int]$backfill.retryCount -lt 0 -or
+        [int]$backfill.retryCount -gt 4 -or
+        [int]$backfill.tushareProviderCallCount -ne
+            $expectedMissing * 2 + [int]$backfill.retryCount -or
+        [int]$backfill.tushareProviderCallCount -ne
+            [int]$backfill.dailyProviderCallCount +
+            [int]$backfill.adjustmentFactorProviderCallCount -or
+        [int]$backfill.tushareProviderCallCount -gt $maximumProvider -or
+        @($backfill.completedTradeDates).Count -ne $expectedMissing -or
+        [int]$backfill.modelCallCount -ne 0 -or
+        -not $backfill.knownAtValid -or
+        -not $backfill.firstObservedAtValid -or
+        $backfill.historicalResearchClassification -ne
+            'POST_HOC_RESEARCH' -or
+        $backfill.pitClassification -ne 'PIT_PARTIAL' -or
+        -not $backfill.universeUnchanged -or
+        -not $backfill.outputAuditClean -or
+        -not $backfill.dataOnly -or $backfill.realTradingStarted -or
+        [long]$backfill.researchSelectionRunsCreated -ne 0 -or
+        [long]$backfill.shadowRunsCreated -ne 0 -or
+        [long]$backfill.paperOrdersCreated -ne 0 -or
+        [long]$backfill.evaluationRowsCreated -ne 0) {
+        $script:failureSummary = $summary
+        throw 'STOCK_QUANT_HOST_BROKER_MAINBOARD_BACKFILL_RESULT_INVALID'
+    }
+    return $summary
+}
+
 function Resolve-ResearchProductionJavaExecutable {
     $command = 'java.exe'
     $oldPreference = $ErrorActionPreference
@@ -2225,6 +2366,10 @@ function Invoke-ClaimedRequest {
             }
             'MAINBOARD_DAILY_INCREMENT' {
                 Invoke-MainboardDailyIncrement -BrokerRequest $request
+                break
+            }
+            'MAINBOARD_HISTORY_BACKFILL' {
+                Invoke-MainboardHistoryBackfill -BrokerRequest $request
                 break
             }
             'START_RESEARCH_PRODUCTION' {

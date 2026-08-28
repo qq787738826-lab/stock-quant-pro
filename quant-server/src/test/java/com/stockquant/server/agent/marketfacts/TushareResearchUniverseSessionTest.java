@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -167,6 +168,8 @@ class TushareResearchUniverseSessionTest {
         assertEquals(6, session.maximumBusinessRequests());
         assertEquals(4, session.consumedNetworkRecoveries());
         assertEquals(6, session.consumedBusinessRequests());
+        assertEquals(Map.of("daily", 5, "adj_factor", 1),
+                session.consumedRequestsByEndpoint());
     }
 
     private static List<SecuritySelection> selections() {

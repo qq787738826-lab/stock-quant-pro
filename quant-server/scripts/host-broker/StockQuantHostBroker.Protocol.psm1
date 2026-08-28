@@ -18,6 +18,7 @@ $script:AllowedOperations = @(
     'RUN_M4_SHADOW_RESEARCH'
     'RUN_RESEARCH_SELECTION'
     'MAINBOARD_DAILY_INCREMENT'
+    'MAINBOARD_HISTORY_BACKFILL'
     'START_RESEARCH_PRODUCTION'
     'STOP_RESEARCH_PRODUCTION'
     'CHECK_RESEARCH_PRODUCTION_STATUS'
@@ -459,6 +460,46 @@ $script:MainboardDailyIncrementRequiredKeys = @(
     'source.request.id'
 )
 
+$script:MainboardHistoryBackfillRequiredKeys = @(
+    'schema.version'
+    'request.id'
+    'operation'
+    'git.commit'
+    'jar.path'
+    'jar.sha256'
+    'authorization.file'
+    'anchor.trade.date'
+    'target.sessions'
+    'expected.missing.sessions'
+    'universe.version'
+    'database.host'
+    'database.port'
+    'database.name'
+    'database.user'
+    'schema.name'
+    'provider'
+    'provider.endpoints'
+    'endpoint.stock_basic.requests'
+    'endpoint.daily.requests'
+    'endpoint.adj_factor.requests'
+    'endpoint.trade_cal.requests'
+    'maximum.provider.requests'
+    'budget.calendar.month'
+    'tushare.monthly.limit'
+    'tushare.monthly.calls.before'
+    'retry.budget'
+    'network.recovery.budget'
+    'redirects'
+    'historical.research.classification'
+    'pit.classification'
+    'user.approval.reference'
+    'created.at'
+    'expires.at'
+    'execution.source'
+    'no.retry'
+    'source.request.id'
+)
+
 $script:M6RequiredKeys = @(
     'schema.version'
     'request.id'
@@ -519,9 +560,9 @@ function Get-StockQuantTushareMonthlyLimit {
         [ValidatePattern('^20[0-9]{2}-(0[1-9]|1[0-2])$')]
         [string] $CalendarMonth
     )
-    # User-approved one-time V1.0.9 mainboard backfill capacity.  Every
+    # User-approved one-task 250-session mainboard history capacity. Every
     # other calendar month retains the normal 150-request ceiling.
-    if ($CalendarMonth -ceq '2026-08') { return 250 }
+    if ($CalendarMonth -ceq '2026-08') { return 625 }
     return 150
 }
 
@@ -580,7 +621,8 @@ function Get-StockQuantM4MonthlyUsage {
         if (-not $values.Contains('operation') -or
             $values['operation'] -notin @(
                 'RUN_M4_SHADOW_RESEARCH', 'RUN_RESEARCH_SELECTION',
-                'MAINBOARD_DAILY_INCREMENT')) {
+                'MAINBOARD_DAILY_INCREMENT',
+                'MAINBOARD_HISTORY_BACKFILL')) {
             continue
         }
         if (-not $values.Contains('request.id') -or
@@ -602,16 +644,20 @@ function Get-StockQuantM4MonthlyUsage {
         $requestCount++
         $selection = $values['operation'] -eq 'RUN_RESEARCH_SELECTION'
         $increment = $values['operation'] -eq 'MAINBOARD_DAILY_INCREMENT'
+        $backfill = $values['operation'] -eq 'MAINBOARD_HISTORY_BACKFILL'
+        $dataOnly = $increment -or $backfill
         $runnerPath = Join-Path $paths.Results $(if ($selection) {
                 "$id.research-selection.json"
             } elseif ($increment) {
                 "$id.mainboard-daily-increment.json"
+            } elseif ($backfill) {
+                "$id.mainboard-history-backfill.json"
             } else { "$id.m4-shadow.json" })
         if (Test-Path -LiteralPath $runnerPath -PathType Leaf) {
             try {
                 $runner = Get-Content -LiteralPath $runnerPath -Raw `
                     -Encoding UTF8 | ConvertFrom-Json
-                [decimal]$cost = if ($increment) { [decimal]0.00 } else {
+                [decimal]$cost = if ($dataOnly) { [decimal]0.00 } else {
                     [decimal]::Parse(
                         [string]$runner.conservativeCostCny,
                         [Globalization.NumberStyles]::Number,
@@ -620,7 +666,62 @@ function Get-StockQuantM4MonthlyUsage {
             } catch {
                 throw 'M4_MONTHLY_BUDGET_LEDGER_INVALID'
             }
-            if ($increment) {
+            if ($backfill) {
+                [int]$maximumCalls = [int]$values[
+                    'maximum.provider.requests']
+                [int]$expectedMissing = [int]$values[
+                    'expected.missing.sessions']
+                if ($runner.schemaVersion -ne
+                        'MAINBOARD_250_SESSION_HISTORY_BACKFILL_RESULT_V1' -or
+                    $runner.status -notin @('SUCCEEDED', 'FAILED') -or
+                    [string]$runner.executionId -ne
+                        ($id -replace '^SQHB_', 'MBH250_') -or
+                    [string]$runner.gitCommit -ne
+                        [string]$values['git.commit'] -or
+                    [int]$runner.targetSessions -ne 250 -or
+                    [int]$runner.expectedMissingSessions -ne
+                        $expectedMissing -or
+                    [int]$runner.maximumProviderRequests -ne $maximumCalls -or
+                    [int]$runner.tushareProviderCallCount -lt 0 -or
+                    [int]$runner.tushareProviderCallCount -gt $maximumCalls -or
+                    [int]$runner.dailyProviderCallCount -lt 0 -or
+                    [int]$runner.adjustmentFactorProviderCallCount -lt 0 -or
+                    [int]$runner.stockBasicProviderCallCount -ne 0 -or
+                    [int]$runner.tradeCalendarProviderCallCount -ne 0 -or
+                    [int]$runner.tushareProviderCallCount -ne
+                        [int]$runner.dailyProviderCallCount +
+                        [int]$runner.adjustmentFactorProviderCallCount -or
+                    [int]$runner.retryCount -lt 0 -or
+                    [int]$runner.retryCount -gt 4 -or
+                    [int]$runner.modelCallCount -ne 0 -or
+                    -not $runner.dataOnly -or $runner.realTradingStarted -or
+                    [long]$runner.researchSelectionRunsCreated -ne 0 -or
+                    [long]$runner.shadowRunsCreated -ne 0 -or
+                    [long]$runner.paperOrdersCreated -ne 0 -or
+                    [long]$runner.evaluationRowsCreated -ne 0 -or
+                    ($runner.status -eq 'SUCCEEDED' -and (
+                        [int]$runner.finalCompleteSessions -ne 250 -or
+                        -not $runner.milestone120Complete -or
+                        -not $runner.final250Complete -or
+                        [int]$runner.milestone120MissingCount -ne 0 -or
+                        [int]$runner.final250MissingCount -ne 0 -or
+                        [int]$runner.partialDateCount -ne 0 -or
+                        [int]$runner.duplicateCount -ne 0 -or
+                        [int]$runner.universeMemberCount -lt 1000 -or
+                        [int]$runner.dailyProviderCallCount -lt
+                            $expectedMissing -or
+                        [int]$runner.adjustmentFactorProviderCallCount -lt
+                            $expectedMissing -or
+                        -not $runner.knownAtValid -or
+                        -not $runner.firstObservedAtValid -or
+                        $runner.historicalResearchClassification -ne
+                            'POST_HOC_RESEARCH' -or
+                        $runner.pitClassification -ne 'PIT_PARTIAL' -or
+                        -not $runner.universeUnchanged -or
+                        -not $runner.outputAuditClean))) {
+                    throw 'M4_MONTHLY_BUDGET_LEDGER_INVALID'
+                }
+            } elseif ($increment) {
                 $runnerTradeDate = if ($runner.tradeDate -is [string]) {
                     [string]$runner.tradeDate
                 } else {
@@ -731,7 +832,7 @@ function Get-StockQuantM4MonthlyUsage {
                     throw 'M4_MONTHLY_BUDGET_LEDGER_INVALID'
                 }
             }
-            if (-not $increment) { $shadowCost += $cost }
+            if (-not $dataOnly) { $shadowCost += $cost }
             $tushareCalls += [int]$runner.tushareProviderCallCount
             continue
         }
@@ -740,33 +841,33 @@ function Get-StockQuantM4MonthlyUsage {
             if ($file.Name -notmatch
                     '\.(request|processing)\.properties$' -or
                 -not $values.Contains('maximum.provider.requests') -or
-                (-not $increment -and
+                (-not $dataOnly -and
                     -not $values.Contains('maximum.cost.cny'))) {
                 throw 'M4_MONTHLY_BUDGET_LEDGER_INCOMPLETE'
             }
             [int]$reservedProvider = -1
-            [decimal]$reservedCost = if ($increment) {
+            [decimal]$reservedCost = if ($dataOnly) {
                 [decimal]0.00
             } else { [decimal]-1 }
+            [int]$singleRequestMaximum = if ($backfill) { 503 } else { 150 }
             if (-not [int]::TryParse(
                     [string]$values['maximum.provider.requests'],
                     [Globalization.NumberStyles]::None,
                     [Globalization.CultureInfo]::InvariantCulture,
                     [ref]$reservedProvider) -or
-                (-not $increment -and -not [decimal]::TryParse(
+                (-not $dataOnly -and -not [decimal]::TryParse(
                     [string]$values['maximum.cost.cny'],
                     [Globalization.NumberStyles]::Number,
                     [Globalization.CultureInfo]::InvariantCulture,
                     [ref]$reservedCost)) -or
-                # The August approval raises only the aggregate monthly
-                # ledger; one pending request remains capped at 150.
-                $reservedProvider -lt 0 -or $reservedProvider -gt 150 -or
-                (-not $increment -and ($reservedCost -le 0 -or
+                $reservedProvider -lt 0 -or
+                $reservedProvider -gt $singleRequestMaximum -or
+                (-not $dataOnly -and ($reservedCost -le 0 -or
                     $reservedCost -gt [decimal]5.00))) {
                 throw 'M4_MONTHLY_BUDGET_LEDGER_INVALID'
             }
             $reservedTushareCalls += $reservedProvider
-            if (-not $increment) { $reservedShadowCost += $reservedCost }
+            if (-not $dataOnly) { $reservedShadowCost += $reservedCost }
             continue
         }
         try {
@@ -1281,6 +1382,10 @@ function Read-StockQuantHostBrokerRequest {
                 $script:MainboardDailyIncrementRequiredKeys
                 break
             }
+            'MAINBOARD_HISTORY_BACKFILL' {
+                $script:MainboardHistoryBackfillRequiredKeys
+                break
+            }
             { $_ -in @('START_RESEARCH_PRODUCTION',
                     'STOP_RESEARCH_PRODUCTION',
                     'CHECK_RESEARCH_PRODUCTION_STATUS') } {
@@ -1440,6 +1545,74 @@ function Read-StockQuantHostBrokerRequest {
                 'USER_APPROVED_V1_0_11_MAINBOARD_DAILY_INCREMENT' -or
             $values['execution.source'] -ne
                 'MAINBOARD_DAILY_INCREMENT' -or
+            $values['no.retry'] -ne 'true') {
+            throw 'STOCK_QUANT_HOST_BROKER_REQUEST_SCOPE_INVALID'
+        }
+    } elseif ($values['operation'] -eq 'MAINBOARD_HISTORY_BACKFILL') {
+        [int]$providerBefore = -1
+        [int]$expectedMissing = -1
+        [int]$maximumProvider = -1
+        [datetime]$anchorDate = [datetime]::MinValue
+        $createdBackfill = ConvertTo-StockQuantTimestamp `
+            ([string]$values['created.at'])
+        $backfillMonth = [TimeZoneInfo]::ConvertTimeBySystemTimeZoneId(
+            $createdBackfill, 'China Standard Time').ToString('yyyy-MM')
+        [int]$backfillLimit = Get-StockQuantTushareMonthlyLimit `
+            -CalendarMonth $backfillMonth
+        if ($values['authorization.file'] -ne 'NONE' -or
+            -not [datetime]::TryParseExact(
+                [string]$values['anchor.trade.date'], 'yyyy-MM-dd',
+                [Globalization.CultureInfo]::InvariantCulture,
+                [Globalization.DateTimeStyles]::None,
+                [ref]$anchorDate) -or
+            $anchorDate.Date -gt [TimeZoneInfo]::ConvertTimeBySystemTimeZoneId(
+                $Now, 'China Standard Time').Date -or
+            $values['target.sessions'] -ne '250' -or
+            -not [int]::TryParse(
+                [string]$values['expected.missing.sessions'],
+                [Globalization.NumberStyles]::None,
+                [Globalization.CultureInfo]::InvariantCulture,
+                [ref]$expectedMissing) -or
+            $expectedMissing -lt 1 -or $expectedMissing -gt 249 -or
+            $values['universe.version'] -ne
+                'RESEARCH_UNIVERSE_MAINBOARD_V1' -or
+            $values['database.host'] -ne '127.0.0.1' -or
+            $values['database.port'] -ne '38432' -or
+            $values['database.name'] -ne 'stock_quant_research' -or
+            $values['database.user'] -ne 'stock_quant_research' -or
+            $values['schema.name'] -ne 'tushare_research' -or
+            $values['provider'] -ne 'TUSHARE' -or
+            $values['provider.endpoints'] -ne 'daily,adj_factor' -or
+            $values['endpoint.stock_basic.requests'] -ne '0' -or
+            $values['endpoint.daily.requests'] -ne [string]$expectedMissing -or
+            $values['endpoint.adj_factor.requests'] -ne
+                [string]$expectedMissing -or
+            $values['endpoint.trade_cal.requests'] -ne '0' -or
+            -not [int]::TryParse(
+                [string]$values['maximum.provider.requests'],
+                [Globalization.NumberStyles]::None,
+                [Globalization.CultureInfo]::InvariantCulture,
+                [ref]$maximumProvider) -or
+            $maximumProvider -ne $expectedMissing * 2 + 4 -or
+            $maximumProvider -gt 503 -or
+            $values['budget.calendar.month'] -ne $backfillMonth -or
+            $values['tushare.monthly.limit'] -ne [string]$backfillLimit -or
+            -not [int]::TryParse(
+                [string]$values['tushare.monthly.calls.before'],
+                [Globalization.NumberStyles]::None,
+                [Globalization.CultureInfo]::InvariantCulture,
+                [ref]$providerBefore) -or $providerBefore -lt 0 -or
+            $providerBefore + $maximumProvider -gt $backfillLimit -or
+            $values['retry.budget'] -ne '0' -or
+            $values['network.recovery.budget'] -ne '4' -or
+            $values['redirects'] -ne 'NEVER' -or
+            $values['historical.research.classification'] -ne
+                'POST_HOC_RESEARCH' -or
+            $values['pit.classification'] -ne 'PIT_PARTIAL' -or
+            $values['user.approval.reference'] -ne
+                'USER_APPROVED_V1_MAINBOARD_250_SESSION_HISTORY_BACKFILL' -or
+            $values['execution.source'] -ne
+                'V1_MAINBOARD_250_SESSION_HISTORY_BACKFILL' -or
             $values['no.retry'] -ne 'true') {
             throw 'STOCK_QUANT_HOST_BROKER_REQUEST_SCOPE_INVALID'
         }
@@ -1814,7 +1987,8 @@ function Read-StockQuantHostBrokerRequest {
         }
     } elseif ($values['operation'] -in @(
             'RUN_M4_SHADOW_RESEARCH', 'RUN_RESEARCH_SELECTION',
-            'MAINBOARD_DAILY_INCREMENT')) {
+            'MAINBOARD_DAILY_INCREMENT',
+            'MAINBOARD_HISTORY_BACKFILL')) {
         if ($values['source.request.id'] -ne 'NONE') {
             throw 'STOCK_QUANT_HOST_BROKER_SOURCE_REQUEST_INVALID'
         }
@@ -1846,11 +2020,13 @@ function Read-StockQuantHostBrokerRequest {
     }
     if ($values['operation'] -in @('RUN_M4_SHADOW_RESEARCH',
             'RUN_RESEARCH_SELECTION', 'MAINBOARD_DAILY_INCREMENT',
+            'MAINBOARD_HISTORY_BACKFILL',
             'START_RESEARCH_PRODUCTION', 'STOP_RESEARCH_PRODUCTION',
             'CHECK_RESEARCH_PRODUCTION_STATUS')) {
         $proofValues = Read-StrictStockQuantProperties -Path $proof
         $allowedModes = if ($values['operation'] -in @(
-                'RUN_RESEARCH_SELECTION', 'MAINBOARD_DAILY_INCREMENT')) {
+                'RUN_RESEARCH_SELECTION', 'MAINBOARD_DAILY_INCREMENT',
+                'MAINBOARD_HISTORY_BACKFILL')) {
             @('RESEARCH_SELECTION_CONTROLLED_BUILD_ARTIFACT',
                 'CONTROLLED_BUILD_ARTIFACT')
         } elseif ($values['operation'] -eq
@@ -1928,6 +2104,12 @@ function Read-StockQuantHostBrokerRequest {
         }
         $authorizationStatus =
             'V1_0_11_MAINBOARD_DAILY_INCREMENT_APPROVED'
+    } elseif ($values['operation'] -eq 'MAINBOARD_HISTORY_BACKFILL') {
+        if ($values['authorization.file'] -ne 'NONE') {
+            throw 'STOCK_QUANT_HOST_BROKER_AUTHORIZATION_MODE_INVALID'
+        }
+        $authorizationStatus =
+            'V1_MAINBOARD_250_SESSION_HISTORY_BACKFILL_APPROVED'
     } elseif ($values['operation'] -eq 'RUN_RESEARCH_SELECTION') {
         if ($values['authorization.file'] -ne 'NONE') {
             throw 'STOCK_QUANT_HOST_BROKER_AUTHORIZATION_MODE_INVALID'
@@ -2144,6 +2326,10 @@ function Write-StockQuantHostBrokerRequest {
             }
             'MAINBOARD_DAILY_INCREMENT' {
                 $script:MainboardDailyIncrementRequiredKeys
+                break
+            }
+            'MAINBOARD_HISTORY_BACKFILL' {
+                $script:MainboardHistoryBackfillRequiredKeys
                 break
             }
             { $_ -in @('START_RESEARCH_PRODUCTION',

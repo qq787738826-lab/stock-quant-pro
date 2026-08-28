@@ -14,6 +14,7 @@ param(
         'RUN_M4_SHADOW_RESEARCH',
         'RUN_RESEARCH_SELECTION',
         'MAINBOARD_DAILY_INCREMENT',
+        'MAINBOARD_HISTORY_BACKFILL',
         'START_RESEARCH_PRODUCTION',
         'STOP_RESEARCH_PRODUCTION',
         'CHECK_RESEARCH_PRODUCTION_STATUS',
@@ -67,12 +68,15 @@ param(
 
     [int] $NetworkRecoveryRequests = -1,
 
+    [ValidateRange(0, 249)]
+    [int] $ExpectedMissingSessions = 0,
+
     [ValidateSet('1.50', '5.00')]
     [string] $MaximumCostCny = '5.00',
 
     [switch] $SubmitOnly,
 
-    [ValidateRange(5, 2700)]
+    [ValidateRange(5, 21600)]
     [int] $TimeoutSeconds = 2700
 )
 
@@ -90,6 +94,7 @@ if (($RequestId -ne 'AUTO' -or $TradeDate -ne 'AUTO' -or
         $SelectionPublicRunId -ne 'NONE' -or $SubmitOnly) -and
     $Operation -notin @('RUN_M4_SHADOW_RESEARCH',
         'RUN_RESEARCH_SELECTION', 'MAINBOARD_DAILY_INCREMENT',
+        'MAINBOARD_HISTORY_BACKFILL',
         'START_RESEARCH_PRODUCTION', 'STOP_RESEARCH_PRODUCTION',
         'CHECK_RESEARCH_PRODUCTION_STATUS')) {
     throw 'STOCK_QUANT_HOST_BROKER_FIXED_DISPATCH_ARGUMENT_INVALID'
@@ -103,6 +108,10 @@ if (($StockBasicRequests -ne -1 -or $DailyRequests -ne -1 -or
         $TradeCalendarRequests -ne -1 -or
         $NetworkRecoveryRequests -ne -1) -and
     $Operation -ne 'RUN_RESEARCH_SELECTION') {
+    throw 'STOCK_QUANT_HOST_BROKER_FIXED_DISPATCH_ARGUMENT_INVALID'
+}
+if ($ExpectedMissingSessions -ne 0 -and
+    $Operation -ne 'MAINBOARD_HISTORY_BACKFILL') {
     throw 'STOCK_QUANT_HOST_BROKER_FIXED_DISPATCH_ARGUMENT_INVALID'
 }
 
@@ -124,6 +133,8 @@ if ([string]::IsNullOrWhiteSpace($ArtifactPath)) {
         'quant-server-1.3.1-research-production.jar'
     } elseif ($Operation -eq 'MAINBOARD_DAILY_INCREMENT') {
         'quant-server-1.3.1-mainboard-daily-increment-runner.jar'
+    } elseif ($Operation -eq 'MAINBOARD_HISTORY_BACKFILL') {
+        'quant-server-1.3.1-mainboard-history-backfill-runner.jar'
     } elseif ($Operation -eq 'RUN_RESEARCH_SELECTION') {
         'quant-server-1.3.1-research-selection-runner.jar'
     } elseif ($Operation -eq 'RUN_M4_SHADOW_RESEARCH') {
@@ -184,6 +195,10 @@ try {
     } elseif ($Operation -eq 'MAINBOARD_DAILY_INCREMENT' -and
         $branch -eq
             'codex/1.4.0-v1.0.11-mainboard-daily-increment') {
+        $branch
+    } elseif ($Operation -eq 'MAINBOARD_HISTORY_BACKFILL' -and
+        $branch -eq
+            'codex/1.4.0-mainboard-250-session-history-backfill') {
         $branch
     } elseif ($Operation -eq 'RUN_M4_SHADOW_RESEARCH' -and
         $branch -eq 'codex/1.4.0-m4-shadow-research-ready') {
@@ -259,6 +274,7 @@ try {
             'RUN_M4_SHADOW_RESEARCH',
             'RUN_RESEARCH_SELECTION',
             'MAINBOARD_DAILY_INCREMENT',
+            'MAINBOARD_HISTORY_BACKFILL',
             'START_RESEARCH_PRODUCTION',
             'STOP_RESEARCH_PRODUCTION',
             'CHECK_RESEARCH_PRODUCTION_STATUS')) {
@@ -422,6 +438,67 @@ try {
             'created.at' = $createdAt.ToString('o')
             'expires.at' = $expiresAt.ToString('o')
             'execution.source' = 'MAINBOARD_DAILY_INCREMENT'
+            'no.retry' = 'true'
+            'source.request.id' = 'NONE'
+        }
+    } elseif ($Operation -eq 'MAINBOARD_HISTORY_BACKFILL') {
+        if ($TradeDate -eq 'AUTO' -or $ExpectedMissingSessions -lt 1 -or
+            $MaximumProviderRequests -ne
+                $ExpectedMissingSessions * 2 + 4) {
+            throw 'MAINBOARD_HISTORY_BACKFILL_FIXED_SCOPE_INVALID'
+        }
+        $chinaNow = [TimeZoneInfo]::ConvertTimeBySystemTimeZoneId(
+            [DateTimeOffset]::UtcNow, 'China Standard Time')
+        $calendarMonth = $chinaNow.ToString('yyyy-MM')
+        [int]$monthlyTushareLimit = Get-StockQuantTushareMonthlyLimit `
+            -CalendarMonth $calendarMonth
+        $usage = Get-StockQuantM4MonthlyUsage `
+            -CalendarMonth $calendarMonth
+        if ([int]$usage.CommittedTushareCalls +
+                $MaximumProviderRequests -gt $monthlyTushareLimit) {
+            throw 'MAINBOARD_HISTORY_BACKFILL_MONTHLY_BUDGET_EXHAUSTED'
+        }
+        $requestValues = [ordered]@{
+            'schema.version' = 'STOCK_QUANT_HOST_BROKER_REQUEST_V1'
+            'request.id' = $requestId
+            'operation' = $Operation
+            'git.commit' = $head
+            'jar.path' = $artifact
+            'jar.sha256' = $artifactHash
+            'authorization.file' = 'NONE'
+            'anchor.trade.date' = $TradeDate
+            'target.sessions' = '250'
+            'expected.missing.sessions' =
+                [string]$ExpectedMissingSessions
+            'universe.version' = 'RESEARCH_UNIVERSE_MAINBOARD_V1'
+            'database.host' = '127.0.0.1'
+            'database.port' = '38432'
+            'database.name' = 'stock_quant_research'
+            'database.user' = 'stock_quant_research'
+            'schema.name' = 'tushare_research'
+            'provider' = 'TUSHARE'
+            'provider.endpoints' = 'daily,adj_factor'
+            'endpoint.stock_basic.requests' = '0'
+            'endpoint.daily.requests' = [string]$ExpectedMissingSessions
+            'endpoint.adj_factor.requests' = [string]$ExpectedMissingSessions
+            'endpoint.trade_cal.requests' = '0'
+            'maximum.provider.requests' =
+                [string]$MaximumProviderRequests
+            'budget.calendar.month' = $calendarMonth
+            'tushare.monthly.limit' = [string]$monthlyTushareLimit
+            'tushare.monthly.calls.before' =
+                [string]$usage.CommittedTushareCalls
+            'retry.budget' = '0'
+            'network.recovery.budget' = '4'
+            'redirects' = 'NEVER'
+            'historical.research.classification' = 'POST_HOC_RESEARCH'
+            'pit.classification' = 'PIT_PARTIAL'
+            'user.approval.reference' =
+                'USER_APPROVED_V1_MAINBOARD_250_SESSION_HISTORY_BACKFILL'
+            'created.at' = $createdAt.ToString('o')
+            'expires.at' = $expiresAt.ToString('o')
+            'execution.source' =
+                'V1_MAINBOARD_250_SESSION_HISTORY_BACKFILL'
             'no.retry' = 'true'
             'source.request.id' = 'NONE'
         }
