@@ -139,8 +139,8 @@ try {
     }
     if ([int](Scalar 'SELECT count(*) FROM research_universe_members') -ne
             3000 -or
-        [int](Scalar "SELECT count(DISTINCT fact_effective_at::date) FROM pit_market_fact_observations WHERE fact_type='RAW_DAILY_BAR'") -ne 250 -or
-        [int](Scalar "SELECT count(DISTINCT fact_effective_at::date) FROM pit_market_fact_observations WHERE fact_type='ADJUSTMENT_FACTOR'") -ne 250 -or
+        [int](Scalar 'SELECT count(DISTINCT trade_date) FROM raw_daily_bar_facts_v2') -ne 250 -or
+        [int](Scalar 'SELECT count(DISTINCT factor_effective_trade_date) FROM adjustment_factor_facts_v1') -ne 250 -or
         [int](Scalar "SELECT count(*) FROM research_selection_runs") -ne 0 -or
         [int](Scalar "SELECT count(*) FROM shadow_research_runs") -ne 0 -or
         [int](Scalar "SELECT count(*) FROM shadow_paper_orders") -ne 0) {
