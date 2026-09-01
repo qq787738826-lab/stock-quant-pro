@@ -560,9 +560,10 @@ function Get-StockQuantTushareMonthlyLimit {
         [ValidatePattern('^20[0-9]{2}-(0[1-9]|1[0-2])$')]
         [string] $CalendarMonth
     )
-    # User-approved one-task 250-session mainboard history capacity. Every
+    # User-approved one-task 250-session mainboard history capacities. Every
     # other calendar month retains the normal 150-request ceiling.
     if ($CalendarMonth -ceq '2026-08') { return 625 }
+    if ($CalendarMonth -ceq '2026-09') { return 450 }
     return 150
 }
 

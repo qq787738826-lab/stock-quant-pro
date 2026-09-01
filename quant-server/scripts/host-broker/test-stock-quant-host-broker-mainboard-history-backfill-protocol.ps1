@@ -65,6 +65,12 @@ try {
     if ($month -eq '2026-08' -and $limit -ne 625) {
         throw 'MAINBOARD_BACKFILL_APPROVED_MONTHLY_LIMIT_INVALID'
     }
+    if ((Get-StockQuantTushareMonthlyLimit -CalendarMonth '2026-09') -ne
+            450 -or
+        (Get-StockQuantTushareMonthlyLimit -CalendarMonth '2026-10') -ne
+            150) {
+        throw 'MAINBOARD_BACKFILL_APPROVED_MONTHLY_LIMIT_INVALID'
+    }
     $request = [ordered]@{
         'schema.version' = 'STOCK_QUANT_HOST_BROKER_REQUEST_V1'
         'request.id' = New-StockQuantHostBrokerRequestId

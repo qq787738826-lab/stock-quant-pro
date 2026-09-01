@@ -34,15 +34,17 @@ class ExternalApiMonthlyBudgetTest {
     }
 
     @Test
-    void augustBackfillLimitIsSixHundredTwentyFiveAndOtherMonthsStayAtOneFifty() {
+    void approvedBackfillMonthsUseTheirLimitsAndOtherMonthsStayAtOneFifty() {
         assertEquals(625, ExternalApiMonthlyBudget.tushareRequestLimit(
                 YearMonth.of(2026, 8)));
-        assertEquals(150, ExternalApiMonthlyBudget.tushareRequestLimit(
+        assertEquals(450, ExternalApiMonthlyBudget.tushareRequestLimit(
                 YearMonth.of(2026, 9)));
+        assertEquals(150, ExternalApiMonthlyBudget.tushareRequestLimit(
+                YearMonth.of(2026, 10)));
 
         var result = ExternalApiMonthlyBudget.admitShadow(
                 YearMonth.of(2026, 9), BigDecimal.ZERO,
-                BigDecimal.ZERO, 145, BigDecimal.ONE, 6);
+                BigDecimal.ZERO, 445, BigDecimal.ONE, 6);
         assertFalse(result.allowed());
         assertEquals("SHADOW_MONTHLY_TUSHARE_EXHAUSTED", result.reason());
         assertEquals(5, result.tushareRequestsRemaining());

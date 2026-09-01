@@ -14,7 +14,10 @@ public final class ExternalApiMonthlyBudget {
     public static final int SHADOW_MONTHLY_TUSHARE_REQUESTS = 150;
     /** One-time mainboard 250-session backfill authorization for 2026-08. */
     public static final int AUGUST_2026_TUSHARE_REQUESTS = 625;
+    /** Continued one-time backfill authorization after the month rollover. */
+    public static final int SEPTEMBER_2026_TUSHARE_REQUESTS = 450;
     private static final YearMonth AUGUST_2026 = YearMonth.of(2026, 8);
+    private static final YearMonth SEPTEMBER_2026 = YearMonth.of(2026, 9);
     public static final BigDecimal M5_DEVELOPMENT_COST_CNY =
             new BigDecimal("5.00");
     public static final int M5_DEVELOPMENT_TUSHARE_REQUESTS = 0;
@@ -24,7 +27,11 @@ public final class ExternalApiMonthlyBudget {
 
     public static int tushareRequestLimit(YearMonth month) {
         Objects.requireNonNull(month, "month");
-        return AUGUST_2026.equals(month) ? AUGUST_2026_TUSHARE_REQUESTS
+        if (AUGUST_2026.equals(month)) {
+            return AUGUST_2026_TUSHARE_REQUESTS;
+        }
+        return SEPTEMBER_2026.equals(month)
+                ? SEPTEMBER_2026_TUSHARE_REQUESTS
                 : SHADOW_MONTHLY_TUSHARE_REQUESTS;
     }
 
