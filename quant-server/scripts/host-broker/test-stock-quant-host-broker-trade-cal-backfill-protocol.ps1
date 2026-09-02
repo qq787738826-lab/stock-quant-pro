@@ -233,6 +233,15 @@ try {
         throw 'TRADE_CAL_BACKFILL_FAILURE_REASON_NOT_PROPAGATED'
     }
     $tests++
+    $runnerScript = Get-Content -LiteralPath (Join-Path $paths.RepositoryRoot `
+        'quant-server\scripts\run-mainboard-trade-cal-backfill.ps1') `
+        -Raw -Encoding UTF8
+    if (-not $runnerScript.Contains('function Get-SafeFailureReason') -or
+        -not $runnerScript.Contains(
+            'Get-SafeFailureReason -Lines $output')) {
+        throw 'TRADE_CAL_BACKFILL_RUNNER_FAILURE_REASON_NOT_PROPAGATED'
+    }
+    $tests++
     foreach ($forbidden in @('Bailian', 'Top200', 'Top30', 'Top10',
             'Invoke-ResearchSelection', 'Invoke-M4ShadowResearch')) {
         if ($section.Contains($forbidden)) {

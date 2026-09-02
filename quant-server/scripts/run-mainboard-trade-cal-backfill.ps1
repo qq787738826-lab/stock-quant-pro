@@ -39,6 +39,21 @@ $expectedArtifact = Join-Path $target `
 $runner = 'com.stockquant.server.agent.marketfacts.' +
     'TushareMainboardTradeCalendarBackfillManualRunner'
 
+function Get-SafeFailureReason {
+    param(
+        [object[]] $Lines,
+        [string] $Fallback
+    )
+    $prefix = 'MAINBOARD_TRADE_CAL_BACKFILL_FAILURE_REASON='
+    $matches = @($Lines | Where-Object {
+        $null -ne $_ -and ([string]$_).StartsWith($prefix)
+    })
+    if ($matches.Count -ne 1) { return $Fallback }
+    $value = ([string]$matches[0]).Substring($prefix.Length)
+    if ($value -notmatch '^[A-Z][A-Z0-9_]{3,127}$') { return $Fallback }
+    return $value
+}
+
 Push-Location $repoRoot
 try {
     $artifact = [IO.Path]::GetFullPath($ArtifactPath)
@@ -83,8 +98,9 @@ try {
         $exitCode = $LASTEXITCODE
     } finally { $ErrorActionPreference = $saved }
     if (-not (Test-Path -LiteralPath $result -PathType Leaf)) {
-        Write-Output `
-            'MAINBOARD_TRADE_CAL_BACKFILL_FAILURE_REASON=MAINBOARD_TRADE_CAL_BACKFILL_RESULT_MISSING'
+        $reason = Get-SafeFailureReason -Lines $output `
+            -Fallback 'MAINBOARD_TRADE_CAL_BACKFILL_RESULT_MISSING'
+        Write-Output "MAINBOARD_TRADE_CAL_BACKFILL_FAILURE_REASON=$reason"
         exit 20
     }
     $value = Get-Content -LiteralPath $result -Raw -Encoding UTF8 |
