@@ -58,7 +58,7 @@ try {
             [StringComparison]::OrdinalIgnoreCase) -or
         $result -split '[\/]' -contains '.ai' -or
         $rangeEnd.Date -ne $anchor.Date -or
-        $rangeStart.Date -ne $anchor.Date.AddDays(-500) -or
+        $rangeStart.Date -ne $anchor.Date.AddDays(-499) -or
         ($ExecutionMode -eq 'FORMAL' -and $DatabasePort -ne 38432) -or
         ($ExecutionMode -eq 'FAKE' -and $DatabasePort -eq 38432)) {
         throw 'MAINBOARD_TRADE_CAL_BACKFILL_PATH_OR_MODE_INVALID'

@@ -29,7 +29,7 @@ class MainboardTradeCalendarBackfillSanitizedResultTest {
                 MainboardTradeCalendarBackfillSanitizedResult.VERSION,
                 "SUCCEEDED", "MBTC250_20260901T110000Z_ABCDEF123456",
                 "a".repeat(40), started, started.plusSeconds(3), anchor,
-                anchor.minusDays(500), anchor, 260, 250, 60, 357,
+                anchor.minusDays(499), anchor, 260, 250, 60, 357,
                 target, anchor, "RESEARCH_UNIVERSE_MAINBOARD_V1",
                 "SNAPSHOT", "b".repeat(64), 3193, 501, 501, 357,
                 357, 0, 3, 2, 1, 0, 0, 0, 1, 2, 4,
