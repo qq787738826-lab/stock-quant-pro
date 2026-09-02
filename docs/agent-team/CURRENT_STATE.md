@@ -683,6 +683,13 @@ DATA_QUALITY 只作门禁和 confidence 上限，MARKET_REGIME V1 权重为 0 �
   最长持有期或风险/数据门禁失效只产生下一合法交易时点的 Paper 退出意图，并继续复用同一 M2
   会计引擎。旧 result JSON、Shadow、Paper 和 Agent Eval 原文不修改，缺少新增字段时 UI 明确显示
   “历史版本未保存”，不补造计划；无 Flyway、Provider、模型、Universe、排名或真实交易变化。
+- `V1_MAINBOARD_250_SESSION_TRADE_CAL_BACKFILL` 增加唯一 data-only Broker operation
+  `TRADE_CAL_BACKFILL`，只复用 V13 `trading_calendar_facts_v1` 与现有 append-only PIT 捕获链，
+  不新建日历表。固定范围为锚点向前 500 个自然日（含首尾），SSE/SZSE 各一次 `trade_cal`
+  范围请求，基础调用 2、仅无响应网络故障允许最多 2 次受控 recovery、总 attempt 最多 4；
+  `daily/adj_factor/stock_basic`、Selection、Shadow、Agent、Paper 与百炼均固定为 0。只有正式
+  SSE/SZSE 日历事实交集达到至少 260 个共同开市日、最近日期仍为锚点并可精确生成最后 250 日时
+  才成功；补采事实保留真实 `knownAt/firstObservedAt` 和既有 source lineage。
 
 ## 当前后续入口与阻断
 

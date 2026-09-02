@@ -266,6 +266,7 @@ class StockQuantHostBrokerContractTest {
                 "RUN_M3_AGENT_RESEARCH_SMOKE",
                 "RUN_M4_SHADOW_RESEARCH",
                 "MAINBOARD_HISTORY_BACKFILL",
+                "TRADE_CAL_BACKFILL",
                 "START_RESEARCH_PRODUCTION",
                 "STOP_RESEARCH_PRODUCTION",
                 "CHECK_RESEARCH_PRODUCTION_STATUS",

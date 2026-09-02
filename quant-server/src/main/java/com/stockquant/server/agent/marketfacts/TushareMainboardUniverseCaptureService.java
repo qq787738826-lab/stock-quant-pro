@@ -1,6 +1,7 @@
 package com.stockquant.server.agent.marketfacts;
 
 import com.stockquant.server.agent.marketfacts.PitMarketFactModels.CaptureResult;
+import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.MarketFactResponse;
 import com.stockquant.server.agent.marketfacts.TushareReferenceDataModels.MainboardInstrument;
 import com.stockquant.server.researchselection.ResearchUniverseMainboard;
 import com.stockquant.server.researchselection.ResearchUniverseMainboard.Member;
@@ -118,6 +119,7 @@ public final class TushareMainboardUniverseCaptureService {
         int idempotent = 0;
         List<Long> batches = new ArrayList<>();
         List<LocalDate> completedDates = new ArrayList<>();
+        Map<String, Integer> calendarCallCounts = new java.util.LinkedHashMap<>();
         SnapshotBundle snapshot = current;
         try {
             if (refreshStockBasic) {
@@ -161,9 +163,20 @@ public final class TushareMainboardUniverseCaptureService {
                                     .equals(exchange)).findFirst()
                             .orElseThrow(() -> invalid(
                                     "MAINBOARD_EXCHANGE_MEMBER_MISSING"));
-                    var response = provider.fetchMainboardCalendar(
-                            representative, exchange, calendarStart,
-                            calendarEnd, timeout, session);
+                    int beforeCalls = session.consumedBusinessRequests();
+                    MarketFactResponse response;
+                    try {
+                        response = provider.fetchMainboardCalendar(
+                                representative, exchange, calendarStart,
+                                calendarEnd, timeout, session);
+                    } finally {
+                        int calls = session.consumedBusinessRequests()
+                                - beforeCalls;
+                        if (calls > 0) {
+                            calendarCallCounts.merge(exchange, calls,
+                                    Integer::sum);
+                        }
+                    }
                     CaptureResult result = capture
                             .captureAuthorizedMainboardResponse(response,
                                     clock.instant(), preProvider);
@@ -181,14 +194,16 @@ public final class TushareMainboardUniverseCaptureService {
                     session.consumedBusinessRequests(),
                     session.consumedNetworkRecoveries(), batches,
                     appended, idempotent,
-                    session.consumedRequestsByEndpoint(), completedDates,
+                    session.consumedRequestsByEndpoint(),
+                    calendarCallCounts, completedDates,
                     clock.instant());
         } catch (RuntimeException failure) {
             throw new CaptureFailure(safeCode(failure),
                     session.consumedBusinessRequests(),
                     session.consumedNetworkRecoveries(),
                     session.consumedRequestsByEndpoint(), batches,
-                    appended, idempotent, completedDates, failure);
+                    calendarCallCounts, appended, idempotent,
+                    completedDates, failure);
         }
     }
 
@@ -246,12 +261,15 @@ public final class TushareMainboardUniverseCaptureService {
             int appendedObservations,
             int idempotentChainTailHits,
             Map<String, Integer> endpointCallCounts,
+            Map<String, Integer> calendarCallCountsByExchange,
             List<LocalDate> completedTradeDates,
             Instant completedAt
     ) {
         public CaptureEvidence {
             batchIds = List.copyOf(batchIds);
             endpointCallCounts = Map.copyOf(endpointCallCounts);
+            calendarCallCountsByExchange = Map.copyOf(
+                    calendarCallCountsByExchange);
             completedTradeDates = List.copyOf(completedTradeDates);
         }
     }
@@ -260,6 +278,7 @@ public final class TushareMainboardUniverseCaptureService {
         private final int providerCallCount;
         private final int retryCount;
         private final Map<String, Integer> endpointCallCounts;
+        private final Map<String, Integer> calendarCallCountsByExchange;
         private final List<Long> batchIds;
         private final int appendedObservations;
         private final int idempotentChainTailHits;
@@ -269,6 +288,7 @@ public final class TushareMainboardUniverseCaptureService {
                                int retryCount,
                                Map<String, Integer> endpointCallCounts,
                                List<Long> batchIds,
+                               Map<String, Integer> calendarCallCountsByExchange,
                                int appendedObservations,
                                int idempotentChainTailHits,
                                List<LocalDate> completedTradeDates,
@@ -277,6 +297,8 @@ public final class TushareMainboardUniverseCaptureService {
             this.providerCallCount = providerCallCount;
             this.retryCount = retryCount;
             this.endpointCallCounts = Map.copyOf(endpointCallCounts);
+            this.calendarCallCountsByExchange = Map.copyOf(
+                    calendarCallCountsByExchange);
             this.batchIds = List.copyOf(batchIds);
             this.appendedObservations = appendedObservations;
             this.idempotentChainTailHits = idempotentChainTailHits;
@@ -297,6 +319,10 @@ public final class TushareMainboardUniverseCaptureService {
 
         public List<Long> batchIds() {
             return batchIds;
+        }
+
+        public Map<String, Integer> calendarCallCountsByExchange() {
+            return calendarCallCountsByExchange;
         }
 
         public int appendedObservations() {

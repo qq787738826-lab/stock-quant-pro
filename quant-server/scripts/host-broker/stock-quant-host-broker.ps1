@@ -40,6 +40,8 @@ $mainboardDailyIncrementRunnerScript = Join-Path $paths.RepositoryRoot `
     'quant-server\scripts\run-mainboard-daily-increment.ps1'
 $mainboardHistoryBackfillRunnerScript = Join-Path $paths.RepositoryRoot `
     'quant-server\scripts\run-mainboard-history-backfill.ps1'
+$mainboardTradeCalendarBackfillRunnerScript = Join-Path $paths.RepositoryRoot `
+    'quant-server\scripts\run-mainboard-trade-cal-backfill.ps1'
 $productionRoot = Join-Path $paths.TargetRoot 'stock-quant-production'
 $productionPidFile = Join-Path $productionRoot 'backend.pid.json'
 $productionAutostartFile = Join-Path $productionRoot 'backend.autostart.json'
@@ -144,6 +146,7 @@ function Assert-GitBinding {
                 'RUN_RESEARCH_SELECTION',
                 'MAINBOARD_DAILY_INCREMENT',
                 'MAINBOARD_HISTORY_BACKFILL',
+                'TRADE_CAL_BACKFILL',
                 'START_RESEARCH_PRODUCTION',
                 'STOP_RESEARCH_PRODUCTION',
                 'CHECK_RESEARCH_PRODUCTION_STATUS')) {
@@ -211,6 +214,14 @@ function Assert-GitBinding {
                 [IO.Path]::GetFullPath($BrokerRequest.JarPath).Equals(
                     (Join-Path $paths.TargetRoot `
                         'quant-server-1.3.1-mainboard-history-backfill-runner.jar'),
+                    [StringComparison]::OrdinalIgnoreCase)) {
+                $branch
+            } elseif ($BrokerRequest.Operation -eq
+                    'TRADE_CAL_BACKFILL' -and $branch -eq
+                    'codex/1.4.0-mainboard-250-session-trade-cal-backfill' -and
+                [IO.Path]::GetFullPath($BrokerRequest.JarPath).Equals(
+                    (Join-Path $paths.TargetRoot `
+                        'quant-server-1.3.1-mainboard-trade-cal-backfill-runner.jar'),
                     [StringComparison]::OrdinalIgnoreCase)) {
                 $branch
             } elseif ($BrokerRequest.Operation -in @(
@@ -1697,6 +1708,134 @@ function Invoke-MainboardHistoryBackfill {
     return $summary
 }
 
+function Invoke-MainboardTradeCalendarBackfill {
+    param([Parameter(Mandatory = $true)] [object] $BrokerRequest)
+    if ($BrokerRequest.AuthorizationStatus -ne
+            'V1_MAINBOARD_250_SESSION_TRADE_CAL_BACKFILL_APPROVED' -or
+        $null -ne $BrokerRequest.AuthorizationFile) {
+        throw 'STOCK_QUANT_HOST_BROKER_TRADE_CAL_BACKFILL_SCOPE_INVALID'
+    }
+    $usage = Get-StockQuantM4MonthlyUsage `
+        -CalendarMonth $BrokerRequest.Values['budget.calendar.month'] `
+        -ExcludedRequestPath $processingPath
+    [int]$monthlyLimit = Get-StockQuantTushareMonthlyLimit `
+        -CalendarMonth $BrokerRequest.Values['budget.calendar.month']
+    [int]$maximumProvider =
+        [int]$BrokerRequest.Values['maximum.provider.requests']
+    if ($maximumProvider -ne 4 -or
+        [int]$usage.CommittedTushareCalls + $maximumProvider -gt
+            $monthlyLimit) {
+        throw 'MAINBOARD_TRADE_CAL_BACKFILL_MONTHLY_BUDGET_EXHAUSTED'
+    }
+    $runnerResult = Join-Path $paths.Results `
+        "$($BrokerRequest.RequestId).mainboard-trade-cal-backfill.json"
+    if (Test-Path -LiteralPath $runnerResult) {
+        throw 'STOCK_QUANT_HOST_BROKER_RUNNER_RESULT_ALREADY_EXISTS'
+    }
+    $executionId = $BrokerRequest.RequestId -replace '^SQHB_', 'MBTC250_'
+    $output = @(& $mainboardTradeCalendarBackfillRunnerScript `
+        -ResultFile $runnerResult -ArtifactPath $BrokerRequest.JarPath `
+        -ExecutionId $executionId -GitCommit $BrokerRequest.GitCommit `
+        -AnchorTradeDate $BrokerRequest.Values['anchor.trade.date'] `
+        -CalendarRangeStart $BrokerRequest.Values['calendar.range.start'] `
+        -CalendarRangeEnd $BrokerRequest.Values['calendar.range.end'] `
+        -MinimumCommonOpenSessions 260 -TargetSessions 250 `
+        -DatabasePort 38432 -MaximumProviderRequests 4 `
+        -NetworkRecoveryBudget 2 -ExecutionMode FORMAL 2>&1 |
+        ForEach-Object { [string]$_ })
+    $runnerExitCode = $LASTEXITCODE
+    if (-not (Test-Path -LiteralPath $runnerResult -PathType Leaf)) {
+        throw 'STOCK_QUANT_HOST_BROKER_RUNNER_RESULT_MISSING'
+    }
+    $calendar = Get-Content -LiteralPath $runnerResult -Raw -Encoding UTF8 |
+        ConvertFrom-Json
+    $summary = [ordered]@{
+        anchorTradeDate = [string]$calendar.anchorTradeDate
+        rangeStart = [string]$calendar.rangeStart
+        rangeEnd = [string]$calendar.rangeEnd
+        universeSnapshotId = [string]$calendar.universeSnapshotId
+        universeMemberCount = [int]$calendar.universeMemberCount
+        initialCommonOpenSessions =
+            [int]$calendar.initialCommonOpenSessions
+        finalCommonOpenSessions = [int]$calendar.finalCommonOpenSessions
+        target250TradeDateCount = @($calendar.target250TradeDates).Count
+        latestCommonOpenTradeDate =
+            [string]$calendar.latestCommonOpenTradeDate
+        sseOpenSessionCount = [int]$calendar.sseOpenSessionCount
+        szseOpenSessionCount = [int]$calendar.szseOpenSessionCount
+        providerCallCount = [int]$calendar.tushareProviderCallCount
+        sseTradeCalendarProviderCallCount =
+            [int]$calendar.sseTradeCalendarProviderCallCount
+        szseTradeCalendarProviderCallCount =
+            [int]$calendar.szseTradeCalendarProviderCallCount
+        retryCount = [int]$calendar.retryCount
+        appendedObservationCount =
+            [int]$calendar.appendedObservationCount
+        idempotentChainTailHits =
+            [int]$calendar.idempotentChainTailHits
+        sanitizedResult = $runnerResult
+        outputAudit = $(if ($calendar.outputAuditClean) {
+            'PASSED'
+        } else { 'FAILED' })
+    }
+    if ($runnerExitCode -ne 0) {
+        $script:failureSummary = $summary
+        $reason = [string]$calendar.failureReason
+        if ($reason -match '^[A-Z][A-Z0-9_]{3,127}$') { throw $reason }
+        throw 'STOCK_QUANT_HOST_BROKER_TRADE_CAL_BACKFILL_FAILED'
+    }
+    [int]$providerCalls = [int]$calendar.tushareProviderCallCount
+    [int]$sseCalls = [int]$calendar.sseTradeCalendarProviderCallCount
+    [int]$szseCalls = [int]$calendar.szseTradeCalendarProviderCallCount
+    [int]$recoveries = [int]$calendar.retryCount
+    $idempotent = $providerCalls -eq 0 -and $sseCalls -eq 0 -and
+        $szseCalls -eq 0 -and $recoveries -eq 0
+    $captured = $providerCalls -eq 2 + $recoveries -and
+        $providerCalls -eq $sseCalls + $szseCalls -and
+        $sseCalls -in @(1, 2) -and $szseCalls -in @(1, 2)
+    if ($calendar.schemaVersion -ne
+            'MAINBOARD_250_SESSION_TRADE_CAL_BACKFILL_RESULT_V1' -or
+        $calendar.status -ne 'SUCCEEDED' -or
+        [string]$calendar.executionId -ne $executionId -or
+        [string]$calendar.gitCommit -ne $BrokerRequest.GitCommit -or
+        [string]$calendar.anchorTradeDate -ne
+            [string]$BrokerRequest.Values['anchor.trade.date'] -or
+        [string]$calendar.rangeStart -ne
+            [string]$BrokerRequest.Values['calendar.range.start'] -or
+        [string]$calendar.rangeEnd -ne
+            [string]$BrokerRequest.Values['calendar.range.end'] -or
+        [int]$calendar.minimumCommonOpenSessions -ne 260 -or
+        [int]$calendar.targetSessions -ne 250 -or
+        [int]$calendar.maximumProviderRequests -ne 4 -or
+        [int]$calendar.networkRecoveryBudget -ne 2 -or
+        [int]$calendar.finalCommonOpenSessions -lt 260 -or
+        @($calendar.target250TradeDates).Count -ne 250 -or
+        [string]$calendar.latestCommonOpenTradeDate -ne
+            [string]$BrokerRequest.Values['anchor.trade.date'] -or
+        -not ($idempotent -or $captured) -or
+        $providerCalls -gt 4 -or $recoveries -gt 2 -or
+        [int]$calendar.dailyProviderCallCount -ne 0 -or
+        [int]$calendar.adjustmentFactorProviderCallCount -ne 0 -or
+        [int]$calendar.stockBasicProviderCallCount -ne 0 -or
+        [int]$calendar.duplicateCount -ne 0 -or
+        [int]$calendar.universeMemberCount -lt 1000 -or
+        [int]$calendar.modelCallCount -ne 0 -or
+        -not $calendar.knownAtValid -or
+        -not $calendar.firstObservedAtValid -or
+        -not $calendar.sourceLineageValid -or
+        -not $calendar.universeUnchanged -or
+        -not $calendar.outputAuditClean -or
+        -not $calendar.dataOnly -or $calendar.realTradingStarted -or
+        [long]$calendar.researchSelectionRunsCreated -ne 0 -or
+        [long]$calendar.shadowRunsCreated -ne 0 -or
+        [long]$calendar.paperOrdersCreated -ne 0 -or
+        [long]$calendar.evaluationRowsCreated -ne 0) {
+        $script:failureSummary = $summary
+        throw 'STOCK_QUANT_HOST_BROKER_TRADE_CAL_BACKFILL_RESULT_INVALID'
+    }
+    return $summary
+}
+
 function Resolve-ResearchProductionJavaExecutable {
     $command = 'java.exe'
     $oldPreference = $ErrorActionPreference
@@ -2370,6 +2509,10 @@ function Invoke-ClaimedRequest {
             }
             'MAINBOARD_HISTORY_BACKFILL' {
                 Invoke-MainboardHistoryBackfill -BrokerRequest $request
+                break
+            }
+            'TRADE_CAL_BACKFILL' {
+                Invoke-MainboardTradeCalendarBackfill -BrokerRequest $request
                 break
             }
             'START_RESEARCH_PRODUCTION' {
