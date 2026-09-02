@@ -661,7 +661,8 @@ public final class TushareControlledAcceptanceBuildProof {
                     "codex/1.4.0-v1.0.7-intraday-research-selection-anchor-fix",
                     "codex/1.4.0-v1.0.9-full-mainboard-universe",
                     "codex/1.4.0-v1.0.11-mainboard-daily-increment",
-                    "codex/1.4.0-mainboard-250-session-history-backfill")
+                    "codex/1.4.0-mainboard-250-session-history-backfill",
+                    "codex/1.4.0-mainboard-250-session-trade-cal-backfill")
                     .contains(branchName);
         }
         return REQUIRED_INTEGRATION_BRANCH.equals(branchName)

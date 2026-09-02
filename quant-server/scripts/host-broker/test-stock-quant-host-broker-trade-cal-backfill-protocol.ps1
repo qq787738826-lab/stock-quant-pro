@@ -228,6 +228,11 @@ try {
         throw 'TRADE_CAL_BACKFILL_FIXED_DISPATCH_MISSING'
     }
     $section = $broker.Substring($start, $end - $start)
+    if (-not $section.Contains(
+            "'MAINBOARD_TRADE_CAL_BACKFILL_FAILURE_REASON'")) {
+        throw 'TRADE_CAL_BACKFILL_FAILURE_REASON_NOT_PROPAGATED'
+    }
+    $tests++
     foreach ($forbidden in @('Bailian', 'Top200', 'Top30', 'Top10',
             'Invoke-ResearchSelection', 'Invoke-M4ShadowResearch')) {
         if ($section.Contains($forbidden)) {

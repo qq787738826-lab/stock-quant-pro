@@ -223,6 +223,29 @@ class TushareControlledAcceptanceTrustedMechanismTest {
     }
 
     @Test
+    void tradeCalendarBackfillTaskBranchCanBindItsFixedRunner(
+            @TempDir Path temp
+    ) throws Exception {
+        String branch =
+                "codex/1.4.0-mainboard-250-session-trade-cal-backfill";
+        String mode = "RESEARCH_SELECTION_CONTROLLED_BUILD_ARTIFACT";
+        Path jar = temp.resolve("trade-calendar-backfill.jar");
+        writeJarWithStartClass(jar, COMMIT, branch, mode,
+                TushareControlledAcceptanceBuildProof
+                        .MAINBOARD_TRADE_CAL_BACKFILL_RUNNER_START_CLASS);
+        Path sidecar = Path.of(jar
+                + TushareControlledAcceptanceBuildProof.SIDECAR_SUFFIX);
+        writeSidecar(sidecar, COMMIT, COMMIT, sha256(jar), branch, mode);
+
+        VerifiedBuildProof proof = TushareControlledAcceptanceBuildProof
+                .loadBoundPreparationArtifactForTest(jar, sidecar);
+
+        assertTrue(proof.mainboardTradeCalendarBackfillEligible());
+        assertFalse(proof.mainboardHistoryBackfillEligible());
+        assertFalse(proof.researchSelectionEligible());
+    }
+
+    @Test
     void auditFindsExactPrefixSuffixEncodedHeadersQueryAndEnvironmentForms() {
         String secret = "fake-token-0123456789";
         AuditResult result = TushareControlledAcceptanceOutputAudit.audit(

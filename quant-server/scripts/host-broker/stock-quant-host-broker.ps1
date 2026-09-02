@@ -1745,7 +1745,9 @@ function Invoke-MainboardTradeCalendarBackfill {
         ForEach-Object { [string]$_ })
     $runnerExitCode = $LASTEXITCODE
     if (-not (Test-Path -LiteralPath $runnerResult -PathType Leaf)) {
-        throw 'STOCK_QUANT_HOST_BROKER_RUNNER_RESULT_MISSING'
+        throw (Get-SafeMarker -Lines $output `
+            -Name 'MAINBOARD_TRADE_CAL_BACKFILL_FAILURE_REASON' `
+            -Fallback 'STOCK_QUANT_HOST_BROKER_RUNNER_RESULT_MISSING')
     }
     $calendar = Get-Content -LiteralPath $runnerResult -Raw -Encoding UTF8 |
         ConvertFrom-Json
