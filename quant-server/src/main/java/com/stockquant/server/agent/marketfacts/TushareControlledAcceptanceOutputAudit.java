@@ -200,10 +200,11 @@ public final class TushareControlledAcceptanceOutputAudit {
             failure = combine(failure, restoreFailure);
         }
         if (failure != null) {
-            Exception safeFailure = failure instanceof Exception exception
-                    ? exception : new IllegalStateException(
-                    "CONTROLLED_EXECUTION_FAILED", failure);
-            throw new CapturedExecutionException(safeFailure, audit);
+            // Preserve Error as the direct cause. The caller persists only a
+            // sanitized class/category/frame tuple, while retaining enough
+            // type information to distinguish resource exhaustion from a
+            // generic controlled-execution failure.
+            throw new CapturedExecutionException(failure, audit);
         }
         return new Captured<>(result, audit);
     }
@@ -669,7 +670,7 @@ public final class TushareControlledAcceptanceOutputAudit {
     static final class CapturedExecutionException extends Exception {
         private final AuditResult auditResult;
 
-        CapturedExecutionException(Exception cause, AuditResult auditResult) {
+        CapturedExecutionException(Throwable cause, AuditResult auditResult) {
             super("CONTROLLED_ACCEPTANCE_CAPTURED_EXECUTION_FAILED", cause);
             this.auditResult = auditResult;
         }

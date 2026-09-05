@@ -47,6 +47,8 @@ public final class ResearchUniverseMainboardDatasetLoader {
             Duration.ofDays(7);
     private static final ZoneId SHANGHAI = ZoneId.of("Asia/Shanghai");
     private static final int COMPLETE_ANCHOR_LOOKBACK = 31;
+    static final int MEMBER_BATCH_SIZE = 64;
+    static final int CURSOR_FETCH_SIZE = 256;
     private final PitMarketFactRepository facts;
 
     public ResearchUniverseMainboardDatasetLoader(
@@ -72,38 +74,71 @@ public final class ResearchUniverseMainboardDatasetLoader {
                 openDates.size() - MAXIMUM_SESSIONS), openDates.size());
         LocalDate rangeStart = selected.get(0);
         LocalDate rangeEnd = selected.get(selected.size() - 1);
-        List<RawDailyBarObservation> raw = facts
-                .findRawBarsForSnapshotAsOf(snapshot.snapshot().databaseId(),
-                        rangeStart, rangeEnd, cutoff);
-        List<AdjustmentFactorObservation> factors = facts
-                .findFactorsForSnapshotAsOf(snapshot.snapshot().databaseId(),
-                        rangeStart, rangeEnd, cutoff);
-        Map<String, Map<LocalDate, RawDailyBarObservation>> rawBySecurity =
-                groupRaw(raw);
-        Map<String, Map<LocalDate, AdjustmentFactorObservation>>
-                factorBySecurity = groupFactors(factors);
-        List<MemberEvaluation> evaluations = new ArrayList<>();
-        List<DailyBar> bars = new ArrayList<>();
+        List<MemberEvaluation> evaluations = new ArrayList<>(
+                snapshot.members().size());
+        List<DailyBar> bars = new ArrayList<>(Math.multiplyExact(
+                snapshot.members().size(), selected.size()));
         Map<Security, List<PriceBar>> tradePlanPrices = new LinkedHashMap<>();
         int totalMissingDaily = 0;
         int totalMissingFactors = 0;
-        for (Member member : snapshot.members()) {
-            Map<LocalDate, RawDailyBarObservation> memberRaw =
-                    rawBySecurity.getOrDefault(member.security().canonicalCode(),
-                            Map.of());
-            Map<LocalDate, AdjustmentFactorObservation> memberFactors =
-                    factorBySecurity.getOrDefault(member.symbol(), Map.of());
-            MemberProjection projection = project(member, selected, memberRaw,
-                    memberFactors, cutoff);
-            evaluations.add(projection.evaluation());
-            bars.addAll(projection.bars());
-            if (!projection.priceBars().isEmpty()) {
-                tradePlanPrices.put(member.security(),
-                        projection.priceBars());
+        for (int start = 0; start < snapshot.members().size();
+                start += MEMBER_BATCH_SIZE) {
+            int end = Math.min(start + MEMBER_BATCH_SIZE,
+                    snapshot.members().size());
+            List<Member> memberBatch = snapshot.members().subList(start, end);
+            List<String> tsCodes = memberBatch.stream().map(Member::tsCode)
+                    .toList();
+            Map<String, Map<LocalDate, RawDailyBarObservation>>
+                    rawBySecurity = new LinkedHashMap<>();
+            facts.streamRawBarsForSnapshotMembersAsOf(
+                    snapshot.snapshot().databaseId(), tsCodes, rangeStart,
+                    rangeEnd, cutoff, CURSOR_FETCH_SIZE, value -> {
+                        String key = new Security(value.symbol(),
+                                value.exchange()).canonicalCode();
+                        RawDailyBarObservation previous = rawBySecurity
+                                .computeIfAbsent(key, ignored ->
+                                        new LinkedHashMap<>())
+                                .put(value.tradeDate(), value);
+                        if (previous != null) {
+                            throw invalid("MAINBOARD_DAILY_DUPLICATE");
+                        }
+                    });
+            Map<String, Map<LocalDate, AdjustmentFactorObservation>>
+                    factorBySecurity = new LinkedHashMap<>();
+            facts.streamFactorsForSnapshotMembersAsOf(
+                    snapshot.snapshot().databaseId(), tsCodes, rangeStart,
+                    rangeEnd, cutoff, CURSOR_FETCH_SIZE, value -> {
+                        AdjustmentFactorObservation previous =
+                                factorBySecurity.computeIfAbsent(
+                                        value.symbol(), ignored ->
+                                                new LinkedHashMap<>())
+                                        .put(value.factorEffectiveTradeDate(),
+                                                value);
+                        if (previous != null) {
+                            throw invalid("MAINBOARD_FACTOR_DUPLICATE");
+                        }
+                    });
+            for (Member member : memberBatch) {
+                Map<LocalDate, RawDailyBarObservation> memberRaw =
+                        rawBySecurity.getOrDefault(
+                                member.security().canonicalCode(), Map.of());
+                Map<LocalDate, AdjustmentFactorObservation> memberFactors =
+                        factorBySecurity.getOrDefault(member.symbol(),
+                                Map.of());
+                MemberProjection projection = project(member, selected,
+                        memberRaw, memberFactors, cutoff);
+                evaluations.add(projection.evaluation());
+                bars.addAll(projection.bars());
+                if (!projection.priceBars().isEmpty()) {
+                    tradePlanPrices.put(member.security(),
+                            projection.priceBars());
+                }
+                totalMissingDaily += projection.evaluation().missingDaily();
+                totalMissingFactors += projection.evaluation()
+                        .missingAdjustmentFactors();
             }
-            totalMissingDaily += projection.evaluation().missingDaily();
-            totalMissingFactors += projection.evaluation()
-                    .missingAdjustmentFactors();
+            rawBySecurity.clear();
+            factorBySecurity.clear();
         }
         long eligible = evaluations.stream().filter(value ->
                 value.status() == EligibilityStatus.ELIGIBLE).count();
@@ -430,36 +465,6 @@ public final class ResearchUniverseMainboardDatasetLoader {
             else common.retainAll(open);
         }
         return common == null ? List.of() : common.stream().sorted().toList();
-    }
-
-    private static Map<String, Map<LocalDate, RawDailyBarObservation>>
-    groupRaw(List<RawDailyBarObservation> values) {
-        Map<String, Map<LocalDate, RawDailyBarObservation>> result =
-                new LinkedHashMap<>();
-        for (RawDailyBarObservation value : values) {
-            String key = new Security(value.symbol(), value.exchange())
-                    .canonicalCode();
-            RawDailyBarObservation previous = result.computeIfAbsent(key,
-                    ignored -> new LinkedHashMap<>()).put(value.tradeDate(),
-                    value);
-            if (previous != null) throw invalid(
-                    "MAINBOARD_DAILY_DUPLICATE");
-        }
-        return result;
-    }
-
-    private static Map<String, Map<LocalDate, AdjustmentFactorObservation>>
-    groupFactors(List<AdjustmentFactorObservation> values) {
-        Map<String, Map<LocalDate, AdjustmentFactorObservation>> result =
-                new LinkedHashMap<>();
-        for (AdjustmentFactorObservation value : values) {
-            AdjustmentFactorObservation previous = result.computeIfAbsent(
-                    value.symbol(), ignored -> new LinkedHashMap<>()).put(
-                    value.factorEffectiveTradeDate(), value);
-            if (previous != null) throw invalid(
-                    "MAINBOARD_FACTOR_DUPLICATE");
-        }
-        return result;
     }
 
     private static Map<LocalDate, Set<String>> identitiesByRawDate(

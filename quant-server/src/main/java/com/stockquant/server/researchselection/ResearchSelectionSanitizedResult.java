@@ -63,7 +63,7 @@ public final class ResearchSelectionSanitizedResult {
                 selection.timings().strategyAnalysisMillis(),
                 selection.timings().agentResearchMillis(),
                 selection.timings().totalMillis(), fake, auditClean, true,
-                false, diagnostics, null, null);
+                false, diagnostics, null, null, null);
     }
 
     public static Result failure(
@@ -83,7 +83,7 @@ public final class ResearchSelectionSanitizedResult {
         return failure(executionId, gitCommit, startedAt, completedAt,
                 runId, publicRunId, providerCalls, retryCount,
                 modelProviderRequests, diagnostics, reason, auditClean,
-                null);
+                null, null);
     }
 
     public static Result failure(
@@ -101,6 +101,29 @@ public final class ResearchSelectionSanitizedResult {
             boolean auditClean,
             com.stockquant.server.agent.marketfacts.TushareApiGateway
                     .NoResponseDiagnostic providerTransportDiagnostic
+    ) {
+        return failure(executionId, gitCommit, startedAt, completedAt, runId,
+                publicRunId, providerCalls, retryCount,
+                modelProviderRequests, diagnostics, reason, auditClean,
+                providerTransportDiagnostic, null);
+    }
+
+    public static Result failure(
+            String executionId,
+            String gitCommit,
+            Instant startedAt,
+            Instant completedAt,
+            long runId,
+            String publicRunId,
+            int providerCalls,
+            int retryCount,
+            int modelProviderRequests,
+            FailureDiagnostics diagnostics,
+            String reason,
+            boolean auditClean,
+            com.stockquant.server.agent.marketfacts.TushareApiGateway
+                    .NoResponseDiagnostic providerTransportDiagnostic,
+            FailureDiagnostic failureDiagnostic
     ) {
         int modelCalls = diagnostics == null ? 0
                 : diagnostics.completedCallCount();
@@ -122,7 +145,88 @@ public final class ResearchSelectionSanitizedResult {
                 false, false, false, false, 0,
                 List.of(), List.of(), 0, 0, 0, 0, 0, false, auditClean,
                 true, false, diagnostics, reason,
-                providerTransportDiagnostic);
+                failureDiagnostic, providerTransportDiagnostic);
+    }
+
+    /** Builds a stable, secret-free diagnosis without persisting messages. */
+    public static FailureDiagnostic diagnose(Throwable error) {
+        Throwable deepest = deepest(error);
+        String category = category(error);
+        String reason = "RESOURCE_EXHAUSTED".equals(category)
+                ? "RESEARCH_SELECTION_RESOURCE_EXHAUSTED"
+                : safeReason(error);
+        return new FailureDiagnostic(deepest == null
+                ? "java.lang.Throwable" : deepest.getClass().getName(),
+                category, firstProjectFrame(deepest, error), reason);
+    }
+
+    private static Throwable deepest(Throwable error) {
+        Throwable current = error;
+        while (current != null && current.getCause() != null
+                && current.getCause() != current) {
+            current = current.getCause();
+        }
+        return current;
+    }
+
+    private static String category(Throwable error) {
+        for (Throwable current = error; current != null
+                && current.getCause() != current;
+                current = current.getCause()) {
+            if (current instanceof OutOfMemoryError
+                    || current instanceof StackOverflowError) {
+                return "RESOURCE_EXHAUSTED";
+            }
+            if (current instanceof java.sql.SQLException) {
+                return "DATABASE";
+            }
+            if (current instanceof com.stockquant.server.agent.marketfacts
+                    .TushareApiGateway.GatewayException) {
+                return "PROVIDER";
+            }
+        }
+        return "EXECUTION";
+    }
+
+    private static String safeReason(Throwable error) {
+        for (Throwable current = error; current != null
+                && current.getCause() != current;
+                current = current.getCause()) {
+            String message = current.getMessage();
+            if (message != null && message.matches(
+                    "[A-Z][A-Z0-9_]{3,127}")) {
+                return message;
+            }
+        }
+        return "RESEARCH_SELECTION_EXECUTION_FAILED";
+    }
+
+    private static String firstProjectFrame(
+            Throwable preferred,
+            Throwable outer
+    ) {
+        String frame = projectFrame(preferred);
+        if (frame != null) return frame;
+        for (Throwable current = outer; current != null
+                && current.getCause() != current;
+                current = current.getCause()) {
+            frame = projectFrame(current);
+            if (frame != null) return frame;
+        }
+        return "UNAVAILABLE";
+    }
+
+    private static String projectFrame(Throwable error) {
+        if (error == null) return null;
+        for (StackTraceElement frame : error.getStackTrace()) {
+            if (frame.getClassName().startsWith("com.stockquant.")) {
+                String file = frame.getFileName() == null ? "UnknownSource"
+                        : frame.getFileName();
+                return frame.getClassName() + '.' + frame.getMethodName()
+                        + '(' + file + ':' + frame.getLineNumber() + ')';
+            }
+        }
+        return null;
     }
 
     public record Result(
@@ -173,12 +277,34 @@ public final class ResearchSelectionSanitizedResult {
             boolean realTradingStarted,
             FailureDiagnostics modelDiagnostics,
             String failureReason,
+            FailureDiagnostic failureDiagnostic,
             com.stockquant.server.agent.marketfacts.TushareApiGateway
                     .NoResponseDiagnostic providerTransportDiagnostic
     ) {
         public Result {
             agentRoles = List.copyOf(agentRoles);
             criticIssues = List.copyOf(criticIssues);
+        }
+    }
+
+    public record FailureDiagnostic(
+            String exceptionClass,
+            String category,
+            String firstProjectStackFrame,
+            String sanitizedReason
+    ) {
+        public FailureDiagnostic {
+            if (exceptionClass == null || !exceptionClass.matches(
+                    "[A-Za-z0-9_.$]{3,200}")
+                    || !List.of("RESOURCE_EXHAUSTED", "DATABASE", "PROVIDER",
+                    "EXECUTION").contains(category)
+                    || firstProjectStackFrame == null
+                    || firstProjectStackFrame.length() > 512
+                    || sanitizedReason == null || !sanitizedReason.matches(
+                    "[A-Z][A-Z0-9_]{3,127}")) {
+                throw new IllegalArgumentException(
+                        "RESEARCH_SELECTION_FAILURE_DIAGNOSTIC_INVALID");
+            }
         }
     }
 

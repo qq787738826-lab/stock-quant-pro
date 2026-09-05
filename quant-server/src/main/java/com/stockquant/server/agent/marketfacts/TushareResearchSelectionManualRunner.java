@@ -508,7 +508,9 @@ public final class TushareResearchSelectionManualRunner {
             Throwable error,
             boolean auditClean
     ) {
-        String reason = safeCode(error);
+        ResearchSelectionSanitizedResult.FailureDiagnostic diagnosis =
+                ResearchSelectionSanitizedResult.diagnose(error);
+        String reason = diagnosis.sanitizedReason();
         if (resultFile != null) {
             resultFile.write(ResearchSelectionSanitizedResult.failure(
                     launch == null ? "SELECT_UNKNOWN" : launch.executionId(),
@@ -519,16 +521,14 @@ public final class TushareResearchSelectionManualRunner {
                     progress.modelDiagnostics == null ? 0
                             : progress.modelDiagnostics.networkCallCount(),
                     progress.modelDiagnostics, reason, auditClean,
-                    noResponseDiagnostic(error)));
+                    noResponseDiagnostic(error), diagnosis));
         }
         System.err.println("RESEARCH_SELECTION_FAILURE_REASON=" + reason);
     }
 
     private static String safeCode(Throwable error) {
-        String message = error == null ? null : error.getMessage();
-        return message != null && message.matches(
-                "[A-Z][A-Z0-9_]{3,127}") ? message
-                : "RESEARCH_SELECTION_EXECUTION_FAILED";
+        return ResearchSelectionSanitizedResult.diagnose(error)
+                .sanitizedReason();
     }
 
     private static TushareApiGateway.NoResponseDiagnostic

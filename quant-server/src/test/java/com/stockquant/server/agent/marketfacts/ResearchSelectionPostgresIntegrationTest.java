@@ -276,6 +276,51 @@ class ResearchSelectionPostgresIntegrationTest {
     }
 
     @Test
+    void snapshotFactsUseBoundedForwardCursorAndPreserveRowOrder() {
+        JdbcTemplate jdbc = new JdbcTemplate(dataSource);
+        ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+        Set<LocalDate> dates = Set.of(ANCHOR.minusDays(1), ANCHOR);
+        ResearchUniverseMainboard.SnapshotBundle snapshot;
+        try (var components = components(
+                new TushareControlledAcceptanceE2eDryRunGateway())) {
+            snapshot = components.mainboardUniverseCaptureService().capture(
+                    null, true, dates, ANCHOR.minusDays(1), ANCHOR, true,
+                    "a".repeat(40), Duration.ofSeconds(5)).snapshot();
+        }
+        var facts = new PitMarketFactRepository(jdbc, mapper);
+        List<String> batch = snapshot.members().subList(0, 64).stream()
+                .map(ResearchUniverseMainboard.Member::tsCode).toList();
+        List<String> dailyOrder = new ArrayList<>();
+        List<String> factorOrder = new ArrayList<>();
+
+        facts.streamRawBarsForSnapshotMembersAsOf(
+                snapshot.snapshot().databaseId(), batch,
+                ANCHOR.minusDays(1), ANCHOR, AS_OF, 17,
+                value -> dailyOrder.add(value.exchange() + '|'
+                        + value.symbol() + '|' + value.tradeDate()));
+        facts.streamFactorsForSnapshotMembersAsOf(
+                snapshot.snapshot().databaseId(), batch,
+                ANCHOR.minusDays(1), ANCHOR, AS_OF, 19,
+                value -> factorOrder.add(value.symbol() + '|'
+                        + value.factorEffectiveTradeDate()));
+
+        assertEquals(128, dailyOrder.size());
+        assertEquals(128, factorOrder.size());
+        assertEquals(dailyOrder.stream().sorted().toList(), dailyOrder);
+        assertEquals(factorOrder.stream().sorted().toList(), factorOrder);
+        assertEquals(128, dailyOrder.stream().distinct().count());
+        assertEquals(128, factorOrder.stream().distinct().count());
+        assertThrows(IllegalArgumentException.class, () ->
+                facts.streamRawBarsForSnapshotMembersAsOf(
+                        snapshot.snapshot().databaseId(),
+                        snapshot.members().subList(0, 101).stream().map(
+                                ResearchUniverseMainboard.Member::tsCode)
+                                .toList(), ANCHOR.minusDays(1), ANCHOR,
+                        AS_OF, 17, ignored -> {
+                        }));
+    }
+
+    @Test
     void boundedNetworkRecoveryPersistsOnlyCompleteDatesAndRestartResumesGap() {
         JdbcTemplate jdbc = new JdbcTemplate(dataSource);
         ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();

@@ -27,19 +27,24 @@ import com.stockquant.server.agent.marketfacts.PitMarketFactModels.FactorPredece
 import com.stockquant.server.agent.marketfacts.PitMarketFactModels.RawDailyBarObservation;
 import com.stockquant.server.agent.marketfacts.PitMarketFactModels.TradingCalendarObservation;
 
+import org.springframework.jdbc.core.ConnectionCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
 
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
-import java.util.List;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Consumer;
 
 @Repository
 public class PitMarketFactRepository {
@@ -579,6 +584,80 @@ public class PitMarketFactRepository {
                 from, to, Timestamp.from(cutoff));
     }
 
+    /**
+     * Streams one bounded member batch through a real PostgreSQL cursor.
+     * The callback must consume each row synchronously and must not retain
+     * the ResultSet. This is the production path for full-mainboard datasets;
+     * the list-returning method remains for bounded completeness audits.
+     */
+    public void streamRawBarsForSnapshotMembersAsOf(
+            long snapshotDatabaseId,
+            List<String> memberTsCodes,
+            LocalDate from,
+            LocalDate to,
+            Instant cutoff,
+            int fetchSize,
+            Consumer<RawDailyBarObservation> consumer
+    ) {
+        requireStreamArguments(snapshotDatabaseId, memberTsCodes, from, to,
+                cutoff, fetchSize, consumer);
+        String sql = """
+                WITH visible AS (
+                    SELECT %s, b.symbol, b.exchange, b.trade_date,
+                           b.open, b.high, b.low, b.close, b.volume,
+                           b.volume_qualification, b.volume_unit_code,
+                           b.volume_semantic_code,
+                           b.amount, b.amount_qualification,
+                           b.amount_unit_code, b.amount_semantic_code,
+                           b.turnover_rate, b.turnover_rate_qualification,
+                           b.turnover_rate_unit_code,
+                           b.turnover_rate_semantic_code,
+                           row_number() OVER (
+                               PARTITION BY b.symbol, b.exchange, b.trade_date
+                               ORDER BY
+                                    CASE o.revision_qualification
+                                      WHEN 'PROVIDER_VERIFIED' THEN 4
+                                      WHEN 'SYSTEM_KNOWLEDGE_ONLY' THEN 3
+                                      WHEN 'PROVIDER_UNVERIFIED' THEN 2
+                                      WHEN 'PROVIDER_UNAVAILABLE' THEN 1
+                                      ELSE 0
+                                    END DESC,
+                                    o.known_at DESC,
+                                    o.chain_sequence DESC, o.id DESC
+                           ) AS selected_version
+                      FROM research_universe_members member
+                      JOIN raw_daily_bar_facts_v2 b
+                        ON b.symbol=member.symbol
+                       AND b.exchange=member.exchange
+                      JOIN pit_market_fact_observations o
+                        ON o.id=b.observation_id
+                       AND o.fact_type='RAW_DAILY_BAR'
+                       AND o.source_code='TUSHARE_PRO'
+                       AND o.source_instrument_id=
+                           'TUSHARE:SECURITY:' || member.ts_code
+                      JOIN pit_market_fact_batches capture
+                        ON capture.id=o.batch_id AND capture.response_complete
+                     WHERE member.snapshot_db_id=?
+                       AND member.ts_code IN (%s)
+                       AND b.trade_date BETWEEN ? AND ?
+                       AND o.known_at<=?
+                )
+                SELECT * FROM visible WHERE selected_version=1
+                 ORDER BY exchange, symbol, trade_date
+                """.formatted(ENVELOPE_COLUMNS,
+                placeholders(memberTsCodes.size()));
+        streamQuery(sql, statement -> {
+            int parameter = 1;
+            statement.setLong(parameter++, snapshotDatabaseId);
+            for (String tsCode : memberTsCodes) {
+                statement.setString(parameter++, tsCode);
+            }
+            statement.setObject(parameter++, from);
+            statement.setObject(parameter++, to);
+            statement.setTimestamp(parameter, Timestamp.from(cutoff));
+        }, fetchSize, this::mapRaw, consumer);
+    }
+
     public List<AdjustmentFactorObservation> findFactorsAsOf(
             String sourceCode,
             String sourceInstrumentId,
@@ -679,6 +758,73 @@ public class PitMarketFactRepository {
                 PitMarketFactsContracts.FACTOR_TYPE,
                 PitMarketFactsContracts.FACTOR_COVERAGE_MODE,
                 from, to, Timestamp.from(cutoff));
+    }
+
+    /** Streams adjustment factors for the same bounded snapshot batch. */
+    public void streamFactorsForSnapshotMembersAsOf(
+            long snapshotDatabaseId,
+            List<String> memberTsCodes,
+            LocalDate from,
+            LocalDate to,
+            Instant cutoff,
+            int fetchSize,
+            Consumer<AdjustmentFactorObservation> consumer
+    ) {
+        requireStreamArguments(snapshotDatabaseId, memberTsCodes, from, to,
+                cutoff, fetchSize, consumer);
+        String sql = """
+                WITH visible AS (
+                    SELECT %s, f.symbol, f.factor_effective_trade_date,
+                           f.factor_type, f.coverage_mode, f.factor,
+                           row_number() OVER (
+                               PARTITION BY f.symbol, f.factor_type,
+                                            f.factor_effective_trade_date
+                               ORDER BY
+                                    CASE o.revision_qualification
+                                      WHEN 'PROVIDER_VERIFIED' THEN 4
+                                      WHEN 'SYSTEM_KNOWLEDGE_ONLY' THEN 3
+                                      WHEN 'PROVIDER_UNVERIFIED' THEN 2
+                                      WHEN 'PROVIDER_UNAVAILABLE' THEN 1
+                                      ELSE 0
+                                    END DESC,
+                                    o.known_at DESC,
+                                    o.chain_sequence DESC, o.id DESC
+                           ) AS selected_version
+                      FROM research_universe_members member
+                      JOIN adjustment_factor_facts_v1 f
+                        ON f.symbol=member.symbol
+                      JOIN pit_market_fact_observations o
+                        ON o.id=f.observation_id
+                       AND o.fact_type='ADJUSTMENT_FACTOR'
+                       AND o.source_code='TUSHARE_PRO'
+                       AND o.source_instrument_id=
+                           'TUSHARE:ADJ_FACTOR:' || member.ts_code
+                      JOIN pit_market_fact_batches capture
+                        ON capture.id=o.batch_id AND capture.response_complete
+                     WHERE member.snapshot_db_id=?
+                       AND member.ts_code IN (%s)
+                       AND f.factor_type=? AND f.coverage_mode=?
+                       AND f.factor_effective_trade_date BETWEEN ? AND ?
+                       AND o.known_at<=?
+                )
+                SELECT * FROM visible WHERE selected_version=1
+                 ORDER BY symbol, factor_effective_trade_date
+                """.formatted(ENVELOPE_COLUMNS,
+                placeholders(memberTsCodes.size()));
+        streamQuery(sql, statement -> {
+            int parameter = 1;
+            statement.setLong(parameter++, snapshotDatabaseId);
+            for (String tsCode : memberTsCodes) {
+                statement.setString(parameter++, tsCode);
+            }
+            statement.setString(parameter++,
+                    PitMarketFactsContracts.FACTOR_TYPE);
+            statement.setString(parameter++,
+                    PitMarketFactsContracts.FACTOR_COVERAGE_MODE);
+            statement.setObject(parameter++, from);
+            statement.setObject(parameter++, to);
+            statement.setTimestamp(parameter, Timestamp.from(cutoff));
+        }, fetchSize, this::mapFactor, consumer);
     }
 
     public List<CorporateActionObservation> findActionsAsOf(
@@ -836,6 +982,78 @@ public class PitMarketFactRepository {
                 rs.getBoolean("backtest_allowed"),
                 rs.getBoolean("agent_use_allowed"),
                 readJson(rs.getString("raw_payload_json")));
+    }
+
+    private <T> void streamQuery(
+            String sql,
+            StatementBinder binder,
+            int fetchSize,
+            RowMapper<T> mapper,
+            Consumer<T> consumer
+    ) {
+        jdbcTemplate.execute((ConnectionCallback<Void>) connection -> {
+            boolean localReadTransaction = connection.getAutoCommit();
+            if (localReadTransaction) {
+                connection.setAutoCommit(false);
+            }
+            try (PreparedStatement statement = connection.prepareStatement(
+                    sql, ResultSet.TYPE_FORWARD_ONLY,
+                    ResultSet.CONCUR_READ_ONLY)) {
+                statement.setFetchDirection(ResultSet.FETCH_FORWARD);
+                statement.setFetchSize(fetchSize);
+                binder.bind(statement);
+                try (ResultSet resultSet = statement.executeQuery()) {
+                    int row = 0;
+                    while (resultSet.next()) {
+                        consumer.accept(mapper.mapRow(resultSet, row++));
+                    }
+                }
+            } finally {
+                if (localReadTransaction) {
+                    try {
+                        connection.rollback();
+                    } finally {
+                        connection.setAutoCommit(true);
+                    }
+                }
+            }
+            return null;
+        });
+    }
+
+    private static void requireStreamArguments(
+            long snapshotDatabaseId,
+            List<String> memberTsCodes,
+            LocalDate from,
+            LocalDate to,
+            Instant cutoff,
+            int fetchSize,
+            Consumer<?> consumer
+    ) {
+        Objects.requireNonNull(memberTsCodes, "memberTsCodes");
+        Objects.requireNonNull(from, "from");
+        Objects.requireNonNull(to, "to");
+        Objects.requireNonNull(cutoff, "cutoff");
+        Objects.requireNonNull(consumer, "consumer");
+        if (snapshotDatabaseId < 1 || memberTsCodes.isEmpty()
+                || memberTsCodes.size() > 100 || from.isAfter(to)
+                || fetchSize < 1 || fetchSize > 10_000
+                || memberTsCodes.stream().anyMatch(value -> value == null
+                || !value.matches("[0-9]{6}\\.(SH|SZ)"))
+                || memberTsCodes.stream().distinct().count()
+                != memberTsCodes.size()) {
+            throw new IllegalArgumentException(
+                    "PIT_SNAPSHOT_STREAM_ARGUMENTS_INVALID");
+        }
+    }
+
+    private static String placeholders(int count) {
+        return String.join(",", Collections.nCopies(count, "?"));
+    }
+
+    @FunctionalInterface
+    private interface StatementBinder {
+        void bind(PreparedStatement statement) throws SQLException;
     }
 
     private RawDailyBarObservation mapRaw(ResultSet rs, int row) throws SQLException {

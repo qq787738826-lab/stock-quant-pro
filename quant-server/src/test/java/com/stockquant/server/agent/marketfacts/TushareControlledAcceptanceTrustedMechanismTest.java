@@ -368,6 +368,22 @@ class TushareControlledAcceptanceTrustedMechanismTest {
     }
 
     @Test
+    void resourceErrorRemainsTheDirectCapturedCause() {
+        OutOfMemoryError exhausted = new OutOfMemoryError("Java heap space");
+
+        CapturedExecutionException captured = assertThrows(
+                CapturedExecutionException.class, () ->
+                        TushareControlledAcceptanceOutputAudit.capture(
+                                List.of(SensitiveMaterial.register(
+                                        "fake-resource-token")), () -> {
+                                    throw exhausted;
+                                }));
+
+        assertSame(exhausted, captured.getCause());
+        assertTrue(captured.auditResult().clean());
+    }
+
+    @Test
     void sensitiveRegistrationRunsInsideTheOutputCaptureBoundary() throws Exception {
         String secret = "fake-token-registration-window";
         var captured = TushareControlledAcceptanceOutputAudit.captureAfterRegistration(

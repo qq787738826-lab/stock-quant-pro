@@ -690,6 +690,15 @@ DATA_QUALITY 只作门禁和 confidence 上限，MARKET_REGIME V1 权重为 0 �
   `daily/adj_factor/stock_basic`、Selection、Shadow、Agent、Paper 与百炼均固定为 0。只有正式
   SSE/SZSE 日历事实交集达到至少 260 个共同开市日、最近日期仍为锚点并可精确生成最后 250 日时
   才成功；补采事实保留真实 `knownAt/firstObservedAt` 和既有 source lineage。
+- 生产全主板历史现已覆盖最近 250 个共同开市交易日，20/60/120/250 窗口均可用；这些后补事实
+  继续标记为 `POST_HOC_RESEARCH/PIT_PARTIAL`。首次 250 日正式选股 run 37 永久保持原 `FAILED`
+  终态：在 `PREPARING_DATA` 将 3193×250 的 daily 与 adj_factor 全量物化为 List 和双层 Map，导致
+  `ResearchUniverseMainboardDatasetLoader.load` 发生 `java.lang.OutOfMemoryError`，尚未生成锚点、
+  进入量化扫描或调用 Provider/模型。`V1_SELECTION_250D_STREAMING_DATASET_FIX` 将生产读取改为每批
+  64 只证券、PostgreSQL forward-only 游标和受控 fetch size，逐批完成 PIT/QFQ 投影后释放原始事实，
+  全市场仅保留后续排名所需的紧凑投影；小样本与旧算法逐项一致，3193×250 在 `-Xmx2048m` 下已进入
+  `QUANTITATIVE_SCAN`。脱敏失败结果同时保留安全的异常类、类别、首个项目栈帧和稳定 reason，资源
+  耗尽不再统一折叠为 `CONTROLLED_EXECUTION_FAILED`；旧 run、数据库事实及选择语义均不修改。
 
 ## 当前后续入口与阻断
 
