@@ -270,17 +270,24 @@ SELECT count(*)
         'RESEARCH_SELECTION_E2E_MEMBERS_INVALID'
     Exact (Scalar 'SELECT count(*) FROM research_selection_member_results WHERE run_id=1') 3000 `
         'RESEARCH_SELECTION_E2E_MEMBER_RESULTS_INVALID'
-    Exact (Scalar "SELECT result_json->'universeFunnel'->>'basicScannedCount' FROM research_selection_runs WHERE id=1") 2998 `
+    $basicScanned = Scalar "SELECT result_json->'universeFunnel'->>'basicScannedCount' FROM research_selection_runs WHERE id=1"
+    $historicalScored = Scalar "SELECT result_json->'universeFunnel'->>'historicalScoredCount' FROM research_selection_runs WHERE id=1"
+    $strategyCompared = Scalar "SELECT result_json->'universeFunnel'->>'strategyComparedCount' FROM research_selection_runs WHERE id=1"
+    $agentResearched = Scalar "SELECT result_json->'universeFunnel'->>'agentResearchedCount' FROM research_selection_runs WHERE id=1"
+    Write-Output ("RESEARCH_SELECTION_E2E_FUNNEL={0}/{1}/{2}/{3}" -f `
+        $basicScanned, $historicalScored, $strategyCompared, `
+        $agentResearched)
+    Exact $basicScanned 2998 `
         'RESEARCH_SELECTION_E2E_BASIC_FUNNEL_INVALID'
-    Exact (Scalar "SELECT result_json->'universeFunnel'->>'historicalScoredCount' FROM research_selection_runs WHERE id=1") 200 `
+    Exact $historicalScored 200 `
         'RESEARCH_SELECTION_E2E_HISTORY_FUNNEL_INVALID'
-    Exact (Scalar "SELECT result_json->'universeFunnel'->>'strategyComparedCount' FROM research_selection_runs WHERE id=1") 30 `
+    Exact $strategyCompared 30 `
         'RESEARCH_SELECTION_E2E_STRATEGY_FUNNEL_INVALID'
     Exact (Scalar "SELECT count(*) FROM research_selection_member_results WHERE run_id=1 AND historical_rank IS NOT NULL AND available_sessions < 60") 0 `
         'RESEARCH_SELECTION_E2E_HISTORY_QUALIFICATION_INVALID'
     Exact (Scalar "SELECT count(*) FROM research_selection_member_results WHERE run_id=1 AND strategy_rank IS NOT NULL AND historical_rank <> strategy_rank") 0 `
         'RESEARCH_SELECTION_E2E_STABILITY_LAYERING_INVALID'
-    Exact (Scalar "SELECT result_json->'universeFunnel'->>'agentResearchedCount' FROM research_selection_runs WHERE id=1") 10 `
+    Exact $agentResearched 10 `
         'RESEARCH_SELECTION_E2E_AGENT_FUNNEL_INVALID'
     Exact (Scalar "SELECT count(*) FROM shadow_research_runs WHERE status='FROZEN' AND trigger_mode='SCHEDULED'") 1 `
         'RESEARCH_SELECTION_E2E_SHADOW_INVALID'
