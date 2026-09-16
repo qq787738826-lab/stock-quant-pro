@@ -18,6 +18,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 final class TushareControlledAcceptanceE2eDryRunGateway
         implements TushareApiGateway, F1cRateLimitedGateway {
     static final int MAINBOARD_FAKE_MEMBER_COUNT = 3_000;
+    private static final int MAINBOARD_FAKE_RECENT_LISTING_INDEX = 11;
+    private static final String MAINBOARD_FAKE_FUTURE_LISTING_DATE =
+            "20991231";
     private final TushareTokenRateLimiter limiter = new TushareTokenRateLimiter(
             TushareEndpointRateLimitPolicy.frozenF1cPolicy());
     private final AtomicInteger calls = new AtomicInteger();
@@ -176,7 +179,9 @@ final class TushareControlledAcceptanceE2eDryRunGateway
             String industry = "行业" + (index % 20 + 1);
             result.add(List.of(text(tsCode), text(symbol), text(name),
                     text(industry), text("主板"), text(exchange), text("L"),
-                    text(index == 11 ? "20260801" : "20000101"),
+                    text(index == MAINBOARD_FAKE_RECENT_LISTING_INDEX
+                            ? MAINBOARD_FAKE_FUTURE_LISTING_DATE
+                            : "20000101"),
                     NullNode.instance));
         }
         return List.copyOf(result);
@@ -185,11 +190,8 @@ final class TushareControlledAcceptanceE2eDryRunGateway
     private static List<List<JsonNode>> mainboardDailyMarket(String date) {
         List<List<JsonNode>> result = new ArrayList<>(
                 MAINBOARD_FAKE_MEMBER_COUNT);
-        LocalDate tradeDate = LocalDate.parse(date,
-                DateTimeFormatter.BASIC_ISO_DATE);
         for (int index = 0; index < MAINBOARD_FAKE_MEMBER_COUNT; index++) {
-            if (index == 11 && tradeDate.isBefore(
-                    LocalDate.of(2026, 8, 1))) continue;
+            if (index == MAINBOARD_FAKE_RECENT_LISTING_INDEX) continue;
             String exchange = index < MAINBOARD_FAKE_MEMBER_COUNT / 2
                     ? "SSE" : "SZSE";
             int local = index < MAINBOARD_FAKE_MEMBER_COUNT / 2
@@ -204,11 +206,8 @@ final class TushareControlledAcceptanceE2eDryRunGateway
     private static List<List<JsonNode>> mainboardFactorMarket(String date) {
         List<List<JsonNode>> result = new ArrayList<>(
                 MAINBOARD_FAKE_MEMBER_COUNT);
-        LocalDate tradeDate = LocalDate.parse(date,
-                DateTimeFormatter.BASIC_ISO_DATE);
         for (int index = 0; index < MAINBOARD_FAKE_MEMBER_COUNT; index++) {
-            if (index == 11 && tradeDate.isBefore(
-                    LocalDate.of(2026, 8, 1))) continue;
+            if (index == MAINBOARD_FAKE_RECENT_LISTING_INDEX) continue;
             String exchange = index < MAINBOARD_FAKE_MEMBER_COUNT / 2
                     ? "SSE" : "SZSE";
             int local = index < MAINBOARD_FAKE_MEMBER_COUNT / 2
