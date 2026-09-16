@@ -11,7 +11,9 @@ import com.stockquant.server.researchselection.ResearchSelectionHistoricalDatase
 import com.stockquant.server.researchselection.ResearchSelectionModels.DataCoverage;
 import com.stockquant.server.researchselection.ResearchSelectionModels.HistoricalAvailability;
 import com.stockquant.server.researchselection.ResearchSelectionModels.HistoricalGrade;
+import com.stockquant.server.researchselection.ResearchSelectionModels.HistoricalStability;
 import com.stockquant.server.researchselection.ResearchSelectionModels.HistoricalWindowCoverage;
+import com.stockquant.server.researchselection.ResearchSelectionModels.HistoricalWindowMetrics;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -23,12 +25,79 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ResearchSelectionHistoricalStabilityTest {
+
+    @Test
+    void mixedHistoriesUsePerSecurityWindowsWithoutGlobalTruncation() {
+        ResearchDataset dataset = mixedDataset();
+        var ranking = new ResearchSelectionRankingService().rank(dataset);
+        var service = new ResearchSelectionHistoricalStabilityService();
+        var result = service.analyze(historical(dataset), ranking, Map.of());
+        Map<String, HistoricalStability> byCode = result.securities().stream()
+                .collect(Collectors.toUnmodifiableMap(value ->
+                        value.security().canonicalCode(), Function.identity()));
+        List<Security> fixtureSecurities = ResearchUniverseV1.securities()
+                .subList(0, 3);
+
+        HistoricalStability full = byCode.get(fixtureSecurities.get(0)
+                .canonicalCode());
+        HistoricalStability middle = byCode.get(fixtureSecurities.get(1)
+                .canonicalCode());
+        HistoricalStability shortHistory = byCode.get(
+                fixtureSecurities.get(2).canonicalCode());
+        assertEquals(250, full.availableSessions());
+        assertEquals(180, middle.availableSessions());
+        assertEquals(61, shortHistory.availableSessions());
+        assertEquals(List.of(HistoricalAvailability.AVAILABLE,
+                        HistoricalAvailability.AVAILABLE,
+                        HistoricalAvailability.AVAILABLE,
+                        HistoricalAvailability.AVAILABLE),
+                statuses(full));
+        assertEquals(List.of(HistoricalAvailability.AVAILABLE,
+                        HistoricalAvailability.AVAILABLE,
+                        HistoricalAvailability.AVAILABLE,
+                        HistoricalAvailability.INSUFFICIENT_HISTORY),
+                statuses(middle));
+        assertEquals(List.of(HistoricalAvailability.AVAILABLE,
+                        HistoricalAvailability.AVAILABLE,
+                        HistoricalAvailability.INSUFFICIENT_HISTORY,
+                        HistoricalAvailability.INSUFFICIENT_HISTORY),
+                statuses(shortHistory));
+        assertEquals(List.of("CURRENT_20", "CURRENT_60", "CURRENT_120",
+                        "CURRENT_250"), currentWindows(full));
+        assertEquals(List.of("CURRENT_20", "CURRENT_60", "CURRENT_120"),
+                currentWindows(middle));
+        assertEquals(List.of("CURRENT_20", "CURRENT_60"),
+                currentWindows(shortHistory));
+
+        ResearchDataset trailingSixty = trailing(dataset,
+                full.security(), 60);
+        var fullScore = ranking.stream().filter(value ->
+                value.security().equals(full.security())).findFirst()
+                .orElseThrow();
+        HistoricalStability legacySixty = service.analyze(
+                historical(trailingSixty), List.of(fullScore),
+                Map.of()).securities().get(0);
+        assertEquals(window(legacySixty, "CURRENT_60"),
+                window(full, "CURRENT_60"));
+
+        String objective = ResearchSelectionDeepResearchService.objective(
+                result, ranking);
+        assertTrue(objective.contains("/250/W1111"));
+        assertTrue(objective.contains("/180/W1110"));
+        assertTrue(objective.contains("/61/W1100"));
+        assertTrue(objective.length() <= 500);
+        assertTrue(result.dataQualityPassed());
+        assertTrue(result.knownAtQualified());
+        assertTrue(result.noFutureDataLeakage());
+    }
 
     @Test
     void sixtySessionHistoryProducesStrictNonBlockingStabilityEvidence() {
@@ -124,9 +193,11 @@ class ResearchSelectionHistoricalStabilityTest {
 
     private static HistoricalDataset historical(ResearchDataset dataset) {
         int available = dataset.sessions().size();
+        int securityCount = dataset.securities().size();
         var coverage = new DataCoverage(dataset.firstSessionDate(),
-                dataset.lastSessionDate(), available, available, 25, 25,
-                0, 0, true, true, true, true, true);
+                dataset.lastSessionDate(), available, available,
+                securityCount, securityCount, 0, 0, true, true, true, true,
+                true);
         List<HistoricalWindowCoverage> windows = List.of(
                 coverage(dataset, 20), coverage(dataset, 60),
                 coverage(dataset, 120), coverage(dataset, 250));
@@ -183,6 +254,88 @@ class ResearchSelectionHistoricalStabilityTest {
                 "RESEARCH_SELECTION_HISTORY_TEST_DATASET",
                 KnowledgeMode.SYSTEM_KNOWLEDGE_RESEARCH, cutoff, calendar,
                 bars);
+    }
+
+    private static ResearchDataset mixedDataset() {
+        List<LocalDate> dates = openDates(LocalDate.of(2025, 8, 1), 250);
+        List<TradingSession> calendar = dates.stream().map(date ->
+                new TradingSession(date, Set.of("SSE", "SZSE"))).toList();
+        List<Security> securities = ResearchUniverseV1.securities()
+                .subList(0, 3);
+        List<DailyBar> bars = new ArrayList<>();
+        addHistory(bars, securities.get(0), dates, 250, 20);
+        addHistory(bars, securities.get(1), dates, 180, 30);
+        addHistory(bars, securities.get(2), dates, 61, 40);
+        Instant cutoff = StrategyResearchModels.closeInstant(
+                dates.get(dates.size() - 1)).plusSeconds(120);
+        return new ResearchDataset(StrategyResearchModels.DATASET_CONTRACT,
+                "RESEARCH_SELECTION_MIXED_HISTORY_TEST_DATASET",
+                KnowledgeMode.SYSTEM_KNOWLEDGE_RESEARCH, cutoff, calendar,
+                bars);
+    }
+
+    private static void addHistory(
+            List<DailyBar> target,
+            Security security,
+            List<LocalDate> dates,
+            int available,
+            int base
+    ) {
+        int start = dates.size() - available;
+        for (int index = start; index < dates.size(); index++) {
+            LocalDate date = dates.get(index);
+            BigDecimal close = BigDecimal.valueOf(base)
+                    .add(BigDecimal.valueOf(index - start, 2))
+                    .add((index - start) % 11 == 0
+                            ? new BigDecimal("-0.07")
+                            : new BigDecimal("0.02"));
+            Instant marketClose = StrategyResearchModels.closeInstant(date);
+            target.add(new DailyBar(security, date, close,
+                    close.add(new BigDecimal("0.40")),
+                    close.subtract(new BigDecimal("0.40")), close,
+                    1_000_000L, true, marketClose,
+                    marketClose.plusSeconds(60)));
+        }
+    }
+
+    private static ResearchDataset trailing(
+            ResearchDataset source,
+            Security security,
+            int sessions
+    ) {
+        List<TradingSession> selected = source.sessions().subList(
+                source.sessions().size() - sessions,
+                source.sessions().size());
+        Set<LocalDate> dates = selected.stream().map(
+                TradingSession::tradeDate).collect(Collectors.toSet());
+        List<DailyBar> bars = source.bars().stream().filter(value ->
+                value.security().equals(security)
+                        && dates.contains(value.tradeDate())).toList();
+        return new ResearchDataset(source.contractVersion(),
+                source.datasetVersion() + "_TRAILING_" + sessions,
+                source.knowledgeMode(), source.knowledgeCutoff(), selected,
+                bars);
+    }
+
+    private static List<HistoricalAvailability> statuses(
+            HistoricalStability value
+    ) {
+        return value.windowCoverage().stream().map(
+                HistoricalWindowCoverage::status).toList();
+    }
+
+    private static List<String> currentWindows(HistoricalStability value) {
+        return value.windows().stream().map(
+                        HistoricalWindowMetrics::windowCode)
+                .filter(code -> code.startsWith("CURRENT_")).toList();
+    }
+
+    private static HistoricalWindowMetrics window(
+            HistoricalStability value,
+            String code
+    ) {
+        return value.windows().stream().filter(item ->
+                code.equals(item.windowCode())).findFirst().orElseThrow();
     }
 
     private static List<LocalDate> openDates(LocalDate start, int count) {

@@ -360,12 +360,9 @@ public final class ResearchSelectionEngine {
             throw new IllegalStateException(
                     "MAINBOARD_HISTORICAL_POOL_INSUFFICIENT");
         }
-        int sessions = pool.stream().mapToInt(value -> available(
-                loaded.evaluations(), value.security())).min()
-                .orElseThrow();
-        sessions = Math.min(250, sessions);
-        ResearchDataset dataset = subsetTrailing(loaded.dataset(), pool,
-                sessions, "TOP200_HISTORY");
+        int sessions = Math.min(250, loaded.sessions().size());
+        ResearchDataset dataset = subsetVariableHistory(loaded.dataset(),
+                pool, sessions, "TOP200_HISTORY");
         DataCoverage coverage = new DataCoverage(dataset.firstSessionDate(),
                 dataset.lastSessionDate(), sessions, sessions, pool.size(),
                 pool.size(), 0, 0, true, true, true, true, true);
@@ -378,6 +375,47 @@ public final class ResearchSelectionEngine {
                                 value -> value.tradeDate()).toList()));
         return new ResearchSelectionHistoricalStabilityService().analyze(
                 historicalDataset, pool, liveShadowSamples);
+    }
+
+    /**
+     * Keeps each security's own contiguous trailing history.  The Top200
+     * admission rule remains 60 sessions, but a short newly-listed security
+     * must never truncate older securities with 120/250-session coverage.
+     */
+    static ResearchDataset subsetVariableHistory(
+            ResearchDataset source,
+            List<QuantitativeScore> selected,
+            int sessions,
+            String label
+    ) {
+        int bounded = Math.min(sessions, source.sessions().size());
+        List<com.stockquant.core.research.StrategyResearchModels
+                .TradingSession> selectedSessions = source.sessions().subList(
+                source.sessions().size() - bounded, source.sessions().size());
+        Set<LocalDate> dates = selectedSessions.stream().map(value ->
+                value.tradeDate()).collect(
+                java.util.stream.Collectors.toUnmodifiableSet());
+        Set<Security> securities = selected.stream().map(
+                QuantitativeScore::security).collect(
+                java.util.stream.Collectors.toUnmodifiableSet());
+        Map<Security, Integer> counts = new java.util.LinkedHashMap<>();
+        securities.forEach(value -> counts.put(value, 0));
+        List<com.stockquant.core.research.StrategyResearchModels.DailyBar>
+                bars = source.bars().stream().filter(value ->
+                securities.contains(value.security())
+                        && dates.contains(value.tradeDate())).peek(value ->
+                counts.computeIfPresent(value.security(),
+                        (ignored, count) -> count + 1)).toList();
+        if (counts.values().stream().anyMatch(value ->
+                value < ResearchUniverseMainboard
+                        .STABILITY_MINIMUM_SESSIONS)) {
+            throw new IllegalStateException(
+                    "MAINBOARD_VARIABLE_HISTORY_INCOMPLETE");
+        }
+        return new ResearchDataset(source.contractVersion(),
+                subsetDatasetVersion(source.datasetVersion(), securities,
+                        dates, label), source.knowledgeMode(),
+                source.knowledgeCutoff(), selectedSessions, bars);
     }
 
     private static ResearchDataset subsetTrailing(

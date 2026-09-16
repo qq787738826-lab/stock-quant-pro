@@ -441,6 +441,9 @@ onBeforeUnmount(() => window.clearInterval(timer))
                     <p><strong>贡献合计：</strong>{{ score(explanationFor(candidate)?.currentScore) }}（由Java确定性计算）</p>
                   </section>
                   <section><h4>3. 历史稳定性分解</h4>
+                    <div v-if="explanationFor(candidate)?.historicalWindowCoverage?.length" class="check-list">
+                      <span v-for="coverage in explanationFor(candidate)?.historicalWindowCoverage" :key="coverage.requestedSessions" :class="coverage.status === 'AVAILABLE' ? 'passed' : 'failed'">{{ coverage.requestedSessions }}日：{{ displayHistoryStatus(coverage) }}</span>
+                    </div>
                     <table><thead><tr><th>子项</th><th>子项分</th><th>权重</th><th>贡献</th></tr></thead><tbody>
                       <tr v-for="item in explanationFor(candidate)?.historicalComponentScores" :key="item.component"><td>{{ label(item.component) }}</td><td>{{ score(item.componentScore) }}</td><td>{{ pct(item.weight) }}</td><td>{{ score(item.weightedContribution) }}</td></tr>
                     </tbody></table>

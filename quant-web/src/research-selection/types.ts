@@ -44,6 +44,7 @@ export interface SelectionExplanation {
   metricPercentiles: Record<string, number>
   historicalRank?: number; historicalPoolSize: number
   historicalScore: number; historicalGrade: 'A' | 'B' | 'C'
+  historicalWindowCoverage?: HistoricalWindowCoverage[]
   historicalComponentScores: HistoricalComponentScore[]
   strategyRank?: number; strategyPoolSize: number
   agentRank?: number; agentPoolSize: number
@@ -100,6 +101,7 @@ export interface HistoricalStability {
   multiWindowConsistency: number; multiStrategyConsistency: number
   bestWindow: string; bestWindowReturn: number; worstWindow: string
   worstWindowReturn: number; walkForward: WalkForwardSummary
+  windowCoverage?: HistoricalWindowCoverage[]
   windows: HistoricalWindowMetrics[]; liveShadowSamples: number
   supportingEvidence: string[]; limitations: string[]
   noFutureDataLeakage: boolean

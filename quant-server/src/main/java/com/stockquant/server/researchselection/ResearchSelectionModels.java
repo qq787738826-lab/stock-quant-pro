@@ -192,6 +192,7 @@ public final class ResearchSelectionModels {
             String worstWindow,
             BigDecimal worstWindowReturn,
             WalkForwardSummary walkForward,
+            List<HistoricalWindowCoverage> windowCoverage,
             List<HistoricalWindowMetrics> windows,
             int liveShadowSamples,
             List<String> supportingEvidence,
@@ -199,6 +200,7 @@ public final class ResearchSelectionModels {
             boolean noFutureDataLeakage
     ) {
         public HistoricalStability {
+            windowCoverage = immutable(windowCoverage);
             windows = List.copyOf(windows);
             supportingEvidence = List.copyOf(supportingEvidence);
             limitations = List.copyOf(limitations);
@@ -318,6 +320,7 @@ public final class ResearchSelectionModels {
             int historicalPoolSize,
             BigDecimal historicalScore,
             HistoricalGrade historicalGrade,
+            List<HistoricalWindowCoverage> historicalWindowCoverage,
             List<HistoricalComponentScore> historicalComponentScores,
             Integer strategyRank,
             int strategyPoolSize,
@@ -349,6 +352,8 @@ public final class ResearchSelectionModels {
                     currentScoreContributions);
             metricPercentiles = metricPercentiles == null
                     ? Map.of() : Map.copyOf(metricPercentiles);
+            historicalWindowCoverage = immutable(
+                    historicalWindowCoverage);
             historicalComponentScores = immutable(
                     historicalComponentScores);
             strategyComparison = immutable(strategyComparison);

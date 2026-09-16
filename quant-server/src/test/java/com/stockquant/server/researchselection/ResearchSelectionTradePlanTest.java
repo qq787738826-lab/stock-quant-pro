@@ -327,7 +327,7 @@ class ResearchSelectionTradePlanTest {
                         20, 10, 10, 3, 12, new BigDecimal("0.02"),
                         new BigDecimal("-0.01"), new BigDecimal("0.60"),
                         new BigDecimal("0.10"), 10, true, true),
-                List.of(), 0, List.of(), List.of(), true);
+                List.of(), List.of(), 0, List.of(), List.of(), true);
     }
 
     private static ResearchDataset singleDataset(

@@ -64,17 +64,30 @@ public final class ResearchSelectionHistoricalStabilityService {
                         && !value.sourceKnownAt().isBefore(
                         value.marketCloseAvailableAt()));
         int available = dataset.sessions().size();
-        boolean quality = dataset.securities().size()
-                == currentScores.size()
-                && dataset.barsBySecurity().values().stream().allMatch(
-                bars -> bars.size() == available && bars.stream().allMatch(
-                        value -> value.tradable()
-                                && value.close().signum() > 0));
-        List<HistoricalStability> securities = dataset.securities().stream()
-                .map(security -> stability(dataset, security,
-                        currentScores.getOrDefault(security, BigDecimal.ZERO),
-                        liveSamples.getOrDefault(
-                                security.canonicalCode(), 0), noFuture))
+        Map<Security, List<DailyBar>> barsBySecurity =
+                dataset.barsBySecurity();
+        List<Security> selectedSecurities = currentScores.keySet().stream()
+                .sorted().toList();
+        boolean quality = barsBySecurity.keySet().equals(
+                currentScores.keySet()) && selectedSecurities.stream()
+                .allMatch(security -> validTrailingHistory(dataset,
+                        barsBySecurity.get(security)));
+        List<HistoricalStability> securities = selectedSecurities.stream()
+                .map(security -> {
+                    ResearchDataset securityDataset = securityDataset(dataset,
+                            security, barsBySecurity.get(security));
+                    boolean securityNoFuture = securityDataset.bars().stream()
+                            .noneMatch(value -> value.tradeDate().isAfter(
+                                    securityDataset.lastSessionDate())
+                                    || value.sourceKnownAt().isAfter(
+                                    securityDataset.knowledgeCutoff()));
+                    return stability(securityDataset, security,
+                            currentScores.getOrDefault(security,
+                                    BigDecimal.ZERO),
+                            liveSamples.getOrDefault(
+                                    security.canonicalCode(), 0),
+                            securityNoFuture);
+                })
                 .sorted(Comparator.comparing(HistoricalStability::score)
                         .reversed().thenComparing(
                                 HistoricalStability::security))
@@ -192,8 +205,55 @@ public final class ResearchSelectionHistoricalStabilityService {
                 scaled(costSampleComponent), scaled(windowRatio),
                 scaled(strategyRatio), best.windowCode(),
                 best.costAdjustedReturn(), worst.windowCode(),
-                worst.costAdjustedReturn(), walkForward, List.copyOf(windows),
-                liveSamples, evidence, List.copyOf(limitations), noFuture);
+                worst.costAdjustedReturn(), walkForward,
+                ResearchSelectionHistoricalDatasetLoader.coverage(
+                        source.sessions().stream().map(
+                                TradingSession::tradeDate).toList()),
+                List.copyOf(windows), liveSamples, evidence,
+                List.copyOf(limitations), noFuture);
+    }
+
+    private static ResearchDataset securityDataset(
+            ResearchDataset source,
+            Security security,
+            List<DailyBar> bars
+    ) {
+        if (!validTrailingHistory(source, bars)) {
+            throw new IllegalStateException(
+                    "RESEARCH_SELECTION_SECURITY_HISTORY_INVALID");
+        }
+        int start = source.sessions().size() - bars.size();
+        List<TradingSession> sessions = source.sessions().subList(start,
+                source.sessions().size());
+        String version = "SELECTION_SECURITY_HISTORY_"
+                + BacktestCanonicalHashService.sha256(
+                source.datasetVersion() + '|' + security.canonicalCode()
+                        + '|' + sessions.get(0).tradeDate() + '|'
+                        + sessions.get(sessions.size() - 1).tradeDate());
+        return new ResearchDataset(source.contractVersion(), version,
+                source.knowledgeMode(), source.knowledgeCutoff(), sessions,
+                bars);
+    }
+
+    private static boolean validTrailingHistory(
+            ResearchDataset source,
+            List<DailyBar> bars
+    ) {
+        if (bars == null || bars.size() < ResearchUniverseMainboard
+                .STABILITY_MINIMUM_SESSIONS
+                || bars.size() > source.sessions().size()
+                || bars.stream().anyMatch(value -> !value.tradable()
+                || value.close().signum() <= 0)) {
+            return false;
+        }
+        int start = source.sessions().size() - bars.size();
+        for (int index = 0; index < bars.size(); index++) {
+            if (!bars.get(index).tradeDate().equals(source.sessions().get(
+                    start + index).tradeDate())) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private HistoricalWindowMetrics window(

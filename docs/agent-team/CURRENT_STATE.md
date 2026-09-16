@@ -699,6 +699,13 @@ DATA_QUALITY 只作门禁和 confidence 上限，MARKET_REGIME V1 权重为 0 �
   全市场仅保留后续排名所需的紧凑投影；小样本与旧算法逐项一致，3193×250 在 `-Xmx2048m` 下已进入
   `QUANTITATIVE_SCAN`。脱敏失败结果同时保留安全的异常类、类别、首个项目栈帧和稳定 reason，资源
   耗尽不再统一折叠为 `CONTROLLED_EXECUTION_FAILED`；旧 run、数据库事实及选择语义均不修改。
+- run 38 `SELECT_20260905T023955Z_2EA383782801` 永久保留原 `COMPLETED` 数据库终态，但其阶段验收结论
+  记录为 `BUSINESS_ACCEPTANCE_FAILED_250D_WINDOWS`：旧 `HISTORICAL_STABILITY` 使用 Top200 全局最短
+  历史（61 日）统一裁剪所有证券，导致完整老证券的 120/250 日窗口也被错误降级。
+  `V1_SELECTION_250D_HISTORICAL_WINDOW_FIX` 保持 Top200 至少 60 日的准入规则不变，改为每只证券按自身
+  连续尾部历史独立计算 20/60/120/250 日窗口，并把逐证券窗口资格贯穿稳定性、解释和 Agent/Critic
+  确定性证据。250/180/61 日同池夹具分别得到 `1111/1110/1100`，短历史证券不再裁短其他证券；
+  既有 60 日数值、PIT/QFQ、评分公式、策略、排名和已冻结历史均不改变。
 
 ## 当前后续入口与阻断
 

@@ -20,6 +20,9 @@ import com.stockquant.server.agent.marketfacts.PitMarketFactModels.FactEnvelope;
 import com.stockquant.server.agent.marketfacts.PitMarketFactModels.RawDailyBarObservation;
 import com.stockquant.server.agent.marketfacts.PitMarketFactModels.TradingCalendarObservation;
 import com.stockquant.server.agent.marketfacts.PitMarketFactRepository;
+import com.stockquant.server.agent.marketfacts.TushareResearchUniverseDatasetLoader.LoadedUniverse;
+import com.stockquant.server.researchselection.ResearchSelectionHistoricalDatasetLoader.HistoricalDataset;
+import com.stockquant.server.researchselection.ResearchSelectionModels.DataCoverage;
 import com.stockquant.server.researchselection.ResearchSelectionModels.HistoricalAvailability;
 import com.stockquant.server.researchselection.ResearchUniverseMainboard.Member;
 import com.stockquant.server.researchselection.ResearchUniverseMainboard.Snapshot;
@@ -119,7 +122,12 @@ class ResearchUniverseMainboardStreamingDatasetTest {
                 "probe must run with -Xmx2048m");
         List<LocalDate> sessions = sessions(250);
         List<Member> members = members(3_193);
-        var repository = new SyntheticStreamingRepository(members, sessions);
+        Map<String, Integer> historyLengths = Map.of(
+                members.get(0).tsCode(), 250,
+                members.get(1).tsCode(), 180,
+                members.get(2).tsCode(), 61);
+        var repository = new SyntheticStreamingRepository(members, sessions,
+                historyLengths);
         var loader = new ResearchUniverseMainboardDatasetLoader(repository);
         SnapshotBundle snapshot = snapshot(members);
 
@@ -133,10 +141,15 @@ class ResearchUniverseMainboardStreamingDatasetTest {
 
         assertEquals(250, loaded.sessions().size());
         assertEquals(3_193, loaded.dataset().securities().size());
-        assertEquals(3_193 * 250, loaded.dataset().bars().size());
+        assertEquals(3_193L * 250L - 70L - 189L,
+                loaded.dataset().bars().size());
         assertEquals(3_193, loaded.evaluations().stream().filter(value ->
                 value.status() == ResearchUniverseMainboard.EligibilityStatus
                         .ELIGIBLE).count());
+        assertEquals(List.of(250, 180, 61), members.subList(0, 3).stream()
+                .map(member -> loaded.evaluations().stream().filter(value ->
+                        value.member().equals(member)).findFirst()
+                        .orElseThrow().availableSessions()).toList());
         assertEquals(50, repository.rawBatchCalls);
         assertEquals(50, repository.factorBatchCalls);
         assertTrue(repository.maximumBatchSize
@@ -151,6 +164,63 @@ class ResearchUniverseMainboardStreamingDatasetTest {
                 .rankExplained(loaded.dataset(), metadata);
         long scanMillis = elapsedMillis(scanStarted);
         long scanPeakHeap = peakHeapBytes();
+
+        Map<Security, ResearchSelectionModels.QuantitativeScore> bySecurity =
+                ranking.scores().stream().collect(
+                        java.util.stream.Collectors.toMap(
+                                ResearchSelectionModels.QuantitativeScore
+                                        ::security,
+                                value -> value));
+        Set<Security> requiredMixed = members.subList(0, 3).stream().map(
+                Member::security).collect(java.util.stream.Collectors
+                .toUnmodifiableSet());
+        List<ResearchSelectionModels.QuantitativeScore> historicalPool =
+                new ArrayList<>();
+        requiredMixed.stream().sorted().map(bySecurity::get)
+                .forEach(historicalPool::add);
+        ranking.scores().stream().filter(value ->
+                        !requiredMixed.contains(value.security()))
+                .limit(197).forEach(historicalPool::add);
+        ResearchDataset variableHistory = ResearchSelectionEngine
+                .subsetVariableHistory(loaded.dataset(), historicalPool, 250,
+                        "MIXED_HISTORY_PROBE");
+        var historyCoverage = new DataCoverage(
+                variableHistory.firstSessionDate(),
+                variableHistory.lastSessionDate(), 250, 250, 200, 198,
+                0, 0, true, true, true, true, true);
+        resetPeakHeap();
+        long historicalStarted = System.nanoTime();
+        var historical = new ResearchSelectionHistoricalStabilityService()
+                .analyze(new HistoricalDataset(new LoadedUniverse(
+                                variableHistory, historyCoverage),
+                                ResearchSelectionHistoricalDatasetLoader
+                                        .coverage(sessions)),
+                        historicalPool, Map.of());
+        long historicalMillis = elapsedMillis(historicalStarted);
+        long historicalPeakHeap = peakHeapBytes();
+        Map<String, ResearchSelectionModels.HistoricalStability> stability =
+                historical.securities().stream().collect(
+                        java.util.stream.Collectors.toMap(value ->
+                                value.security().canonicalCode(),
+                                value -> value));
+        assertEquals(250, stability.get(members.get(0).security()
+                .canonicalCode()).availableSessions());
+        assertEquals(180, stability.get(members.get(1).security()
+                .canonicalCode()).availableSessions());
+        assertEquals(61, stability.get(members.get(2).security()
+                .canonicalCode()).availableSessions());
+        assertTrue(stability.get(members.get(0).security().canonicalCode())
+                .windows().stream().anyMatch(value ->
+                        "CURRENT_250".equals(value.windowCode())));
+        assertTrue(stability.get(members.get(1).security().canonicalCode())
+                .windows().stream().anyMatch(value ->
+                        "CURRENT_120".equals(value.windowCode())));
+        assertFalse(stability.get(members.get(1).security().canonicalCode())
+                .windows().stream().anyMatch(value ->
+                        "CURRENT_250".equals(value.windowCode())));
+        assertFalse(stability.get(members.get(2).security().canonicalCode())
+                .windows().stream().anyMatch(value ->
+                        "CURRENT_120".equals(value.windowCode())));
         long gcMillis = Math.max(0, garbageCollectionMillis() - gcBefore);
         long totalMillis = preparingMillis + scanMillis;
 
@@ -168,6 +238,11 @@ class ResearchUniverseMainboardStreamingDatasetTest {
         System.out.println("STREAMING_QUANTITATIVE_SCAN_MILLIS="
                 + scanMillis);
         System.out.println("STREAMING_SCAN_PEAK_HEAP_BYTES=" + scanPeakHeap);
+        System.out.println("MIXED_HISTORY_ANALYSIS_MILLIS="
+                + historicalMillis);
+        System.out.println("MIXED_HISTORY_PEAK_HEAP_BYTES="
+                + historicalPeakHeap);
+        System.out.println("MIXED_HISTORY_250_180_61=PASS");
         System.out.println("STREAMING_GC_MILLIS=" + gcMillis);
         System.out.println("STREAMING_QUANTITATIVE_SCAN=PASS");
     }
@@ -249,6 +324,7 @@ class ResearchUniverseMainboardStreamingDatasetTest {
         private final Map<String, Member> members;
         private final Map<String, Integer> memberIndexes;
         private final List<LocalDate> sessions;
+        private final Map<String, Integer> historyLengths;
         private int rawBatchCalls;
         private int factorBatchCalls;
         private int maximumBatchSize;
@@ -256,6 +332,14 @@ class ResearchUniverseMainboardStreamingDatasetTest {
         private SyntheticStreamingRepository(
                 List<Member> members,
                 List<LocalDate> sessions
+        ) {
+            this(members, sessions, Map.of());
+        }
+
+        private SyntheticStreamingRepository(
+                List<Member> members,
+                List<LocalDate> sessions,
+                Map<String, Integer> historyLengths
         ) {
             super(new JdbcTemplate(), new ObjectMapper());
             Map<String, Member> byCode = new LinkedHashMap<>();
@@ -267,6 +351,7 @@ class ResearchUniverseMainboardStreamingDatasetTest {
             this.members = Map.copyOf(byCode);
             this.memberIndexes = Map.copyOf(indexes);
             this.sessions = sessions;
+            this.historyLengths = Map.copyOf(historyLengths);
         }
 
         @Override
@@ -303,7 +388,8 @@ class ResearchUniverseMainboardStreamingDatasetTest {
                 int memberIndex = memberIndexes.get(tsCode);
                 for (int day = 0; day < sessions.size(); day++) {
                     LocalDate date = sessions.get(day);
-                    if (!date.isBefore(from) && !date.isAfter(to)) {
+                    if (hasHistory(tsCode, day)
+                            && !date.isBefore(from) && !date.isAfter(to)) {
                         consumer.accept(raw(member, memberIndex, day, date));
                     }
                 }
@@ -327,7 +413,8 @@ class ResearchUniverseMainboardStreamingDatasetTest {
                 Member member = members.get(tsCode);
                 for (int day = 0; day < sessions.size(); day++) {
                     LocalDate date = sessions.get(day);
-                    if (!date.isBefore(from) && !date.isAfter(to)) {
+                    if (hasHistory(tsCode, day)
+                            && !date.isBefore(from) && !date.isAfter(to)) {
                         consumer.accept(factor(member, day, date));
                     }
                 }
@@ -340,7 +427,9 @@ class ResearchUniverseMainboardStreamingDatasetTest {
             int memberIndex = memberIndexes.get(member.tsCode());
             for (int day = 0; day < sessions.size(); day++) {
                 LocalDate date = sessions.get(day);
-                result.put(date, raw(member, memberIndex, day, date));
+                if (hasHistory(member.tsCode(), day)) {
+                    result.put(date, raw(member, memberIndex, day, date));
+                }
             }
             return result;
         }
@@ -352,9 +441,17 @@ class ResearchUniverseMainboardStreamingDatasetTest {
                     new LinkedHashMap<>();
             for (int day = 0; day < sessions.size(); day++) {
                 LocalDate date = sessions.get(day);
-                result.put(date, factor(member, day, date));
+                if (hasHistory(member.tsCode(), day)) {
+                    result.put(date, factor(member, day, date));
+                }
             }
             return result;
+        }
+
+        private boolean hasHistory(String tsCode, int day) {
+            int available = historyLengths.getOrDefault(tsCode,
+                    sessions.size());
+            return day >= sessions.size() - available;
         }
 
         private static RawDailyBarObservation raw(

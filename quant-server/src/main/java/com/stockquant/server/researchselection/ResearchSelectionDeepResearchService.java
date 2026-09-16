@@ -115,7 +115,9 @@ public final class ResearchSelectionDeepResearchService
             var stability = bySecurity.get(score.security().canonicalCode());
             if (stability == null) continue;
             String item = score.security().canonicalCode() + '='
-                    + stability.score() + '/' + stability.grade() + ';';
+                    + stability.score() + '/' + stability.grade() + '/'
+                    + stability.availableSessions() + "/W"
+                    + windowMask(stability) + ';';
             if (value.length() + item.length() > 440) break;
             value.append(item);
         }
@@ -125,6 +127,18 @@ public final class ResearchSelectionDeepResearchService
                     "RESEARCH_SELECTION_HISTORY_OBJECTIVE_TOO_LONG");
         }
         return value.toString();
+    }
+
+    private static String windowMask(
+            ResearchSelectionModels.HistoricalStability stability
+    ) {
+        Set<String> available = stability.windows().stream().map(
+                ResearchSelectionModels.HistoricalWindowMetrics::windowCode)
+                .filter(value -> value.startsWith("CURRENT_"))
+                .collect(Collectors.toUnmodifiableSet());
+        return List.of(20, 60, 120, 250).stream().map(value ->
+                available.contains("CURRENT_" + value) ? "1" : "0")
+                .collect(Collectors.joining());
     }
 
     static Instant validatePaperExecution(
