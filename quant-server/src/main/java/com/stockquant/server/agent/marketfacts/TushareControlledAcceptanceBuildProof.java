@@ -57,6 +57,10 @@ public final class TushareControlledAcceptanceBuildProof {
             MAINBOARD_TRADE_CAL_BACKFILL_RUNNER_START_CLASS =
             "com.stockquant.server.agent.marketfacts."
                     + "TushareMainboardTradeCalendarBackfillManualRunner";
+    public static final String
+            MAINBOARD_TRADE_CAL_FORWARD_INCREMENT_RUNNER_START_CLASS =
+            "com.stockquant.server.agent.marketfacts."
+                    + "TushareMainboardTradeCalendarForwardIncrementManualRunner";
     static final String M1_STAGE_BRANCH =
             "codex/1.4.0-m1-research-data-ready";
     private static final Set<String> REQUIRED_PROPERTIES = Set.of(
@@ -303,7 +307,9 @@ public final class TushareControlledAcceptanceBuildProof {
                     RESEARCH_SELECTION_RUNNER_START_CLASS,
                     MAINBOARD_DAILY_INCREMENT_RUNNER_START_CLASS,
                     MAINBOARD_HISTORY_BACKFILL_RUNNER_START_CLASS,
-                    MAINBOARD_TRADE_CAL_BACKFILL_RUNNER_START_CLASS).contains(
+                    MAINBOARD_TRADE_CAL_BACKFILL_RUNNER_START_CLASS,
+                    MAINBOARD_TRADE_CAL_FORWARD_INCREMENT_RUNNER_START_CLASS)
+                    .contains(
                             manifest.startClass())
                     || !gitCommit.equals(manifest.gitCommit())
                     || !remoteGitCommit.equals(manifest.remoteGitCommit())
@@ -459,6 +465,17 @@ public final class TushareControlledAcceptanceBuildProof {
             validate();
             return MAINBOARD_TRADE_CAL_BACKFILL_RUNNER_START_CLASS.equals(
                     runnerStartClass()) && (source
+                    == ProofSource.RESEARCH_SELECTION_CONTROLLED_BUILD_ARTIFACT
+                    && buildMode
+                    == BuildMode.RESEARCH_SELECTION_CONTROLLED_BUILD_ARTIFACT
+                    || source == ProofSource.CONTROLLED_BUILD_ARTIFACT
+                    && buildMode == BuildMode.CONTROLLED_BUILD_ARTIFACT);
+        }
+
+        public boolean mainboardTradeCalendarForwardIncrementEligible() {
+            validate();
+            return MAINBOARD_TRADE_CAL_FORWARD_INCREMENT_RUNNER_START_CLASS
+                    .equals(runnerStartClass()) && (source
                     == ProofSource.RESEARCH_SELECTION_CONTROLLED_BUILD_ARTIFACT
                     && buildMode
                     == BuildMode.RESEARCH_SELECTION_CONTROLLED_BUILD_ARTIFACT
@@ -662,7 +679,8 @@ public final class TushareControlledAcceptanceBuildProof {
                     "codex/1.4.0-v1.0.9-full-mainboard-universe",
                     "codex/1.4.0-v1.0.11-mainboard-daily-increment",
                     "codex/1.4.0-mainboard-250-session-history-backfill",
-                    "codex/1.4.0-mainboard-250-session-trade-cal-backfill")
+                    "codex/1.4.0-mainboard-250-session-trade-cal-backfill",
+                    "codex/1.4.0-v1-trade-cal-forward-increment-fix")
                     .contains(branchName);
         }
         return REQUIRED_INTEGRATION_BRANCH.equals(branchName)

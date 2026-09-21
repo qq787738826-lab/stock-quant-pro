@@ -29,6 +29,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -352,6 +353,101 @@ public class PitMarketFactCaptureService {
                     .verifySameTransactionalConnection(before, after);
             return result;
         }), "mainboard market capture result");
+    }
+
+    /**
+     * Persists the SSE and SZSE calendar responses as one append-only unit.
+     * Both provider responses are completely validated and prepared before
+     * the transaction starts, so a one-sided provider failure cannot leave a
+     * one-sided formal calendar extension.
+     */
+    public List<CaptureResult> captureAuthorizedMainboardCalendars(
+            List<MarketFactResponse> responses,
+            Instant observedAt,
+            TushareDedicatedResearchPersistenceGuard.Verification
+                    preProviderVerification
+    ) {
+        List<MarketFactResponse> immutable = List.copyOf(
+                Objects.requireNonNull(responses, "responses"));
+        if (immutable.size() != 2) {
+            throw new IllegalArgumentException(
+                    "MAINBOARD_CALENDAR_CAPTURE_SCOPE_INVALID");
+        }
+        Set<String> exchanges = new HashSet<>();
+        LocalDate requestedStart = null;
+        LocalDate requestedEnd = null;
+        for (MarketFactResponse response : immutable) {
+            boolean calendarOnly = response.complete()
+                    && response.errors().isEmpty()
+                    && response.rawDailyBars().isEmpty()
+                    && response.adjustmentFactors().isEmpty()
+                    && response.corporateActions().isEmpty()
+                    && !response.tradingCalendar().isEmpty();
+            Set<String> responseExchanges = response.tradingCalendar().stream()
+                    .map(MarketFactProviderModels.TradingCalendar::exchange)
+                    .collect(java.util.stream.Collectors.toUnmodifiableSet());
+            if (!calendarOnly || responseExchanges.size() != 1) {
+                throw new IllegalArgumentException(
+                        "MAINBOARD_CALENDAR_CAPTURE_RESPONSE_INVALID");
+            }
+            String exchange = responseExchanges.iterator().next();
+            if (!Set.of("SSE", "SZSE").contains(exchange)
+                    || !exchanges.add(exchange)
+                    || !TushareMarketFactProvider
+                    .calendarSourceIdentity(exchange)
+                    .equals(response.sourceInstrumentId())
+                    || response.tradingCalendar().stream().anyMatch(value ->
+                    !exchange.equals(value.exchange())
+                            || !response.sourceInstrumentId().equals(
+                            value.sourceIdentity()))) {
+                throw new IllegalArgumentException(
+                        "MAINBOARD_CALENDAR_CAPTURE_RESPONSE_INVALID");
+            }
+            if (requestedStart == null) {
+                requestedStart = response.requestedStart();
+                requestedEnd = response.requestedEnd();
+            } else if (!Objects.equals(requestedStart,
+                    response.requestedStart())
+                    || !Objects.equals(requestedEnd,
+                    response.requestedEnd())) {
+                throw new IllegalArgumentException(
+                        "MAINBOARD_CALENDAR_CAPTURE_RANGE_MISMATCH");
+            }
+        }
+        if (!exchanges.equals(Set.of("SSE", "SZSE"))) {
+            throw new IllegalArgumentException(
+                    "MAINBOARD_CALENDAR_CAPTURE_SCOPE_INVALID");
+        }
+        LimitedPersonalFormalCaptureAuthorization authorization =
+                LimitedPersonalFormalCaptureAuthorization.tushareF1A();
+        List<PreparedCaptureInput> prepared = immutable.stream()
+                .map(response -> prepareCaptureInput(response, observedAt,
+                        authorization)).toList();
+        return List.copyOf(Objects.requireNonNull(transactionTemplate.execute(
+                status -> {
+                    var before = tushareDedicatedResearchPersistenceGuard
+                            .verifyTransactional();
+                    tushareDedicatedResearchPersistenceGuard.verifySameTarget(
+                            preProviderVerification, before);
+                    List<CaptureResult> results = new ArrayList<>();
+                    for (PreparedCaptureInput input : prepared) {
+                        CaptureResult result = capturePreparedWithinTransaction(
+                                input);
+                        if (!result.complete() || result.receivedCount() <= 0
+                                || result.appendedCount()
+                                + result.idempotentCount()
+                                != result.receivedCount()) {
+                            throw new IllegalStateException(
+                                    "MAINBOARD_CALENDAR_CAPTURE_RESULT_INVALID");
+                        }
+                        results.add(result);
+                    }
+                    var after = tushareDedicatedResearchPersistenceGuard
+                            .verifyTransactional();
+                    tushareDedicatedResearchPersistenceGuard
+                            .verifySameTransactionalConnection(before, after);
+                    return results;
+                }), "mainboard calendar capture result"));
     }
 
     private M1ResearchCaptureResult

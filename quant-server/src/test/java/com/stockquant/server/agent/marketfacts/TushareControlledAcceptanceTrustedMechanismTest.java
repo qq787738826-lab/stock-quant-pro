@@ -246,6 +246,29 @@ class TushareControlledAcceptanceTrustedMechanismTest {
     }
 
     @Test
+    void tradeCalendarForwardTaskBranchCanBindItsFixedRunner(
+            @TempDir Path temp
+    ) throws Exception {
+        String branch =
+                "codex/1.4.0-v1-trade-cal-forward-increment-fix";
+        String mode = "RESEARCH_SELECTION_CONTROLLED_BUILD_ARTIFACT";
+        Path jar = temp.resolve("trade-calendar-forward.jar");
+        writeJarWithStartClass(jar, COMMIT, branch, mode,
+                TushareControlledAcceptanceBuildProof
+                        .MAINBOARD_TRADE_CAL_FORWARD_INCREMENT_RUNNER_START_CLASS);
+        Path sidecar = Path.of(jar
+                + TushareControlledAcceptanceBuildProof.SIDECAR_SUFFIX);
+        writeSidecar(sidecar, COMMIT, COMMIT, sha256(jar), branch, mode);
+
+        VerifiedBuildProof proof = TushareControlledAcceptanceBuildProof
+                .loadBoundPreparationArtifactForTest(jar, sidecar);
+
+        assertTrue(proof.mainboardTradeCalendarForwardIncrementEligible());
+        assertFalse(proof.mainboardTradeCalendarBackfillEligible());
+        assertFalse(proof.researchSelectionEligible());
+    }
+
+    @Test
     void auditFindsExactPrefixSuffixEncodedHeadersQueryAndEnvironmentForms() {
         String secret = "fake-token-0123456789";
         AuditResult result = TushareControlledAcceptanceOutputAudit.audit(

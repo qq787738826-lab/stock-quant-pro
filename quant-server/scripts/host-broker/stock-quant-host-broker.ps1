@@ -42,6 +42,8 @@ $mainboardHistoryBackfillRunnerScript = Join-Path $paths.RepositoryRoot `
     'quant-server\scripts\run-mainboard-history-backfill.ps1'
 $mainboardTradeCalendarBackfillRunnerScript = Join-Path $paths.RepositoryRoot `
     'quant-server\scripts\run-mainboard-trade-cal-backfill.ps1'
+$mainboardTradeCalendarForwardRunnerScript = Join-Path $paths.RepositoryRoot `
+    'quant-server\scripts\run-mainboard-trade-cal-forward-increment.ps1'
 $productionRoot = Join-Path $paths.TargetRoot 'stock-quant-production'
 $productionPidFile = Join-Path $productionRoot 'backend.pid.json'
 $productionAutostartFile = Join-Path $productionRoot 'backend.autostart.json'
@@ -147,6 +149,7 @@ function Assert-GitBinding {
                 'MAINBOARD_DAILY_INCREMENT',
                 'MAINBOARD_HISTORY_BACKFILL',
                 'TRADE_CAL_BACKFILL',
+                'MAINBOARD_TRADE_CAL_FORWARD_INCREMENT',
                 'START_RESEARCH_PRODUCTION',
                 'STOP_RESEARCH_PRODUCTION',
                 'CHECK_RESEARCH_PRODUCTION_STATUS')) {
@@ -222,6 +225,15 @@ function Assert-GitBinding {
                 [IO.Path]::GetFullPath($BrokerRequest.JarPath).Equals(
                     (Join-Path $paths.TargetRoot `
                         'quant-server-1.3.1-mainboard-trade-cal-backfill-runner.jar'),
+                    [StringComparison]::OrdinalIgnoreCase)) {
+                $branch
+            } elseif ($BrokerRequest.Operation -eq
+                    'MAINBOARD_TRADE_CAL_FORWARD_INCREMENT' -and
+                $branch -eq
+                    'codex/1.4.0-v1-trade-cal-forward-increment-fix' -and
+                [IO.Path]::GetFullPath($BrokerRequest.JarPath).Equals(
+                    (Join-Path $paths.TargetRoot `
+                        'quant-server-1.3.1-mainboard-trade-cal-forward-increment-runner.jar'),
                     [StringComparison]::OrdinalIgnoreCase)) {
                 $branch
             } elseif ($BrokerRequest.Operation -in @(
@@ -1838,6 +1850,178 @@ function Invoke-MainboardTradeCalendarBackfill {
     return $summary
 }
 
+function Invoke-MainboardTradeCalendarForwardIncrement {
+    param([Parameter(Mandatory = $true)] [object] $BrokerRequest)
+    if ($BrokerRequest.AuthorizationStatus -ne
+            'V1_TRADE_CAL_FORWARD_INCREMENT_FIX_APPROVED' -or
+        $null -ne $BrokerRequest.AuthorizationFile) {
+        throw 'STOCK_QUANT_HOST_BROKER_TRADE_CAL_FORWARD_SCOPE_INVALID'
+    }
+    $usage = Get-StockQuantM4MonthlyUsage `
+        -CalendarMonth $BrokerRequest.Values['budget.calendar.month'] `
+        -ExcludedRequestPath $processingPath
+    [int]$monthlyLimit = Get-StockQuantTushareMonthlyLimit `
+        -CalendarMonth $BrokerRequest.Values['budget.calendar.month']
+    [int]$maximumProvider =
+        [int]$BrokerRequest.Values['maximum.provider.requests']
+    if ($maximumProvider -ne 4 -or
+        [int]$usage.CommittedTushareCalls + $maximumProvider -gt
+            $monthlyLimit) {
+        throw 'MAINBOARD_TRADE_CAL_FORWARD_MONTHLY_BUDGET_EXHAUSTED'
+    }
+    $runnerResult = Join-Path $paths.Results `
+        "$($BrokerRequest.RequestId).mainboard-trade-cal-forward-increment.json"
+    if (Test-Path -LiteralPath $runnerResult) {
+        throw 'STOCK_QUANT_HOST_BROKER_RUNNER_RESULT_ALREADY_EXISTS'
+    }
+    $executionId = $BrokerRequest.RequestId -replace '^SQHB_', 'MBTCFWD_'
+    $output = @(& $mainboardTradeCalendarForwardRunnerScript `
+        -ResultFile $runnerResult -ArtifactPath $BrokerRequest.JarPath `
+        -ExecutionId $executionId -GitCommit $BrokerRequest.GitCommit `
+        -TargetEndDate $BrokerRequest.Values['target.end.date'] `
+        -DatabasePort 38432 -MaximumProviderRequests 4 `
+        -NetworkRecoveryBudget 2 -ExecutionMode FORMAL 2>&1 |
+        ForEach-Object { [string]$_ })
+    $runnerExitCode = $LASTEXITCODE
+    if (-not (Test-Path -LiteralPath $runnerResult -PathType Leaf)) {
+        throw (Get-SafeMarker -Lines $output `
+            -Name 'MAINBOARD_TRADE_CAL_FORWARD_FAILURE_REASON' `
+            -Fallback 'STOCK_QUANT_HOST_BROKER_RUNNER_RESULT_MISSING')
+    }
+    $calendar = Get-Content -LiteralPath $runnerResult -Raw -Encoding UTF8 |
+        ConvertFrom-Json
+    $summary = [ordered]@{
+        action = [string]$calendar.action
+        requestedEndDate = [string]$calendar.requestedEndDate
+        currentSseMaxCalDate = [string]$calendar.currentSseMaxCalDate
+        currentSzseMaxCalDate = [string]$calendar.currentSzseMaxCalDate
+        startDate = [string]$calendar.startDate
+        finalSseMaxCalDate = [string]$calendar.finalSseMaxCalDate
+        finalSzseMaxCalDate = [string]$calendar.finalSzseMaxCalDate
+        latestCommonCompletedOpenTradeDate =
+            [string]$calendar.latestCommonCompletedOpenTradeDate
+        rangeCalendarDateCount = [int]$calendar.rangeCalendarDateCount
+        universeSnapshotId = [string]$calendar.universeSnapshotId
+        universeMemberCount = [int]$calendar.universeMemberCount
+        providerCallCount = [int]$calendar.tushareProviderCallCount
+        sseTradeCalendarProviderCallCount =
+            [int]$calendar.sseTradeCalendarProviderCallCount
+        szseTradeCalendarProviderCallCount =
+            [int]$calendar.szseTradeCalendarProviderCallCount
+        retryCount = [int]$calendar.retryCount
+        appendedObservationCount =
+            [int]$calendar.appendedObservationCount
+        idempotentChainTailHits =
+            [int]$calendar.idempotentChainTailHits
+        sanitizedResult = $runnerResult
+        outputAudit = $(if ($calendar.outputAuditClean) {
+            'PASSED'
+        } else { 'FAILED' })
+    }
+    if ($runnerExitCode -ne 0) {
+        $script:failureSummary = $summary
+        $reason = [string]$calendar.failureReason
+        if ($reason -match '^[A-Z][A-Z0-9_]{3,127}$') { throw $reason }
+        throw 'STOCK_QUANT_HOST_BROKER_TRADE_CAL_FORWARD_FAILED'
+    }
+    [int]$providerCalls = [int]$calendar.tushareProviderCallCount
+    [int]$sseCalls = [int]$calendar.sseTradeCalendarProviderCallCount
+    [int]$szseCalls = [int]$calendar.szseTradeCalendarProviderCallCount
+    [int]$recoveries = [int]$calendar.retryCount
+    [datetime]$target = [datetime]::MinValue
+    [datetime]$currentSse = [datetime]::MinValue
+    [datetime]$currentSzse = [datetime]::MinValue
+    [datetime]$start = [datetime]::MinValue
+    [datetime]$finalSse = [datetime]::MinValue
+    [datetime]$finalSzse = [datetime]::MinValue
+    $datesValid = [datetime]::TryParseExact(
+            [string]$calendar.requestedEndDate, 'yyyy-MM-dd',
+            [Globalization.CultureInfo]::InvariantCulture,
+            [Globalization.DateTimeStyles]::None, [ref]$target) -and
+        [datetime]::TryParseExact(
+            [string]$calendar.currentSseMaxCalDate, 'yyyy-MM-dd',
+            [Globalization.CultureInfo]::InvariantCulture,
+            [Globalization.DateTimeStyles]::None, [ref]$currentSse) -and
+        [datetime]::TryParseExact(
+            [string]$calendar.currentSzseMaxCalDate, 'yyyy-MM-dd',
+            [Globalization.CultureInfo]::InvariantCulture,
+            [Globalization.DateTimeStyles]::None, [ref]$currentSzse) -and
+        [datetime]::TryParseExact(
+            [string]$calendar.startDate, 'yyyy-MM-dd',
+            [Globalization.CultureInfo]::InvariantCulture,
+            [Globalization.DateTimeStyles]::None, [ref]$start) -and
+        [datetime]::TryParseExact(
+            [string]$calendar.finalSseMaxCalDate, 'yyyy-MM-dd',
+            [Globalization.CultureInfo]::InvariantCulture,
+            [Globalization.DateTimeStyles]::None, [ref]$finalSse) -and
+        [datetime]::TryParseExact(
+            [string]$calendar.finalSzseMaxCalDate, 'yyyy-MM-dd',
+            [Globalization.CultureInfo]::InvariantCulture,
+            [Globalization.DateTimeStyles]::None, [ref]$finalSzse)
+    $noOp = $calendar.action -eq 'NO_OP' -and $providerCalls -eq 0 -and
+        $sseCalls -eq 0 -and $szseCalls -eq 0 -and $recoveries -eq 0 -and
+        [int]$calendar.rangeCalendarDateCount -eq 0 -and
+        [int]$calendar.appendedObservationCount -eq 0 -and
+        @($calendar.captureBatchIds).Count -eq 0 -and
+        $target.Date -le $currentSse.Date -and
+        $currentSse.Date -eq $currentSzse.Date -and
+        $finalSse.Date -eq $currentSse.Date -and
+        $finalSzse.Date -eq $currentSzse.Date
+    [int]$rangeDays = if ($datesValid) {
+        [int](($target.Date - $start.Date).TotalDays + 1)
+    } else { -1 }
+    $captured = $calendar.action -eq 'APPENDED' -and
+        $providerCalls -eq 2 + $recoveries -and
+        $providerCalls -eq $sseCalls + $szseCalls -and
+        $sseCalls -in @(1, 2, 3) -and $szseCalls -in @(1, 2, 3) -and
+        $currentSse.Date -eq $currentSzse.Date -and
+        $start.Date -eq $currentSse.Date.AddDays(1) -and
+        $finalSse.Date -eq $target.Date -and
+        $finalSzse.Date -eq $target.Date -and $rangeDays -ge 1 -and
+        $rangeDays -le 500 -and
+        [int]$calendar.rangeCalendarDateCount -eq $rangeDays -and
+        [int]$calendar.appendedObservationCount -eq 2 * $rangeDays -and
+        [int]$calendar.idempotentChainTailHits -eq 0 -and
+        @($calendar.captureBatchIds).Count -eq 2
+    if (-not $datesValid -or $calendar.schemaVersion -ne
+            'MAINBOARD_TRADE_CAL_FORWARD_INCREMENT_RESULT_V1' -or
+        $calendar.status -ne 'SUCCEEDED' -or
+        [string]$calendar.executionId -ne $executionId -or
+        [string]$calendar.gitCommit -ne $BrokerRequest.GitCommit -or
+        [string]$calendar.requestedEndDate -ne
+            [string]$BrokerRequest.Values['target.end.date'] -or
+        [int]$calendar.maximumProviderRequests -ne 4 -or
+        [int]$calendar.networkRecoveryBudget -ne 2 -or
+        -not ($noOp -or $captured) -or
+        $providerCalls -gt 4 -or $recoveries -gt 2 -or
+        [int]$calendar.dailyProviderCallCount -ne 0 -or
+        [int]$calendar.adjustmentFactorProviderCallCount -ne 0 -or
+        [int]$calendar.stockBasicProviderCallCount -ne 0 -or
+        [int]$calendar.duplicateCount -ne 0 -or
+        [int]$calendar.universeMemberCount -lt 1000 -or
+        [int]$calendar.modelCallCount -ne 0 -or
+        -not $calendar.continuousCoverage -or
+        -not $calendar.knownAtValid -or
+        -not $calendar.firstObservedAtValid -or
+        -not $calendar.sourceLineageValid -or
+        -not $calendar.providerFieldsPreserved -or
+        -not $calendar.existingFactsUnchanged -or
+        -not $calendar.appendOnly -or
+        -not $calendar.universeUnchanged -or
+        -not $calendar.outputAuditClean -or
+        -not $calendar.dataOnly -or $calendar.realTradingStarted -or
+        [string]::IsNullOrWhiteSpace(
+            [string]$calendar.latestCommonCompletedOpenTradeDate) -or
+        [long]$calendar.researchSelectionRunsCreated -ne 0 -or
+        [long]$calendar.shadowRunsCreated -ne 0 -or
+        [long]$calendar.paperOrdersCreated -ne 0 -or
+        [long]$calendar.evaluationRowsCreated -ne 0) {
+        $script:failureSummary = $summary
+        throw 'STOCK_QUANT_HOST_BROKER_TRADE_CAL_FORWARD_RESULT_INVALID'
+    }
+    return $summary
+}
+
 function Resolve-ResearchProductionJavaExecutable {
     $command = 'java.exe'
     $oldPreference = $ErrorActionPreference
@@ -2515,6 +2699,11 @@ function Invoke-ClaimedRequest {
             }
             'TRADE_CAL_BACKFILL' {
                 Invoke-MainboardTradeCalendarBackfill -BrokerRequest $request
+                break
+            }
+            'MAINBOARD_TRADE_CAL_FORWARD_INCREMENT' {
+                Invoke-MainboardTradeCalendarForwardIncrement `
+                    -BrokerRequest $request
                 break
             }
             'START_RESEARCH_PRODUCTION' {

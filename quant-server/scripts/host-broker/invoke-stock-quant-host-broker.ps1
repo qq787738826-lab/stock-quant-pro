@@ -16,6 +16,7 @@ param(
         'MAINBOARD_DAILY_INCREMENT',
         'MAINBOARD_HISTORY_BACKFILL',
         'TRADE_CAL_BACKFILL',
+        'MAINBOARD_TRADE_CAL_FORWARD_INCREMENT',
         'START_RESEARCH_PRODUCTION',
         'STOP_RESEARCH_PRODUCTION',
         'CHECK_RESEARCH_PRODUCTION_STATUS',
@@ -96,6 +97,7 @@ if (($RequestId -ne 'AUTO' -or $TradeDate -ne 'AUTO' -or
     $Operation -notin @('RUN_M4_SHADOW_RESEARCH',
         'RUN_RESEARCH_SELECTION', 'MAINBOARD_DAILY_INCREMENT',
         'MAINBOARD_HISTORY_BACKFILL', 'TRADE_CAL_BACKFILL',
+        'MAINBOARD_TRADE_CAL_FORWARD_INCREMENT',
         'START_RESEARCH_PRODUCTION', 'STOP_RESEARCH_PRODUCTION',
         'CHECK_RESEARCH_PRODUCTION_STATUS')) {
     throw 'STOCK_QUANT_HOST_BROKER_FIXED_DISPATCH_ARGUMENT_INVALID'
@@ -138,6 +140,8 @@ if ([string]::IsNullOrWhiteSpace($ArtifactPath)) {
         'quant-server-1.3.1-mainboard-history-backfill-runner.jar'
     } elseif ($Operation -eq 'TRADE_CAL_BACKFILL') {
         'quant-server-1.3.1-mainboard-trade-cal-backfill-runner.jar'
+    } elseif ($Operation -eq 'MAINBOARD_TRADE_CAL_FORWARD_INCREMENT') {
+        'quant-server-1.3.1-mainboard-trade-cal-forward-increment-runner.jar'
     } elseif ($Operation -eq 'RUN_RESEARCH_SELECTION') {
         'quant-server-1.3.1-research-selection-runner.jar'
     } elseif ($Operation -eq 'RUN_M4_SHADOW_RESEARCH') {
@@ -206,6 +210,10 @@ try {
     } elseif ($Operation -eq 'TRADE_CAL_BACKFILL' -and
         $branch -eq
             'codex/1.4.0-mainboard-250-session-trade-cal-backfill') {
+        $branch
+    } elseif ($Operation -eq 'MAINBOARD_TRADE_CAL_FORWARD_INCREMENT' -and
+        $branch -eq
+            'codex/1.4.0-v1-trade-cal-forward-increment-fix') {
         $branch
     } elseif ($Operation -eq 'RUN_M4_SHADOW_RESEARCH' -and
         $branch -eq 'codex/1.4.0-m4-shadow-research-ready') {
@@ -283,6 +291,7 @@ try {
             'MAINBOARD_DAILY_INCREMENT',
             'MAINBOARD_HISTORY_BACKFILL',
             'TRADE_CAL_BACKFILL',
+            'MAINBOARD_TRADE_CAL_FORWARD_INCREMENT',
             'START_RESEARCH_PRODUCTION',
             'STOP_RESEARCH_PRODUCTION',
             'CHECK_RESEARCH_PRODUCTION_STATUS')) {
@@ -570,6 +579,65 @@ try {
             'expires.at' = $expiresAt.ToString('o')
             'execution.source' =
                 'V1_MAINBOARD_250_SESSION_TRADE_CAL_BACKFILL'
+            'no.retry' = 'true'
+            'source.request.id' = 'NONE'
+        }
+    } elseif ($Operation -eq 'MAINBOARD_TRADE_CAL_FORWARD_INCREMENT') {
+        if ($TradeDate -eq 'AUTO' -or $MaximumProviderRequests -ne 4) {
+            throw 'MAINBOARD_TRADE_CAL_FORWARD_FIXED_SCOPE_INVALID'
+        }
+        $targetEnd = [DateTime]::ParseExact($TradeDate, 'yyyy-MM-dd',
+            [Globalization.CultureInfo]::InvariantCulture)
+        $chinaNow = [TimeZoneInfo]::ConvertTimeBySystemTimeZoneId(
+            [DateTimeOffset]::UtcNow, 'China Standard Time')
+        if ($targetEnd.Date -gt $chinaNow.Date) {
+            throw 'MAINBOARD_TRADE_CAL_FORWARD_TARGET_FUTURE'
+        }
+        $calendarMonth = $chinaNow.ToString('yyyy-MM')
+        [int]$monthlyTushareLimit = Get-StockQuantTushareMonthlyLimit `
+            -CalendarMonth $calendarMonth
+        $usage = Get-StockQuantM4MonthlyUsage `
+            -CalendarMonth $calendarMonth
+        if ([int]$usage.CommittedTushareCalls + 4 -gt
+                $monthlyTushareLimit) {
+            throw 'MAINBOARD_TRADE_CAL_FORWARD_MONTHLY_BUDGET_EXHAUSTED'
+        }
+        $requestValues = [ordered]@{
+            'schema.version' = 'STOCK_QUANT_HOST_BROKER_REQUEST_V1'
+            'request.id' = $requestId
+            'operation' = $Operation
+            'git.commit' = $head
+            'jar.path' = $artifact
+            'jar.sha256' = $artifactHash
+            'authorization.file' = 'NONE'
+            'target.end.date' = $TradeDate
+            'universe.version' = 'RESEARCH_UNIVERSE_MAINBOARD_V1'
+            'database.host' = '127.0.0.1'
+            'database.port' = '38432'
+            'database.name' = 'stock_quant_research'
+            'database.user' = 'stock_quant_research'
+            'schema.name' = 'tushare_research'
+            'provider' = 'TUSHARE'
+            'provider.endpoints' = 'trade_cal'
+            'endpoint.stock_basic.requests' = '0'
+            'endpoint.daily.requests' = '0'
+            'endpoint.adj_factor.requests' = '0'
+            'endpoint.trade_cal.requests' = '2'
+            'maximum.provider.requests' = '4'
+            'budget.calendar.month' = $calendarMonth
+            'tushare.monthly.limit' = [string]$monthlyTushareLimit
+            'tushare.monthly.calls.before' =
+                [string]$usage.CommittedTushareCalls
+            'retry.budget' = '0'
+            'network.recovery.budget' = '2'
+            'redirects' = 'NEVER'
+            'historical.research.classification' = 'POST_HOC_RESEARCH'
+            'pit.classification' = 'PIT_PARTIAL'
+            'user.approval.reference' =
+                'USER_APPROVED_V1_TRADE_CAL_FORWARD_INCREMENT_FIX'
+            'created.at' = $createdAt.ToString('o')
+            'expires.at' = $expiresAt.ToString('o')
+            'execution.source' = 'V1_TRADE_CAL_FORWARD_INCREMENT_FIX'
             'no.retry' = 'true'
             'source.request.id' = 'NONE'
         }

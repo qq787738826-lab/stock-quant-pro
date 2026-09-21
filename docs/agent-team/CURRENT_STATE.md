@@ -690,6 +690,17 @@ DATA_QUALITY 只作门禁和 confidence 上限，MARKET_REGIME V1 权重为 0 �
   `daily/adj_factor/stock_basic`、Selection、Shadow、Agent、Paper 与百炼均固定为 0。只有正式
   SSE/SZSE 日历事实交集达到至少 260 个共同开市日、最近日期仍为锚点并可精确生成最后 250 日时
   才成功；补采事实保留真实 `knownAt/firstObservedAt` 和既有 source lineage。
+- `V1_TRADE_CAL_FORWARD_INCREMENT_FIX` 新增独立 data-only Broker operation
+  `MAINBOARD_TRADE_CAL_FORWARD_INCREMENT`，只从 SSE/SZSE 当前共同最大 `cal_date` 的下一自然日
+  追加到授权 `target.end.date`；原 `TRADE_CAL_BACKFILL` 的“最近共同开市日必须等于 anchor”门禁和
+  历史回填合同保持不变。目标不晚于当前最大日期时直接 `NO_OP`，Provider 调用为 0；需要扩展时仅
+  允许 SSE/SZSE 各一次 `trade_cal` 基础调用及既有最多 2 次无响应网络恢复，总预算固定为 4，
+  `daily/adj_factor/stock_basic`、Selection、Shadow、Agent、Paper 与百炼均为 0。两侧 Provider 响应
+  必须全部成功并完成字段、自然日连续性和来源校验后，才在单一事务中 append-only 提交；单边失败
+  不产生不一致正式状态。新增事实保留 Provider `cal_date/is_open/pretrade_date` 原文、真实
+  `knownAt/firstObservedAt` 和 PIT/source lineage；已有日期不重新抓取或改写。该修复部署本身不签发
+  真实日历请求，既有失败请求 `SQHB_20260917T113826Z_7B5BA2973C9A` 永久保留，正式 SSE/SZSE
+  日历与 `latestCompleteTradeDate` 仍停在 `2026-08-27`，2026-09 Tushare 账本仍为 `375/450`。
 - 生产全主板历史现已覆盖最近 250 个共同开市交易日，20/60/120/250 窗口均可用；这些后补事实
   继续标记为 `POST_HOC_RESEARCH/PIT_PARTIAL`。首次 250 日正式选股 run 37 永久保持原 `FAILED`
   终态：在 `PREPARING_DATA` 将 3193×250 的 daily 与 adj_factor 全量物化为 List 和双层 Map，导致

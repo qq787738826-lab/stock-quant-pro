@@ -13,14 +13,18 @@ param(
         'M2_STRATEGY_RESEARCH', 'M3_AGENT_RESEARCH', 'M4_SHADOW_RESEARCH',
         'M6_RESEARCH_PRODUCTION', 'RESEARCH_SELECTION',
         'MAINBOARD_DAILY_INCREMENT', 'MAINBOARD_HISTORY_BACKFILL',
-        'MAINBOARD_TRADE_CAL_BACKFILL')]
+        'MAINBOARD_TRADE_CAL_BACKFILL',
+        'MAINBOARD_TRADE_CAL_FORWARD_INCREMENT')]
     [string] $RunnerProfile = 'F1F_B2'
 )
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $requiredBranch = 'feature/1.4.0-agent-team'
-$artifactName = if ($RunnerProfile -eq 'MAINBOARD_TRADE_CAL_BACKFILL') {
+$artifactName = if ($RunnerProfile -eq
+        'MAINBOARD_TRADE_CAL_FORWARD_INCREMENT') {
+    'quant-server-1.3.1-mainboard-trade-cal-forward-increment-runner.jar'
+} elseif ($RunnerProfile -eq 'MAINBOARD_TRADE_CAL_BACKFILL') {
     'quant-server-1.3.1-mainboard-trade-cal-backfill-runner.jar'
 } elseif ($RunnerProfile -eq 'MAINBOARD_HISTORY_BACKFILL') {
     'quant-server-1.3.1-mainboard-history-backfill-runner.jar'
@@ -44,6 +48,9 @@ $artifactName = if ($RunnerProfile -eq 'MAINBOARD_TRADE_CAL_BACKFILL') {
     'quant-server-1.3.1-f1f-b2-runner.jar'
 }
 $runnerStartClass = if ($RunnerProfile -eq
+        'MAINBOARD_TRADE_CAL_FORWARD_INCREMENT') {
+    'com.stockquant.server.agent.marketfacts.TushareMainboardTradeCalendarForwardIncrementManualRunner'
+} elseif ($RunnerProfile -eq
         'MAINBOARD_TRADE_CAL_BACKFILL') {
     'com.stockquant.server.agent.marketfacts.TushareMainboardTradeCalendarBackfillManualRunner'
 } elseif ($RunnerProfile -eq 'MAINBOARD_HISTORY_BACKFILL') {
@@ -174,12 +181,14 @@ try {
                 'codex/1.4.0-v1.0.9-full-mainboard-universe',
                 'codex/1.4.0-v1.0.11-mainboard-daily-increment',
                 'codex/1.4.0-mainboard-250-session-history-backfill',
-                'codex/1.4.0-mainboard-250-session-trade-cal-backfill') -or
+                'codex/1.4.0-mainboard-250-session-trade-cal-backfill',
+                'codex/1.4.0-v1-trade-cal-forward-increment-fix') -or
             $remoteCommit -ne $ExpectedCommit -or
             $RunnerProfile -notin @(
                 'RESEARCH_SELECTION', 'M6_RESEARCH_PRODUCTION',
                 'MAINBOARD_DAILY_INCREMENT', 'MAINBOARD_HISTORY_BACKFILL',
-                'MAINBOARD_TRADE_CAL_BACKFILL')) {
+                'MAINBOARD_TRADE_CAL_BACKFILL',
+                'MAINBOARD_TRADE_CAL_FORWARD_INCREMENT')) {
             throw 'RESEARCH_SELECTION_BUILD_BASELINE_REQUIRED'
         }
     } elseif ($actualBranch -ne $requiredBranch -and

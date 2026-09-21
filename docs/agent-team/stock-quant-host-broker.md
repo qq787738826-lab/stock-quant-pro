@@ -118,6 +118,8 @@ operation 只允许：
 - `CHECK_CREDENTIAL_STATUS`：只返回两个固定 Target 是否整体 ready，不编组内容；
 - `RUN_FAKE_E2E`：固定打包 Fake Provider/临时 PostgreSQL E2E，禁止读取真实 Credential；
 - `RUN_DAY001`：要求未消费、未过期、`USER_APPROVED` 的正式 Day001 授权；
+- `MAINBOARD_TRADE_CAL_FORWARD_INCREMENT`：固定、data-only 的 SSE/SZSE
+  `trade_cal` 向前追加；起点由正式数据库当前共同最大日计算，目标不超过当前最大日时零调用 `NO_OP`；
 - `READ_SANITIZED_RESULT`：只读 Broker 已生成的 V1 脱敏结果。
 
 Broker 通过同目录原子重命名

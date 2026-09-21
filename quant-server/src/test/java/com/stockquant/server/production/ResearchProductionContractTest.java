@@ -78,15 +78,17 @@ class ResearchProductionContractTest {
         String build = read(
                 "scripts/prepare-m6-research-production-build-proof.ps1");
         assertTrue(build.contains(
-                "@('M6_RESEARCH_PRODUCTION', 'RESEARCH_SELECTION')"));
+                "@('M6_RESEARCH_PRODUCTION', 'RESEARCH_SELECTION',"));
         assertTrue(build.contains(
-                "STOCK_QUANT_FORMAL_ARTIFACT_SET=PRODUCTION,RESEARCH_SELECTION"));
+                "STOCK_QUANT_FORMAL_ARTIFACT_SET=PRODUCTION,RESEARCH_SELECTION,MAINBOARD_TRADE_CAL_FORWARD_INCREMENT"));
         assertTrue(launcher.contains(
                 "quant-server-1.3.1-research-selection-runner.jar"));
         assertTrue(launcher.contains(
                 "TushareResearchSelectionManualRunner"));
         assertTrue(launcher.contains(
                 "M6_RESEARCH_SELECTION_ARTIFACT_INVALID"));
+        assertTrue(launcher.contains(
+                "TushareMainboardTradeCalendarForwardIncrementManualRunner"));
 
         String protocol = read(
                 "scripts/host-broker/StockQuantHostBroker.Protocol.psm1");

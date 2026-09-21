@@ -34,7 +34,8 @@ $mode = if ($branch -eq 'feature/1.4.0-agent-team') {
 } else { 'M6_STAGE_CONTROLLED_BUILD_ARTIFACT' }
 
 $profiles = if ($RunnerProfile -eq 'M6_RESEARCH_PRODUCTION') {
-    @('M6_RESEARCH_PRODUCTION', 'RESEARCH_SELECTION')
+    @('M6_RESEARCH_PRODUCTION', 'RESEARCH_SELECTION',
+        'MAINBOARD_TRADE_CAL_FORWARD_INCREMENT')
 } else { @($RunnerProfile) }
 foreach ($profile in $profiles) {
     & "$PSScriptRoot\prepare-f1f-b2-build-proof.ps1" `
@@ -45,4 +46,5 @@ foreach ($profile in $profiles) {
         throw "STOCK_QUANT_FORMAL_ARTIFACT_BUILD_FAILED_$profile"
     }
 }
-Write-Output 'STOCK_QUANT_FORMAL_ARTIFACT_SET=PRODUCTION,RESEARCH_SELECTION'
+Write-Output `
+    'STOCK_QUANT_FORMAL_ARTIFACT_SET=PRODUCTION,RESEARCH_SELECTION,MAINBOARD_TRADE_CAL_FORWARD_INCREMENT'

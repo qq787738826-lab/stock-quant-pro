@@ -16,6 +16,10 @@ $proof = "$artifact.f1f-b2-proof.properties"
 $selectionArtifact = Join-Path $repoRoot `
     'quant-server\target\quant-server-1.3.1-research-selection-runner.jar'
 $selectionProof = "$selectionArtifact.f1f-b2-proof.properties"
+$tradeCalendarForwardArtifact = Join-Path $repoRoot `
+    'quant-server\target\quant-server-1.3.1-mainboard-trade-cal-forward-increment-runner.jar'
+$tradeCalendarForwardProof =
+    "$tradeCalendarForwardArtifact.f1f-b2-proof.properties"
 $invokeBroker = Join-Path $PSScriptRoot `
     'host-broker\invoke-stock-quant-host-broker.ps1'
 $brokerScript = Join-Path $PSScriptRoot `
@@ -99,6 +103,9 @@ function Get-StartupActionRequiredMessage([string] $Reason) {
         'M6_RESEARCH_SELECTION_ARTIFACT_INVALID' {
             return 'The stock-selection runtime is not aligned with this application version. Complete the controlled application update, then start again.'
         }
+        'M6_TRADE_CAL_FORWARD_ARTIFACT_INVALID' {
+            return 'The forward trade-calendar runtime is not aligned with this application version. Complete the controlled application update, then start again.'
+        }
         'M6_JAVA_17_REQUIRED' {
             return 'Java 17 is required before Stock Quant Pro can start.'
         }
@@ -161,6 +168,13 @@ try {
             -ExpectedStartClass `
                 'com.stockquant.server.agent.marketfacts.TushareResearchSelectionManualRunner' `
             -FailureReason 'M6_RESEARCH_SELECTION_ARTIFACT_INVALID'
+        Assert-StockQuantFormalArtifactBinding `
+            -ArtifactPath $tradeCalendarForwardArtifact `
+            -ProofPath $tradeCalendarForwardProof `
+            -ExpectedCommit $expectedHead `
+            -ExpectedStartClass `
+                'com.stockquant.server.agent.marketfacts.TushareMainboardTradeCalendarForwardIncrementManualRunner' `
+            -FailureReason 'M6_TRADE_CAL_FORWARD_ARTIFACT_INVALID'
         Write-Output 'STOCK_QUANT_STARTUP_STAGE=CHECKING_RESIDENT_BROKER'
         $brokerProbeState = [pscustomobject]@{
             ProcessId = 0

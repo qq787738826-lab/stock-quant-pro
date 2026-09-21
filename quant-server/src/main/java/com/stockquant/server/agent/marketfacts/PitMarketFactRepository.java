@@ -415,6 +415,51 @@ public class PitMarketFactRepository {
                 Timestamp.from(cutoff));
     }
 
+    public Optional<TradingCalendarObservation> findLatestCalendarAsOf(
+            String sourceCode,
+            String sourceInstrumentId,
+            String exchange,
+            Instant cutoff
+    ) {
+        String sql = """
+                WITH visible AS (
+                    SELECT %s, c.exchange, c.calendar_date, c.is_open,
+                           c.session_code,
+                           row_number() OVER (
+                               PARTITION BY c.exchange, c.calendar_date
+                               ORDER BY
+                                    CASE o.revision_qualification
+                                      WHEN 'PROVIDER_VERIFIED' THEN 4
+                                      WHEN 'SYSTEM_KNOWLEDGE_ONLY' THEN 3
+                                      WHEN 'PROVIDER_UNVERIFIED' THEN 2
+                                      WHEN 'PROVIDER_UNAVAILABLE' THEN 1
+                                      ELSE 0
+                                    END DESC,
+                                    o.known_at DESC,
+                                    o.chain_sequence DESC, o.id DESC
+                           ) AS selected_version
+                    FROM pit_market_fact_observations o
+                    JOIN pit_market_fact_batches capture
+                      ON capture.id=o.batch_id
+                     AND capture.response_complete
+                    JOIN trading_calendar_facts_v1 c
+                      ON c.observation_id=o.id
+                    WHERE o.fact_type='TRADING_CALENDAR'
+                      AND o.source_code=?
+                      AND o.source_instrument_id=?
+                      AND c.exchange=?
+                      AND o.known_at<=?
+                )
+                SELECT * FROM visible
+                 WHERE selected_version=1
+                 ORDER BY calendar_date DESC
+                 LIMIT 1
+                """.formatted(ENVELOPE_COLUMNS);
+        return jdbcTemplate.query(sql, this::mapCalendar,
+                        sourceCode, sourceInstrumentId, exchange,
+                        Timestamp.from(cutoff)).stream().findFirst();
+    }
+
     public List<RawDailyBarObservation> findRawBarsAsOf(
             String sourceCode,
             String sourceInstrumentId,

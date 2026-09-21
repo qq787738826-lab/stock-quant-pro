@@ -192,7 +192,8 @@ Vue 修改后：
   `quant-server/scripts/run-stock-quant-local-automation.ps1`，再启动已证明 Start-Class 的
   `TushareReducedResearchManualRunner`。Codex 只能通过
   `quant-server/scripts/host-broker/invoke-stock-quant-host-broker.ps1` 校验 fresh heartbeat、写请求并
-  等待脱敏结果；不得查询或触发 Task Scheduler，也不得直接启动正式 Runner。
+  等待脱敏结果；正式主板日历向前追加只允许固定
+  `MAINBOARD_TRADE_CAL_FORWARD_INCREMENT` operation；不得查询或触发 Task Scheduler，也不得直接启动正式 Runner。
   `stock_quant_formal_runner` 只用于请求和结果轮询，不允许访问 Tushare 域名。任何测试、E2E、
   诊断、修复、构建或普通 Java/PowerShell 命令均不得访问真实 Provider。
 - M3 真实 LLM smoke 只允许固定宿主 Broker 以真实用户身份启动已证明 Start-Class 的

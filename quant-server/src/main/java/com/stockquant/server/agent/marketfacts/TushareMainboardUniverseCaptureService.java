@@ -207,6 +207,89 @@ public final class TushareMainboardUniverseCaptureService {
         }
     }
 
+    /**
+     * Fetches the forward SSE/SZSE calendar pair before beginning one atomic
+     * persistence transaction. This method is intentionally calendar-only.
+     */
+    public CaptureEvidence captureForwardCalendars(
+            SnapshotBundle current,
+            LocalDate calendarStart,
+            LocalDate calendarEnd,
+            String gitCommit,
+            Duration timeout,
+            int maximumNetworkRecoveries
+    ) {
+        if (current == null || calendarStart == null || calendarEnd == null
+                || calendarStart.isAfter(calendarEnd) || gitCommit == null
+                || !gitCommit.matches("[0-9a-f]{40}") || timeout == null
+                || timeout.isZero() || timeout.isNegative()
+                || maximumNetworkRecoveries < 0
+                || maximumNetworkRecoveries
+                > TushareManualBoundedSession
+                .MAINBOARD_MAX_NETWORK_RECOVERIES) {
+            throw invalid("MAINBOARD_FORWARD_CALENDAR_REQUEST_INVALID");
+        }
+        var preProvider = guard.verifyBeforeProvider();
+        var session = TushareManualBoundedSession.mainboardUniverse(Set.of(),
+                calendarStart, calendarEnd, false, true,
+                maximumNetworkRecoveries);
+        List<Long> batches = new ArrayList<>();
+        Map<String, Integer> calendarCallCounts =
+                new java.util.LinkedHashMap<>();
+        try {
+            List<MainboardInstrument> providerMembers = current.members()
+                    .stream().map(TushareMainboardUniverseCaptureService
+                            ::providerMember).toList();
+            List<MarketFactResponse> responses = new ArrayList<>();
+            for (String exchange : List.of("SSE", "SZSE")) {
+                MainboardInstrument representative = providerMembers.stream()
+                        .filter(value -> exchange.equals(value.exchange()))
+                        .findFirst().orElseThrow(() -> invalid(
+                                "MAINBOARD_EXCHANGE_MEMBER_MISSING"));
+                int beforeCalls = session.consumedBusinessRequests();
+                try {
+                    responses.add(provider.fetchMainboardCalendar(
+                            representative, exchange, calendarStart,
+                            calendarEnd, timeout, session));
+                } finally {
+                    int calls = session.consumedBusinessRequests()
+                            - beforeCalls;
+                    if (calls > 0) {
+                        calendarCallCounts.merge(exchange, calls,
+                                Integer::sum);
+                    }
+                }
+            }
+            Instant observedAt = clock.instant();
+            List<CaptureResult> results = capture
+                    .captureAuthorizedMainboardCalendars(responses,
+                            observedAt, preProvider);
+            int appended = 0;
+            int idempotent = 0;
+            for (CaptureResult result : results) {
+                batches.add(result.batchId());
+                appended += result.appendedCount();
+                idempotent += result.idempotentCount();
+            }
+            if (session.consumedBusinessRequests()
+                    != session.expectedBusinessRequests()
+                    + session.consumedNetworkRecoveries()) {
+                throw invalid("MAINBOARD_PROVIDER_BUDGET_MISMATCH");
+            }
+            return new CaptureEvidence(current,
+                    session.consumedBusinessRequests(),
+                    session.consumedNetworkRecoveries(), batches, appended,
+                    idempotent, session.consumedRequestsByEndpoint(),
+                    calendarCallCounts, List.of(), clock.instant());
+        } catch (RuntimeException failure) {
+            throw new CaptureFailure(safeCode(failure),
+                    session.consumedBusinessRequests(),
+                    session.consumedNetworkRecoveries(),
+                    session.consumedRequestsByEndpoint(), batches,
+                    calendarCallCounts, 0, 0, List.of(), failure);
+        }
+    }
+
     private static Member member(
             MainboardInstrument value,
             Instant observedAt
