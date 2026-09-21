@@ -55,13 +55,16 @@ function Run-Forward(
     [string] $ExecutionId,
     [string] $TargetDate
 ) {
-    & "$PSScriptRoot\run-mainboard-trade-cal-forward-increment.ps1" `
+    $runnerOutput = @(& "$PSScriptRoot\run-mainboard-trade-cal-forward-increment.ps1" `
         -ResultFile $Result -ArtifactPath $artifact `
         -ExecutionId $ExecutionId -GitCommit $ExpectedCommit `
         -TargetEndDate $TargetDate `
         -DatabasePort $port -MaximumProviderRequests 4 `
-        -NetworkRecoveryBudget 2 -ExecutionMode FAKE
-    if ($LASTEXITCODE -ne 0) {
+        -NetworkRecoveryBudget 2 -ExecutionMode FAKE 2>&1 |
+        ForEach-Object { [string]$_ })
+    $runnerExitCode = $LASTEXITCODE
+    if ($runnerExitCode -ne 0) {
+        $runnerOutput | Write-Output
         throw 'MAINBOARD_TRADE_CAL_FORWARD_E2E_RUNNER_FAILED'
     }
     return Get-Content -LiteralPath $Result -Raw -Encoding UTF8 |
