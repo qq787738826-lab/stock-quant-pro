@@ -38,6 +38,9 @@ $researchSelectionRunnerScript = Join-Path $paths.RepositoryRoot `
     'quant-server\scripts\run-research-selection.ps1'
 $mainboardDailyIncrementRunnerScript = Join-Path $paths.RepositoryRoot `
     'quant-server\scripts\run-mainboard-daily-increment.ps1'
+$mainboardCatchupReadonlyAuditRunnerScript = Join-Path `
+    $paths.RepositoryRoot `
+    'quant-server\scripts\run-mainboard-catchup-readonly-audit.ps1'
 $mainboardHistoryBackfillRunnerScript = Join-Path $paths.RepositoryRoot `
     'quant-server\scripts\run-mainboard-history-backfill.ps1'
 $mainboardTradeCalendarBackfillRunnerScript = Join-Path $paths.RepositoryRoot `
@@ -147,6 +150,7 @@ function Assert-GitBinding {
                 'RUN_M4_SHADOW_RESEARCH',
                 'RUN_RESEARCH_SELECTION',
                 'MAINBOARD_DAILY_INCREMENT',
+                'MAINBOARD_CATCHUP_READONLY_AUDIT',
                 'MAINBOARD_HISTORY_BACKFILL',
                 'TRADE_CAL_BACKFILL',
                 'MAINBOARD_TRADE_CAL_FORWARD_INCREMENT',
@@ -1590,6 +1594,138 @@ function Invoke-MainboardDailyIncrement {
     return $summary
 }
 
+function Invoke-MainboardCatchupReadonlyAudit {
+    param([Parameter(Mandatory = $true)] [object] $BrokerRequest)
+    if ($BrokerRequest.AuthorizationStatus -ne
+            'V1_MAINBOARD_CATCHUP_READONLY_AUDIT_APPROVED' -or
+        $null -ne $BrokerRequest.AuthorizationFile) {
+        throw 'STOCK_QUANT_HOST_BROKER_CATCHUP_AUDIT_SCOPE_INVALID'
+    }
+    $usage = Get-StockQuantM4MonthlyUsage `
+        -CalendarMonth $BrokerRequest.Values['budget.calendar.month'] `
+        -ExcludedRequestPath $processingPath
+    [int]$monthlyLimit = Get-StockQuantTushareMonthlyLimit `
+        -CalendarMonth $BrokerRequest.Values['budget.calendar.month']
+    [int]$currentLedger = [int]$usage.CommittedTushareCalls
+    if ($currentLedger -ne
+            [int]$BrokerRequest.Values['tushare.monthly.calls.before'] -or
+        $monthlyLimit -ne
+            [int]$BrokerRequest.Values['tushare.monthly.limit']) {
+        throw 'MAINBOARD_CATCHUP_AUDIT_LEDGER_CHANGED'
+    }
+    $runnerResult = Join-Path $paths.Results `
+        "$($BrokerRequest.RequestId).mainboard-catchup-readonly-audit.json"
+    if (Test-Path -LiteralPath $runnerResult) {
+        throw 'STOCK_QUANT_HOST_BROKER_RUNNER_RESULT_ALREADY_EXISTS'
+    }
+    $executionId = $BrokerRequest.RequestId -replace '^SQHB_', 'MBAUDIT_'
+    $output = @(& $mainboardCatchupReadonlyAuditRunnerScript `
+        -ResultFile $runnerResult -ArtifactPath $BrokerRequest.JarPath `
+        -ExecutionId $executionId -GitCommit $BrokerRequest.GitCommit `
+        -DatabasePort 38432 -CurrentLedger $currentLedger `
+        -LedgerLimit $monthlyLimit -ExecutionMode FORMAL 2>&1 |
+        ForEach-Object { [string]$_ })
+    $runnerExitCode = $LASTEXITCODE
+    if (-not (Test-Path -LiteralPath $runnerResult -PathType Leaf)) {
+        throw (Get-SafeMarker -Lines $output `
+            -Name 'MAINBOARD_CATCHUP_READONLY_AUDIT_FAILURE_REASON' `
+            -Fallback 'STOCK_QUANT_HOST_BROKER_RUNNER_RESULT_MISSING')
+    }
+    $audit = Get-Content -LiteralPath $runnerResult -Raw -Encoding UTF8 |
+        ConvertFrom-Json
+    $summary = [ordered]@{
+        calendarMaxSse = [string]$audit.calendarMaxSse
+        calendarMaxSzse = [string]$audit.calendarMaxSzse
+        latestCommonCompletedOpenTradeDate =
+            [string]$audit.latestCommonCompletedOpenTradeDate
+        latestCompleteTradeDate = [string]$audit.latestCompleteTradeDate
+        commonOpenTradeDates = @($audit.commonOpenTradeDates)
+        dateAudits = @($audit.dateAudits)
+        missingTradeDates = @($audit.missingTradeDates)
+        partialTradeDates = @($audit.partialTradeDates)
+        completeTradeDates = @($audit.completeTradeDates)
+        missingTradeDateCount = [int]$audit.missingTradeDateCount
+        partialTradeDateCount = [int]$audit.partialTradeDateCount
+        completeTradeDateCount = [int]$audit.completeTradeDateCount
+        universeMemberCount = [int]$audit.universeMemberCount
+        factSecurityCount = [int]$audit.factSecurityCount
+        currentLedger = [int]$audit.currentLedger
+        ledgerLimit = [int]$audit.ledgerLimit
+        plannedBaseCalls = [int]$audit.plannedBaseCalls
+        networkRecoveryBudget = [int]$audit.networkRecoveryBudget
+        projectedWorstCaseLedger =
+            [int]$audit.projectedWorstCaseLedger
+        projectedWithinLimit = [bool]$audit.projectedWithinLimit
+        providerCallCount = [int]$audit.tushareProviderCallCount
+        retryCount = [int]$audit.retryCount
+        databaseRowsWritten = [long]$audit.databaseRowsWritten
+        outputAudit = $(if ($audit.outputAuditClean) {
+            'PASSED'
+        } else { 'FAILED' })
+    }
+    if ($runnerExitCode -ne 0) {
+        $script:failureSummary = $summary
+        $reason = [string]$audit.failureReason
+        if ($reason -match '^[A-Z][A-Z0-9_]{3,127}$') { throw $reason }
+        throw 'STOCK_QUANT_HOST_BROKER_CATCHUP_AUDIT_FAILED'
+    }
+    [int]$missingCount = @($audit.missingTradeDates).Count
+    [int]$partialCount = @($audit.partialTradeDates).Count
+    [int]$completeCount = @($audit.completeTradeDates).Count
+    [int]$planned = $missingCount * 2
+    [int]$projected = $currentLedger + $planned
+    $statusValues = @($audit.dateAudits | ForEach-Object {
+        [string]$_.status
+    })
+    if ($audit.schemaVersion -ne
+            'MAINBOARD_CATCHUP_READONLY_AUDIT_RESULT_V1' -or
+        $audit.status -ne 'SUCCEEDED' -or
+        [string]$audit.executionId -ne $executionId -or
+        [string]$audit.gitCommit -ne $BrokerRequest.GitCommit -or
+        [string]::IsNullOrWhiteSpace([string]$audit.calendarMaxSse) -or
+        [string]::IsNullOrWhiteSpace([string]$audit.calendarMaxSzse) -or
+        [string]::IsNullOrWhiteSpace(
+            [string]$audit.latestCommonCompletedOpenTradeDate) -or
+        [string]::IsNullOrWhiteSpace(
+            [string]$audit.latestCompleteTradeDate) -or
+        [int]$audit.missingTradeDateCount -ne $missingCount -or
+        [int]$audit.partialTradeDateCount -ne $partialCount -or
+        [int]$audit.completeTradeDateCount -ne $completeCount -or
+        @($audit.commonOpenTradeDates).Count -ne
+            $missingCount + $partialCount + $completeCount -or
+        @($statusValues | Where-Object {
+                $_ -notin @('COMPLETE', 'PARTIAL', 'MISSING')
+            }).Count -ne 0 -or
+        [int]$audit.universeMemberCount -lt 1000 -or
+        [int]$audit.factSecurityCount -lt 950 -or
+        [int]$audit.currentLedger -ne $currentLedger -or
+        [int]$audit.ledgerLimit -ne $monthlyLimit -or
+        [int]$audit.plannedBaseCalls -ne $planned -or
+        [int]$audit.networkRecoveryBudget -ne 0 -or
+        [int]$audit.projectedWorstCaseLedger -ne $projected -or
+        [bool]$audit.projectedWithinLimit -ne
+            ($projected -le $monthlyLimit) -or
+        [int]$audit.tushareProviderCallCount -ne 0 -or
+        [int]$audit.dailyProviderCallCount -ne 0 -or
+        [int]$audit.adjustmentFactorProviderCallCount -ne 0 -or
+        [int]$audit.tradeCalendarProviderCallCount -ne 0 -or
+        [int]$audit.stockBasicProviderCallCount -ne 0 -or
+        [int]$audit.retryCount -ne 0 -or
+        [int]$audit.modelCallCount -ne 0 -or
+        [long]$audit.databaseRowsWritten -ne 0 -or
+        [long]$audit.researchSelectionRunsCreated -ne 0 -or
+        [long]$audit.shadowRunsCreated -ne 0 -or
+        [long]$audit.paperOrdersCreated -ne 0 -or
+        [long]$audit.evaluationRowsCreated -ne 0 -or
+        -not $audit.readOnlyTransaction -or
+        -not $audit.outputAuditClean -or -not $audit.dataOnly -or
+        $audit.realTradingStarted) {
+        $script:failureSummary = $summary
+        throw 'STOCK_QUANT_HOST_BROKER_CATCHUP_AUDIT_RESULT_INVALID'
+    }
+    return $summary
+}
+
 function Invoke-MainboardHistoryBackfill {
     param([Parameter(Mandatory = $true)] [object] $BrokerRequest)
     if ($BrokerRequest.AuthorizationStatus -ne
@@ -2691,6 +2827,11 @@ function Invoke-ClaimedRequest {
             }
             'MAINBOARD_DAILY_INCREMENT' {
                 Invoke-MainboardDailyIncrement -BrokerRequest $request
+                break
+            }
+            'MAINBOARD_CATCHUP_READONLY_AUDIT' {
+                Invoke-MainboardCatchupReadonlyAudit `
+                    -BrokerRequest $request
                 break
             }
             'MAINBOARD_HISTORY_BACKFILL' {

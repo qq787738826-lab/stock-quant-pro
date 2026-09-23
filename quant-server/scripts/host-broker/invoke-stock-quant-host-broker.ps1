@@ -14,6 +14,7 @@ param(
         'RUN_M4_SHADOW_RESEARCH',
         'RUN_RESEARCH_SELECTION',
         'MAINBOARD_DAILY_INCREMENT',
+        'MAINBOARD_CATCHUP_READONLY_AUDIT',
         'MAINBOARD_HISTORY_BACKFILL',
         'TRADE_CAL_BACKFILL',
         'MAINBOARD_TRADE_CAL_FORWARD_INCREMENT',
@@ -91,11 +92,17 @@ $paths = Initialize-StockQuantHostBrokerDirectories
 $identity = [Security.Principal.WindowsIdentity]::GetCurrent().Name
 $integrationBranch = 'feature/1.4.0-agent-team'
 
+if ($Operation -eq 'MAINBOARD_CATCHUP_READONLY_AUDIT' -and
+    $PSBoundParameters.ContainsKey('ArtifactPath')) {
+    throw 'MAINBOARD_CATCHUP_AUDIT_CLIENT_PATH_FORBIDDEN'
+}
+
 if (($RequestId -ne 'AUTO' -or $TradeDate -ne 'AUTO' -or
         $ShadowDispatchMode -ne 'AUTO' -or $SelectionRunId -ne 0 -or
         $SelectionPublicRunId -ne 'NONE' -or $SubmitOnly) -and
     $Operation -notin @('RUN_M4_SHADOW_RESEARCH',
         'RUN_RESEARCH_SELECTION', 'MAINBOARD_DAILY_INCREMENT',
+        'MAINBOARD_CATCHUP_READONLY_AUDIT',
         'MAINBOARD_HISTORY_BACKFILL', 'TRADE_CAL_BACKFILL',
         'MAINBOARD_TRADE_CAL_FORWARD_INCREMENT',
         'START_RESEARCH_PRODUCTION', 'STOP_RESEARCH_PRODUCTION',
@@ -136,6 +143,8 @@ if ([string]::IsNullOrWhiteSpace($ArtifactPath)) {
         'quant-server-1.3.1-research-production.jar'
     } elseif ($Operation -eq 'MAINBOARD_DAILY_INCREMENT') {
         'quant-server-1.3.1-mainboard-daily-increment-runner.jar'
+    } elseif ($Operation -eq 'MAINBOARD_CATCHUP_READONLY_AUDIT') {
+        'quant-server-1.3.1-mainboard-catchup-readonly-audit-runner.jar'
     } elseif ($Operation -eq 'MAINBOARD_HISTORY_BACKFILL') {
         'quant-server-1.3.1-mainboard-history-backfill-runner.jar'
     } elseif ($Operation -eq 'TRADE_CAL_BACKFILL') {
@@ -289,6 +298,7 @@ try {
             'RUN_M4_SHADOW_RESEARCH',
             'RUN_RESEARCH_SELECTION',
             'MAINBOARD_DAILY_INCREMENT',
+            'MAINBOARD_CATCHUP_READONLY_AUDIT',
             'MAINBOARD_HISTORY_BACKFILL',
             'TRADE_CAL_BACKFILL',
             'MAINBOARD_TRADE_CAL_FORWARD_INCREMENT',
@@ -408,6 +418,47 @@ try {
             'execution.source' = 'M3_AGENT_RESEARCH_REAL_LLM_SMOKE'
             'no.retry' = 'true'
             'source.request.id' = $SourceRequestId
+        }
+    } elseif ($Operation -eq 'MAINBOARD_CATCHUP_READONLY_AUDIT') {
+        $chinaNow = [TimeZoneInfo]::ConvertTimeBySystemTimeZoneId(
+            [DateTimeOffset]::UtcNow, 'China Standard Time')
+        $calendarMonth = $chinaNow.ToString('yyyy-MM')
+        [int]$monthlyTushareLimit = Get-StockQuantTushareMonthlyLimit `
+            -CalendarMonth $calendarMonth
+        $usage = Get-StockQuantM4MonthlyUsage `
+            -CalendarMonth $calendarMonth
+        $requestValues = [ordered]@{
+            'schema.version' = 'STOCK_QUANT_HOST_BROKER_REQUEST_V1'
+            'request.id' = $requestId
+            'operation' = $Operation
+            'git.commit' = $head
+            'jar.path' = $artifact
+            'jar.sha256' = $artifactHash
+            'authorization.file' = 'NONE'
+            'universe.version' = 'RESEARCH_UNIVERSE_MAINBOARD_V1'
+            'database.host' = '127.0.0.1'
+            'database.port' = '38432'
+            'database.name' = 'stock_quant_research'
+            'database.user' = 'stock_quant_research'
+            'schema.name' = 'tushare_research'
+            'database.read.only' = 'true'
+            'provider' = 'NONE'
+            'provider.endpoints' = 'NONE'
+            'maximum.provider.requests' = '0'
+            'budget.calendar.month' = $calendarMonth
+            'tushare.monthly.limit' = [string]$monthlyTushareLimit
+            'tushare.monthly.calls.before' =
+                [string]$usage.CommittedTushareCalls
+            'retry.budget' = '0'
+            'network.recovery.budget' = '0'
+            'redirects' = 'NEVER'
+            'user.approval.reference' =
+                'USER_APPROVED_V1_MAINBOARD_CATCHUP_READONLY_AUDIT'
+            'created.at' = $createdAt.ToString('o')
+            'expires.at' = $expiresAt.ToString('o')
+            'execution.source' = 'V1_MAINBOARD_CATCHUP_READONLY_AUDIT'
+            'no.retry' = 'true'
+            'source.request.id' = 'NONE'
         }
     } elseif ($Operation -eq 'MAINBOARD_DAILY_INCREMENT') {
         if ($TradeDate -eq 'AUTO' -or $MaximumProviderRequests -ne 2) {

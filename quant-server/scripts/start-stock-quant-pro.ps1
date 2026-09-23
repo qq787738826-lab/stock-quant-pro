@@ -20,6 +20,12 @@ $tradeCalendarForwardArtifact = Join-Path $repoRoot `
     'quant-server\target\quant-server-1.3.1-mainboard-trade-cal-forward-increment-runner.jar'
 $tradeCalendarForwardProof =
     "$tradeCalendarForwardArtifact.f1f-b2-proof.properties"
+$catchupAuditArtifact = Join-Path $repoRoot `
+    'quant-server\target\quant-server-1.3.1-mainboard-catchup-readonly-audit-runner.jar'
+$catchupAuditProof = "$catchupAuditArtifact.f1f-b2-proof.properties"
+$dailyIncrementArtifact = Join-Path $repoRoot `
+    'quant-server\target\quant-server-1.3.1-mainboard-daily-increment-runner.jar'
+$dailyIncrementProof = "$dailyIncrementArtifact.f1f-b2-proof.properties"
 $invokeBroker = Join-Path $PSScriptRoot `
     'host-broker\invoke-stock-quant-host-broker.ps1'
 $brokerScript = Join-Path $PSScriptRoot `
@@ -106,6 +112,12 @@ function Get-StartupActionRequiredMessage([string] $Reason) {
         'M6_TRADE_CAL_FORWARD_ARTIFACT_INVALID' {
             return 'The forward trade-calendar runtime is not aligned with this application version. Complete the controlled application update, then start again.'
         }
+        'M6_CATCHUP_AUDIT_ARTIFACT_INVALID' {
+            return 'The read-only catch-up audit runtime is not aligned with this application version. Complete the controlled application update, then start again.'
+        }
+        'M6_DAILY_INCREMENT_ARTIFACT_INVALID' {
+            return 'The daily increment runtime is not aligned with this application version. Complete the controlled application update, then start again.'
+        }
         'M6_JAVA_17_REQUIRED' {
             return 'Java 17 is required before Stock Quant Pro can start.'
         }
@@ -175,6 +187,20 @@ try {
             -ExpectedStartClass `
                 'com.stockquant.server.agent.marketfacts.TushareMainboardTradeCalendarForwardIncrementManualRunner' `
             -FailureReason 'M6_TRADE_CAL_FORWARD_ARTIFACT_INVALID'
+        Assert-StockQuantFormalArtifactBinding `
+            -ArtifactPath $catchupAuditArtifact `
+            -ProofPath $catchupAuditProof `
+            -ExpectedCommit $expectedHead `
+            -ExpectedStartClass `
+                'com.stockquant.server.agent.marketfacts.TushareMainboardCatchupReadonlyAuditManualRunner' `
+            -FailureReason 'M6_CATCHUP_AUDIT_ARTIFACT_INVALID'
+        Assert-StockQuantFormalArtifactBinding `
+            -ArtifactPath $dailyIncrementArtifact `
+            -ProofPath $dailyIncrementProof `
+            -ExpectedCommit $expectedHead `
+            -ExpectedStartClass `
+                'com.stockquant.server.agent.marketfacts.TushareMainboardDailyIncrementManualRunner' `
+            -FailureReason 'M6_DAILY_INCREMENT_ARTIFACT_INVALID'
         Write-Output 'STOCK_QUANT_STARTUP_STAGE=CHECKING_RESIDENT_BROKER'
         $brokerProbeState = [pscustomobject]@{
             ProcessId = 0

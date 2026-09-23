@@ -699,8 +699,20 @@ DATA_QUALITY 只作门禁和 confidence 上限，MARKET_REGIME V1 权重为 0 �
   必须全部成功并完成字段、自然日连续性和来源校验后，才在单一事务中 append-only 提交；单边失败
   不产生不一致正式状态。新增事实保留 Provider `cal_date/is_open/pretrade_date` 原文、真实
   `knownAt/firstObservedAt` 和 PIT/source lineage；已有日期不重新抓取或改写。该修复部署本身不签发
-  真实日历请求，既有失败请求 `SQHB_20260917T113826Z_7B5BA2973C9A` 永久保留，正式 SSE/SZSE
-  日历与 `latestCompleteTradeDate` 仍停在 `2026-08-27`，2026-09 Tushare 账本仍为 `375/450`。
+  真实日历请求，既有失败请求 `SQHB_20260917T113826Z_7B5BA2973C9A` 永久保留。后续唯一正式
+  Forward `SQHB_20260921T092144Z_5A2FFA1B71B5` 已成功，正式 SSE/SZSE `trade_cal` 最大日期均为
+  `2026-09-21`，`latestCompleteTradeDate` 仍为 `2026-08-27`，2026-09 Tushare 权威账本为
+  `377/450`；该 Forward 不得再次执行。
+- `V1_MAINBOARD_CATCHUP_READONLY_AUDIT` 新增唯一固定、脱敏、只读 Broker operation
+  `MAINBOARD_CATCHUP_READONLY_AUDIT`。它只读取 SSE/SZSE `trade_cal`、正式 `daily/adj_factor`、
+  当前全主板 Universe 必要元数据和 Broker 权威账本；数据库连接、事务和运行时三层固定只读，
+  客户端不能传 SQL、表名、Schema、文件路径或命令。审计与 `MAINBOARD_DAILY_INCREMENT` 共用
+  `MainboardDailyFactIntegrity`，逐共同开市日验证日期、重复、证券集合、覆盖率和 PIT 用途许可，
+  再分类为 `COMPLETE/PARTIAL/MISSING`。该操作无 Provider/模型能力，Tushare、百炼、retry、
+  network recovery 和数据库写入预算均为 0；预算投影固定为
+  `plannedBaseCalls=missingTradeDateCount×2`、
+  `projectedWorstCaseLedger=currentLedger+plannedBaseCalls`。无 Flyway、Provider、Universe、
+  Selection、Shadow 或 Paper 业务逻辑变化。
 - 生产全主板历史现已覆盖最近 250 个共同开市交易日，20/60/120/250 窗口均可用；这些后补事实
   继续标记为 `POST_HOC_RESEARCH/PIT_PARTIAL`。首次 250 日正式选股 run 37 永久保持原 `FAILED`
   终态：在 `PREPARING_DATA` 将 3193×250 的 daily 与 adj_factor 全量物化为 List 和双层 Map，导致

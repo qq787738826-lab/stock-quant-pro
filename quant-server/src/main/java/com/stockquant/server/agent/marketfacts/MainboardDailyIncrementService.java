@@ -5,7 +5,6 @@ import com.stockquant.server.agent.marketfacts.PitMarketFactModels.AdjustmentFac
 import com.stockquant.server.agent.marketfacts.PitMarketFactModels.RawDailyBarObservation;
 import com.stockquant.server.agent.shadowresearch.ShadowResearchRepository;
 import com.stockquant.server.researchselection.ResearchUniverseMainboard;
-import com.stockquant.server.researchselection.ResearchUniverseMainboard.Member;
 import com.stockquant.server.researchselection.ResearchUniverseMainboard.SnapshotBundle;
 import com.stockquant.server.researchselection.ResearchUniverseMainboardDatasetLoader;
 import com.stockquant.server.researchselection.ResearchUniverseMainboardRepository;
@@ -16,11 +15,8 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 /** Data-only, one-date main-board market-fact increment. */
 final class MainboardDailyIncrementService {
@@ -152,64 +148,13 @@ final class MainboardDailyIncrementService {
             boolean requireFresh,
             Instant completedAt
     ) {
-        Map<String, RawDailyBarObservation> daily = unique(values.daily(),
-                value -> value.symbol() + '|' + value.exchange(),
-                "MAINBOARD_DAILY_INCREMENT_DAILY_DUPLICATE");
-        Map<String, Member> members = snapshot.members().stream().collect(
-                Collectors.toUnmodifiableMap(Member::symbol, value -> value));
-        Map<String, AdjustmentFactorObservation> factors = unique(
-                values.factors(), AdjustmentFactorObservation::symbol,
-                "MAINBOARD_DAILY_INCREMENT_FACTOR_DUPLICATE");
-        Set<String> dailySymbols = daily.values().stream().map(
-                RawDailyBarObservation::symbol).collect(Collectors.toSet());
-        if (daily.isEmpty() || !dailySymbols.equals(factors.keySet())
-                || daily.values().stream().anyMatch(value ->
-                !date.equals(value.tradeDate())
-                        || !members.containsKey(value.symbol())
-                        || !members.get(value.symbol()).exchange().equals(
-                        value.exchange()))
-                || factors.values().stream().anyMatch(value ->
-                !date.equals(value.factorEffectiveTradeDate())
-                        || !members.containsKey(value.symbol()))) {
-            throw invalid("MAINBOARD_DAILY_INCREMENT_FACT_ALIGNMENT_INVALID");
-        }
-        long active = snapshot.members().stream().filter(value ->
-                !value.listDate().isAfter(date)
-                        && (value.delistDate() == null
-                        || !value.delistDate().isBefore(date))).count();
-        boolean coverage = active > 0 && daily.size() * 100L >= active
-                * TushareMarketFactProvider.MAINBOARD_MINIMUM_COVERAGE_PERCENT;
-        if (!coverage) {
-            throw invalid("MAINBOARD_DAILY_INCREMENT_COVERAGE_INCOMPLETE");
-        }
-        boolean knownAt = java.util.stream.Stream.concat(
-                        values.daily().stream().map(RawDailyBarObservation::envelope),
-                        values.factors().stream().map(
-                                AdjustmentFactorObservation::envelope))
-                .allMatch(envelope -> !envelope.knownAt().isAfter(completedAt)
-                        && !envelope.firstObservedAt().isAfter(
-                        envelope.knownAt())
-                        && (!requireFresh || !envelope.knownAt().isBefore(
-                        startedAt))
-                        && envelope.historicalReplayAllowed()
-                        && envelope.backtestAllowed()
-                        && envelope.agentUseAllowed());
-        if (!knownAt) {
-            throw invalid("MAINBOARD_DAILY_INCREMENT_PIT_INVALID");
-        }
-        return new Validation(true, true, 0, active);
-    }
-
-    private static <T> Map<String, T> unique(
-            List<T> values, Function<T, String> identity, String failure
-    ) {
-        Map<String, T> result = new java.util.LinkedHashMap<>();
-        for (T value : values) {
-            if (result.put(identity.apply(value), value) != null) {
-                throw invalid(failure);
-            }
-        }
-        return Map.copyOf(result);
+        var evaluation = MainboardDailyFactIntegrity.evaluate(snapshot, date,
+                values.daily(), values.factors(), startedAt, requireFresh,
+                completedAt);
+        evaluation.requireDailyIncrementComplete();
+        return new Validation(evaluation.coverageComplete(),
+                evaluation.knownAtValid(), evaluation.duplicateCount(),
+                evaluation.activeMemberCount());
     }
 
     private Counts businessCounts() {

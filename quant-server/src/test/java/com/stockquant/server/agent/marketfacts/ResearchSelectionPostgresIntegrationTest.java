@@ -190,7 +190,8 @@ class ResearchSelectionPostgresIntegrationTest {
                 new PitMarketFactRepository(jdbc, mapper));
         var audit = loader.audit(snapshot, ANCHOR, AS_OF, 2);
         assertTrue(audit.missingTradeDates().isEmpty());
-        assertEquals(3_000, audit.existingSecurityCount());
+        assertEquals(activeMemberCount(snapshot, ANCHOR),
+                audit.existingSecurityCount());
 
         var unchangedMembers = snapshot.members().stream().map(value ->
                 new ResearchUniverseMainboard.Member(value.tsCode(),
@@ -304,12 +305,16 @@ class ResearchSelectionPostgresIntegrationTest {
                 value -> factorOrder.add(value.symbol() + '|'
                         + value.factorEffectiveTradeDate()));
 
-        assertEquals(128, dailyOrder.size());
-        assertEquals(128, factorOrder.size());
+        long expectedFactCount = dates.stream().mapToLong(date ->
+                snapshot.members().subList(0, 64).stream().filter(value ->
+                        isActive(value, date)).count()).sum();
+        assertEquals(expectedFactCount, dailyOrder.size());
+        assertEquals(expectedFactCount, factorOrder.size());
         assertEquals(dailyOrder.stream().sorted().toList(), dailyOrder);
         assertEquals(factorOrder.stream().sorted().toList(), factorOrder);
-        assertEquals(128, dailyOrder.stream().distinct().count());
-        assertEquals(128, factorOrder.stream().distinct().count());
+        assertEquals(expectedFactCount, dailyOrder.stream().distinct().count());
+        assertEquals(expectedFactCount,
+                factorOrder.stream().distinct().count());
         assertThrows(IllegalArgumentException.class, () ->
                 facts.streamRawBarsForSnapshotMembersAsOf(
                         snapshot.snapshot().databaseId(),
@@ -502,9 +507,10 @@ class ResearchSelectionPostgresIntegrationTest {
         assertEquals(2, first.providerCalls());
         assertEquals(0, first.retryCount());
         assertEquals(1, first.batchIds().size());
-        assertEquals(3_000, first.dailyAdded());
-        assertEquals(3_000, first.factorAdded());
-        assertEquals(6_000, first.appended());
+        long expectedFactCount = activeMemberCount(snapshot, ANCHOR);
+        assertEquals(expectedFactCount, first.dailyAdded());
+        assertEquals(expectedFactCount, first.factorAdded());
+        assertEquals(expectedFactCount * 2, first.appended());
         assertEquals(ANCHOR, first.latestCompleteDate());
         assertTrue(first.validation().coverageComplete());
         assertTrue(first.validation().knownAtValid());
@@ -605,6 +611,23 @@ class ResearchSelectionPostgresIntegrationTest {
         Integer value = jdbc.queryForObject(
                 "SELECT count(*) FROM " + table, Integer.class);
         return value == null ? 0 : value;
+    }
+
+    private static long activeMemberCount(
+            ResearchUniverseMainboard.SnapshotBundle snapshot,
+            LocalDate date
+    ) {
+        return snapshot.members().stream().filter(value ->
+                isActive(value, date)).count();
+    }
+
+    private static boolean isActive(
+            ResearchUniverseMainboard.Member member,
+            LocalDate date
+    ) {
+        return !member.listDate().isAfter(date)
+                && (member.delistDate() == null
+                || !member.delistDate().isBefore(date));
     }
 
     /** Simulates a transport that loses the first response per endpoint/date. */

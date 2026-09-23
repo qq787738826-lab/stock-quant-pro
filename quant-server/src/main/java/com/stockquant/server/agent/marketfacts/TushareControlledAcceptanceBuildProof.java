@@ -50,6 +50,10 @@ public final class TushareControlledAcceptanceBuildProof {
     public static final String MAINBOARD_DAILY_INCREMENT_RUNNER_START_CLASS =
             "com.stockquant.server.agent.marketfacts."
                     + "TushareMainboardDailyIncrementManualRunner";
+    public static final String
+            MAINBOARD_CATCHUP_READONLY_AUDIT_RUNNER_START_CLASS =
+            "com.stockquant.server.agent.marketfacts."
+                    + "TushareMainboardCatchupReadonlyAuditManualRunner";
     public static final String MAINBOARD_HISTORY_BACKFILL_RUNNER_START_CLASS =
             "com.stockquant.server.agent.marketfacts."
                     + "TushareMainboardHistoryBackfillManualRunner";
@@ -306,6 +310,7 @@ public final class TushareControlledAcceptanceBuildProof {
                     M6_RUNNER_START_CLASS,
                     RESEARCH_SELECTION_RUNNER_START_CLASS,
                     MAINBOARD_DAILY_INCREMENT_RUNNER_START_CLASS,
+                    MAINBOARD_CATCHUP_READONLY_AUDIT_RUNNER_START_CLASS,
                     MAINBOARD_HISTORY_BACKFILL_RUNNER_START_CLASS,
                     MAINBOARD_TRADE_CAL_BACKFILL_RUNNER_START_CLASS,
                     MAINBOARD_TRADE_CAL_FORWARD_INCREMENT_RUNNER_START_CLASS)
@@ -442,6 +447,17 @@ public final class TushareControlledAcceptanceBuildProof {
         public boolean mainboardDailyIncrementEligible() {
             validate();
             return MAINBOARD_DAILY_INCREMENT_RUNNER_START_CLASS.equals(
+                    runnerStartClass()) && (source
+                    == ProofSource.RESEARCH_SELECTION_CONTROLLED_BUILD_ARTIFACT
+                    && buildMode
+                    == BuildMode.RESEARCH_SELECTION_CONTROLLED_BUILD_ARTIFACT
+                    || source == ProofSource.CONTROLLED_BUILD_ARTIFACT
+                    && buildMode == BuildMode.CONTROLLED_BUILD_ARTIFACT);
+        }
+
+        public boolean mainboardCatchupReadonlyAuditEligible() {
+            validate();
+            return MAINBOARD_CATCHUP_READONLY_AUDIT_RUNNER_START_CLASS.equals(
                     runnerStartClass()) && (source
                     == ProofSource.RESEARCH_SELECTION_CONTROLLED_BUILD_ARTIFACT
                     && buildMode

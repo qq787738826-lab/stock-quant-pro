@@ -268,6 +268,7 @@ class StockQuantHostBrokerContractTest {
                 "MAINBOARD_HISTORY_BACKFILL",
                 "TRADE_CAL_BACKFILL",
                 "MAINBOARD_TRADE_CAL_FORWARD_INCREMENT",
+                "MAINBOARD_CATCHUP_READONLY_AUDIT",
                 "START_RESEARCH_PRODUCTION",
                 "STOP_RESEARCH_PRODUCTION",
                 "CHECK_RESEARCH_PRODUCTION_STATUS",
@@ -327,6 +328,8 @@ class StockQuantHostBrokerContractTest {
         assertTrue(script.contains("RUN_M4_SHADOW_RESEARCH"));
         assertTrue(script.contains(
                 "Invoke-MainboardTradeCalendarForwardIncrement"));
+        assertTrue(script.contains(
+                "Invoke-MainboardCatchupReadonlyAudit"));
         assertTrue(script.contains("BailianCredentialHealthProbe"));
         assertTrue(script.contains("qwen3.7-plus"));
         assertTrue(script.contains("Get-M3BailianStageBudget"));

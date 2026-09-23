@@ -12,7 +12,8 @@ param(
     [ValidateSet('F1F_B2', 'REDUCED_RESEARCH_DAY001', 'M1_RESEARCH_DATA',
         'M2_STRATEGY_RESEARCH', 'M3_AGENT_RESEARCH', 'M4_SHADOW_RESEARCH',
         'M6_RESEARCH_PRODUCTION', 'RESEARCH_SELECTION',
-        'MAINBOARD_DAILY_INCREMENT', 'MAINBOARD_HISTORY_BACKFILL',
+        'MAINBOARD_DAILY_INCREMENT', 'MAINBOARD_CATCHUP_READONLY_AUDIT',
+        'MAINBOARD_HISTORY_BACKFILL',
         'MAINBOARD_TRADE_CAL_BACKFILL',
         'MAINBOARD_TRADE_CAL_FORWARD_INCREMENT')]
     [string] $RunnerProfile = 'F1F_B2'
@@ -30,6 +31,8 @@ $artifactName = if ($RunnerProfile -eq
     'quant-server-1.3.1-mainboard-history-backfill-runner.jar'
 } elseif ($RunnerProfile -eq 'MAINBOARD_DAILY_INCREMENT') {
     'quant-server-1.3.1-mainboard-daily-increment-runner.jar'
+} elseif ($RunnerProfile -eq 'MAINBOARD_CATCHUP_READONLY_AUDIT') {
+    'quant-server-1.3.1-mainboard-catchup-readonly-audit-runner.jar'
 } elseif ($RunnerProfile -eq 'RESEARCH_SELECTION') {
     'quant-server-1.3.1-research-selection-runner.jar'
 } elseif ($RunnerProfile -eq 'M6_RESEARCH_PRODUCTION') {
@@ -57,6 +60,8 @@ $runnerStartClass = if ($RunnerProfile -eq
     'com.stockquant.server.agent.marketfacts.TushareMainboardHistoryBackfillManualRunner'
 } elseif ($RunnerProfile -eq 'MAINBOARD_DAILY_INCREMENT') {
     'com.stockquant.server.agent.marketfacts.TushareMainboardDailyIncrementManualRunner'
+} elseif ($RunnerProfile -eq 'MAINBOARD_CATCHUP_READONLY_AUDIT') {
+    'com.stockquant.server.agent.marketfacts.TushareMainboardCatchupReadonlyAuditManualRunner'
 } elseif ($RunnerProfile -eq 'RESEARCH_SELECTION') {
     'com.stockquant.server.agent.marketfacts.TushareResearchSelectionManualRunner'
 } elseif ($RunnerProfile -eq 'M6_RESEARCH_PRODUCTION') {
@@ -186,7 +191,9 @@ try {
             $remoteCommit -ne $ExpectedCommit -or
             $RunnerProfile -notin @(
                 'RESEARCH_SELECTION', 'M6_RESEARCH_PRODUCTION',
-                'MAINBOARD_DAILY_INCREMENT', 'MAINBOARD_HISTORY_BACKFILL',
+                'MAINBOARD_DAILY_INCREMENT',
+                'MAINBOARD_CATCHUP_READONLY_AUDIT',
+                'MAINBOARD_HISTORY_BACKFILL',
                 'MAINBOARD_TRADE_CAL_BACKFILL',
                 'MAINBOARD_TRADE_CAL_FORWARD_INCREMENT')) {
             throw 'RESEARCH_SELECTION_BUILD_BASELINE_REQUIRED'

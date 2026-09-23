@@ -18,6 +18,7 @@ $script:AllowedOperations = @(
     'RUN_M4_SHADOW_RESEARCH'
     'RUN_RESEARCH_SELECTION'
     'MAINBOARD_DAILY_INCREMENT'
+    'MAINBOARD_CATCHUP_READONLY_AUDIT'
     'MAINBOARD_HISTORY_BACKFILL'
     'TRADE_CAL_BACKFILL'
     'MAINBOARD_TRADE_CAL_FORWARD_INCREMENT'
@@ -453,6 +454,38 @@ $script:MainboardDailyIncrementRequiredKeys = @(
     'tushare.monthly.limit'
     'tushare.monthly.calls.before'
     'retry.budget'
+    'redirects'
+    'user.approval.reference'
+    'created.at'
+    'expires.at'
+    'execution.source'
+    'no.retry'
+    'source.request.id'
+)
+
+$script:MainboardCatchupReadonlyAuditRequiredKeys = @(
+    'schema.version'
+    'request.id'
+    'operation'
+    'git.commit'
+    'jar.path'
+    'jar.sha256'
+    'authorization.file'
+    'universe.version'
+    'database.host'
+    'database.port'
+    'database.name'
+    'database.user'
+    'schema.name'
+    'database.read.only'
+    'provider'
+    'provider.endpoints'
+    'maximum.provider.requests'
+    'budget.calendar.month'
+    'tushare.monthly.limit'
+    'tushare.monthly.calls.before'
+    'retry.budget'
+    'network.recovery.budget'
     'redirects'
     'user.approval.reference'
     'created.at'
@@ -1574,6 +1607,10 @@ function Read-StockQuantHostBrokerRequest {
                 $script:MainboardDailyIncrementRequiredKeys
                 break
             }
+            'MAINBOARD_CATCHUP_READONLY_AUDIT' {
+                $script:MainboardCatchupReadonlyAuditRequiredKeys
+                break
+            }
             'MAINBOARD_HISTORY_BACKFILL' {
                 $script:MainboardHistoryBackfillRequiredKeys
                 break
@@ -1699,6 +1736,45 @@ function Read-StockQuantHostBrokerRequest {
                 'USER_APPROVED_M3_BAILIAN_SMOKE_TRANCHE_2_CNY_5_00' -or
             $values['execution.source'] -ne
                 'M3_AGENT_RESEARCH_REAL_LLM_SMOKE' -or
+            $values['no.retry'] -ne 'true') {
+            throw 'STOCK_QUANT_HOST_BROKER_REQUEST_SCOPE_INVALID'
+        }
+    } elseif ($values['operation'] -eq
+            'MAINBOARD_CATCHUP_READONLY_AUDIT') {
+        [int]$providerBefore = -1
+        $createdAudit = ConvertTo-StockQuantTimestamp `
+            ([string]$values['created.at'])
+        $auditMonth = [TimeZoneInfo]::ConvertTimeBySystemTimeZoneId(
+            $createdAudit, 'China Standard Time').ToString('yyyy-MM')
+        [int]$auditLimit = Get-StockQuantTushareMonthlyLimit `
+            -CalendarMonth $auditMonth
+        if ($values['authorization.file'] -ne 'NONE' -or
+            $values['universe.version'] -ne
+                'RESEARCH_UNIVERSE_MAINBOARD_V1' -or
+            $values['database.host'] -ne '127.0.0.1' -or
+            $values['database.port'] -ne '38432' -or
+            $values['database.name'] -ne 'stock_quant_research' -or
+            $values['database.user'] -ne 'stock_quant_research' -or
+            $values['schema.name'] -ne 'tushare_research' -or
+            $values['database.read.only'] -ne 'true' -or
+            $values['provider'] -ne 'NONE' -or
+            $values['provider.endpoints'] -ne 'NONE' -or
+            $values['maximum.provider.requests'] -ne '0' -or
+            $values['budget.calendar.month'] -ne $auditMonth -or
+            $values['tushare.monthly.limit'] -ne [string]$auditLimit -or
+            -not [int]::TryParse(
+                [string]$values['tushare.monthly.calls.before'],
+                [Globalization.NumberStyles]::None,
+                [Globalization.CultureInfo]::InvariantCulture,
+                [ref]$providerBefore) -or $providerBefore -lt 0 -or
+            $providerBefore -gt $auditLimit -or
+            $values['retry.budget'] -ne '0' -or
+            $values['network.recovery.budget'] -ne '0' -or
+            $values['redirects'] -ne 'NEVER' -or
+            $values['user.approval.reference'] -ne
+                'USER_APPROVED_V1_MAINBOARD_CATCHUP_READONLY_AUDIT' -or
+            $values['execution.source'] -ne
+                'V1_MAINBOARD_CATCHUP_READONLY_AUDIT' -or
             $values['no.retry'] -ne 'true') {
             throw 'STOCK_QUANT_HOST_BROKER_REQUEST_SCOPE_INVALID'
         }
@@ -2317,6 +2393,7 @@ function Read-StockQuantHostBrokerRequest {
     } elseif ($values['operation'] -in @(
             'RUN_M4_SHADOW_RESEARCH', 'RUN_RESEARCH_SELECTION',
             'MAINBOARD_DAILY_INCREMENT',
+            'MAINBOARD_CATCHUP_READONLY_AUDIT',
             'MAINBOARD_HISTORY_BACKFILL', 'TRADE_CAL_BACKFILL',
             'MAINBOARD_TRADE_CAL_FORWARD_INCREMENT')) {
         if ($values['source.request.id'] -ne 'NONE') {
@@ -2350,6 +2427,7 @@ function Read-StockQuantHostBrokerRequest {
     }
     if ($values['operation'] -in @('RUN_M4_SHADOW_RESEARCH',
             'RUN_RESEARCH_SELECTION', 'MAINBOARD_DAILY_INCREMENT',
+            'MAINBOARD_CATCHUP_READONLY_AUDIT',
             'MAINBOARD_HISTORY_BACKFILL', 'TRADE_CAL_BACKFILL',
             'MAINBOARD_TRADE_CAL_FORWARD_INCREMENT',
             'START_RESEARCH_PRODUCTION', 'STOP_RESEARCH_PRODUCTION',
@@ -2357,6 +2435,7 @@ function Read-StockQuantHostBrokerRequest {
         $proofValues = Read-StrictStockQuantProperties -Path $proof
         $allowedModes = if ($values['operation'] -in @(
                 'RUN_RESEARCH_SELECTION', 'MAINBOARD_DAILY_INCREMENT',
+                'MAINBOARD_CATCHUP_READONLY_AUDIT',
                 'MAINBOARD_HISTORY_BACKFILL', 'TRADE_CAL_BACKFILL',
                 'MAINBOARD_TRADE_CAL_FORWARD_INCREMENT')) {
             @('RESEARCH_SELECTION_CONTROLLED_BUILD_ARTIFACT',
@@ -2430,6 +2509,13 @@ function Read-StockQuantHostBrokerRequest {
         }
         $authorizationStatus =
             'M3_USER_APPROVED_BAILIAN_SMOKE_TRANCHE_2_CNY_5_00'
+    } elseif ($values['operation'] -eq
+            'MAINBOARD_CATCHUP_READONLY_AUDIT') {
+        if ($values['authorization.file'] -ne 'NONE') {
+            throw 'STOCK_QUANT_HOST_BROKER_AUTHORIZATION_MODE_INVALID'
+        }
+        $authorizationStatus =
+            'V1_MAINBOARD_CATCHUP_READONLY_AUDIT_APPROVED'
     } elseif ($values['operation'] -eq 'MAINBOARD_DAILY_INCREMENT') {
         if ($values['authorization.file'] -ne 'NONE') {
             throw 'STOCK_QUANT_HOST_BROKER_AUTHORIZATION_MODE_INVALID'
@@ -2671,6 +2757,10 @@ function Write-StockQuantHostBrokerRequest {
             }
             'MAINBOARD_DAILY_INCREMENT' {
                 $script:MainboardDailyIncrementRequiredKeys
+                break
+            }
+            'MAINBOARD_CATCHUP_READONLY_AUDIT' {
+                $script:MainboardCatchupReadonlyAuditRequiredKeys
                 break
             }
             'MAINBOARD_HISTORY_BACKFILL' {
