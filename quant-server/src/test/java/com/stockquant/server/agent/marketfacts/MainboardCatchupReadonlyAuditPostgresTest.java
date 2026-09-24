@@ -1,6 +1,15 @@
 package com.stockquant.server.agent.marketfacts;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.stockquant.server.agent.backtest.BacktestCanonicalHashService;
+import com.stockquant.server.agent.marketfacts.MarketFactProviderModels.MarketFactResponse;
+import com.stockquant.server.agent.temporal.MarketDataDatasetVersionRepository;
+import com.stockquant.server.agent.temporal.SecurityStatusEventRepository;
+import com.stockquant.server.agent.temporal.SecurityStatusHistoryRepository;
+import com.stockquant.server.agent.temporal.SecurityStatusStateHasher;
+import com.stockquant.server.agent.temporal.TemporalMarketFoundationService;
+import com.stockquant.server.agent.temporal.TradingCalendarRevisionRepository;
 import com.stockquant.server.researchselection.ResearchUniverseMainboardRepository;
 import com.stockquant.server.researchselection.ResearchUniverseMainboardDatasetLoader;
 import org.flywaydb.core.Flyway;
@@ -79,23 +88,16 @@ class MainboardCatchupReadonlyAuditPostgresTest {
             List<LocalDate> baseline = throughBaseline.subList(
                     throughBaseline.size() - 60, throughBaseline.size());
             components.mainboardUniverseCaptureService().capture(snapshot,
-                    false, Set.copyOf(baseline), baseline.get(0),
+                    false, Set.of(baseline.get(0), baseline.get(1),
+                            LATEST_COMPLETE), baseline.get(0),
                     LATEST_COMPLETE, false, COMMIT, Duration.ofMinutes(5), 0);
             components.mainboardUniverseCaptureService().capture(snapshot,
-                    false, Set.of(LocalDate.of(2026, 8, 31),
-                            LocalDate.of(2026, 9, 1),
-                            LocalDate.of(2026, 9, 2)),
+                    false, Set.of(LocalDate.of(2026, 8, 31)),
                     LocalDate.of(2026, 8, 31),
-                    LocalDate.of(2026, 9, 2), false, COMMIT,
+                    LocalDate.of(2026, 8, 31), false, COMMIT,
                     Duration.ofMinutes(2), 0);
+            captureOneSidedFacts(snapshot, gateway);
         }
-        jdbc.update("""
-                DELETE FROM adjustment_factor_facts_v1
-                 WHERE factor_effective_trade_date=?
-                """, LocalDate.of(2026, 9, 1));
-        jdbc.update("""
-                DELETE FROM raw_daily_bar_facts_v2 WHERE trade_date=?
-                """, LocalDate.of(2026, 9, 2));
 
         long rowsBefore = factRows(jdbc);
         int callsBefore = gateway.calls();
@@ -134,6 +136,86 @@ class MainboardCatchupReadonlyAuditPostgresTest {
         assertTrue(outcome.readOnlyTransaction());
         assertEquals(callsBefore, gateway.calls());
         assertEquals(rowsBefore, factRows(jdbc));
+    }
+
+    private static void captureOneSidedFacts(
+            com.stockquant.server.researchselection.ResearchUniverseMainboard
+                    .SnapshotBundle snapshot,
+            TushareControlledAcceptanceE2eDryRunGateway gateway
+    ) {
+        ObjectMapper mapper = new ObjectMapper().registerModule(
+                new JavaTimeModule());
+        JdbcTemplate jdbc = new JdbcTemplate(dataSource);
+        DataSourceTransactionManager transactions =
+                new DataSourceTransactionManager(dataSource);
+        var dedicatedGuard = new TushareDedicatedResearchPersistenceGuard(
+                jdbc, TushareDedicatedResearchPersistenceGuard
+                .DATABASE_PURPOSE);
+        var reducedGuard = new TushareReducedResearchPersistenceGuard(jdbc,
+                TushareReducedResearchPersistenceGuard.DATABASE_PURPOSE);
+        var capture = new PitMarketFactCaptureService(mapper,
+                new PitMarketFactsCanonicalService(mapper,
+                        new BacktestCanonicalHashService(mapper)),
+                new PitMarketFactRepository(jdbc, mapper),
+                new TemporalMarketFoundationService(
+                        new MarketDataDatasetVersionRepository(jdbc, mapper),
+                        new SecurityStatusEventRepository(jdbc, mapper),
+                        new SecurityStatusHistoryRepository(jdbc),
+                        new TradingCalendarRevisionRepository(jdbc),
+                        new SecurityStatusStateHasher(), CLOCK),
+                reducedGuard, dedicatedGuard, CLOCK, transactions);
+        var properties = new TushareMarketFactProperties();
+        properties.setMode(TushareMarketFactProperties.Mode.MANUAL_BOUNDED);
+        properties.setMaximumRateLimitRetries(0);
+        properties.setToken("MAINBOARD_CATCHUP_AUDIT_E2E_TOKEN");
+        try {
+            var provider = new TushareMarketFactProvider(mapper, properties,
+                    gateway);
+            var members = snapshot.members().stream().map(value ->
+                    new TushareReferenceDataModels.MainboardInstrument(
+                            value.tsCode(), value.symbol(), value.exchange(),
+                            value.name(), value.industry(), value.market(),
+                            value.listStatus(), value.listDate(),
+                            value.delistDate(), value.contentHash())).toList();
+            LocalDate dailyOnly = LocalDate.of(2026, 9, 1);
+            LocalDate factorOnly = LocalDate.of(2026, 9, 2);
+            var session = TushareManualBoundedSession.mainboardUniverse(
+                    Set.of(dailyOnly, factorOnly), dailyOnly, factorOnly,
+                    false, false, 0);
+            MarketFactResponse daily = provider.fetchMainboardMarketDate(
+                    members, dailyOnly, Duration.ofMinutes(2), session);
+            MarketFactResponse factor = provider.fetchMainboardMarketDate(
+                    members, factorOnly, Duration.ofMinutes(2), session);
+            TransactionTemplate transaction = new TransactionTemplate(
+                    transactions);
+            transaction.executeWithoutResult(status -> capture
+                    .captureAuthorizedLimitedPersonalFormal(
+                            oneSided(daily, true), CLOCK.instant(),
+                            LimitedPersonalFormalCaptureAuthorization
+                                    .tushareF1A()));
+            transaction.executeWithoutResult(status -> capture
+                    .captureAuthorizedLimitedPersonalFormal(
+                            oneSided(factor, false), CLOCK.instant(),
+                            LimitedPersonalFormalCaptureAuthorization
+                                    .tushareF1A()));
+        } finally {
+            properties.clearToken();
+        }
+    }
+
+    private static MarketFactResponse oneSided(
+            MarketFactResponse value,
+            boolean daily
+    ) {
+        return new MarketFactResponse(value.providerContractVersion(),
+                value.providerCode(), value.adapterVersion(),
+                value.runNamespace(), value.sourceCode(),
+                value.sourceInstrumentId(), value.requestedStart(),
+                value.requestedEnd(), value.complete(), value.capability(),
+                daily ? value.rawDailyBars() : List.of(),
+                daily ? List.of() : value.adjustmentFactors(),
+                List.of(), List.of(), value.errors(),
+                value.providerMetadata());
     }
 
     private static MainboardDailyFactIntegrity.Status status(
