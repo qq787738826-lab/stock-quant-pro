@@ -44,7 +44,7 @@ function Dump-Database([string] $Path) {
     & "$pgBin\pg_dump.exe" -h 127.0.0.1 -p $port `
         -U stock_quant_research -d stock_quant_research `
         --data-only --no-owner --no-privileges `
-        --restrict-key=MAINBOARD_CATCHUP_AUDIT_E2E `
+        --restrict-key=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef `
         --schema=tushare_research --file=$Path
     if ($LASTEXITCODE -ne 0 -or
         -not (Test-Path -LiteralPath $Path -PathType Leaf)) {
