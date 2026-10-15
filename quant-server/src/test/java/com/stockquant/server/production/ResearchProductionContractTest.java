@@ -74,6 +74,10 @@ class ResearchProductionContractTest {
                 "STOCK_QUANT_HOST_BROKER_STATUS=REJECTED"));
         assertTrue(invoker.contains(
                 "STOCK_QUANT_HOST_BROKER_REASON=$reason"));
+        assertTrue(invoker.contains(
+                "AUTOMATIC_DAILY_MARKET_DATA_MAINTENANCE"));
+        assertTrue(broker.contains(
+                "Invoke-AutomaticDailyMarketDataMaintenance"));
 
         String build = read(
                 "scripts/prepare-m6-research-production-build-proof.ps1");
@@ -94,6 +98,10 @@ class ResearchProductionContractTest {
                 "TushareMainboardCatchupReadonlyAuditManualRunner"));
         assertTrue(launcher.contains(
                 "TushareMainboardDailyIncrementManualRunner"));
+        assertTrue(launcher.contains(
+                "run-automatic-daily-market-data-maintenance.ps1"));
+        assertTrue(launcher.contains(
+                "M6_AUTOMATIC_MAINTENANCE_RUNNER_INVALID"));
 
         String protocol = read(
                 "scripts/host-broker/StockQuantHostBroker.Protocol.psm1");
@@ -153,7 +161,32 @@ class ResearchProductionContractTest {
         assertTrue(runner.contains("m6FixedRuntime"));
         assertTrue(runner.contains("stockquant.market-facts.tushare.mode"));
         assertTrue(runner.contains("\"DISABLED\""));
+        assertTrue(runner.contains(
+                "stockquant.market-data-maintenance.scheduler."));
         assertFalse(runner.contains(".properties("));
+
+        String scheduler = read("src/main/java/com/stockquant/server/"
+                + "production/AutomaticDailyMarketDataMaintenanceScheduler.java");
+        String readyGate = read("src/main/java/com/stockquant/server/"
+                + "production/BrokerResultMarketDataReadyGate.java");
+        String orchestration = read(
+                "scripts/run-automatic-daily-market-data-maintenance.ps1");
+        assertTrue(scheduler.contains("0 30 16 * * MON-FRI"));
+        assertTrue(scheduler.contains("Asia/Shanghai"));
+        assertTrue(readyGate.contains(
+                "AUTOMATIC_MARKET_DATA_MAINTENANCE_NOT_RUN"));
+        int forward = orchestration.indexOf(
+                "$forwardRequestId = Derived-RequestId");
+        int initialAudit = orchestration.indexOf(
+                "$initialAuditRequestId = Derived-RequestId");
+        int daily = orchestration.indexOf(
+                "$dailyRequestId = Derived-RequestId");
+        int finalAudit = orchestration.indexOf(
+                "$finalAuditRequestId = Derived-RequestId");
+        assertTrue(forward > 0 && forward < initialAudit
+                && initialAudit < daily && daily < finalAudit);
+        assertFalse(orchestration.contains("Invoke-Expression"));
+        assertFalse(orchestration.contains("RUN_RESEARCH_SELECTION"));
     }
 
     @Test

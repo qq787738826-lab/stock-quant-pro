@@ -26,6 +26,8 @@ $catchupAuditProof = "$catchupAuditArtifact.f1f-b2-proof.properties"
 $dailyIncrementArtifact = Join-Path $repoRoot `
     'quant-server\target\quant-server-1.3.1-mainboard-daily-increment-runner.jar'
 $dailyIncrementProof = "$dailyIncrementArtifact.f1f-b2-proof.properties"
+$automaticMaintenanceRunner = Join-Path $repoRoot `
+    'quant-server\scripts\run-automatic-daily-market-data-maintenance.ps1'
 $invokeBroker = Join-Path $PSScriptRoot `
     'host-broker\invoke-stock-quant-host-broker.ps1'
 $brokerScript = Join-Path $PSScriptRoot `
@@ -118,6 +120,9 @@ function Get-StartupActionRequiredMessage([string] $Reason) {
         'M6_DAILY_INCREMENT_ARTIFACT_INVALID' {
             return 'The daily increment runtime is not aligned with this application version. Complete the controlled application update, then start again.'
         }
+        'M6_AUTOMATIC_MAINTENANCE_RUNNER_INVALID' {
+            return 'The automatic market-data maintenance runner is missing from this application version. Complete the controlled application update, then start again.'
+        }
         'M6_JAVA_17_REQUIRED' {
             return 'Java 17 is required before Stock Quant Pro can start.'
         }
@@ -155,6 +160,12 @@ try {
         throw 'M6_FORMAL_ARTIFACT_MISSING'
     }
     if ($Action -eq 'Start') {
+        if (-not (Test-Path -LiteralPath $automaticMaintenanceRunner `
+                -PathType Leaf) -or
+            [IO.Path]::GetFullPath($automaticMaintenanceRunner) -split
+                '[\\/]' -contains '.ai') {
+            throw 'M6_AUTOMATIC_MAINTENANCE_RUNNER_INVALID'
+        }
         $oldPreference = $ErrorActionPreference
         try {
             $ErrorActionPreference = 'Continue'
@@ -305,6 +316,7 @@ try {
     } elseif ($failure -in @(
             'M6_FORMAL_ARTIFACT_MISSING', 'M6_JAVA_17_REQUIRED',
             'M6_RESEARCH_SELECTION_ARTIFACT_INVALID',
+            'M6_AUTOMATIC_MAINTENANCE_RUNNER_INVALID',
             'M6_DATABASE_NOT_LISTENING',
             'M6_HOST_BROKER_OPERATION_FAILED',
             'M6_SYSTEM_HEALTH_BLOCKED')) {

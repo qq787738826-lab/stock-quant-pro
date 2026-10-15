@@ -127,6 +127,8 @@ public final class StockQuantResearchProductionRunner {
                 Map.entry("spring.flyway.enabled", "false"),
                 Map.entry("quant.jobs.enabled", "false"),
                 Map.entry("stockquant.production.enabled", "true"),
+                Map.entry("stockquant.market-data-maintenance.scheduler."
+                        + "enabled", "true"),
                 Map.entry("stockquant.shadow-research.scheduler.enabled",
                         "true"),
                 Map.entry("stockquant.agent-team.enabled", "false"),

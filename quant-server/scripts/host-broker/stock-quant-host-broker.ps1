@@ -47,6 +47,9 @@ $mainboardTradeCalendarBackfillRunnerScript = Join-Path $paths.RepositoryRoot `
     'quant-server\scripts\run-mainboard-trade-cal-backfill.ps1'
 $mainboardTradeCalendarForwardRunnerScript = Join-Path $paths.RepositoryRoot `
     'quant-server\scripts\run-mainboard-trade-cal-forward-increment.ps1'
+$automaticDailyMarketDataMaintenanceRunnerScript = Join-Path `
+    $paths.RepositoryRoot `
+    'quant-server\scripts\run-automatic-daily-market-data-maintenance.ps1'
 $productionRoot = Join-Path $paths.TargetRoot 'stock-quant-production'
 $productionPidFile = Join-Path $productionRoot 'backend.pid.json'
 $productionAutostartFile = Join-Path $productionRoot 'backend.autostart.json'
@@ -154,6 +157,7 @@ function Assert-GitBinding {
                 'MAINBOARD_HISTORY_BACKFILL',
                 'TRADE_CAL_BACKFILL',
                 'MAINBOARD_TRADE_CAL_FORWARD_INCREMENT',
+                'AUTOMATIC_DAILY_MARKET_DATA_MAINTENANCE',
                 'START_RESEARCH_PRODUCTION',
                 'STOP_RESEARCH_PRODUCTION',
                 'CHECK_RESEARCH_PRODUCTION_STATUS')) {
@@ -238,6 +242,15 @@ function Assert-GitBinding {
                 [IO.Path]::GetFullPath($BrokerRequest.JarPath).Equals(
                     (Join-Path $paths.TargetRoot `
                         'quant-server-1.3.1-mainboard-trade-cal-forward-increment-runner.jar'),
+                    [StringComparison]::OrdinalIgnoreCase)) {
+                $branch
+            } elseif ($BrokerRequest.Operation -eq
+                    'AUTOMATIC_DAILY_MARKET_DATA_MAINTENANCE' -and
+                $branch -eq
+                    'codex/1.4.0-v1-automatic-daily-market-data-maintenance' -and
+                [IO.Path]::GetFullPath($BrokerRequest.JarPath).Equals(
+                    (Join-Path $paths.TargetRoot `
+                        'quant-server-1.3.1-research-production.jar'),
                     [StringComparison]::OrdinalIgnoreCase)) {
                 $branch
             } elseif ($BrokerRequest.Operation -in @(
@@ -2158,6 +2171,273 @@ function Invoke-MainboardTradeCalendarForwardIncrement {
     return $summary
 }
 
+function Assert-AutomaticMarketDataMaintenanceArtifact {
+    param(
+        [Parameter(Mandatory = $true)] [string] $ArtifactName,
+        [Parameter(Mandatory = $true)] [string] $ExpectedStartClass,
+        [Parameter(Mandatory = $true)] [string] $GitCommit
+    )
+    $artifact = [IO.Path]::GetFullPath(
+        (Join-Path $paths.TargetRoot $ArtifactName))
+    $proof = "$artifact.f1f-b2-proof.properties"
+    if (-not (Test-Path -LiteralPath $artifact -PathType Leaf) -or
+        -not (Test-Path -LiteralPath $proof -PathType Leaf)) {
+        throw 'AUTOMATIC_MARKET_DATA_MAINTENANCE_ARTIFACT_MISSING'
+    }
+    $hash = ((Get-FileHash -LiteralPath $artifact -Algorithm SHA256).Hash
+        ).ToLowerInvariant()
+    $proofLines = @(Get-Content -LiteralPath $proof -Encoding UTF8)
+    if (@($proofLines | Where-Object {
+                $_ -ceq "git.commit=$GitCommit"
+            }).Count -ne 1 -or
+        @($proofLines | Where-Object {
+                $_ -ceq "artifact.sha256=$hash"
+            }).Count -ne 1 -or
+        @($proofLines | Where-Object {
+                $_ -in @(
+                    'build.mode=CONTROLLED_BUILD_ARTIFACT',
+                    'build.mode=RESEARCH_SELECTION_CONTROLLED_BUILD_ARTIFACT',
+                    'build.mode=M6_STAGE_CONTROLLED_BUILD_ARTIFACT')
+            }).Count -ne 1) {
+        throw 'AUTOMATIC_MARKET_DATA_MAINTENANCE_BUILD_PROOF_INVALID'
+    }
+    try {
+        Add-Type -AssemblyName System.IO.Compression.FileSystem `
+            -ErrorAction SilentlyContinue
+        $archive = [IO.Compression.ZipFile]::OpenRead($artifact)
+        try {
+            $entries = @($archive.Entries | Where-Object {
+                $_.FullName -ceq 'META-INF/MANIFEST.MF'
+            })
+            if ($entries.Count -ne 1 -or $entries[0].Length -gt 65536) {
+                throw 'INVALID'
+            }
+            $reader = [IO.StreamReader]::new(
+                $entries[0].Open(), [Text.Encoding]::UTF8, $true)
+            try { $manifest = $reader.ReadToEnd() } finally {
+                $reader.Dispose()
+            }
+        } finally { $archive.Dispose() }
+        $unfolded = $manifest -replace "`r?`n ", ''
+        if ($unfolded -notmatch
+                "(?m)^Start-Class: $([regex]::Escape($ExpectedStartClass))`r?$") {
+            throw 'INVALID'
+        }
+    } catch {
+        throw 'AUTOMATIC_MARKET_DATA_MAINTENANCE_START_CLASS_INVALID'
+    }
+    return $artifact
+}
+
+function Assert-AutomaticMarketDataMaintenanceArtifactSet {
+    param([Parameter(Mandatory = $true)] [object] $BrokerRequest)
+    $fixedProduction = [IO.Path]::GetFullPath((Join-Path `
+        $paths.TargetRoot 'quant-server-1.3.1-research-production.jar'))
+    if (-not [IO.Path]::GetFullPath($BrokerRequest.JarPath).Equals(
+            $fixedProduction, [StringComparison]::OrdinalIgnoreCase) -or
+        -not (Test-Path -LiteralPath `
+            $automaticDailyMarketDataMaintenanceRunnerScript -PathType Leaf)) {
+        throw 'AUTOMATIC_MARKET_DATA_MAINTENANCE_FIXED_PATH_INVALID'
+    }
+    Assert-AutomaticMarketDataMaintenanceArtifact `
+        -ArtifactName 'quant-server-1.3.1-research-production.jar' `
+        -ExpectedStartClass `
+            'com.stockquant.server.production.StockQuantResearchProductionRunner' `
+        -GitCommit $BrokerRequest.GitCommit | Out-Null
+    Assert-AutomaticMarketDataMaintenanceArtifact `
+        -ArtifactName `
+            'quant-server-1.3.1-mainboard-trade-cal-forward-increment-runner.jar' `
+        -ExpectedStartClass ('com.stockquant.server.agent.marketfacts.' +
+            'TushareMainboardTradeCalendarForwardIncrementManualRunner') `
+        -GitCommit $BrokerRequest.GitCommit | Out-Null
+    Assert-AutomaticMarketDataMaintenanceArtifact `
+        -ArtifactName `
+            'quant-server-1.3.1-mainboard-catchup-readonly-audit-runner.jar' `
+        -ExpectedStartClass ('com.stockquant.server.agent.marketfacts.' +
+            'TushareMainboardCatchupReadonlyAuditManualRunner') `
+        -GitCommit $BrokerRequest.GitCommit | Out-Null
+    Assert-AutomaticMarketDataMaintenanceArtifact `
+        -ArtifactName `
+            'quant-server-1.3.1-mainboard-daily-increment-runner.jar' `
+        -ExpectedStartClass ('com.stockquant.server.agent.marketfacts.' +
+            'TushareMainboardDailyIncrementManualRunner') `
+        -GitCommit $BrokerRequest.GitCommit | Out-Null
+}
+
+function Invoke-AutomaticDailyMarketDataMaintenance {
+    param([Parameter(Mandatory = $true)] [object] $BrokerRequest)
+    if ($BrokerRequest.AuthorizationStatus -ne
+            'V1_AUTOMATIC_DAILY_MARKET_DATA_MAINTENANCE_APPROVED' -or
+        $null -ne $BrokerRequest.AuthorizationFile) {
+        throw 'AUTOMATIC_MARKET_DATA_MAINTENANCE_SCOPE_INVALID'
+    }
+    Assert-AutomaticMarketDataMaintenanceArtifactSet `
+        -BrokerRequest $BrokerRequest
+    $usage = Get-StockQuantM4MonthlyUsage `
+        -CalendarMonth $BrokerRequest.Values['budget.calendar.month'] `
+        -ExcludedRequestPath $processingPath
+    [int]$monthlyLimit = Get-StockQuantTushareMonthlyLimit `
+        -CalendarMonth $BrokerRequest.Values['budget.calendar.month']
+    [int]$currentLedger = [int]$usage.CommittedTushareCalls
+    [int]$declaredBefore =
+        [int]$BrokerRequest.Values['tushare.monthly.calls.before']
+    [int]$maximumProvider =
+        [int]$BrokerRequest.Values['maximum.provider.requests']
+    if ($currentLedger -ne $declaredBefore -or
+        $monthlyLimit -ne
+            [int]$BrokerRequest.Values['tushare.monthly.limit'] -or
+        $maximumProvider -ne $monthlyLimit - $currentLedger) {
+        throw 'AUTOMATIC_MARKET_DATA_MAINTENANCE_LEDGER_CHANGED'
+    }
+    $runnerResult = Join-Path $paths.Results `
+        "$($BrokerRequest.RequestId).automatic-daily-market-data-maintenance.json"
+    if (Test-Path -LiteralPath $runnerResult) {
+        throw 'STOCK_QUANT_HOST_BROKER_RUNNER_RESULT_ALREADY_EXISTS'
+    }
+    $output = @(& $automaticDailyMarketDataMaintenanceRunnerScript `
+        -ResultFile $runnerResult -RequestId $BrokerRequest.RequestId `
+        -GitCommit $BrokerRequest.GitCommit `
+        -TargetEndDate $BrokerRequest.Values['target.end.date'] `
+        -DatabasePort 38432 -CurrentLedger $currentLedger `
+        -LedgerLimit $monthlyLimit `
+        -MaximumProviderRequests $maximumProvider `
+        -ExecutionMode FORMAL 2>&1 | ForEach-Object { [string]$_ })
+    $runnerExitCode = $LASTEXITCODE
+    if (-not (Test-Path -LiteralPath $runnerResult -PathType Leaf)) {
+        throw (Get-SafeMarker -Lines $output `
+            -Name 'AUTOMATIC_DAILY_MARKET_DATA_MAINTENANCE_FAILURE_REASON' `
+            -Fallback 'STOCK_QUANT_HOST_BROKER_RUNNER_RESULT_MISSING')
+    }
+    try {
+        $maintenance = Get-Content -LiteralPath $runnerResult -Raw `
+            -Encoding UTF8 | ConvertFrom-Json
+    } catch {
+        throw 'AUTOMATIC_MARKET_DATA_MAINTENANCE_RESULT_INVALID'
+    }
+    $summary = [ordered]@{
+        targetEndDate = [string]$maintenance.targetEndDate
+        readyForShadow = [bool]$maintenance.readyForShadow
+        latestCommonCompletedOpenTradeDate =
+            [string]$maintenance.finalLatestCommonCompletedOpenTradeDate
+        latestCompleteTradeDate =
+            [string]$maintenance.finalLatestCompleteTradeDate
+        missingTradeDateCount =
+            @($maintenance.finalMissingTradeDates).Count
+        partialTradeDateCount =
+            @($maintenance.finalPartialTradeDates).Count
+        duplicateCount = [int]$maintenance.duplicateCount
+        providerCallCount = [int]$maintenance.tushareProviderCallCount
+        tradeCalendarProviderCallCount =
+            [int]$maintenance.tradeCalendarProviderCallCount
+        dailyProviderCallCount =
+            [int]$maintenance.dailyProviderCallCount
+        adjustmentFactorProviderCallCount =
+            [int]$maintenance.adjustmentFactorProviderCallCount
+        retryCount = [int]$maintenance.retryCount
+        ledgerBefore = [int]$maintenance.ledgerBefore
+        finalLedger = [int]$maintenance.finalLedger
+        sanitizedResult = $runnerResult
+        outputAudit = $(if ($maintenance.outputAuditClean) {
+            'PASSED'
+        } else { 'FAILED' })
+    }
+    $expectedChain = @(
+        'MAINBOARD_TRADE_CAL_FORWARD_INCREMENT',
+        'MAINBOARD_CATCHUP_READONLY_AUDIT',
+        'MAINBOARD_DAILY_INCREMENT',
+        'MAINBOARD_CATCHUP_READONLY_AUDIT')
+    $actualChain = @($maintenance.operationChain)
+    $chainValid = $actualChain.Count -eq $expectedChain.Count
+    if ($chainValid) {
+        for ($index = 0; $index -lt $expectedChain.Count; $index++) {
+            if ([string]$actualChain[$index] -cne $expectedChain[$index]) {
+                $chainValid = $false
+                break
+            }
+        }
+    }
+    [int]$providerCalls = [int]$maintenance.tushareProviderCallCount
+    [int]$calendarCalls =
+        [int]$maintenance.tradeCalendarProviderCallCount
+    [int]$dailyCalls = [int]$maintenance.dailyProviderCallCount
+    [int]$factorCalls =
+        [int]$maintenance.adjustmentFactorProviderCallCount
+    $commonValid = $maintenance.schemaVersion -eq
+            'AUTOMATIC_DAILY_MARKET_DATA_MAINTENANCE_RESULT_V1' -and
+        [string]$maintenance.requestId -eq $BrokerRequest.RequestId -and
+        [string]$maintenance.executionId -eq
+            ($BrokerRequest.RequestId -replace '^SQHB_', 'MBMAINT_') -and
+        [string]$maintenance.gitCommit -eq $BrokerRequest.GitCommit -and
+        [string]$maintenance.targetEndDate -eq
+            [string]$BrokerRequest.Values['target.end.date'] -and
+        $chainValid -and
+        [int]$maintenance.ledgerBefore -eq $currentLedger -and
+        [int]$maintenance.ledgerLimit -eq $monthlyLimit -and
+        [int]$maintenance.maximumProviderRequests -eq $maximumProvider -and
+        $providerCalls -ge 0 -and $providerCalls -le $maximumProvider -and
+        $calendarCalls -ge 0 -and $calendarCalls -le 4 -and
+        $dailyCalls -ge 0 -and $factorCalls -eq $dailyCalls -and
+        $providerCalls -eq $calendarCalls + $dailyCalls + $factorCalls -and
+        [int]$maintenance.stockBasicProviderCallCount -eq 0 -and
+        [int]$maintenance.retryCount -ge 0 -and
+        [int]$maintenance.retryCount -le 2 -and
+        [int]$maintenance.networkRecoveryBudget -eq 2 -and
+        [int]$maintenance.finalLedger -eq $currentLedger + $providerCalls -and
+        [int]$maintenance.finalLedger -le $monthlyLimit -and
+        [int]$maintenance.modelCallCount -eq 0 -and
+        [long]$maintenance.researchSelectionRunsCreated -eq 0 -and
+        [long]$maintenance.shadowRunsCreated -eq 0 -and
+        [long]$maintenance.paperOrdersCreated -eq 0 -and
+        [long]$maintenance.evaluationRowsCreated -eq 0 -and
+        $maintenance.historicalResearchClassification -eq
+            'POST_HOC_RESEARCH' -and
+        $maintenance.pitClassification -eq 'PIT_PARTIAL' -and
+        $maintenance.dataOnly -and -not $maintenance.realTradingStarted
+    if (-not $commonValid) {
+        $script:failureSummary = $summary
+        throw 'AUTOMATIC_MARKET_DATA_MAINTENANCE_RESULT_INVALID'
+    }
+    if ($runnerExitCode -ne 0) {
+        $script:failureSummary = $summary
+        $reason = [string]$maintenance.failureReason
+        if ($maintenance.status -ne 'FAILED' -or
+            $maintenance.readyForShadow -or
+            $maintenance.outputAuditClean -or
+            $reason -notmatch '^[A-Z][A-Z0-9_]{3,127}$') {
+            throw 'AUTOMATIC_MARKET_DATA_MAINTENANCE_RESULT_INVALID'
+        }
+        throw $reason
+    }
+    if ($maintenance.status -ne 'SUCCEEDED' -or
+        -not $maintenance.readyForShadow -or
+        -not $maintenance.outputAuditClean -or
+        $null -ne $maintenance.failureReason -or
+        $maintenance.forwardAction -notin @('APPENDED', 'NO_OP') -or
+        [string]$maintenance.calendarAfterSse -ne
+            [string]$BrokerRequest.Values['target.end.date'] -or
+        [string]$maintenance.calendarAfterSzse -ne
+            [string]$BrokerRequest.Values['target.end.date'] -or
+        [string]::IsNullOrWhiteSpace(
+            [string]$maintenance.finalLatestCompleteTradeDate) -or
+        [string]$maintenance.finalLatestCompleteTradeDate -ne
+            [string]$maintenance.finalLatestCommonCompletedOpenTradeDate -or
+        @($maintenance.finalMissingTradeDates).Count -ne 0 -or
+        @($maintenance.finalPartialTradeDates).Count -ne 0 -or
+        [int]$maintenance.duplicateCount -ne 0 -or
+        [int]$maintenance.plannedBaseCalls -ne
+            2 * @($maintenance.initialMissingTradeDates).Count -or
+        $dailyCalls -ne @($maintenance.initialMissingTradeDates).Count -or
+        @($maintenance.dailyResults).Count -ne $dailyCalls -or
+        [int]$maintenance.projectedWorstCaseLedger -ne
+            $currentLedger + $calendarCalls +
+            [int]$maintenance.plannedBaseCalls -or
+        [int]$maintenance.projectedWorstCaseLedger -gt $monthlyLimit) {
+        $script:failureSummary = $summary
+        throw 'AUTOMATIC_MARKET_DATA_MAINTENANCE_RESULT_INVALID'
+    }
+    return $summary
+}
+
 function Resolve-ResearchProductionJavaExecutable {
     $command = 'java.exe'
     $oldPreference = $ErrorActionPreference
@@ -2844,6 +3124,11 @@ function Invoke-ClaimedRequest {
             }
             'MAINBOARD_TRADE_CAL_FORWARD_INCREMENT' {
                 Invoke-MainboardTradeCalendarForwardIncrement `
+                    -BrokerRequest $request
+                break
+            }
+            'AUTOMATIC_DAILY_MARKET_DATA_MAINTENANCE' {
+                Invoke-AutomaticDailyMarketDataMaintenance `
                     -BrokerRequest $request
                 break
             }

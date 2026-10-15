@@ -2,6 +2,7 @@ package com.stockquant.server.agent.shadowresearch;
 
 import jakarta.validation.Validation;
 import org.junit.jupiter.api.Test;
+import com.stockquant.server.production.MarketDataReadyGate;
 import com.stockquant.server.production.ShadowSchedulerRuntimeState;
 
 import java.time.Clock;
@@ -249,6 +250,41 @@ class ShadowResearchSchedulerTest {
         assertEquals(1, dispatchCalls.get());
         assertEquals("SCHEDULED_SHADOW_SKIPPED_BACKFILL_INCOMPLETE",
                 runtime.snapshot().lastReason());
+        verify(repository, never()).activeRun();
+    }
+
+    @Test
+    void failedMaintenanceSkipsShadowBeforeAnyBusinessMutation() {
+        ShadowResearchRepository repository = mock(
+                ShadowResearchRepository.class);
+        AtomicInteger dispatchCalls = new AtomicInteger();
+        ShadowResearchDispatchGateway gateway = (date, asOf, calendar) -> {
+            dispatchCalls.incrementAndGet();
+            return new ShadowResearchDispatchGateway.DispatchResult(
+                    "SQHB_20250910T092000Z_A1B2C3D4E5F6", true);
+        };
+        Instant now = Instant.parse("2025-09-10T09:20:00Z");
+        when(repository.frozenSlot(any(), any(), any()))
+                .thenReturn(Optional.empty());
+        when(repository.researchCalendarState(any(), any()))
+                .thenReturn(ShadowResearchRepository.CalendarState.OPEN);
+        when(repository.nextCommonOpenKnown(any(), any())).thenReturn(true);
+        MarketDataReadyGate gate = ignored ->
+                MarketDataReadyGate.ReadyResult.skip(
+                        "AUTOMATIC_MARKET_DATA_MAINTENANCE_BUDGET_EXHAUSTED",
+                        "SQHB_20250910T083000Z_A1B2C3D4E5F6");
+        var runtime = new ShadowSchedulerRuntimeState();
+
+        new ShadowResearchScheduler(repository, gateway,
+                new ShadowResearchScheduleProperties(),
+                Clock.fixed(now, ZoneOffset.UTC), runtime, gate)
+                .dispatchAfterClose();
+
+        assertEquals(0, dispatchCalls.get());
+        assertEquals(
+                "AUTOMATIC_MARKET_DATA_MAINTENANCE_BUDGET_EXHAUSTED",
+                runtime.snapshot().lastReason());
+        verify(repository, never()).interruptStaleRuns(any(), any());
         verify(repository, never()).activeRun();
     }
 }

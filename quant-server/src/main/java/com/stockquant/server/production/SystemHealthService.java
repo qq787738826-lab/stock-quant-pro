@@ -51,6 +51,8 @@ public final class SystemHealthService {
     private final AgentEvaluationService evaluations;
     private final ShadowResearchScheduleProperties schedule;
     private final ShadowSchedulerRuntimeState schedulerState;
+    private final AutomaticMarketDataMaintenanceProperties maintenanceSchedule;
+    private final AutomaticMarketDataMaintenanceRuntimeState maintenanceState;
     private final ObjectMapper mapper;
     private final Clock clock;
     private final Path repositoryRoot;
@@ -62,9 +64,12 @@ public final class SystemHealthService {
             AgentEvaluationService evaluations,
             ShadowResearchScheduleProperties schedule,
             ShadowSchedulerRuntimeState schedulerState,
+            AutomaticMarketDataMaintenanceProperties maintenanceSchedule,
+            AutomaticMarketDataMaintenanceRuntimeState maintenanceState,
             ObjectMapper mapper
     ) {
-        this(jdbc, shadows, evaluations, schedule, schedulerState, mapper,
+        this(jdbc, shadows, evaluations, schedule, schedulerState,
+                maintenanceSchedule, maintenanceState, mapper,
                 Clock.systemUTC(), repositoryRoot());
     }
 
@@ -74,6 +79,8 @@ public final class SystemHealthService {
             AgentEvaluationService evaluations,
             ShadowResearchScheduleProperties schedule,
             ShadowSchedulerRuntimeState schedulerState,
+            AutomaticMarketDataMaintenanceProperties maintenanceSchedule,
+            AutomaticMarketDataMaintenanceRuntimeState maintenanceState,
             ObjectMapper mapper,
             Clock clock,
             Path repositoryRoot
@@ -83,6 +90,8 @@ public final class SystemHealthService {
         this.evaluations = evaluations;
         this.schedule = schedule;
         this.schedulerState = schedulerState;
+        this.maintenanceSchedule = maintenanceSchedule;
+        this.maintenanceState = maintenanceState;
         this.mapper = mapper;
         this.clock = clock;
         this.repositoryRoot = repositoryRoot.toAbsolutePath().normalize();
@@ -109,6 +118,7 @@ public final class SystemHealthService {
                 Map.of("realTrading", false)));
         components.add(healthy("M3 Agent Runtime", "AGENT_RESEARCH_TEAM_V1",
                 Map.of("roles", 7)));
+        components.add(maintenance());
         ShadowResearchQueryService.Overview shadow = shadows.overview(1);
         AgentEvaluationService.Overview evaluation = evaluations.overview();
         components.add(healthy("M4 Shadow", "SHADOW_RESEARCH_RUNTIME_V1",
@@ -332,6 +342,30 @@ public final class SystemHealthService {
                 schedule.getCron(), nextSlot(now),
                 schedule.isEnabled() ? "ACTIVE" : "DISABLED",
                 state.lastReason());
+    }
+
+    private ComponentHealth maintenance() {
+        AutomaticMarketDataMaintenanceRuntimeState.Snapshot state =
+                maintenanceState.snapshot();
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("enabled", maintenanceSchedule.isEnabled());
+        details.put("zone", maintenanceSchedule.getZone());
+        details.put("cron", maintenanceSchedule.getCron());
+        details.put("lastReason", state.lastReason());
+        details.put("requestId", state.requestId());
+        if (state.tradeDate() != null) {
+            details.put("tradeDate", state.tradeDate());
+        }
+        if (state.lastCheckedAt() != null) {
+            details.put("lastCheckedAt", state.lastCheckedAt());
+        }
+        return new ComponentHealth("Market Data Maintenance",
+                maintenanceSchedule.isEnabled()
+                        ? HealthStatus.HEALTHY : HealthStatus.BLOCKED,
+                maintenanceSchedule.isEnabled()
+                        ? "AUTOMATIC_MARKET_DATA_MAINTENANCE_V1"
+                        : "AUTOMATIC_MARKET_DATA_MAINTENANCE_DISABLED",
+                details);
     }
 
     private Instant nextSlot(Instant now) {

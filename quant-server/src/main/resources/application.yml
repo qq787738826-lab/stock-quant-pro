@@ -31,6 +31,14 @@ quant:
     scan-batch-size: 12
     history-days: 120
 stockquant:
+  market-data-maintenance:
+    scheduler:
+      enabled: ${AUTOMATIC_MARKET_DATA_MAINTENANCE_ENABLED:false}
+      cron: "0 30 16 * * MON-FRI"
+      zone: Asia/Shanghai
+      safe-window-start: "16:25"
+      safe-window-end: "17:10"
+      submit-timeout-seconds: 30
   shadow-research:
     scheduler:
       enabled: ${M4_SHADOW_SCHEDULER_ENABLED:false}
