@@ -318,7 +318,8 @@ public final class TushareControlledAcceptanceBuildProof {
                             manifest.startClass())
                     || !gitCommit.equals(manifest.gitCommit())
                     || !remoteGitCommit.equals(manifest.remoteGitCommit())
-                    || !branchAllowedForMode(branchName, buildMode)
+                    || !branchAndRunnerAllowedForMode(branchName, buildMode,
+                            manifest.startClass())
                     || buildMode == BuildMode.CONTROLLED_BUILD_ARTIFACT
                     && !gitCommit.equals(remoteGitCommit)
                     || buildMode
@@ -666,7 +667,11 @@ public final class TushareControlledAcceptanceBuildProof {
                 System.getProperty("java.version"));
     }
 
-    private static boolean branchAllowedForMode(String branchName, BuildMode buildMode) {
+    private static boolean branchAndRunnerAllowedForMode(
+            String branchName,
+            BuildMode buildMode,
+            String runnerStartClass
+    ) {
         if (buildMode == BuildMode.CONTROLLED_BUILD_ARTIFACT) {
             return REQUIRED_INTEGRATION_BRANCH.equals(branchName);
         }
@@ -687,6 +692,15 @@ public final class TushareControlledAcceptanceBuildProof {
         }
         if (buildMode
                 == BuildMode.RESEARCH_SELECTION_CONTROLLED_BUILD_ARTIFACT) {
+            if ("codex/1.4.0-v1-automatic-daily-market-data-maintenance"
+                    .equals(branchName)) {
+                return Set.of(M6_RUNNER_START_CLASS,
+                        RESEARCH_SELECTION_RUNNER_START_CLASS,
+                        MAINBOARD_TRADE_CAL_FORWARD_INCREMENT_RUNNER_START_CLASS,
+                        MAINBOARD_CATCHUP_READONLY_AUDIT_RUNNER_START_CLASS,
+                        MAINBOARD_DAILY_INCREMENT_RUNNER_START_CLASS)
+                        .contains(runnerStartClass);
+            }
             return Set.of(
                     "codex/1.4.0-v1.0.1-research-selection-usability",
                     "codex/1.4.0-v1.0.2-startup-self-heal-fix",

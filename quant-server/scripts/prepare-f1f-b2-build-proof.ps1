@@ -178,7 +178,9 @@ try {
             throw 'STOCK_QUANT_M6_STAGE_BUILD_BASELINE_REQUIRED'
         }
     } elseif ($Mode -eq 'RESEARCH_SELECTION_CONTROLLED_BUILD_ARTIFACT') {
-        if ($actualBranch -notin @(
+        $automaticMaintenanceBranch =
+            'codex/1.4.0-v1-automatic-daily-market-data-maintenance'
+        $allowedBranches = @(
                 'codex/1.4.0-v1.0.1-research-selection-usability',
                 'codex/1.4.0-v1.0.2-startup-self-heal-fix',
                 'codex/1.4.0-v1.0.3-research-selection-runtime-fix',
@@ -187,15 +189,25 @@ try {
                 'codex/1.4.0-v1.0.11-mainboard-daily-increment',
                 'codex/1.4.0-mainboard-250-session-history-backfill',
                 'codex/1.4.0-mainboard-250-session-trade-cal-backfill',
-                'codex/1.4.0-v1-trade-cal-forward-increment-fix') -or
-            $remoteCommit -ne $ExpectedCommit -or
-            $RunnerProfile -notin @(
+                'codex/1.4.0-v1-trade-cal-forward-increment-fix',
+                $automaticMaintenanceBranch)
+        $allowedProfiles = @(
                 'RESEARCH_SELECTION', 'M6_RESEARCH_PRODUCTION',
                 'MAINBOARD_DAILY_INCREMENT',
                 'MAINBOARD_CATCHUP_READONLY_AUDIT',
                 'MAINBOARD_HISTORY_BACKFILL',
                 'MAINBOARD_TRADE_CAL_BACKFILL',
-                'MAINBOARD_TRADE_CAL_FORWARD_INCREMENT')) {
+                'MAINBOARD_TRADE_CAL_FORWARD_INCREMENT')
+        $automaticMaintenanceProfiles = @(
+                'M6_RESEARCH_PRODUCTION', 'RESEARCH_SELECTION',
+                'MAINBOARD_TRADE_CAL_FORWARD_INCREMENT',
+                'MAINBOARD_CATCHUP_READONLY_AUDIT',
+                'MAINBOARD_DAILY_INCREMENT')
+        if ($actualBranch -notin $allowedBranches -or
+            $remoteCommit -ne $ExpectedCommit -or
+            $RunnerProfile -notin $allowedProfiles -or
+            ($actualBranch -eq $automaticMaintenanceBranch -and
+                $RunnerProfile -notin $automaticMaintenanceProfiles)) {
             throw 'RESEARCH_SELECTION_BUILD_BASELINE_REQUIRED'
         }
     } elseif ($actualBranch -ne $requiredBranch -and

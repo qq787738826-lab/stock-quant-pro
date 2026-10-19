@@ -269,6 +269,61 @@ class TushareControlledAcceptanceTrustedMechanismTest {
     }
 
     @Test
+    void automaticMaintenanceBranchBindsTheFixedProductionArtifactSet(
+            @TempDir Path temp
+    ) throws Exception {
+        String branch =
+                "codex/1.4.0-v1-automatic-daily-market-data-maintenance";
+        String mode = "RESEARCH_SELECTION_CONTROLLED_BUILD_ARTIFACT";
+        List<String> startClasses = List.of(
+                TushareControlledAcceptanceBuildProof.M6_RUNNER_START_CLASS,
+                TushareControlledAcceptanceBuildProof
+                        .RESEARCH_SELECTION_RUNNER_START_CLASS,
+                TushareControlledAcceptanceBuildProof
+                        .MAINBOARD_TRADE_CAL_FORWARD_INCREMENT_RUNNER_START_CLASS,
+                TushareControlledAcceptanceBuildProof
+                        .MAINBOARD_CATCHUP_READONLY_AUDIT_RUNNER_START_CLASS,
+                TushareControlledAcceptanceBuildProof
+                        .MAINBOARD_DAILY_INCREMENT_RUNNER_START_CLASS);
+
+        for (int index = 0; index < startClasses.size(); index++) {
+            Path jar = temp.resolve("automatic-maintenance-" + index
+                    + ".jar");
+            writeJarWithStartClass(jar, COMMIT, branch, mode,
+                    startClasses.get(index));
+            Path sidecar = Path.of(jar
+                    + TushareControlledAcceptanceBuildProof.SIDECAR_SUFFIX);
+            writeSidecar(sidecar, COMMIT, COMMIT, sha256(jar), branch, mode);
+
+            VerifiedBuildProof proof = TushareControlledAcceptanceBuildProof
+                    .loadBoundPreparationArtifactForTest(jar, sidecar);
+            boolean eligible = switch (index) {
+                case 0 -> proof.m6ProductionEligible();
+                case 1 -> proof.researchSelectionEligible();
+                case 2 -> proof
+                        .mainboardTradeCalendarForwardIncrementEligible();
+                case 3 -> proof.mainboardCatchupReadonlyAuditEligible();
+                case 4 -> proof.mainboardDailyIncrementEligible();
+                default -> false;
+            };
+            assertTrue(eligible);
+        }
+
+        Path forbidden = temp.resolve("automatic-maintenance-forbidden.jar");
+        writeJarWithStartClass(forbidden, COMMIT, branch, mode,
+                TushareControlledAcceptanceBuildProof
+                        .MAINBOARD_HISTORY_BACKFILL_RUNNER_START_CLASS);
+        Path forbiddenSidecar = Path.of(forbidden
+                + TushareControlledAcceptanceBuildProof.SIDECAR_SUFFIX);
+        writeSidecar(forbiddenSidecar, COMMIT, COMMIT, sha256(forbidden),
+                branch, mode);
+        assertThrows(IllegalArgumentException.class, () ->
+                TushareControlledAcceptanceBuildProof
+                        .loadBoundPreparationArtifactForTest(forbidden,
+                                forbiddenSidecar));
+    }
+
+    @Test
     void auditFindsExactPrefixSuffixEncodedHeadersQueryAndEnvironmentForms() {
         String secret = "fake-token-0123456789";
         AuditResult result = TushareControlledAcceptanceOutputAudit.audit(

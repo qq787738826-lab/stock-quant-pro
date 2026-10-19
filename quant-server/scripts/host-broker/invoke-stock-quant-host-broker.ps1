@@ -213,7 +213,8 @@ try {
             'codex/1.4.0-v1.0.1-research-selection-usability',
             'codex/1.4.0-v1.0.3-research-selection-runtime-fix',
             'codex/1.4.0-v1.0.7-intraday-research-selection-anchor-fix',
-            'codex/1.4.0-v1.0.9-full-mainboard-universe')) {
+            'codex/1.4.0-v1.0.9-full-mainboard-universe',
+            'codex/1.4.0-v1-automatic-daily-market-data-maintenance')) {
         $branch
     } elseif ($Operation -eq 'MAINBOARD_DAILY_INCREMENT' -and
         $branch -eq
@@ -260,7 +261,8 @@ try {
         $branch -in @(
             'codex/1.4.0-v1.0.3-research-selection-runtime-fix',
             'codex/1.4.0-v1.0.7-intraday-research-selection-anchor-fix',
-            'codex/1.4.0-v1.0.9-full-mainboard-universe')) {
+            'codex/1.4.0-v1.0.9-full-mainboard-universe',
+            'codex/1.4.0-v1-automatic-daily-market-data-maintenance')) {
         $branch
     } elseif ($Operation -in @('START_RESEARCH_PRODUCTION',
             'STOP_RESEARCH_PRODUCTION',

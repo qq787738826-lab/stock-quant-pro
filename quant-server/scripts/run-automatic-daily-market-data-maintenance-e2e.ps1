@@ -27,6 +27,9 @@ $result2 = Join-Path $target `
 $result3 = Join-Path $target `
     ('automatic-maintenance-budget-' +
         [Guid]::NewGuid().ToString('N') + '.json')
+$result4 = Join-Path $target `
+    ('automatic-maintenance-partial-' +
+        [Guid]::NewGuid().ToString('N') + '.json')
 $port = 0
 $started = $false
 $generatedResults = [Collections.Generic.List[string]]::new()
@@ -270,6 +273,53 @@ try {
         throw 'AUTOMATIC_MARKET_DATA_MAINTENANCE_E2E_BUDGET_INVALID'
     }
 
+    $partialGap = Scalar @'
+BEGIN;
+ALTER TABLE tushare_research.adjustment_factor_facts_v1
+    DISABLE TRIGGER USER;
+DELETE FROM tushare_research.adjustment_factor_facts_v1
+ WHERE observation_id = (
+     SELECT observation_id
+       FROM tushare_research.adjustment_factor_facts_v1
+      WHERE factor_effective_trade_date = DATE '2026-08-31'
+      ORDER BY observation_id
+      LIMIT 1
+ );
+ALTER TABLE tushare_research.adjustment_factor_facts_v1
+    ENABLE TRIGGER USER;
+COMMIT;
+SELECT (
+    (SELECT count(*)
+       FROM tushare_research.raw_daily_bar_facts_v2
+      WHERE trade_date = DATE '2026-08-31')
+    -
+    (SELECT count(*)
+       FROM tushare_research.adjustment_factor_facts_v1
+      WHERE factor_effective_trade_date = DATE '2026-08-31')
+)::text;
+'@
+    if ([int]$partialGap -ne 1) {
+        throw 'AUTOMATIC_MARKET_DATA_MAINTENANCE_E2E_PARTIAL_FIXTURE_INVALID'
+    }
+    $partial = Run-Maintenance -Result $result4 `
+        -RequestId (New-TestRequestId 'PARTIAL') -CurrentLedger 6 `
+        -MaximumProviderRequests 444
+    if ($partial.ExitCode -eq 0 -or
+        $partial.Value.status -ne 'FAILED' -or
+        $partial.Value.readyForShadow -or
+        [string]$partial.Value.failureReason -ne
+            'AUTOMATIC_MARKET_DATA_MAINTENANCE_PARTIAL_DATE_PRESENT' -or
+        @($partial.Value.initialPartialTradeDates).Count -ne 1 -or
+        [string]$partial.Value.initialPartialTradeDates[0] -ne
+            '2026-08-31' -or
+        @($partial.Value.initialMissingTradeDates).Count -ne 0 -or
+        @($partial.Value.dailyResults).Count -ne 0 -or
+        [string]$partial.Value.finalAuditRequestId -ne 'NONE' -or
+        [int]$partial.Value.tushareProviderCallCount -ne 0 -or
+        [int]$partial.Value.finalLedger -ne 6) {
+        throw 'AUTOMATIC_MARKET_DATA_MAINTENANCE_E2E_PARTIAL_INVALID'
+    }
+
     if ((Scalar "SELECT max(version::integer)::text FROM flyway_schema_history WHERE success") -ne '18' -or
         [int](Scalar 'SELECT count(*) FROM research_selection_runs') -ne 0 -or
         [int](Scalar 'SELECT count(*) FROM shadow_research_runs') -ne 0 -or
@@ -304,11 +354,13 @@ SELECT count(*) FROM (
     Write-Output "AUTOMATIC_MARKET_DATA_MAINTENANCE_SHADOW_READY=$([bool]$value.readyForShadow)"
     Write-Output "AUTOMATIC_MARKET_DATA_MAINTENANCE_SECOND_PROVIDER_CALLS=$([int]$second.Value.tushareProviderCallCount)"
     Write-Output "AUTOMATIC_MARKET_DATA_MAINTENANCE_BUDGET_PROVIDER_CALLS=$([int]$budget.Value.tushareProviderCallCount)"
+    Write-Output "AUTOMATIC_MARKET_DATA_MAINTENANCE_PARTIAL_PROVIDER_CALLS=$([int]$partial.Value.tushareProviderCallCount)"
     Write-Output 'AUTOMATIC_MARKET_DATA_MAINTENANCE_FAKE_E2E=PASS'
     Write-Output 'AUTOMATIC_MARKET_DATA_MAINTENANCE_TEMP_POSTGRES_V1_V18=PASS'
     Write-Output 'AUTOMATIC_MARKET_DATA_MAINTENANCE_FORWARD_AUDIT_DAILY_FINAL_AUDIT=PASS'
     Write-Output 'AUTOMATIC_MARKET_DATA_MAINTENANCE_IDEMPOTENT_ZERO_CALL_REPEAT=PASS'
     Write-Output 'AUTOMATIC_MARKET_DATA_MAINTENANCE_BUDGET_FAIL_CLOSED=PASS'
+    Write-Output 'AUTOMATIC_MARKET_DATA_MAINTENANCE_PARTIAL_FAIL_CLOSED=PASS'
     Write-Output 'AUTOMATIC_MARKET_DATA_MAINTENANCE_SELECTION_SHADOW_PAPER_CREATED=0'
     Write-Output 'AUTOMATIC_MARKET_DATA_MAINTENANCE_REAL_TUSHARE_CALLS=0'
     Write-Output 'AUTOMATIC_MARKET_DATA_MAINTENANCE_REAL_BAILIAN_CALLS=0'
@@ -322,7 +374,7 @@ SELECT count(*) FROM (
         & "$pgBin\pg_ctl.exe" -D $data -m immediate -w stop `
             2>$null | Out-Null
     }
-    foreach ($path in @($result1, $result2, $result3) +
+    foreach ($path in @($result1, $result2, $result3, $result4) +
             @($generatedResults)) {
         if (Test-Path -LiteralPath $path -PathType Leaf) {
             $full = [IO.Path]::GetFullPath($path)

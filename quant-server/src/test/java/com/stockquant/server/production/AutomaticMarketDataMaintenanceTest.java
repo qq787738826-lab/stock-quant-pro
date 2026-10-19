@@ -183,6 +183,37 @@ class AutomaticMarketDataMaintenanceTest {
     }
 
     @Test
+    void uncertainSubmitQueriesOnlyTheOriginalRequestIdentity(
+            @TempDir Path root
+    ) throws Exception {
+        Path requests = Files.createDirectories(root.resolve("requests"));
+        Files.createDirectories(root.resolve("results"));
+        String requestId = AutomaticMarketDataMaintenanceRequestIds.forDate(
+                DATE, COMMIT);
+        Files.writeString(requests.resolve(
+                requestId + ".processing.properties"), "safe=true\n");
+
+        AutomaticMarketDataMaintenanceDispatchGateway.DispatchResult value =
+                PowerShellAutomaticMarketDataMaintenanceDispatchGateway
+                        .queryOriginalRequestState(root, requestId)
+                        .orElseThrow();
+
+        assertEquals(requestId, value.requestId());
+        assertTrue(value.accepted());
+        assertEquals(
+                "AUTOMATIC_MARKET_DATA_MAINTENANCE_STATE_CONFIRMED",
+                value.reason());
+        assertTrue(PowerShellAutomaticMarketDataMaintenanceDispatchGateway
+                .queryOriginalRequestState(root,
+                        AutomaticMarketDataMaintenanceRequestIds.forDate(
+                                DATE.plusDays(1), COMMIT))
+                .isEmpty());
+        try (var files = Files.list(requests)) {
+            assertEquals(1, files.count());
+        }
+    }
+
+    @Test
     void readyGatePropagatesSafeTerminalFailure(@TempDir Path root)
             throws Exception {
         Path results = Files.createDirectories(root.resolve("results"));

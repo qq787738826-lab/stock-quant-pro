@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -78,6 +79,10 @@ class ResearchProductionContractTest {
                 "AUTOMATIC_DAILY_MARKET_DATA_MAINTENANCE"));
         assertTrue(broker.contains(
                 "Invoke-AutomaticDailyMarketDataMaintenance"));
+        assertEquals(3, occurrences(broker,
+                "codex/1.4.0-v1-automatic-daily-market-data-maintenance"));
+        assertEquals(3, occurrences(invoker,
+                "codex/1.4.0-v1-automatic-daily-market-data-maintenance"));
 
         String build = read(
                 "scripts/prepare-m6-research-production-build-proof.ps1");
@@ -86,6 +91,10 @@ class ResearchProductionContractTest {
         assertTrue(build.contains(
                 "MAINBOARD_CATCHUP_READONLY_AUDIT"));
         assertTrue(build.contains("MAINBOARD_DAILY_INCREMENT"));
+        assertTrue(build.contains(
+                "codex/1.4.0-v1-automatic-daily-market-data-maintenance"));
+        assertTrue(read("scripts/prepare-f1f-b2-build-proof.ps1").contains(
+                "codex/1.4.0-v1-automatic-daily-market-data-maintenance"));
         assertTrue(launcher.contains(
                 "quant-server-1.3.1-research-selection-runner.jar"));
         assertTrue(launcher.contains(
@@ -200,5 +209,14 @@ class ResearchProductionContractTest {
 
     private static String read(String path) throws Exception {
         return Files.readString(Path.of(path));
+    }
+
+    private static int occurrences(String value, String expected) {
+        int count = 0;
+        for (int offset = 0; (offset = value.indexOf(expected, offset)) >= 0;
+             offset += expected.length()) {
+            count++;
+        }
+        return count;
     }
 }

@@ -82,12 +82,9 @@ public final class PowerShellAutomaticMarketDataMaintenanceDispatchGateway
                     properties.getSubmitTimeoutSeconds(), TimeUnit.SECONDS);
             if (!completed) {
                 process.destroyForcibly();
-                if (stateExists(requestId)) {
-                    return new DispatchResult(requestId, true,
-                            "AUTOMATIC_MARKET_DATA_MAINTENANCE_STATE_CONFIRMED");
-                }
-                throw invalid(
-                        "AUTOMATIC_MARKET_DATA_MAINTENANCE_SUBMIT_TIMEOUT");
+                return queryOriginalRequestState(brokerBase(), requestId)
+                        .orElseThrow(() -> invalid(
+                                "AUTOMATIC_MARKET_DATA_MAINTENANCE_SUBMIT_TIMEOUT"));
             }
             List<String> output = readBounded(process);
             boolean accepted = process.exitValue() == 0
@@ -107,12 +104,9 @@ public final class PowerShellAutomaticMarketDataMaintenanceDispatchGateway
                     "AUTOMATIC_MARKET_DATA_MAINTENANCE_BROKER_REJECTED"));
         } catch (InterruptedException error) {
             Thread.currentThread().interrupt();
-            if (stateExists(requestId)) {
-                return new DispatchResult(requestId, true,
-                        "AUTOMATIC_MARKET_DATA_MAINTENANCE_STATE_CONFIRMED");
-            }
-            throw invalid(
-                    "AUTOMATIC_MARKET_DATA_MAINTENANCE_SUBMIT_INTERRUPTED");
+            return queryOriginalRequestState(brokerBase(), requestId)
+                    .orElseThrow(() -> invalid(
+                            "AUTOMATIC_MARKET_DATA_MAINTENANCE_SUBMIT_INTERRUPTED"));
         } catch (IOException error) {
             throw invalid(
                     "AUTOMATIC_MARKET_DATA_MAINTENANCE_SUBMIT_FAILED");
@@ -153,6 +147,21 @@ public final class PowerShellAutomaticMarketDataMaintenanceDispatchGateway
                     "AUTOMATIC_MARKET_DATA_MAINTENANCE_ALREADY_SUBMITTED");
         }
         return Optional.empty();
+    }
+
+    /**
+     * Resolves an uncertain submit only from the durable state of the same
+     * deterministic request. It never creates a replacement request.
+     */
+    static Optional<DispatchResult> queryOriginalRequestState(
+            Path base,
+            String requestId
+    ) {
+        if (!stateExists(base, requestId)) {
+            return Optional.empty();
+        }
+        return Optional.of(new DispatchResult(requestId, true,
+                "AUTOMATIC_MARKET_DATA_MAINTENANCE_STATE_CONFIRMED"));
     }
 
     private boolean stateExists(String requestId) {

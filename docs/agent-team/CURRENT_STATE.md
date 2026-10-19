@@ -27,6 +27,7 @@
 - M5 长期任务分支：`codex/1.4.0-m5-agent-evaluation-ready`
 - M6 长期任务分支：`codex/1.4.0-m6-research-production-ready`
 - V1.0.9 长期任务分支：`codex/1.4.0-v1.0.9-full-mainboard-universe`
+- V1 自动行情维护任务分支：`codex/1.4.0-v1-automatic-daily-market-data-maintenance`。该任务分支实现固定的 `AUTOMATIC_DAILY_MARKET_DATA_MAINTENANCE` Broker operation，以交易日历前向增量、只读 Audit、逐日 Daily Increment 和最终只读 Audit 组成单一可审计链，并在 Shadow 调度前增加结果门禁。该分支尚未合入集成分支，仍待 ChatGPT 基于最终提交与测试证据验收及用户批准 merge；本阶段只允许 Fake Provider/临时 PostgreSQL 验证，不表示已经执行任何正式 Tushare 自动同步。
 - 1D-4 验收来源分支：`codex/1.4.0-1d4-acceptance`
 - 1D-4 验收基线：`5bc492a feat(agent): add safe local team runtime scripts`
 - 阶段 2A 验收来源分支：`codex/1.4.0-2a-readonly-context`
