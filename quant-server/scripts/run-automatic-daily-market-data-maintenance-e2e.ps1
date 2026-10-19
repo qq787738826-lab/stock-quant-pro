@@ -273,32 +273,26 @@ try {
         throw 'AUTOMATIC_MARKET_DATA_MAINTENANCE_E2E_BUDGET_INVALID'
     }
 
-    $partialGap = Scalar @'
+    $partialFixtureReady = Scalar @'
 BEGIN;
 ALTER TABLE tushare_research.adjustment_factor_facts_v1
     DISABLE TRIGGER USER;
 DELETE FROM tushare_research.adjustment_factor_facts_v1
- WHERE observation_id = (
-     SELECT observation_id
-       FROM tushare_research.adjustment_factor_facts_v1
-      WHERE factor_effective_trade_date = DATE '2026-08-31'
-      ORDER BY observation_id
-      LIMIT 1
- );
+ WHERE factor_effective_trade_date = DATE '2026-08-31';
 ALTER TABLE tushare_research.adjustment_factor_facts_v1
     ENABLE TRIGGER USER;
 COMMIT;
-SELECT (
+SELECT CASE WHEN
     (SELECT count(*)
        FROM tushare_research.raw_daily_bar_facts_v2
-      WHERE trade_date = DATE '2026-08-31')
-    -
+      WHERE trade_date = DATE '2026-08-31') > 0
+    AND
     (SELECT count(*)
        FROM tushare_research.adjustment_factor_facts_v1
-      WHERE factor_effective_trade_date = DATE '2026-08-31')
-)::text;
+      WHERE factor_effective_trade_date = DATE '2026-08-31') = 0
+THEN '1' ELSE '0' END;
 '@
-    if ([int]$partialGap -ne 1) {
+    if ([int]$partialFixtureReady -ne 1) {
         throw 'AUTOMATIC_MARKET_DATA_MAINTENANCE_E2E_PARTIAL_FIXTURE_INVALID'
     }
     $partial = Run-Maintenance -Result $result4 `
