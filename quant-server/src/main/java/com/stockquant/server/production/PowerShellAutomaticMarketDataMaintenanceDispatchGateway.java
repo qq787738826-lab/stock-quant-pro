@@ -1,5 +1,6 @@
 package com.stockquant.server.production;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
@@ -31,6 +32,7 @@ public final class PowerShellAutomaticMarketDataMaintenanceDispatchGateway
     private final Path repositoryRoot;
     private final Object dispatchLock = new Object();
 
+    @Autowired
     public PowerShellAutomaticMarketDataMaintenanceDispatchGateway(
             AutomaticMarketDataMaintenanceProperties properties
     ) {
