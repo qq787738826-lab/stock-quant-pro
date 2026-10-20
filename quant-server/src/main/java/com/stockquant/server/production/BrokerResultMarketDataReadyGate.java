@@ -2,6 +2,7 @@ package com.stockquant.server.production;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -30,6 +31,7 @@ public final class BrokerResultMarketDataReadyGate
     private final Path brokerBase;
     private final Supplier<String> gitCommit;
 
+    @Autowired
     public BrokerResultMarketDataReadyGate(ObjectMapper mapper) {
         this(mapper, repositoryRoot().resolve(
                         "quant-server/target/stock-quant-host-broker"),
