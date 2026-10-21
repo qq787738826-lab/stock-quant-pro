@@ -48,9 +48,29 @@ type Overview = {
   latestUpdateTask?: UpdateTask
 }
 
+type MaintenanceStatus = {
+  status: 'NOT_RUN' | 'SUBMITTED' | 'IN_PROGRESS' | 'SUCCEEDED' | 'FAILED'
+  requestId: string
+  tradeDate: string
+  reason: string
+  readyForShadow: boolean
+  latestCompleteTradeDate?: string
+  latestCommonCompletedOpenTradeDate?: string
+  missingTradeDates?: string[]
+  partialTradeDates?: string[]
+  providerCallCount?: number
+}
+
 const overview = ref<Overview>({ securities: 0, dailyBars: 0, cachedSymbols: 0 })
 const task = ref<Task>({})
 const updateTask = ref<UpdateTask>({})
+const maintenanceStatus = ref<MaintenanceStatus>({
+  status: 'NOT_RUN',
+  requestId: 'NONE',
+  tradeDate: '',
+  reason: 'AUTOMATIC_MARKET_DATA_MAINTENANCE_NOT_RUN',
+  readyForShadow: false,
+})
 const taskHistory = ref<Task[]>([])
 const scanFailures = ref<any[]>([])
 const updateFailures = ref<any[]>([])
@@ -61,13 +81,31 @@ const syncing = ref(false)
 const starting = ref(false)
 const updating = ref(false)
 const retrying = ref(false)
+const maintenanceSubmitting = ref(false)
 const error = ref('')
 const message = ref('')
 let scanTimer: number | undefined
 let updateTimer: number | undefined
+let maintenanceTimer: number | undefined
 
 const scanRunning = computed(() => ['QUEUED', 'RUNNING'].includes(task.value.status || ''))
 const updateRunning = computed(() => ['QUEUED', 'RUNNING'].includes(updateTask.value.status || ''))
+const maintenanceRunning = computed(() =>
+  ['SUBMITTED', 'IN_PROGRESS'].includes(maintenanceStatus.value.status))
+const maintenanceMessage = computed(() => {
+  const value = maintenanceStatus.value
+  if (value.status === 'SUCCEEDED' && value.readyForShadow) {
+    return '行情已同步到最新完整交易日'
+  }
+  if (value.status === 'FAILED') {
+    return `同步失败：${displayReason(value.reason)}`
+  }
+  if (maintenanceRunning.value) return '正在同步行情，请稍候'
+  if (value.reason === 'AUTOMATIC_MARKET_DATA_MAINTENANCE_WINDOW_INVALID') {
+    return displayReason(value.reason)
+  }
+  return displayReason(value.reason)
+})
 
 const scanProgress = computed(() => {
   const total = Number(task.value.total_symbols || 0)
@@ -125,6 +163,12 @@ async function loadUpdateFailures(taskId?: number) {
   updateFailures.value = taskId
     ? await api.get(`/data/updates/${taskId}/failures`) as unknown as any[]
     : []
+}
+
+async function loadMaintenanceStatus() {
+  maintenanceStatus.value = await api.get('/data/maintenance/status') as unknown as MaintenanceStatus
+  if (!maintenanceRunning.value) stopMaintenancePolling()
+  return maintenanceStatus.value
 }
 
 async function viewTask(row: Task) {
@@ -208,6 +252,34 @@ async function startUpdate() {
   }
 }
 
+async function startFormalMaintenance() {
+  if (maintenanceSubmitting.value || maintenanceRunning.value) return
+  maintenanceSubmitting.value = true
+  error.value = ''
+  message.value = ''
+  try {
+    maintenanceStatus.value = await api.post(
+      '/data/maintenance/sync-latest',
+    ) as unknown as MaintenanceStatus
+    if (maintenanceRunning.value) beginMaintenancePolling()
+  } catch (postError: any) {
+    try {
+      const recovered = await loadMaintenanceStatus()
+      if (maintenanceRunning.value) {
+        beginMaintenancePolling()
+        return
+      }
+      if (recovered.status === 'SUCCEEDED' || recovered.status === 'FAILED'
+        || recovered.reason === 'AUTOMATIC_MARKET_DATA_MAINTENANCE_WINDOW_INVALID') return
+    } catch {
+      // Keep the original POST error. Never retry the POST automatically.
+    }
+    error.value = friendlyError(postError, '正式行情同步提交失败')
+  } finally {
+    maintenanceSubmitting.value = false
+  }
+}
+
 async function pollScan() {
   if (!task.value.id) return
   try {
@@ -236,6 +308,14 @@ async function pollUpdate() {
   }
 }
 
+async function pollMaintenance() {
+  try {
+    await loadMaintenanceStatus()
+  } catch (e: any) {
+    error.value = friendlyError(e, '正式行情同步状态读取失败')
+  }
+}
+
 function beginScanPolling() {
   stopScanPolling()
   pollScan()
@@ -248,6 +328,12 @@ function beginUpdatePolling() {
   updateTimer = window.setInterval(pollUpdate, 2000)
 }
 
+function beginMaintenancePolling() {
+  stopMaintenancePolling()
+  void pollMaintenance()
+  maintenanceTimer = window.setInterval(pollMaintenance, 2000)
+}
+
 function stopScanPolling() {
   if (scanTimer) window.clearInterval(scanTimer)
   scanTimer = undefined
@@ -256,6 +342,11 @@ function stopScanPolling() {
 function stopUpdatePolling() {
   if (updateTimer) window.clearInterval(updateTimer)
   updateTimer = undefined
+}
+
+function stopMaintenancePolling() {
+  if (maintenanceTimer) window.clearInterval(maintenanceTimer)
+  maintenanceTimer = undefined
 }
 
 onMounted(async () => {
@@ -268,11 +359,18 @@ onMounted(async () => {
   } catch (e: any) {
     error.value = friendlyError(e, '数据中心加载失败')
   }
+  try {
+    await loadMaintenanceStatus()
+    if (maintenanceRunning.value) beginMaintenancePolling()
+  } catch (e: any) {
+    error.value = friendlyError(e, '正式行情同步状态读取失败')
+  }
 })
 
 onUnmounted(() => {
   stopScanPolling()
   stopUpdatePolling()
+  stopMaintenancePolling()
 })
 </script>
 
@@ -284,6 +382,34 @@ onUnmounted(() => {
     <div class="card metric"><label>本地K线</label><strong>{{ Number(overview.dailyBars || 0).toLocaleString() }}</strong></div>
     <div class="card metric"><label>已缓存股票</label><strong>{{ overview.cachedSymbols }}</strong></div>
     <div class="card metric"><label>最新交易日</label><strong class="small-metric">{{ overview.latestBarDate || '暂无' }}</strong></div>
+  </div>
+
+  <div class="card formal-sync-card">
+    <div class="task-header">
+      <div>
+        <h3>正式行情同步</h3>
+        <p class="muted">同步正式交易日历，并自动补齐缺失的日线和复权因子。<br>仅在系统允许的收盘后时间窗口内执行。</p>
+        <p class="formal-purpose">用于正式研究数据；自动同步交易日历、日线和复权因子。</p>
+      </div>
+      <span class="status-tag" :class="maintenanceStatus.status.toLowerCase()">
+        {{ displayStatus(maintenanceStatus.status) }}
+      </span>
+    </div>
+    <button
+      class="btn formal-sync-button"
+      :disabled="maintenanceSubmitting || maintenanceRunning"
+      @click="startFormalMaintenance"
+    >
+      {{ maintenanceSubmitting || maintenanceRunning ? '同步进行中...' : '手动同步到最新交易日' }}
+    </button>
+    <div class="maintenance-status-grid">
+      <span><label>当前状态</label>{{ displayStatus(maintenanceStatus.status) }}</span>
+      <span><label>requestId</label>{{ maintenanceStatus.requestId === 'NONE' ? '--' : maintenanceStatus.requestId }}</span>
+      <span><label>目标日期</label>{{ maintenanceStatus.tradeDate || '--' }}</span>
+      <span><label>最新完整交易日</label>{{ maintenanceStatus.latestCompleteTradeDate || '--' }}</span>
+      <span><label>是否 DATA_READY</label>{{ maintenanceStatus.readyForShadow ? '是' : '否' }}</span>
+      <span><label>成功/失败原因</label>{{ maintenanceMessage }}</span>
+    </div>
   </div>
 
   <div class="section-grid three">
@@ -421,6 +547,12 @@ onUnmounted(() => {
 
 <style scoped>
 .small-metric { font-size: 17px !important; }
+.formal-sync-card { margin-top:12px; border-color:#315e86; }
+.formal-purpose { color:#69b1ff; font-size:12px; margin:8px 0 12px; }
+.formal-sync-button { min-width:210px; }
+.maintenance-status-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin-top:16px; }
+.maintenance-status-grid span { min-width:0; color:#d2dbea; font-size:12px; overflow-wrap:anywhere; }
+.maintenance-status-grid label { display:block; color:#7d8da5; margin-bottom:4px; }
 .section-grid.three { grid-template-columns: repeat(3, 1fr); }
 .form-column { display:grid; grid-template-columns:1fr 130px; gap:8px 10px; align-items:center; margin-bottom:12px; }
 .form-column label { color:#7d8da5; font-size:12px; }
@@ -429,7 +561,9 @@ onUnmounted(() => {
 .task-header { display:flex; align-items:center; justify-content:space-between; }
 .status-tag { padding:3px 9px; border-radius:3px; background:#25344a; color:#aab8ca; font-size:12px; }
 .status-tag.running, .status-tag.queued { background:#173759; color:#5da9ff; }
+.status-tag.submitted, .status-tag.in_progress { background:#173759; color:#5da9ff; }
 .status-tag.completed { background:#173d32; color:#4ade9a; }
+.status-tag.succeeded { background:#173d32; color:#4ade9a; }
 .status-tag.failed { background:#492329; color:#ff7b86; }
 .progress-track { height:8px; background:#18263a; border-radius:99px; overflow:hidden; margin:12px 0; }
 .progress-value { height:100%; background:#1677ff; transition:width .25s; }
@@ -447,5 +581,6 @@ onUnmounted(() => {
 @media(max-width:1400px) {
   .section-grid.three { grid-template-columns:1fr; }
   .task-grid { grid-template-columns:repeat(3,1fr); }
+  .maintenance-status-grid { grid-template-columns:1fr; }
 }
 </style>

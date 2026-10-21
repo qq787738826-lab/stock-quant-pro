@@ -1,6 +1,7 @@
 package com.stockquant.server.production;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.stockquant.server.api.MarketDataMaintenanceController;
 import com.stockquant.server.agent.shadowresearch.ShadowResearchDispatchGateway;
 import com.stockquant.server.agent.shadowresearch.ShadowResearchRepository;
 import com.stockquant.server.agent.shadowresearch.ShadowResearchScheduleProperties;
@@ -51,8 +52,11 @@ class AutomaticMarketDataMaintenanceProductionContextTest {
                     () -> mock(ShadowResearchDispatchGateway.class));
             context.register(
                     BrokerResultMarketDataReadyGate.class,
+                    BrokerAutomaticMarketDataMaintenanceStatusQuery.class,
                     PowerShellAutomaticMarketDataMaintenanceDispatchGateway.class,
                     AutomaticDailyMarketDataMaintenanceScheduler.class,
+                    ManualMarketDataMaintenanceService.class,
+                    MarketDataMaintenanceController.class,
                     ShadowResearchScheduler.class);
 
             context.refresh();
@@ -66,6 +70,12 @@ class AutomaticMarketDataMaintenanceProductionContextTest {
                     AutomaticMarketDataMaintenanceDispatchGateway.class));
             assertNotNull(context.getBean(
                     AutomaticDailyMarketDataMaintenanceScheduler.class));
+            assertNotNull(context.getBean(
+                    MarketDataMaintenanceController.class));
+            assertSame(context.getBean(
+                            BrokerAutomaticMarketDataMaintenanceStatusQuery.class),
+                    context.getBean(
+                            AutomaticMarketDataMaintenanceStatusQuery.class));
             assertNotNull(context.getBean(ShadowResearchScheduler.class));
             assertTrue(context.getBean(
                     AutomaticMarketDataMaintenanceProperties.class)
