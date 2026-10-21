@@ -2364,6 +2364,12 @@ function Invoke-AutomaticDailyMarketDataMaintenance {
     [int]$dailyCalls = [int]$maintenance.dailyProviderCallCount
     [int]$factorCalls =
         [int]$maintenance.adjustmentFactorProviderCallCount
+    $providerCallPairValid =
+        ($maintenance.status -eq 'SUCCEEDED' -and
+            $dailyCalls -eq $factorCalls) -or
+        ($maintenance.status -eq 'FAILED' -and
+            $dailyCalls -ge $factorCalls -and
+            $dailyCalls -le $factorCalls + 1)
     $commonValid = $maintenance.schemaVersion -eq
             'AUTOMATIC_DAILY_MARKET_DATA_MAINTENANCE_RESULT_V1' -and
         [string]$maintenance.requestId -eq $BrokerRequest.RequestId -and
@@ -2378,7 +2384,8 @@ function Invoke-AutomaticDailyMarketDataMaintenance {
         [int]$maintenance.maximumProviderRequests -eq $maximumProvider -and
         $providerCalls -ge 0 -and $providerCalls -le $maximumProvider -and
         $calendarCalls -ge 0 -and $calendarCalls -le 4 -and
-        $dailyCalls -ge 0 -and $factorCalls -eq $dailyCalls -and
+        $dailyCalls -ge 0 -and $factorCalls -ge 0 -and
+        $providerCallPairValid -and
         $providerCalls -eq $calendarCalls + $dailyCalls + $factorCalls -and
         [int]$maintenance.stockBasicProviderCallCount -eq 0 -and
         [int]$maintenance.retryCount -ge 0 -and
@@ -2405,7 +2412,7 @@ function Invoke-AutomaticDailyMarketDataMaintenance {
         if ($maintenance.status -ne 'FAILED' -or
             $maintenance.readyForShadow -or
             $maintenance.outputAuditClean -or
-            $reason -notmatch '^[A-Z][A-Z0-9_]{3,127}$') {
+            $reason -cnotmatch '^[A-Z][A-Z0-9_]{3,127}$') {
             throw 'AUTOMATIC_MARKET_DATA_MAINTENANCE_RESULT_INVALID'
         }
         throw $reason

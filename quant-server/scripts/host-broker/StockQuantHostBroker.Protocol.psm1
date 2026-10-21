@@ -887,8 +887,14 @@ function Get-StockQuantM4MonthlyUsage {
                 [int]$dailyCalls = [int]$runner.dailyProviderCallCount
                 [int]$factorCalls =
                     [int]$runner.adjustmentFactorProviderCallCount
+                $providerCallPairValid =
+                    ($runner.status -eq 'SUCCEEDED' -and
+                        $dailyCalls -eq $factorCalls) -or
+                    ($runner.status -eq 'FAILED' -and
+                        $dailyCalls -ge $factorCalls -and
+                        $dailyCalls -le $factorCalls + 1)
                 $failureCodeValid = $runner.status -eq 'FAILED' -and
-                    [string]$runner.failureReason -match
+                    [string]$runner.failureReason -cmatch
                         '^[A-Z][A-Z0-9_]{3,127}$'
                 $successValid = $runner.status -eq 'SUCCEEDED' -and
                     $runner.readyForShadow -and $runner.outputAuditClean -and
@@ -933,7 +939,7 @@ function Get-StockQuantM4MonthlyUsage {
                     $providerCalls -gt $maximumCalls -or
                     $calendarCalls -lt 0 -or $calendarCalls -gt 4 -or
                     $dailyCalls -lt 0 -or $factorCalls -lt 0 -or
-                    $dailyCalls -ne $factorCalls -or
+                    -not $providerCallPairValid -or
                     $providerCalls -ne
                         $calendarCalls + $dailyCalls + $factorCalls -or
                     [int]$runner.stockBasicProviderCallCount -ne 0 -or
