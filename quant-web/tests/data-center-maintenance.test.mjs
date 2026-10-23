@@ -50,12 +50,15 @@ test('正式同步状态和原因使用稳定中文文案', () => {
 })
 
 test('手动同步展示服务端解析的目标日期和回退说明', () => {
-  assert.equal(source.includes('effectiveTargetTradeDate?: string'), true)
+  assert.equal(source.includes(
+    'effectiveTargetTradeDate?: string | null'), true)
   assert.equal(source.includes('系统会自动判断最新可同步交易日。'), true)
   assert.equal(source.includes(
     '当日数据尚未达到同步时间时，将自动同步到上一个交易日。'), true)
   assert.equal(source.includes('<label>同步目标日期</label>'), true)
   assert.equal(source.includes(
     '当前当日数据尚未进入正式同步时间，本次将同步至最近交易日：${target}'), true)
+  assert.equal(source.includes(
+    '本地交易日历需要先补齐至 ${maintenanceStatus.value.tradeDate}，完成后将显示最新交易日。'), true)
   assert.equal(source.includes('请在交易日 16:25–17:10 执行'), false)
 })

@@ -11,7 +11,10 @@ import java.util.Map;
 import java.util.function.Predicate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ManualMarketDataTargetResolverTest {
     private static final ZoneId SHANGHAI = ZoneId.of("Asia/Shanghai");
@@ -25,8 +28,9 @@ class ManualMarketDataTargetResolverTest {
                 calendar(LocalDate.of(2026, 10, 16), monday,
                         ManualMarketDataTargetResolverTest::weekday));
 
-        assertEquals(LocalDate.of(2026, 10, 16),
-                resolver.resolve(at(monday, 10, 0)));
+        assertKnown(resolver.resolve(at(monday, 10, 0)),
+                LocalDate.of(2026, 10, 18),
+                LocalDate.of(2026, 10, 16));
     }
 
     @Test
@@ -34,8 +38,9 @@ class ManualMarketDataTargetResolverTest {
         LocalDate today = LocalDate.of(2026, 10, 21);
         var resolver = openResolver(LocalDate.of(2026, 10, 20), today);
 
-        assertEquals(LocalDate.of(2026, 10, 20),
-                resolver.resolve(at(today, 15, 30)));
+        assertKnown(resolver.resolve(at(today, 15, 30)),
+                LocalDate.of(2026, 10, 20),
+                LocalDate.of(2026, 10, 20));
     }
 
     @Test
@@ -43,7 +48,7 @@ class ManualMarketDataTargetResolverTest {
         LocalDate today = LocalDate.of(2026, 10, 21);
         var resolver = openResolver(LocalDate.of(2026, 10, 20), today);
 
-        assertEquals(today, resolver.resolve(at(today, 16, 25)));
+        assertKnown(resolver.resolve(at(today, 16, 25)), today, today);
     }
 
     @Test
@@ -51,7 +56,7 @@ class ManualMarketDataTargetResolverTest {
         LocalDate today = LocalDate.of(2026, 10, 21);
         var resolver = openResolver(LocalDate.of(2026, 10, 20), today);
 
-        assertEquals(today, resolver.resolve(at(today, 16, 30)));
+        assertKnown(resolver.resolve(at(today, 16, 30)), today, today);
     }
 
     @Test
@@ -59,7 +64,7 @@ class ManualMarketDataTargetResolverTest {
         LocalDate today = LocalDate.of(2026, 10, 21);
         var resolver = openResolver(LocalDate.of(2026, 10, 20), today);
 
-        assertEquals(today, resolver.resolve(at(today, 20, 0)));
+        assertKnown(resolver.resolve(at(today, 20, 0)), today, today);
     }
 
     @Test
@@ -69,8 +74,9 @@ class ManualMarketDataTargetResolverTest {
                 LocalDate.of(2026, 10, 24),
                 ManualMarketDataTargetResolverTest::weekday);
 
-        assertEquals(friday, resolver.resolve(at(
-                LocalDate.of(2026, 10, 24), 18, 0)));
+        assertKnown(resolver.resolve(at(
+                        LocalDate.of(2026, 10, 24), 18, 0)),
+                LocalDate.of(2026, 10, 24), friday);
     }
 
     @Test
@@ -80,8 +86,9 @@ class ManualMarketDataTargetResolverTest {
                 LocalDate.of(2026, 10, 25),
                 ManualMarketDataTargetResolverTest::weekday);
 
-        assertEquals(friday, resolver.resolve(at(
-                LocalDate.of(2026, 10, 25), 18, 0)));
+        assertKnown(resolver.resolve(at(
+                        LocalDate.of(2026, 10, 25), 18, 0)),
+                LocalDate.of(2026, 10, 25), friday);
     }
 
     @Test
@@ -92,7 +99,8 @@ class ManualMarketDataTargetResolverTest {
         Map<LocalDate, Boolean> values = calendar(previous, holiday, open);
         var resolver = resolver(values, values);
 
-        assertEquals(previous, resolver.resolve(at(holiday, 18, 0)));
+        assertKnown(resolver.resolve(at(holiday, 18, 0)), holiday,
+                previous);
     }
 
     @Test
@@ -105,7 +113,41 @@ class ManualMarketDataTargetResolverTest {
                 date -> date.equals(previous));
         var resolver = resolver(sse, szse);
 
-        assertEquals(previous, resolver.resolve(at(today, 16, 30)));
+        assertKnown(resolver.resolve(at(today, 16, 30)), today, previous);
+    }
+
+    @Test
+    void alignedStaleCalendarBootstrapsStableCoverageEnd() {
+        LocalDate latestKnown = LocalDate.of(2026, 10, 20);
+        LocalDate today = LocalDate.of(2026, 10, 21);
+        var resolver = commonCalendar(latestKnown.minusDays(1), latestKnown,
+                ignored -> true);
+
+        ManualMarketDataTargetResolver.Resolution resolution =
+                resolver.resolve(at(today, 16, 30));
+
+        assertEquals(today, resolution.coverageEndDate());
+        assertEquals(today, resolution.dispatchTargetDate());
+        assertNull(resolution.effectiveTargetTradeDate());
+        assertTrue(resolution.calendarBootstrapRequired());
+    }
+
+    @Test
+    void beforeCutoffBootstrapsOnlyThroughPreviousNaturalDate() {
+        LocalDate today = LocalDate.of(2026, 10, 21);
+        LocalDate latestKnown = LocalDate.of(2026, 10, 19);
+        var resolver = commonCalendar(latestKnown.minusDays(1), latestKnown,
+                ignored -> true);
+
+        ManualMarketDataTargetResolver.Resolution resolution =
+                resolver.resolve(at(today, 10, 0));
+
+        assertEquals(LocalDate.of(2026, 10, 20),
+                resolution.coverageEndDate());
+        assertEquals(LocalDate.of(2026, 10, 20),
+                resolution.dispatchTargetDate());
+        assertNull(resolution.effectiveTargetTradeDate());
+        assertTrue(resolution.calendarBootstrapRequired());
     }
 
     @Test
@@ -124,6 +166,47 @@ class ManualMarketDataTargetResolverTest {
 
         assertEquals(ManualMarketDataTargetResolver.TARGET_UNAVAILABLE,
                 error.getMessage());
+    }
+
+    @Test
+    void emptyCalendarCannotBootstrapForwardIncrement() {
+        var resolver = resolver(Map.of(), Map.of());
+
+        IllegalStateException error = assertThrows(
+                IllegalStateException.class,
+                () -> resolver.resolve(at(LocalDate.of(2026, 10, 21),
+                        16, 30)));
+
+        assertEquals(ManualMarketDataTargetResolver.TARGET_UNAVAILABLE,
+                error.getMessage());
+    }
+
+    @Test
+    void staleClosedTailWithoutKnownOpenDateFailsClosed() {
+        LocalDate friday = LocalDate.of(2026, 10, 16);
+        Map<LocalDate, Boolean> closed = calendar(friday,
+                friday.plusDays(1), ignored -> false);
+        var resolver = resolver(closed, closed);
+
+        IllegalStateException error = assertThrows(
+                IllegalStateException.class,
+                () -> resolver.resolve(at(LocalDate.of(2026, 10, 21),
+                        16, 30)));
+
+        assertEquals(ManualMarketDataTargetResolver.TARGET_UNAVAILABLE,
+                error.getMessage());
+    }
+
+    private static void assertKnown(
+            ManualMarketDataTargetResolver.Resolution resolution,
+            LocalDate coverageEnd,
+            LocalDate effectiveTradeDate
+    ) {
+        assertEquals(coverageEnd, resolution.coverageEndDate());
+        assertEquals(effectiveTradeDate, resolution.dispatchTargetDate());
+        assertEquals(effectiveTradeDate,
+                resolution.effectiveTargetTradeDate());
+        assertFalse(resolution.calendarBootstrapRequired());
     }
 
     private static ManualMarketDataTargetResolver openResolver(

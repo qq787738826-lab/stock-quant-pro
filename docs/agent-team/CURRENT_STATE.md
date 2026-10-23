@@ -27,7 +27,8 @@
 - M5 长期任务分支：`codex/1.4.0-m5-agent-evaluation-ready`
 - M6 长期任务分支：`codex/1.4.0-m6-research-production-ready`
 - V1.0.9 长期任务分支：`codex/1.4.0-v1.0.9-full-mainboard-universe`
-- V1 自动行情维护任务分支：`codex/1.4.0-v1-automatic-daily-market-data-maintenance`。该任务分支实现固定的 `AUTOMATIC_DAILY_MARKET_DATA_MAINTENANCE` Broker operation，以交易日历前向增量、只读 Audit、逐日 Daily Increment 和最终只读 Audit 组成单一可审计链，并在 Shadow 调度前增加结果门禁。该分支尚未合入集成分支，仍待 ChatGPT 基于最终提交与测试证据验收及用户批准 merge；本阶段只允许 Fake Provider/临时 PostgreSQL 验证，不表示已经执行任何正式 Tushare 自动同步。
+- V1 自动行情维护主实现及其启动装配、失败调用账本、数据页手工入口和显式目标日期修复已经依次合入集成分支，当前集成基线为 `5ee98382474e0d828975771aadd3ec48bc8e6180`。固定的 `AUTOMATIC_DAILY_MARKET_DATA_MAINTENANCE` Broker operation 仍由交易日历前向增量、只读 Audit、逐日 Daily Increment 和最终只读 Audit 组成单一可审计链，并在 Shadow 调度前执行结果门禁；该代码事实不表示本轮执行过正式 Tushare 同步。
+- V1 手工同步日历 bootstrap 修复任务分支：`codex/1.4.0-v1-manual-sync-calendar-bootstrap-fix`。该分支把稳定的自然日覆盖截止日与实际目标交易日显式分离：两所日历对齐但落后时，手工入口可用覆盖截止日启动既有 Broker 链，由第一阶段补齐日历；实际交易日在可证明前保持 `null`，补齐后轮询仍优先读取原 bootstrap 请求身份。空日历、两所最大日期不一致或尾部无法证明共同开市日时继续 fail-closed。Java 定向回归 `49/0/0/0`，显式排除 Integration/Postgres/CrossLanguage/Live 的离线回归为 `quant-core 23/0/0/0`、`quant-server 846/0/0/1`，前端页面测试 `4/0/0/0` 且生产构建通过；本任务尚未合入集成分支，等待 ChatGPT 基于最终 Git 提交验收和用户批准 merge，未访问正式 Provider、正式数据库或凭据。
 - 1D-4 验收来源分支：`codex/1.4.0-1d4-acceptance`
 - 1D-4 验收基线：`5bc492a feat(agent): add safe local team runtime scripts`
 - 阶段 2A 验收来源分支：`codex/1.4.0-2a-readonly-context`

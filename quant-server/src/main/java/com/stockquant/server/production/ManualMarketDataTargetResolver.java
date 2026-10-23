@@ -14,7 +14,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
-/** Resolves the newest locally known common SSE/SZSE manual-sync date. */
+/** Resolves a stable manual-sync request date and its known trade date. */
 @Component
 @ConditionalOnProperty(
         prefix = "stockquant.market-data-maintenance.scheduler",
@@ -53,29 +53,55 @@ public final class ManualMarketDataTargetResolver {
         this.zone = ZoneId.of(properties.getZone());
     }
 
-    public LocalDate resolve(Instant submittedAt) {
+    public Resolution resolve(Instant submittedAt) {
         Objects.requireNonNull(submittedAt, "submittedAt");
         var now = submittedAt.atZone(zone);
         LocalDate today = now.toLocalDate();
-        LocalDate start = today.minusDays(
-                MAXIMUM_CALENDAR_LOOKBACK_DAYS - 1L);
-        Map<LocalDate, CalendarDay> sse = calendar("SSE", start, today,
-                submittedAt);
-        Map<LocalDate, CalendarDay> szse = calendar("SZSE", start, today,
-                submittedAt);
-        LocalDate candidate = now.toLocalTime().isBefore(
+        LocalDate coverageEnd = now.toLocalTime().isBefore(
                 properties.getSafeWindowStart())
                 ? today.minusDays(1) : today;
-        while (!candidate.isBefore(start)) {
-            CalendarDay sseDay = sse.get(candidate);
-            CalendarDay szseDay = szse.get(candidate);
+        LocalDate start = coverageEnd.minusDays(
+                MAXIMUM_CALENDAR_LOOKBACK_DAYS - 1L);
+        Map<LocalDate, CalendarDay> sse = calendar("SSE", start,
+                coverageEnd, submittedAt);
+        Map<LocalDate, CalendarDay> szse = calendar("SZSE", start,
+                coverageEnd, submittedAt);
+        LocalDate sseMaximum = maximum(sse);
+        LocalDate szseMaximum = maximum(szse);
+        if (!sseMaximum.equals(szseMaximum)) {
+            throw unavailable(null);
+        }
+        latestCommonOpen(sse, szse, sseMaximum, start);
+        if (sseMaximum.isBefore(coverageEnd)) {
+            return Resolution.bootstrap(coverageEnd);
+        }
+        LocalDate effectiveTradeDate = latestCommonOpen(sse, szse,
+                coverageEnd, start);
+        return Resolution.known(coverageEnd, effectiveTradeDate);
+    }
+
+    private static LocalDate maximum(Map<LocalDate, CalendarDay> values) {
+        return values.keySet().stream().max(LocalDate::compareTo)
+                .orElseThrow(() -> unavailable(null));
+    }
+
+    private static LocalDate latestCommonOpen(
+            Map<LocalDate, CalendarDay> sse,
+            Map<LocalDate, CalendarDay> szse,
+            LocalDate candidate,
+            LocalDate start
+    ) {
+        LocalDate value = candidate;
+        while (!value.isBefore(start)) {
+            CalendarDay sseDay = sse.get(value);
+            CalendarDay szseDay = szse.get(value);
             if (sseDay == null || szseDay == null) {
                 throw unavailable(null);
             }
             if (sseDay.open() && szseDay.open()) {
-                return candidate;
+                return value;
             }
-            candidate = candidate.minusDays(1);
+            value = value.minusDays(1);
         }
         throw unavailable(null);
     }
@@ -126,6 +152,53 @@ public final class ManualMarketDataTargetResolver {
         CalendarDay {
             Objects.requireNonNull(exchange, "exchange");
             Objects.requireNonNull(date, "date");
+        }
+    }
+
+    /**
+     * coverageEndDate is the stable request identity. When local calendars
+     * already cover it, dispatchTargetDate remains the actual common open
+     * trade date for backward compatibility. A stale but aligned calendar
+     * instead dispatches the coverage end so the Broker's first stage can
+     * append the missing calendar tail before resolving open dates.
+     */
+    public record Resolution(
+            LocalDate coverageEndDate,
+            LocalDate dispatchTargetDate,
+            LocalDate effectiveTargetTradeDate,
+            boolean calendarBootstrapRequired
+    ) {
+        public Resolution {
+            Objects.requireNonNull(coverageEndDate, "coverageEndDate");
+            Objects.requireNonNull(dispatchTargetDate,
+                    "dispatchTargetDate");
+            if (dispatchTargetDate.isAfter(coverageEndDate)
+                    || (effectiveTargetTradeDate != null
+                    && effectiveTargetTradeDate.isAfter(coverageEndDate))
+                    || calendarBootstrapRequired
+                    != (effectiveTargetTradeDate == null)
+                    || (calendarBootstrapRequired
+                    && !dispatchTargetDate.equals(coverageEndDate))
+                    || (!calendarBootstrapRequired
+                    && !dispatchTargetDate.equals(
+                    effectiveTargetTradeDate))) {
+                throw new IllegalArgumentException(
+                        "MANUAL_MARKET_DATA_TARGET_RESOLUTION_INVALID");
+            }
+        }
+
+        public static Resolution known(
+                LocalDate coverageEndDate,
+                LocalDate effectiveTargetTradeDate
+        ) {
+            return new Resolution(coverageEndDate,
+                    effectiveTargetTradeDate, effectiveTargetTradeDate,
+                    false);
+        }
+
+        public static Resolution bootstrap(LocalDate coverageEndDate) {
+            return new Resolution(coverageEndDate, coverageEndDate, null,
+                    true);
         }
     }
 }

@@ -20,6 +20,7 @@ import java.time.ZoneOffset;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
+import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -82,9 +83,10 @@ class MarketDataMaintenanceControllerTest {
                     calls.incrementAndGet();
                     throw new AssertionError("dispatch must not be called");
                 };
-        AutomaticMarketDataMaintenanceStatusQuery query = target -> {
-            throw new AssertionError("status lookup must not be called");
-        };
+        AutomaticMarketDataMaintenanceStatusQuery query = target ->
+                AutomaticMarketDataMaintenanceStatusQuery.Snapshot.notRun(
+                        target, null, REQUEST_ID,
+                        "AUTOMATIC_MARKET_DATA_MAINTENANCE_NOT_RUN");
         ManualMarketDataTargetResolver resolver = mock(
                 ManualMarketDataTargetResolver.class);
         when(resolver.resolve(any())).thenThrow(new IllegalStateException(
@@ -95,10 +97,12 @@ class MarketDataMaintenanceControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("NOT_RUN"))
                 .andExpect(jsonPath("$.data.requestId").value("NONE"))
+                .andExpect(jsonPath("$.data.tradeDate")
+                        .value("2026-10-20"))
                 .andExpect(jsonPath("$.data.reason").value(
                         "MANUAL_MARKET_DATA_TARGET_TRADE_DATE_UNAVAILABLE"))
                 .andExpect(jsonPath("$.data.effectiveTargetTradeDate")
-                        .doesNotExist());
+                        .value(nullValue()));
         assertEquals(0, calls.get());
     }
 
@@ -128,6 +132,39 @@ class MarketDataMaintenanceControllerTest {
                 .andExpect(jsonPath("$.data.status").value("SUBMITTED"))
                 .andExpect(jsonPath("$.data.effectiveTargetTradeDate")
                         .value("2026-10-20"));
+
+        assertEquals(TARGET, dispatchedTarget.get());
+    }
+
+    @Test
+    void calendarBootstrapDoesNotClaimAnUnknownTradeDate()
+            throws Exception {
+        AtomicReference<LocalDate> dispatchedTarget = new AtomicReference<>();
+        AutomaticMarketDataMaintenanceDispatchGateway gateway =
+                (date, submittedAt) -> {
+                    dispatchedTarget.set(date);
+                    return new AutomaticMarketDataMaintenanceDispatchGateway
+                            .DispatchResult(REQUEST_ID, true,
+                            "AUTOMATIC_MARKET_DATA_MAINTENANCE_SUBMITTED");
+                };
+        AutomaticMarketDataMaintenanceStatusQuery query = target ->
+                AutomaticMarketDataMaintenanceStatusQuery.Snapshot.notRun(
+                        target, null, REQUEST_ID,
+                        "AUTOMATIC_MARKET_DATA_MAINTENANCE_NOT_RUN");
+        ManualMarketDataTargetResolver resolver = mock(
+                ManualMarketDataTargetResolver.class);
+        when(resolver.resolve(any())).thenReturn(
+                ManualMarketDataTargetResolver.Resolution.bootstrap(
+                        TARGET));
+        MockMvc mvc = mvc(gateway, query, resolver);
+
+        mvc.perform(post("/api/data/maintenance/sync-latest"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("SUBMITTED"))
+                .andExpect(jsonPath("$.data.tradeDate")
+                        .value("2026-10-20"))
+                .andExpect(jsonPath("$.data.effectiveTargetTradeDate")
+                        .value(nullValue()));
 
         assertEquals(TARGET, dispatchedTarget.get());
     }
@@ -181,7 +218,9 @@ class MarketDataMaintenanceControllerTest {
     ) {
         ManualMarketDataTargetResolver resolver = mock(
                 ManualMarketDataTargetResolver.class);
-        when(resolver.resolve(any())).thenReturn(target);
+        when(resolver.resolve(any())).thenReturn(
+                ManualMarketDataTargetResolver.Resolution.known(target,
+                        target));
         return resolver;
     }
 }

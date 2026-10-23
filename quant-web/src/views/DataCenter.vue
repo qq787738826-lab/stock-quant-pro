@@ -52,7 +52,7 @@ type MaintenanceStatus = {
   status: 'NOT_RUN' | 'SUBMITTED' | 'IN_PROGRESS' | 'SUCCEEDED' | 'FAILED'
   requestId: string
   tradeDate: string
-  effectiveTargetTradeDate?: string
+  effectiveTargetTradeDate?: string | null
   reason: string
   readyForShadow: boolean
   latestCompleteTradeDate?: string
@@ -96,11 +96,18 @@ const maintenanceRunning = computed(() =>
 const maintenanceTargetTradeDate = computed(() => {
   if (maintenanceStatus.value.reason
     === 'MANUAL_MARKET_DATA_TARGET_TRADE_DATE_UNAVAILABLE') return ''
-  return maintenanceStatus.value.effectiveTargetTradeDate
-    || maintenanceStatus.value.tradeDate
+  const effective = maintenanceStatus.value.effectiveTargetTradeDate
+  return effective === undefined
+    ? maintenanceStatus.value.tradeDate
+    : effective || ''
 })
 const maintenanceTargetMessage = computed(() => {
   const target = maintenanceTargetTradeDate.value
+  if (!target && maintenanceStatus.value.tradeDate
+    && maintenanceStatus.value.reason
+    !== 'MANUAL_MARKET_DATA_TARGET_TRADE_DATE_UNAVAILABLE') {
+    return `本地交易日历需要先补齐至 ${maintenanceStatus.value.tradeDate}，完成后将显示最新交易日。`
+  }
   if (!target || target >= shanghaiToday()) return ''
   return `当前当日数据尚未进入正式同步时间，本次将同步至最近交易日：${target}`
 })

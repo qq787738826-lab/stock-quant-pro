@@ -17,6 +17,7 @@ import static com.stockquant.server.production.AutomaticMarketDataMaintenanceSta
 import static com.stockquant.server.production.AutomaticMarketDataMaintenanceStatusQuery.Status;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -92,8 +93,8 @@ class ManualMarketDataMaintenanceServiceTest {
     @Test
     void succeededReadyStateIsReportedWithoutDispatch() {
         Snapshot succeeded = new Snapshot(Status.SUCCEEDED, REQUEST_ID,
-                TARGET, "AUTOMATIC_MARKET_DATA_READY", true, TARGET, TARGET,
-                List.of(), List.of(), 6);
+                TARGET, TARGET, "AUTOMATIC_MARKET_DATA_READY", true,
+                TARGET, TARGET, List.of(), List.of(), 6);
         var service = service(BEFORE_CUTOFF, TARGET, failIfDispatched(),
                 ignored -> succeeded);
 
@@ -136,7 +137,7 @@ class ManualMarketDataMaintenanceServiceTest {
     }
 
     @Test
-    void unavailableCalendarFailsClosedBeforeLookupOrDispatch() {
+    void unavailableCalendarChecksStableIdentityThenFailsClosed() {
         AtomicInteger dispatchCalls = new AtomicInteger();
         AtomicInteger queryCalls = new AtomicInteger();
         ManualMarketDataTargetResolver resolver = mock(
@@ -160,7 +161,48 @@ class ManualMarketDataMaintenanceServiceTest {
                 ManualMarketDataTargetResolver.TARGET_UNAVAILABLE,
                 result.reason());
         assertEquals(0, dispatchCalls.get());
-        assertEquals(0, queryCalls.get());
+        assertEquals(1, queryCalls.get());
+    }
+
+    @Test
+    void unavailableCalendarRecoversPersistedBootstrapStatus() {
+        ManualMarketDataTargetResolver resolver = mock(
+                ManualMarketDataTargetResolver.class);
+        when(resolver.resolve(any())).thenThrow(new IllegalStateException(
+                ManualMarketDataTargetResolver.TARGET_UNAVAILABLE));
+        var service = service(BEFORE_CUTOFF, failIfDispatched(),
+                date -> snapshot(Status.IN_PROGRESS, date,
+                        "AUTOMATIC_MARKET_DATA_MAINTENANCE_IN_PROGRESS",
+                        false), resolver);
+
+        Snapshot result = service.status();
+
+        assertEquals(Status.IN_PROGRESS, result.status());
+        assertEquals(TARGET, result.tradeDate());
+        assertEquals(REQUEST_ID, result.requestId());
+        assertNull(result.effectiveTargetTradeDate());
+    }
+
+    @Test
+    void unavailableCalendarRecoversAcceptedRuntimeBeforeBrokerFileAppears() {
+        ManualMarketDataTargetResolver resolver = mock(
+                ManualMarketDataTargetResolver.class);
+        when(resolver.resolve(any())).thenThrow(new IllegalStateException(
+                ManualMarketDataTargetResolver.TARGET_UNAVAILABLE));
+        var runtime = new AutomaticMarketDataMaintenanceRuntimeState();
+        runtime.checked(BEFORE_CUTOFF, TARGET, REQUEST_ID,
+                "AUTOMATIC_MARKET_DATA_MAINTENANCE_SUBMITTED");
+        var service = service(BEFORE_CUTOFF, failIfDispatched(),
+                ignored -> Snapshot.notRun(TARGET, null, REQUEST_ID,
+                        "AUTOMATIC_MARKET_DATA_MAINTENANCE_NOT_RUN"),
+                resolver, runtime);
+
+        Snapshot result = service.status();
+
+        assertEquals(Status.SUBMITTED, result.status());
+        assertEquals(TARGET, result.tradeDate());
+        assertEquals(REQUEST_ID, result.requestId());
+        assertNull(result.effectiveTargetTradeDate());
     }
 
     @Test
@@ -187,6 +229,93 @@ class ManualMarketDataMaintenanceServiceTest {
     }
 
     @Test
+    void staleAlignedCalendarDispatchesCoverageEndForBootstrap() {
+        AtomicReference<LocalDate> dispatchedDate = new AtomicReference<>();
+        ManualMarketDataTargetResolver resolver = mock(
+                ManualMarketDataTargetResolver.class);
+        when(resolver.resolve(any())).thenReturn(
+                ManualMarketDataTargetResolver.Resolution.bootstrap(TODAY));
+        var service = service(AFTER_CUTOFF,
+                (date, submittedAt) -> {
+                    dispatchedDate.set(date);
+                    return dispatched();
+                }, ignored -> Snapshot.notRun(TODAY, null, REQUEST_ID,
+                        "AUTOMATIC_MARKET_DATA_MAINTENANCE_NOT_RUN"),
+                resolver);
+
+        Snapshot result = service.syncLatest();
+
+        assertEquals(TODAY, dispatchedDate.get());
+        assertEquals(TODAY, result.tradeDate());
+        assertNull(result.effectiveTargetTradeDate());
+        assertEquals(Status.SUBMITTED, result.status());
+    }
+
+    @Test
+    void refreshedCalendarKeepsPollingBootstrapRequestIdentity() {
+        LocalDate saturday = LocalDate.of(2026, 10, 24);
+        LocalDate friday = LocalDate.of(2026, 10, 23);
+        Instant saturdayEvening = Instant.parse("2026-10-24T10:00:00Z");
+        AtomicInteger dispatches = new AtomicInteger();
+        AtomicReference<Snapshot> broker = new AtomicReference<>(
+                Snapshot.notRun(saturday, null, REQUEST_ID,
+                        "AUTOMATIC_MARKET_DATA_MAINTENANCE_NOT_RUN"));
+        ManualMarketDataTargetResolver resolver = mock(
+                ManualMarketDataTargetResolver.class);
+        when(resolver.resolve(any())).thenReturn(
+                ManualMarketDataTargetResolver.Resolution.bootstrap(
+                        saturday),
+                ManualMarketDataTargetResolver.Resolution.known(
+                        saturday, friday));
+        var service = service(saturdayEvening,
+                (date, submittedAt) -> {
+                    dispatches.incrementAndGet();
+                    broker.set(new Snapshot(Status.IN_PROGRESS, REQUEST_ID,
+                            saturday, null,
+                            "AUTOMATIC_MARKET_DATA_MAINTENANCE_IN_PROGRESS",
+                            false, null, null, null, null, null));
+                    return dispatched();
+                }, date -> date.equals(saturday) ? broker.get()
+                        : notRun(date), resolver);
+
+        Snapshot submitted = service.syncLatest();
+        Snapshot polled = service.status();
+
+        assertEquals(Status.IN_PROGRESS, submitted.status());
+        assertEquals(Status.IN_PROGRESS, polled.status());
+        assertEquals(saturday, polled.tradeDate());
+        assertEquals(friday, polled.effectiveTargetTradeDate());
+        assertEquals(1, dispatches.get());
+    }
+
+    @Test
+    void coveredWeekendChecksBootstrapIdentityBeforeTradeDate() {
+        LocalDate saturday = LocalDate.of(2026, 10, 24);
+        LocalDate friday = LocalDate.of(2026, 10, 23);
+        List<LocalDate> queried = new ArrayList<>();
+        ManualMarketDataTargetResolver resolver = mock(
+                ManualMarketDataTargetResolver.class);
+        when(resolver.resolve(any())).thenReturn(
+                ManualMarketDataTargetResolver.Resolution.known(
+                        saturday, friday));
+        var service = service(Instant.parse("2026-10-24T10:00:00Z"),
+                failIfDispatched(), date -> {
+                    queried.add(date);
+                    return date.equals(saturday) ? notRun(saturday)
+                            : snapshot(Status.IN_PROGRESS, friday,
+                            "AUTOMATIC_MARKET_DATA_MAINTENANCE_IN_PROGRESS",
+                            false);
+                }, resolver);
+
+        Snapshot result = service.status();
+
+        assertEquals(List.of(saturday, friday), queried);
+        assertEquals(Status.IN_PROGRESS, result.status());
+        assertEquals(friday, result.tradeDate());
+        assertEquals(friday, result.effectiveTargetTradeDate());
+    }
+
+    @Test
     void manualEntryPointHasNoSelectionShadowOrPaperDependency() {
         Constructor<?> constructor = Arrays.stream(
                         ManualMarketDataMaintenanceService.class
@@ -208,7 +337,9 @@ class ManualMarketDataMaintenanceServiceTest {
     ) {
         ManualMarketDataTargetResolver resolver = mock(
                 ManualMarketDataTargetResolver.class);
-        when(resolver.resolve(any())).thenReturn(target);
+        when(resolver.resolve(any())).thenReturn(
+                ManualMarketDataTargetResolver.Resolution.known(target,
+                        target));
         return service(instant, gateway, query, resolver);
     }
 
@@ -218,10 +349,21 @@ class ManualMarketDataMaintenanceServiceTest {
             AutomaticMarketDataMaintenanceStatusQuery query,
             ManualMarketDataTargetResolver resolver
     ) {
+        return service(instant, gateway, query, resolver,
+                new AutomaticMarketDataMaintenanceRuntimeState());
+    }
+
+    private static ManualMarketDataMaintenanceService service(
+            Instant instant,
+            AutomaticMarketDataMaintenanceDispatchGateway gateway,
+            AutomaticMarketDataMaintenanceStatusQuery query,
+            ManualMarketDataTargetResolver resolver,
+            AutomaticMarketDataMaintenanceRuntimeState runtime
+    ) {
         return new ManualMarketDataMaintenanceService(
                 explicitManualGateway(gateway), query,
                 enabledProperties(), Clock.fixed(instant, ZoneOffset.UTC),
-                new AutomaticMarketDataMaintenanceRuntimeState(), resolver);
+                runtime, resolver);
     }
 
     private static AutomaticMarketDataMaintenanceDispatchGateway
@@ -274,8 +416,8 @@ class ManualMarketDataMaintenanceServiceTest {
             String reason,
             boolean ready
     ) {
-        return new Snapshot(status, REQUEST_ID, target, reason, ready,
-                null, null, null, null, null);
+        return new Snapshot(status, REQUEST_ID, target, target, reason,
+                ready, null, null, null, null, null);
     }
 
     private static AutomaticMarketDataMaintenanceProperties

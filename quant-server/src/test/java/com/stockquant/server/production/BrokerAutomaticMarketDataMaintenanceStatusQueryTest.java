@@ -12,6 +12,7 @@ import java.util.Map;
 
 import static com.stockquant.server.production.AutomaticMarketDataMaintenanceStatusQuery.Status;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class BrokerAutomaticMarketDataMaintenanceStatusQueryTest {
@@ -83,6 +84,8 @@ class BrokerAutomaticMarketDataMaintenanceStatusQueryTest {
         assertEquals(Status.SUCCEEDED, result.status());
         assertTrue(result.readyForShadow());
         assertEquals(LocalDate.of(2026, 10, 20),
+                result.effectiveTargetTradeDate());
+        assertEquals(LocalDate.of(2026, 10, 20),
                 result.latestCompleteTradeDate());
         assertEquals(List.of(), result.missingTradeDates());
         assertEquals(6, result.providerCallCount());
@@ -103,5 +106,34 @@ class BrokerAutomaticMarketDataMaintenanceStatusQueryTest {
         assertEquals(Status.FAILED, result.status());
         assertEquals("TUSHARE_CONNECT_TIMEOUT_NO_RESPONSE",
                 result.reason());
+    }
+
+    @Test
+    void outOfRangeFailureDetailsAreNotExposed(@TempDir Path root)
+            throws Exception {
+        Files.createDirectories(root.resolve("requests"));
+        Path results = Files.createDirectories(root.resolve("results"));
+        ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+        mapper.writeValue(results.resolve(REQUEST_ID
+                + ".automatic-daily-market-data-maintenance.json").toFile(),
+                Map.of(
+                        "finalLatestCompleteTradeDate", "2026-10-22",
+                        "finalLatestCommonCompletedOpenTradeDate",
+                        "2026-10-22",
+                        "finalMissingTradeDates", List.of("2026-10-22"),
+                        "finalPartialTradeDates", List.of(),
+                        "tushareProviderCallCount", 2));
+        MarketDataReadyGate gate = ignored -> MarketDataReadyGate.ReadyResult
+                .skip("TUSHARE_CONNECT_TIMEOUT_NO_RESPONSE", REQUEST_ID);
+        var query = new BrokerAutomaticMarketDataMaintenanceStatusQuery(
+                mapper, gate, root);
+
+        var result = query.query(DATE);
+
+        assertEquals(Status.FAILED, result.status());
+        assertNull(result.effectiveTargetTradeDate());
+        assertNull(result.latestCompleteTradeDate());
+        assertNull(result.missingTradeDates());
+        assertNull(result.providerCallCount());
     }
 }

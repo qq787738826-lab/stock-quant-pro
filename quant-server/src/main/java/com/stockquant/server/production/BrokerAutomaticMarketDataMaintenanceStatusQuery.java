@@ -59,8 +59,12 @@ public final class BrokerAutomaticMarketDataMaintenanceStatusQuery
                 ? "AUTOMATIC_MARKET_DATA_MAINTENANCE_BROKER_REJECTED"
                 : ready.reasonCode();
         Details details = details(status, reason, requestId);
+        if (!details.within(tradeDate)) {
+            details = Details.empty();
+        }
         return new Snapshot(status, requestId, tradeDate,
-                reason, ready.ready(),
+                details.latestCommonCompletedOpenTradeDate(), reason,
+                ready.ready(),
                 details.latestCompleteTradeDate(),
                 details.latestCommonCompletedOpenTradeDate(),
                 details.missingTradeDates(), details.partialTradeDates(),
@@ -176,6 +180,25 @@ public final class BrokerAutomaticMarketDataMaintenanceStatusQuery
     ) {
         private static Details empty() {
             return new Details(null, null, null, null, null);
+        }
+
+        private boolean within(LocalDate target) {
+            return notAfter(latestCompleteTradeDate, target)
+                    && notAfter(latestCommonCompletedOpenTradeDate, target)
+                    && allNotAfter(missingTradeDates, target)
+                    && allNotAfter(partialTradeDates, target);
+        }
+
+        private static boolean notAfter(LocalDate value, LocalDate target) {
+            return value == null || !value.isAfter(target);
+        }
+
+        private static boolean allNotAfter(
+                List<LocalDate> values,
+                LocalDate target
+        ) {
+            return values == null || values.stream()
+                    .noneMatch(value -> value.isAfter(target));
         }
     }
 }

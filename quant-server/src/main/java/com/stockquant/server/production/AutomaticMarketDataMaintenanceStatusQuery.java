@@ -20,6 +20,7 @@ public interface AutomaticMarketDataMaintenanceStatusQuery {
             Status status,
             String requestId,
             LocalDate tradeDate,
+            LocalDate effectiveTargetTradeDate,
             String reason,
             boolean readyForShadow,
             LocalDate latestCompleteTradeDate,
@@ -31,6 +32,11 @@ public interface AutomaticMarketDataMaintenanceStatusQuery {
         public Snapshot {
             Objects.requireNonNull(status, "status");
             Objects.requireNonNull(tradeDate, "tradeDate");
+            if (effectiveTargetTradeDate != null
+                    && effectiveTargetTradeDate.isAfter(tradeDate)) {
+                throw new IllegalArgumentException(
+                        "AUTOMATIC_MARKET_DATA_MAINTENANCE_TARGET_INVALID");
+            }
             if (requestId == null || !("NONE".equals(requestId)
                     || requestId.matches(
                     "SQHB_[0-9]{8}T[0-9]{6}Z_[A-F0-9]{12}"))) {
@@ -58,7 +64,25 @@ public interface AutomaticMarketDataMaintenanceStatusQuery {
                 String reason
         ) {
             return new Snapshot(Status.NOT_RUN, requestId, tradeDate,
-                    reason, false, null, null, null, null, null);
+                    tradeDate, reason, false, null, null, null, null, null);
+        }
+
+        public static Snapshot notRun(
+                LocalDate tradeDate,
+                LocalDate effectiveTargetTradeDate,
+                String requestId,
+                String reason
+        ) {
+            return new Snapshot(Status.NOT_RUN, requestId, tradeDate,
+                    effectiveTargetTradeDate, reason, false, null, null,
+                    null, null, null);
+        }
+
+        public Snapshot withEffectiveTargetTradeDate(LocalDate value) {
+            return new Snapshot(status, requestId, tradeDate, value, reason,
+                    readyForShadow, latestCompleteTradeDate,
+                    latestCommonCompletedOpenTradeDate, missingTradeDates,
+                    partialTradeDates, providerCallCount);
         }
     }
 }
