@@ -11,6 +11,8 @@ import org.springframework.web.bind.annotation.RestController;
 import java.time.LocalDate;
 import java.util.List;
 
+import static com.stockquant.server.production.ManualMarketDataTargetResolver.TARGET_UNAVAILABLE;
+
 /** HTTP facade for one deterministic formal maintenance request. */
 @RestController
 @RequestMapping("/api/data/maintenance")
@@ -40,6 +42,7 @@ public final class MarketDataMaintenanceController {
             String status,
             String requestId,
             String tradeDate,
+            String effectiveTargetTradeDate,
             String reason,
             boolean readyForShadow,
             String latestCompleteTradeDate,
@@ -51,8 +54,12 @@ public final class MarketDataMaintenanceController {
         static Response from(
                 AutomaticMarketDataMaintenanceStatusQuery.Snapshot value
         ) {
+            String effectiveTarget =
+                    TARGET_UNAVAILABLE.equals(value.reason())
+                            ? null : value.tradeDate().toString();
             return new Response(value.status().name(), value.requestId(),
-                    value.tradeDate().toString(), value.reason(),
+                    value.tradeDate().toString(),
+                    effectiveTarget, value.reason(),
                     value.readyForShadow(),
                     date(value.latestCompleteTradeDate()),
                     date(value.latestCommonCompletedOpenTradeDate()),

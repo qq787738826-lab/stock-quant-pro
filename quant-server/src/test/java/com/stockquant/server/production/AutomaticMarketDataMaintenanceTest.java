@@ -9,6 +9,7 @@ import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.ZoneOffset;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -49,6 +50,22 @@ class AutomaticMarketDataMaintenanceTest {
     }
 
     @Test
+    void automaticSchedulerSafeWindowContractRemainsUnchanged() {
+        var scheduler = new AutomaticDailyMarketDataMaintenanceScheduler(
+                (date, submittedAt) -> new AutomaticMarketDataMaintenanceDispatchGateway
+                        .DispatchResult(
+                        "SQHB_20260924T083000Z_9C93F160711B", true,
+                        "AUTOMATIC_MARKET_DATA_MAINTENANCE_SUBMITTED"),
+                enabledProperties(), Clock.fixed(SCHEDULED, ZoneOffset.UTC),
+                new AutomaticMarketDataMaintenanceRuntimeState());
+
+        assertFalse(scheduler.withinWindow(LocalTime.of(16, 24, 59)));
+        assertTrue(scheduler.withinWindow(LocalTime.of(16, 25)));
+        assertTrue(scheduler.withinWindow(LocalTime.of(17, 10)));
+        assertFalse(scheduler.withinWindow(LocalTime.of(17, 10, 1)));
+    }
+
+    @Test
     void schedulerSubmitsOncePerInvocationAndNeverRetriesFailure() {
         AtomicInteger calls = new AtomicInteger();
         AutomaticMarketDataMaintenanceDispatchGateway gateway =
@@ -79,18 +96,63 @@ class AutomaticMarketDataMaintenanceTest {
                         .brokerCommand(Path.of("powershell.exe"),
                                 Path.of("invoke.ps1"),
                                 "SQHB_20260924T083000Z_9C93F160711B",
-                                DATE, 30);
+                                DATE,
+                                AutomaticMarketDataMaintenanceDispatchGateway
+                                        .SubmissionMode.AUTOMATIC,
+                                30);
 
         assertTrue(command.contains(
                 "AUTOMATIC_DAILY_MARKET_DATA_MAINTENANCE"));
         assertTrue(command.contains("-SubmitOnly"));
         assertTrue(command.contains("-MaximumProviderRequests"));
         assertTrue(command.contains("0"));
+        assertEquals("AUTOMATIC", command.get(
+                command.indexOf("-SubmissionMode") + 1));
         assertFalse(command.contains("-Command"));
         assertFalse(command.stream().anyMatch(value -> value.toLowerCase()
                 .contains("select ")));
         assertFalse(command.stream().anyMatch(value -> value.toLowerCase()
                 .contains("schema")));
+    }
+
+    @Test
+    void manualBrokerCommandUsesExplicitModeAndSameOperation() {
+        LocalDate target = DATE.minusDays(1);
+        String requestId = AutomaticMarketDataMaintenanceRequestIds.forDate(
+                target, COMMIT);
+        List<String> command =
+                PowerShellAutomaticMarketDataMaintenanceDispatchGateway
+                        .brokerCommand(Path.of("powershell.exe"),
+                                Path.of("invoke.ps1"),
+                                requestId, target,
+                                AutomaticMarketDataMaintenanceDispatchGateway
+                                        .SubmissionMode.MANUAL,
+                                30);
+
+        assertEquals("AUTOMATIC_DAILY_MARKET_DATA_MAINTENANCE",
+                command.get(command.indexOf("-Operation") + 1));
+        assertEquals("MANUAL", command.get(
+                command.indexOf("-SubmissionMode") + 1));
+        assertEquals(requestId, command.get(
+                command.indexOf("-RequestId") + 1));
+        assertEquals("2026-09-23", command.get(
+                command.indexOf("-TradeDate") + 1));
+    }
+
+    @Test
+    void manualDispatchRequiresAnExplicitGatewayImplementation() {
+        AutomaticMarketDataMaintenanceDispatchGateway automaticOnly =
+                (date, submittedAt) -> new AutomaticMarketDataMaintenanceDispatchGateway
+                        .DispatchResult(
+                        "SQHB_20260924T083000Z_9C93F160711B", true,
+                        "AUTOMATIC_MARKET_DATA_MAINTENANCE_SUBMITTED");
+
+        IllegalStateException error = assertThrows(
+                IllegalStateException.class,
+                () -> automaticOnly.dispatchManual(DATE, SCHEDULED));
+
+        assertEquals("MANUAL_MARKET_DATA_MAINTENANCE_DISPATCH_UNSUPPORTED",
+                error.getMessage());
     }
 
     @Test
@@ -169,17 +231,29 @@ class AutomaticMarketDataMaintenanceTest {
     void brokerStateMakesDuplicateSubmissionAReadOnlyNoOp(
             @TempDir Path root
     ) throws Exception {
-        Path requests = Files.createDirectories(root.resolve("requests"));
-        Files.createDirectories(root.resolve("results"));
         String requestId = AutomaticMarketDataMaintenanceRequestIds.forDate(
                 DATE, COMMIT);
-        Files.writeString(requests.resolve(
-                requestId + ".processing.properties"), "safe=true\n");
+        for (String state : List.of("request", "processing", "processed")) {
+            Path base = Files.createDirectories(root.resolve(state));
+            Path requests = Files.createDirectories(base.resolve("requests"));
+            Files.createDirectories(base.resolve("results"));
+            Files.writeString(requests.resolve(
+                    requestId + '.' + state + ".properties"), "safe=true\n");
 
+            assertEquals(
+                    "AUTOMATIC_MARKET_DATA_MAINTENANCE_ALREADY_SUBMITTED",
+                    PowerShellAutomaticMarketDataMaintenanceDispatchGateway
+                            .existingReason(base, requestId).orElseThrow());
+        }
+        Path terminal = Files.createDirectories(root.resolve("terminal"));
+        Files.createDirectories(terminal.resolve("requests"));
+        Path results = Files.createDirectories(terminal.resolve("results"));
+        Files.writeString(results.resolve(requestId + ".result.json"),
+                "{}");
         assertEquals(
-                "AUTOMATIC_MARKET_DATA_MAINTENANCE_ALREADY_SUBMITTED",
+                "AUTOMATIC_MARKET_DATA_MAINTENANCE_ALREADY_TERMINAL",
                 PowerShellAutomaticMarketDataMaintenanceDispatchGateway
-                        .existingReason(root, requestId).orElseThrow());
+                        .existingReason(terminal, requestId).orElseThrow());
     }
 
     @Test
@@ -236,6 +310,37 @@ class AutomaticMarketDataMaintenanceTest {
                 value.reasonCode());
     }
 
+    @Test
+    void readyGateStrictlyAuditsSubmissionMode(@TempDir Path root)
+            throws Exception {
+        Path results = Files.createDirectories(root.resolve("results"));
+        Files.createDirectories(root.resolve("requests"));
+        String requestId = AutomaticMarketDataMaintenanceRequestIds.forDate(
+                DATE, COMMIT);
+        ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+        Map<String, Object> terminal = terminal(requestId, "SUCCEEDED",
+                "STOCK_QUANT_HOST_BROKER_SUCCEEDED", 4);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> summary = (Map<String, Object>) terminal.get(
+                "summary");
+        summary.put("submissionMode", "MANUAL");
+        write(mapper, results.resolve(requestId + ".result.json"), terminal);
+        write(mapper, results.resolve(requestId
+                + ".automatic-daily-market-data-maintenance.json"),
+                successfulAggregate(requestId));
+        var gate = new BrokerResultMarketDataReadyGate(mapper, root,
+                () -> COMMIT);
+
+        assertTrue(gate.evaluate(DATE).ready());
+
+        summary.put("submissionMode", "manual");
+        write(mapper, results.resolve(requestId + ".result.json"), terminal);
+        MarketDataReadyGate.ReadyResult invalid = gate.evaluate(DATE);
+        assertFalse(invalid.ready());
+        assertEquals("AUTOMATIC_MARKET_DATA_MAINTENANCE_RESULT_INVALID",
+                invalid.reasonCode());
+    }
+
     private static AutomaticMarketDataMaintenanceProperties
     enabledProperties() {
         var properties = new AutomaticMarketDataMaintenanceProperties();
@@ -258,6 +363,10 @@ class AutomaticMarketDataMaintenanceTest {
         value.put("reason", reason);
         value.put("gitCommit", COMMIT);
         value.put("providerCallCount", calls);
+        Map<String, Object> summary = new LinkedHashMap<>();
+        summary.put("submissionMode", "AUTOMATIC");
+        summary.put("targetEndDate", DATE.toString());
+        value.put("summary", summary);
         return value;
     }
 

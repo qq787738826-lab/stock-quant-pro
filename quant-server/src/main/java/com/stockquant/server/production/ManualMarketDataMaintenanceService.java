@@ -5,8 +5,8 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
-import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.Objects;
 
@@ -19,21 +19,20 @@ import static com.stockquant.server.production.AutomaticMarketDataMaintenanceSta
         prefix = "stockquant.market-data-maintenance.scheduler",
         name = "enabled", havingValue = "true")
 public final class ManualMarketDataMaintenanceService {
-    private static final String WINDOW_INVALID =
-            "AUTOMATIC_MARKET_DATA_MAINTENANCE_WINDOW_INVALID";
-
     private final AutomaticMarketDataMaintenanceDispatchGateway dispatcher;
     private final AutomaticMarketDataMaintenanceStatusQuery statusQuery;
     private final AutomaticMarketDataMaintenanceProperties properties;
     private final Clock clock;
     private final AutomaticMarketDataMaintenanceRuntimeState runtimeState;
+    private final ManualMarketDataTargetResolver targetResolver;
 
     public ManualMarketDataMaintenanceService(
             AutomaticMarketDataMaintenanceDispatchGateway dispatcher,
             AutomaticMarketDataMaintenanceStatusQuery statusQuery,
             AutomaticMarketDataMaintenanceProperties properties,
             @Qualifier("agentTemporalClock") Clock clock,
-            AutomaticMarketDataMaintenanceRuntimeState runtimeState
+            AutomaticMarketDataMaintenanceRuntimeState runtimeState,
+            ManualMarketDataTargetResolver targetResolver
     ) {
         this.dispatcher = Objects.requireNonNull(dispatcher, "dispatcher");
         this.statusQuery = Objects.requireNonNull(statusQuery, "statusQuery");
@@ -41,19 +40,22 @@ public final class ManualMarketDataMaintenanceService {
         this.clock = Objects.requireNonNull(clock, "clock");
         this.runtimeState = Objects.requireNonNull(runtimeState,
                 "runtimeState");
+        this.targetResolver = Objects.requireNonNull(targetResolver,
+                "targetResolver");
         properties.validate();
     }
 
     public Snapshot syncLatest() {
         var submittedAt = clock.instant();
-        var now = submittedAt.atZone(ZoneId.of(properties.getZone()));
-        LocalDate tradeDate = now.toLocalDate();
-        if (!AutomaticDailyMarketDataMaintenanceScheduler
-                .eligibleWeekday(tradeDate)
-                || !withinWindow(now.toLocalTime())) {
-            runtimeState.checked(submittedAt, tradeDate, null,
-                    WINDOW_INVALID);
-            return Snapshot.notRun(tradeDate, "NONE", WINDOW_INVALID);
+        LocalDate tradeDate;
+        try {
+            tradeDate = targetResolver.resolve(submittedAt);
+        } catch (RuntimeException error) {
+            String reason = ManualMarketDataTargetResolver
+                    .TARGET_UNAVAILABLE;
+            LocalDate referenceDate = localDate(submittedAt);
+            runtimeState.checked(submittedAt, referenceDate, null, reason);
+            return Snapshot.notRun(referenceDate, "NONE", reason);
         }
 
         Snapshot existing = statusQuery.query(tradeDate);
@@ -64,7 +66,8 @@ public final class ManualMarketDataMaintenanceService {
         }
 
         try {
-            var dispatched = dispatcher.dispatch(tradeDate, submittedAt);
+            var dispatched = dispatcher.dispatchManual(tradeDate,
+                    submittedAt);
             runtimeState.checked(clock.instant(), tradeDate,
                     dispatched.requestId(), dispatched.reason());
             Snapshot observed = statusQuery.query(tradeDate);
@@ -85,35 +88,37 @@ public final class ManualMarketDataMaintenanceService {
     }
 
     public Snapshot status() {
-        var now = clock.instant().atZone(ZoneId.of(properties.getZone()));
-        Snapshot persisted = statusQuery.query(now.toLocalDate());
+        Instant checkedAt = clock.instant();
+        LocalDate tradeDate;
+        try {
+            tradeDate = targetResolver.resolve(checkedAt);
+        } catch (RuntimeException error) {
+            return Snapshot.notRun(localDate(checkedAt), "NONE",
+                    ManualMarketDataTargetResolver.TARGET_UNAVAILABLE);
+        }
+        Snapshot persisted = statusQuery.query(tradeDate);
         if (persisted.status() != Status.NOT_RUN) {
             return persisted;
         }
         var runtime = runtimeState.snapshot();
-        if (!now.toLocalDate().equals(runtime.tradeDate())) {
+        if (!tradeDate.equals(runtime.tradeDate())) {
             return persisted;
-        }
-        if (WINDOW_INVALID.equals(runtime.lastReason())) {
-            return Snapshot.notRun(now.toLocalDate(), "NONE",
-                    WINDOW_INVALID);
         }
         if (!"NONE".equals(runtime.requestId())) {
             return new Snapshot(Status.SUBMITTED, runtime.requestId(),
-                    now.toLocalDate(), runtime.lastReason(), false,
+                    tradeDate, runtime.lastReason(), false,
                     null, null, null, null, null);
         }
         if (!"AWAITING_SCHEDULE".equals(runtime.lastReason())) {
-            return new Snapshot(Status.FAILED, "NONE", now.toLocalDate(),
+            return new Snapshot(Status.FAILED, "NONE", tradeDate,
                     runtime.lastReason(), false, null, null, null, null,
                     null);
         }
         return persisted;
     }
 
-    private boolean withinWindow(LocalTime time) {
-        return !time.isBefore(properties.getSafeWindowStart())
-                && !time.isAfter(properties.getSafeWindowEnd());
+    private LocalDate localDate(Instant instant) {
+        return instant.atZone(ZoneId.of(properties.getZone())).toLocalDate();
     }
 
     private static Status fallbackStatus(String reason) {

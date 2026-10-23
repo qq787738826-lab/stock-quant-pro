@@ -616,6 +616,41 @@ $script:TradeCalendarForwardIncrementRequiredKeys = @(
     'source.request.id'
 )
 
+$script:AutomaticDailyMarketDataMaintenanceLegacyRequiredKeys = @(
+    'schema.version'
+    'request.id'
+    'operation'
+    'git.commit'
+    'jar.path'
+    'jar.sha256'
+    'authorization.file'
+    'target.end.date'
+    'maintenance.chain'
+    'universe.version'
+    'database.host'
+    'database.port'
+    'database.name'
+    'database.user'
+    'schema.name'
+    'provider'
+    'provider.endpoints'
+    'maximum.provider.requests'
+    'budget.calendar.month'
+    'tushare.monthly.limit'
+    'tushare.monthly.calls.before'
+    'retry.budget'
+    'network.recovery.budget'
+    'redirects'
+    'historical.research.classification'
+    'pit.classification'
+    'user.approval.reference'
+    'created.at'
+    'expires.at'
+    'execution.source'
+    'no.retry'
+    'source.request.id'
+)
+
 $script:AutomaticDailyMarketDataMaintenanceRequiredKeys = @(
     'schema.version'
     'request.id'
@@ -624,6 +659,7 @@ $script:AutomaticDailyMarketDataMaintenanceRequiredKeys = @(
     'jar.path'
     'jar.sha256'
     'authorization.file'
+    'submission.mode'
     'target.end.date'
     'maintenance.chain'
     'universe.version'
@@ -1798,7 +1834,11 @@ function Read-StockQuantHostBrokerRequest {
                 break
             }
             'AUTOMATIC_DAILY_MARKET_DATA_MAINTENANCE' {
-                $script:AutomaticDailyMarketDataMaintenanceRequiredKeys
+                if ($values.Contains('submission.mode')) {
+                    $script:AutomaticDailyMarketDataMaintenanceRequiredKeys
+                } else {
+                    $script:AutomaticDailyMarketDataMaintenanceLegacyRequiredKeys
+                }
                 break
             }
             { $_ -in @('START_RESEARCH_PRODUCTION',
@@ -1824,6 +1864,12 @@ function Read-StockQuantHostBrokerRequest {
             throw 'STOCK_QUANT_HOST_BROKER_REQUEST_FIELDS_INVALID'
         }
     }
+    $submissionMode = if ($values['operation'] -eq
+            'AUTOMATIC_DAILY_MARKET_DATA_MAINTENANCE') {
+        if ($values.Contains('submission.mode')) {
+            [string]$values['submission.mode']
+        } else { 'AUTOMATIC' }
+    } else { $null }
     if ($values['schema.version'] -ne $script:ProtocolVersion -or
         $values['request.id'] -notmatch
             '^SQHB_[0-9]{8}T[0-9]{6}Z_[A-F0-9]{12}$' -or
@@ -2217,25 +2263,37 @@ function Read-StockQuantHostBrokerRequest {
             'quant-server-1.3.1-research-production.jar'))
         $requestJar = [IO.Path]::GetFullPath(
             [string]$values['jar.path'])
+        $targetParsed = [datetime]::TryParseExact(
+            [string]$values['target.end.date'], 'yyyy-MM-dd',
+            [Globalization.CultureInfo]::InvariantCulture,
+            [Globalization.DateTimeStyles]::None,
+            [ref]$targetEnd)
+        if ($submissionMode -cne 'AUTOMATIC' -and
+            $submissionMode -cne 'MANUAL') {
+            throw 'AUTOMATIC_MARKET_DATA_MAINTENANCE_SUBMISSION_MODE_INVALID'
+        }
+        $submissionTimingInvalid = -not $targetParsed
+        if ($targetParsed -and $submissionMode -ceq 'AUTOMATIC') {
+            $submissionTimingInvalid =
+                $targetEnd.Date -ne $chinaMaintenance.Date -or
+                $chinaMaintenance.DayOfWeek -in @(
+                    [DayOfWeek]::Saturday, [DayOfWeek]::Sunday) -or
+                $chinaMaintenance.TimeOfDay -lt
+                    [TimeSpan]::FromMinutes(985) -or
+                $chinaMaintenance.TimeOfDay -gt
+                    [TimeSpan]::FromMinutes(1030)
+        } elseif ($targetParsed) {
+            $submissionTimingInvalid =
+                $targetEnd.Date -gt $chinaMaintenance.Date
+        }
         if ($values['authorization.file'] -ne 'NONE' -or
             -not $requestJar.Equals($fixedProductionJar,
                 [StringComparison]::OrdinalIgnoreCase) -or
-            -not [datetime]::TryParseExact(
-                [string]$values['target.end.date'], 'yyyy-MM-dd',
-                [Globalization.CultureInfo]::InvariantCulture,
-                [Globalization.DateTimeStyles]::None,
-                [ref]$targetEnd) -or
-            $targetEnd.Date -ne $chinaMaintenance.Date -or
+            $submissionTimingInvalid -or
             $values['request.id'] -cne
                 (Get-StockQuantAutomaticMaintenanceRequestId `
                     -TargetDate $targetEnd `
                     -GitCommit ([string]$values['git.commit'])) -or
-            $chinaMaintenance.DayOfWeek -in @(
-                [DayOfWeek]::Saturday, [DayOfWeek]::Sunday) -or
-            $chinaMaintenance.TimeOfDay -lt
-                [TimeSpan]::FromMinutes(985) -or
-            $chinaMaintenance.TimeOfDay -gt
-                [TimeSpan]::FromMinutes(1030) -or
             $values['maintenance.chain'] -ne
                 'MAINBOARD_TRADE_CAL_FORWARD_INCREMENT>MAINBOARD_CATCHUP_READONLY_AUDIT>MAINBOARD_DAILY_INCREMENT>MAINBOARD_CATCHUP_READONLY_AUDIT' -or
             $values['universe.version'] -ne
@@ -2952,6 +3010,7 @@ function Read-StockQuantHostBrokerRequest {
         BuildProofPath = $proof
         AuthorizationFile = $authorization
         AuthorizationStatus = $authorizationStatus
+        SubmissionMode = $submissionMode
         Values = $values
         CreatedAt = $created
         ExpiresAt = $expires

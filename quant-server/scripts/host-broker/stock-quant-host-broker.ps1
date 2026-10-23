@@ -2270,7 +2270,12 @@ function Invoke-AutomaticDailyMarketDataMaintenance {
     param([Parameter(Mandatory = $true)] [object] $BrokerRequest)
     if ($BrokerRequest.AuthorizationStatus -ne
             'V1_AUTOMATIC_DAILY_MARKET_DATA_MAINTENANCE_APPROVED' -or
-        $null -ne $BrokerRequest.AuthorizationFile) {
+        $null -ne $BrokerRequest.AuthorizationFile -or
+        ($BrokerRequest.SubmissionMode -cne 'AUTOMATIC' -and
+            $BrokerRequest.SubmissionMode -cne 'MANUAL') -or
+        ($BrokerRequest.Values.Contains('submission.mode') -and
+            [string]$BrokerRequest.Values['submission.mode'] -cne
+                [string]$BrokerRequest.SubmissionMode)) {
         throw 'AUTOMATIC_MARKET_DATA_MAINTENANCE_SCOPE_INVALID'
     }
     Assert-AutomaticMarketDataMaintenanceArtifactSet `
@@ -2317,6 +2322,7 @@ function Invoke-AutomaticDailyMarketDataMaintenance {
         throw 'AUTOMATIC_MARKET_DATA_MAINTENANCE_RESULT_INVALID'
     }
     $summary = [ordered]@{
+        submissionMode = [string]$BrokerRequest.SubmissionMode
         targetEndDate = [string]$maintenance.targetEndDate
         readyForShadow = [bool]$maintenance.readyForShadow
         latestCommonCompletedOpenTradeDate =

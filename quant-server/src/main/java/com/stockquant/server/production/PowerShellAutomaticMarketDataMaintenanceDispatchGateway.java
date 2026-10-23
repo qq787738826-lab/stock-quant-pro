@@ -51,8 +51,26 @@ public final class PowerShellAutomaticMarketDataMaintenanceDispatchGateway
 
     @Override
     public DispatchResult dispatch(LocalDate tradeDate, Instant submittedAt) {
+        return dispatch(tradeDate, submittedAt, SubmissionMode.AUTOMATIC);
+    }
+
+    @Override
+    public DispatchResult dispatchManual(
+            LocalDate effectiveTargetTradeDate,
+            Instant submittedAt
+    ) {
+        return dispatch(effectiveTargetTradeDate, submittedAt,
+                SubmissionMode.MANUAL);
+    }
+
+    private DispatchResult dispatch(
+            LocalDate tradeDate,
+            Instant submittedAt,
+            SubmissionMode submissionMode
+    ) {
         Objects.requireNonNull(tradeDate, "tradeDate");
         Objects.requireNonNull(submittedAt, "submittedAt");
+        Objects.requireNonNull(submissionMode, "submissionMode");
         String requestId = AutomaticMarketDataMaintenanceRequestIds.forDate(
                 tradeDate, ProductionRuntimeState.require().gitCommit());
         synchronized (dispatchLock) {
@@ -61,11 +79,15 @@ public final class PowerShellAutomaticMarketDataMaintenanceDispatchGateway
                 return new DispatchResult(requestId, false,
                         existing.orElseThrow());
             }
-            return submit(requestId, tradeDate);
+            return submit(requestId, tradeDate, submissionMode);
         }
     }
 
-    private DispatchResult submit(String requestId, LocalDate tradeDate) {
+    private DispatchResult submit(
+            String requestId,
+            LocalDate tradeDate,
+            SubmissionMode submissionMode
+    ) {
         Path script = fixedFile("quant-server/scripts/host-broker/"
                 + "invoke-stock-quant-host-broker.ps1");
         fixedFile("quant-server/target/"
@@ -74,7 +96,7 @@ public final class PowerShellAutomaticMarketDataMaintenanceDispatchGateway
                 + "quant-server-1.3.1-research-production.jar"
                 + ".f1f-b2-proof.properties");
         List<String> command = brokerCommand(powershell(), script,
-                requestId, tradeDate,
+                requestId, tradeDate, submissionMode,
                 properties.getSubmitTimeoutSeconds());
         try {
             Process process = new ProcessBuilder(command)
@@ -120,13 +142,16 @@ public final class PowerShellAutomaticMarketDataMaintenanceDispatchGateway
             Path script,
             String requestId,
             LocalDate tradeDate,
+            SubmissionMode submissionMode,
             int timeoutSeconds
     ) {
+        Objects.requireNonNull(submissionMode, "submissionMode");
         return List.of(powershell.toString(), "-NoProfile",
                 "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File",
                 script.toString(), "-Operation",
                 "AUTOMATIC_DAILY_MARKET_DATA_MAINTENANCE", "-RequestId",
                 requestId, "-TradeDate", tradeDate.toString(),
+                "-SubmissionMode", submissionMode.name(),
                 "-MaximumProviderRequests", "0", "-SubmitOnly",
                 "-TimeoutSeconds", Integer.toString(timeoutSeconds));
     }

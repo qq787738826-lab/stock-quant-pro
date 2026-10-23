@@ -38,6 +38,8 @@ param(
     [ValidatePattern('^(AUTO|20[0-9]{2}-[0-9]{2}-[0-9]{2})$')]
     [string] $TradeDate = 'AUTO',
 
+    [string] $SubmissionMode = 'AUTOMATIC',
+
     [ValidateSet('KNOWN_OPEN', 'UNKNOWN')]
     [string] $CalendarAdmission = 'KNOWN_OPEN',
 
@@ -92,6 +94,14 @@ Import-Module (Join-Path $PSScriptRoot `
 $paths = Initialize-StockQuantHostBrokerDirectories
 $identity = [Security.Principal.WindowsIdentity]::GetCurrent().Name
 $integrationBranch = 'feature/1.4.0-agent-team'
+
+if ($SubmissionMode -cnotin @('AUTOMATIC', 'MANUAL')) {
+    throw 'AUTOMATIC_MARKET_DATA_MAINTENANCE_SUBMISSION_MODE_INVALID'
+}
+if ($Operation -cne 'AUTOMATIC_DAILY_MARKET_DATA_MAINTENANCE' -and
+    $PSBoundParameters.ContainsKey('SubmissionMode')) {
+    throw 'STOCK_QUANT_HOST_BROKER_FIXED_DISPATCH_ARGUMENT_INVALID'
+}
 
 if ($Operation -eq 'MAINBOARD_CATCHUP_READONLY_AUDIT' -and
     $PSBoundParameters.ContainsKey('ArtifactPath')) {
@@ -376,12 +386,16 @@ try {
             [Globalization.CultureInfo]::InvariantCulture)
         $chinaNow = [TimeZoneInfo]::ConvertTimeBySystemTimeZoneId(
             [DateTimeOffset]::UtcNow, 'China Standard Time')
-        if ($targetEnd.Date -ne $chinaNow.Date -or
-            $chinaNow.DayOfWeek -in @(
-                [DayOfWeek]::Saturday, [DayOfWeek]::Sunday) -or
-            $chinaNow.TimeOfDay -lt [TimeSpan]::FromMinutes(985) -or
-            $chinaNow.TimeOfDay -gt [TimeSpan]::FromMinutes(1030)) {
-            throw 'AUTOMATIC_MARKET_DATA_MAINTENANCE_WINDOW_INVALID'
+        if ($SubmissionMode -ceq 'AUTOMATIC') {
+            if ($targetEnd.Date -ne $chinaNow.Date -or
+                $chinaNow.DayOfWeek -in @(
+                    [DayOfWeek]::Saturday, [DayOfWeek]::Sunday) -or
+                $chinaNow.TimeOfDay -lt [TimeSpan]::FromMinutes(985) -or
+                $chinaNow.TimeOfDay -gt [TimeSpan]::FromMinutes(1030)) {
+                throw 'AUTOMATIC_MARKET_DATA_MAINTENANCE_WINDOW_INVALID'
+            }
+        } elseif ($targetEnd.Date -gt $chinaNow.Date) {
+            throw 'MANUAL_MARKET_DATA_MAINTENANCE_TARGET_INVALID'
         }
         $calendarMonth = $chinaNow.ToString('yyyy-MM')
         [int]$monthlyTushareLimit = Get-StockQuantTushareMonthlyLimit `
@@ -401,6 +415,7 @@ try {
             'jar.path' = $artifact
             'jar.sha256' = $artifactHash
             'authorization.file' = 'NONE'
+            'submission.mode' = $SubmissionMode
             'target.end.date' = $TradeDate
             'maintenance.chain' =
                 'MAINBOARD_TRADE_CAL_FORWARD_INCREMENT>MAINBOARD_CATCHUP_READONLY_AUDIT>MAINBOARD_DAILY_INCREMENT>MAINBOARD_CATCHUP_READONLY_AUDIT'

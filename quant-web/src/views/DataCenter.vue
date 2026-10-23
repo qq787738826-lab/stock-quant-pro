@@ -52,6 +52,7 @@ type MaintenanceStatus = {
   status: 'NOT_RUN' | 'SUBMITTED' | 'IN_PROGRESS' | 'SUCCEEDED' | 'FAILED'
   requestId: string
   tradeDate: string
+  effectiveTargetTradeDate?: string
   reason: string
   readyForShadow: boolean
   latestCompleteTradeDate?: string
@@ -92,6 +93,17 @@ const scanRunning = computed(() => ['QUEUED', 'RUNNING'].includes(task.value.sta
 const updateRunning = computed(() => ['QUEUED', 'RUNNING'].includes(updateTask.value.status || ''))
 const maintenanceRunning = computed(() =>
   ['SUBMITTED', 'IN_PROGRESS'].includes(maintenanceStatus.value.status))
+const maintenanceTargetTradeDate = computed(() => {
+  if (maintenanceStatus.value.reason
+    === 'MANUAL_MARKET_DATA_TARGET_TRADE_DATE_UNAVAILABLE') return ''
+  return maintenanceStatus.value.effectiveTargetTradeDate
+    || maintenanceStatus.value.tradeDate
+})
+const maintenanceTargetMessage = computed(() => {
+  const target = maintenanceTargetTradeDate.value
+  if (!target || target >= shanghaiToday()) return ''
+  return `当前当日数据尚未进入正式同步时间，本次将同步至最近交易日：${target}`
+})
 const maintenanceMessage = computed(() => {
   const value = maintenanceStatus.value
   if (value.status === 'SUCCEEDED' && value.readyForShadow) {
@@ -101,11 +113,18 @@ const maintenanceMessage = computed(() => {
     return `同步失败：${displayReason(value.reason)}`
   }
   if (maintenanceRunning.value) return '正在同步行情，请稍候'
-  if (value.reason === 'AUTOMATIC_MARKET_DATA_MAINTENANCE_WINDOW_INVALID') {
-    return displayReason(value.reason)
-  }
   return displayReason(value.reason)
 })
+
+function shanghaiToday() {
+  const values = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date()).map(part => [part.type, part.value]))
+  return `${values.year}-${values.month}-${values.day}`
+}
 
 const scanProgress = computed(() => {
   const total = Number(task.value.total_symbols || 0)
@@ -269,8 +288,7 @@ async function startFormalMaintenance() {
         beginMaintenancePolling()
         return
       }
-      if (recovered.status === 'SUCCEEDED' || recovered.status === 'FAILED'
-        || recovered.reason === 'AUTOMATIC_MARKET_DATA_MAINTENANCE_WINDOW_INVALID') return
+      if (recovered.status === 'SUCCEEDED' || recovered.status === 'FAILED') return
     } catch {
       // Keep the original POST error. Never retry the POST automatically.
     }
@@ -388,7 +406,7 @@ onUnmounted(() => {
     <div class="task-header">
       <div>
         <h3>正式行情同步</h3>
-        <p class="muted">同步正式交易日历，并自动补齐缺失的日线和复权因子。<br>仅在系统允许的收盘后时间窗口内执行。</p>
+        <p class="muted">系统会自动判断最新可同步交易日。<br>当日数据尚未达到同步时间时，将自动同步到上一个交易日。</p>
         <p class="formal-purpose">用于正式研究数据；自动同步交易日历、日线和复权因子。</p>
       </div>
       <span class="status-tag" :class="maintenanceStatus.status.toLowerCase()">
@@ -402,10 +420,13 @@ onUnmounted(() => {
     >
       {{ maintenanceSubmitting || maintenanceRunning ? '同步进行中...' : '手动同步到最新交易日' }}
     </button>
+    <p v-if="maintenanceTargetMessage" class="muted maintenance-target-note">
+      {{ maintenanceTargetMessage }}
+    </p>
     <div class="maintenance-status-grid">
       <span><label>当前状态</label>{{ displayStatus(maintenanceStatus.status) }}</span>
       <span><label>requestId</label>{{ maintenanceStatus.requestId === 'NONE' ? '--' : maintenanceStatus.requestId }}</span>
-      <span><label>目标日期</label>{{ maintenanceStatus.tradeDate || '--' }}</span>
+      <span><label>同步目标日期</label>{{ maintenanceTargetTradeDate || '--' }}</span>
       <span><label>最新完整交易日</label>{{ maintenanceStatus.latestCompleteTradeDate || '--' }}</span>
       <span><label>是否 DATA_READY</label>{{ maintenanceStatus.readyForShadow ? '是' : '否' }}</span>
       <span><label>成功/失败原因</label>{{ maintenanceMessage }}</span>

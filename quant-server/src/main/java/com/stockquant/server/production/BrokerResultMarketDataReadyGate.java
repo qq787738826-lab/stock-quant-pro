@@ -62,11 +62,17 @@ public final class BrokerResultMarketDataReadyGate
         }
         try {
             JsonNode terminal = read(terminalPath, MAXIMUM_TERMINAL_BYTES);
+            JsonNode summary = terminal.path("summary");
+            String submissionMode = text(summary, "submissionMode");
             if (!"STOCK_QUANT_HOST_BROKER_RESULT_V1".equals(text(terminal,
                     "schemaVersion"))
                     || !requestId.equals(text(terminal, "requestId"))
                     || !OPERATION.equals(text(terminal, "operation"))
-                    || !commit.equals(text(terminal, "gitCommit"))) {
+                    || !commit.equals(text(terminal, "gitCommit"))
+                    || !("AUTOMATIC".equals(submissionMode)
+                    || "MANUAL".equals(submissionMode))
+                    || !tradeDate.toString().equals(text(summary,
+                    "targetEndDate"))) {
                 return ReadyResult.skip(
                         "AUTOMATIC_MARKET_DATA_MAINTENANCE_RESULT_INVALID",
                         requestId);

@@ -32,7 +32,13 @@ test('正式同步状态和原因使用稳定中文文案', () => {
   assert.equal(displayStatus('IN_PROGRESS'), '进行中')
   assert.equal(displayReason(
     'AUTOMATIC_MARKET_DATA_MAINTENANCE_WINDOW_INVALID'),
-  '当前不在手动同步时间窗口，请在交易日 16:25–17:10 执行。')
+  '无法解析手动同步目标交易日，请刷新后重试。')
+  assert.equal(displayReason(
+    'MANUAL_MARKET_DATA_TARGET_TRADE_DATE_UNAVAILABLE'),
+  '正式交易日历暂时无法解析最新可同步交易日。')
+  assert.equal(displayReason(
+    'AUTOMATIC_MARKET_DATA_MAINTENANCE_SUBMISSION_MODE_INVALID'),
+  '手动同步提交模式校验失败，请刷新后重试。')
   assert.equal(displayReason(
     'AUTOMATIC_MARKET_DATA_MAINTENANCE_PARTIAL_DATE_PRESENT'),
   '检测到部分交易日数据，已停止自动修复')
@@ -41,4 +47,15 @@ test('正式同步状态和原因使用稳定中文文案', () => {
   assert.equal(source.includes('行情已同步到最新完整交易日'), true)
   assert.equal(source.includes('正在同步行情，请稍候'), true)
   assert.equal(source.includes('同步失败：${displayReason(value.reason)}'), true)
+})
+
+test('手动同步展示服务端解析的目标日期和回退说明', () => {
+  assert.equal(source.includes('effectiveTargetTradeDate?: string'), true)
+  assert.equal(source.includes('系统会自动判断最新可同步交易日。'), true)
+  assert.equal(source.includes(
+    '当日数据尚未达到同步时间时，将自动同步到上一个交易日。'), true)
+  assert.equal(source.includes('<label>同步目标日期</label>'), true)
+  assert.equal(source.includes(
+    '当前当日数据尚未进入正式同步时间，本次将同步至最近交易日：${target}'), true)
+  assert.equal(source.includes('请在交易日 16:25–17:10 执行'), false)
 })

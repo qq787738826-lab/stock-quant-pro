@@ -2,6 +2,7 @@ package com.stockquant.server.production;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stockquant.server.api.MarketDataMaintenanceController;
+import com.stockquant.server.agent.marketfacts.PitMarketFactRepository;
 import com.stockquant.server.agent.shadowresearch.ShadowResearchDispatchGateway;
 import com.stockquant.server.agent.shadowresearch.ShadowResearchRepository;
 import com.stockquant.server.agent.shadowresearch.ShadowResearchScheduleProperties;
@@ -45,6 +46,8 @@ class AutomaticMarketDataMaintenanceProductionContextTest {
                             ZoneOffset.UTC));
             context.registerBean(
                     AutomaticMarketDataMaintenanceRuntimeState.class);
+            context.registerBean(PitMarketFactRepository.class,
+                    () -> mock(PitMarketFactRepository.class));
             context.registerBean(ShadowSchedulerRuntimeState.class);
             context.registerBean(ShadowResearchRepository.class,
                     () -> mock(ShadowResearchRepository.class));
@@ -55,6 +58,7 @@ class AutomaticMarketDataMaintenanceProductionContextTest {
                     BrokerAutomaticMarketDataMaintenanceStatusQuery.class,
                     PowerShellAutomaticMarketDataMaintenanceDispatchGateway.class,
                     AutomaticDailyMarketDataMaintenanceScheduler.class,
+                    ManualMarketDataTargetResolver.class,
                     ManualMarketDataMaintenanceService.class,
                     MarketDataMaintenanceController.class,
                     ShadowResearchScheduler.class);
@@ -70,6 +74,8 @@ class AutomaticMarketDataMaintenanceProductionContextTest {
                     AutomaticMarketDataMaintenanceDispatchGateway.class));
             assertNotNull(context.getBean(
                     AutomaticDailyMarketDataMaintenanceScheduler.class));
+            assertNotNull(context.getBean(
+                    ManualMarketDataTargetResolver.class));
             assertNotNull(context.getBean(
                     MarketDataMaintenanceController.class));
             assertSame(context.getBean(

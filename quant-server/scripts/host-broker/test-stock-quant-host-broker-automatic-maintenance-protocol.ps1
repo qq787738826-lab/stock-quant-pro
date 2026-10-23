@@ -41,6 +41,30 @@ function Copy-Values([System.Collections.IDictionary] $Source) {
     return $copy
 }
 
+function New-SubmissionRequest(
+    [System.Collections.IDictionary] $Template,
+    [string] $Mode,
+    [datetime] $TargetDate,
+    [DateTimeOffset] $CreatedAt,
+    [string] $GitCommit
+) {
+    $value = Copy-Values $Template
+    $month = [TimeZoneInfo]::ConvertTimeBySystemTimeZoneId(
+        $CreatedAt, 'China Standard Time').ToString('yyyy-MM')
+    [int]$limit = Get-StockQuantTushareMonthlyLimit -CalendarMonth $month
+    $value['submission.mode'] = $Mode
+    $value['request.id'] = Maintenance-RequestId $TargetDate $GitCommit
+    $value['target.end.date'] = $TargetDate.ToString('yyyy-MM-dd',
+        [Globalization.CultureInfo]::InvariantCulture)
+    $value['budget.calendar.month'] = $month
+    $value['tushare.monthly.limit'] = [string]$limit
+    $value['maximum.provider.requests'] = [string]$limit
+    $value['tushare.monthly.calls.before'] = '0'
+    $value['created.at'] = $CreatedAt.ToString('o')
+    $value['expires.at'] = $CreatedAt.AddMinutes(10).ToString('o')
+    return $value
+}
+
 function Copy-Result([object] $Source) {
     return $Source | ConvertTo-Json -Depth 12 | ConvertFrom-Json
 }
@@ -182,6 +206,7 @@ try {
         'jar.path' = $artifact
         'jar.sha256' = $hash
         'authorization.file' = 'NONE'
+        'submission.mode' = 'AUTOMATIC'
         'target.end.date' = '2026-09-24'
         'maintenance.chain' =
             'MAINBOARD_TRADE_CAL_FORWARD_INCREMENT>MAINBOARD_CATCHUP_READONLY_AUDIT>MAINBOARD_DAILY_INCREMENT>MAINBOARD_CATCHUP_READONLY_AUDIT'
@@ -217,10 +242,110 @@ try {
             'AUTOMATIC_DAILY_MARKET_DATA_MAINTENANCE' -or
         $parsed.AuthorizationStatus -ne
             'V1_AUTOMATIC_DAILY_MARKET_DATA_MAINTENANCE_APPROVED' -or
+        $parsed.SubmissionMode -cne 'AUTOMATIC' -or
         [int]$parsed.Values['maximum.provider.requests'] -ne $limit) {
         throw 'AUTOMATIC_MAINTENANCE_VALID_REQUEST_REJECTED'
     }
     $tests++
+
+    foreach ($boundary in @(
+        [pscustomobject]@{ Name = 'AUTOMATIC_1624'; Time = '08:24:00Z';
+            Valid = $false },
+        [pscustomobject]@{ Name = 'AUTOMATIC_1625'; Time = '08:25:00Z';
+            Valid = $true },
+        [pscustomobject]@{ Name = 'AUTOMATIC_1710'; Time = '09:10:00Z';
+            Valid = $true },
+        [pscustomobject]@{ Name = 'AUTOMATIC_1711'; Time = '09:11:00Z';
+            Valid = $false }
+    )) {
+        $boundaryCreated = [DateTimeOffset]::Parse(
+            "2026-09-24T$($boundary.Time)")
+        $boundaryRequest = New-SubmissionRequest $request 'AUTOMATIC' `
+            $targetDate $boundaryCreated $head
+        if ($boundary.Valid) {
+            $boundaryParsed = Read-Valid $boundaryRequest `
+                $boundaryCreated.AddMinutes(1)
+            if ($boundaryParsed.SubmissionMode -cne 'AUTOMATIC') {
+                throw "AUTOMATIC_MAINTENANCE_BOUNDARY_INVALID_$($boundary.Name)"
+            }
+            $tests++
+        } else {
+            Reject $boundaryRequest $boundaryCreated.AddMinutes(1) `
+                'STOCK_QUANT_HOST_BROKER_REQUEST_SCOPE_INVALID' `
+                $boundary.Name
+        }
+    }
+
+    $previousDate = [datetime]::ParseExact('2026-09-23', 'yyyy-MM-dd',
+        [Globalization.CultureInfo]::InvariantCulture)
+    $automaticWrongTarget = New-SubmissionRequest $request 'AUTOMATIC' `
+        $previousDate $created $head
+    Reject $automaticWrongTarget $now `
+        'STOCK_QUANT_HOST_BROKER_REQUEST_SCOPE_INVALID' `
+        'AUTOMATIC_TARGET_NOT_TODAY'
+
+    foreach ($manualCase in @(
+        [pscustomobject]@{ Name = 'MANUAL_MONDAY_1000';
+            Created = '2026-09-28T02:00:00Z'; Target = '2026-09-25' },
+        [pscustomobject]@{ Name = 'MANUAL_TRADING_DAY_1530';
+            Created = '2026-09-28T07:30:00Z'; Target = '2026-09-25' },
+        [pscustomobject]@{ Name = 'MANUAL_TRADING_DAY_1630';
+            Created = '2026-09-28T08:30:00Z'; Target = '2026-09-28' },
+        [pscustomobject]@{ Name = 'MANUAL_SATURDAY';
+            Created = '2026-09-26T02:00:00Z'; Target = '2026-09-25' },
+        [pscustomobject]@{ Name = 'MANUAL_HOLIDAY';
+            Created = '2026-10-01T02:00:00Z'; Target = '2026-09-30' }
+    )) {
+        $manualCreated = [DateTimeOffset]::Parse($manualCase.Created)
+        $manualTarget = [datetime]::ParseExact($manualCase.Target,
+            'yyyy-MM-dd', [Globalization.CultureInfo]::InvariantCulture)
+        $manualRequest = New-SubmissionRequest $request 'MANUAL' `
+            $manualTarget $manualCreated $head
+        $manualParsed = Read-Valid $manualRequest `
+            $manualCreated.AddMinutes(1)
+        if ($manualParsed.SubmissionMode -cne 'MANUAL' -or
+            [string]$manualParsed.Values['target.end.date'] -cne
+                $manualCase.Target) {
+            throw "AUTOMATIC_MAINTENANCE_MANUAL_CASE_INVALID_$($manualCase.Name)"
+        }
+        $tests++
+    }
+
+    $manualCreated = [DateTimeOffset]::Parse('2026-09-28T02:00:00Z')
+    $futureTarget = [datetime]::ParseExact('2026-09-29', 'yyyy-MM-dd',
+        [Globalization.CultureInfo]::InvariantCulture)
+    $manualFuture = New-SubmissionRequest $request 'MANUAL' $futureTarget `
+        $manualCreated $head
+    Reject $manualFuture $manualCreated.AddMinutes(1) `
+        'STOCK_QUANT_HOST_BROKER_REQUEST_SCOPE_INVALID' `
+        'MANUAL_FUTURE_TARGET'
+
+    foreach ($invalidMode in @('UNKNOWN', 'manual', '')) {
+        $invalidModeRequest = Copy-Values $request
+        $invalidModeRequest['submission.mode'] = $invalidMode
+        $expectedReason = if ([string]::IsNullOrWhiteSpace($invalidMode)) {
+            'STOCK_QUANT_HOST_BROKER_REQUEST_LINE_INVALID'
+        } else {
+            'AUTOMATIC_MARKET_DATA_MAINTENANCE_SUBMISSION_MODE_INVALID'
+        }
+        Reject $invalidModeRequest $now $expectedReason `
+            "SUBMISSION_MODE_$invalidMode"
+    }
+
+    $legacyAutomatic = Copy-Values $request
+    $legacyAutomatic.Remove('submission.mode') | Out-Null
+    $legacyParsed = Read-Valid $legacyAutomatic $now
+    if ($legacyParsed.SubmissionMode -cne 'AUTOMATIC') {
+        throw 'AUTOMATIC_MAINTENANCE_LEGACY_MODE_INVALID'
+    }
+    $tests++
+
+    $legacyPast = New-SubmissionRequest $request 'AUTOMATIC' $previousDate `
+        ([DateTimeOffset]::Parse('2026-09-24T02:00:00Z')) $head
+    $legacyPast.Remove('submission.mode') | Out-Null
+    Reject $legacyPast ([DateTimeOffset]::Parse('2026-09-24T02:01:00Z')) `
+        'STOCK_QUANT_HOST_BROKER_REQUEST_SCOPE_INVALID' `
+        'LEGACY_MISSING_MODE_NOT_MANUAL'
 
     foreach ($case in @(
         @('maintenance.chain', 'MAINBOARD_DAILY_INCREMENT'),
@@ -430,8 +555,10 @@ try {
         AuthorizationStatus =
             'V1_AUTOMATIC_DAILY_MARKET_DATA_MAINTENANCE_APPROVED'
         AuthorizationFile = $null
+        SubmissionMode = 'AUTOMATIC'
         Values = [ordered]@{
             'budget.calendar.month' = $ledgerMonth
+            'submission.mode' = 'AUTOMATIC'
             'target.end.date' = '2099-10-20'
             'tushare.monthly.calls.before' = '0'
             'tushare.monthly.limit' = '150'
@@ -476,6 +603,7 @@ try {
             }
         } elseif ($case.Valid) {
             if ($null -ne $exception -or $null -eq $summary -or
+                [string]$summary.submissionMode -cne 'AUTOMATIC' -or
                 [int]$summary.providerCallCount -ne
                     [int]$brokerResult.tushareProviderCallCount) {
                 throw "AUTOMATIC_MAINTENANCE_BROKER_CASE_INVALID_$($case.Name)"
@@ -490,19 +618,66 @@ try {
         $tests++
     }
 
+    $brokerRequest.SubmissionMode = 'MANUAL'
+    $brokerRequest.Values['submission.mode'] = 'MANUAL'
+    $manualBrokerResult = Copy-Result $succeeded
+    $manualBrokerResult.requestId = $brokerRequestId
+    $manualBrokerResult.executionId =
+        ($brokerRequestId -replace '^SQHB_', 'MBMAINT_')
+    $global:AutomaticMaintenanceFixtureJson =
+        $manualBrokerResult | ConvertTo-Json -Depth 12 -Compress
+    $global:AutomaticMaintenanceFixtureExitCode = 0
+    try {
+        $manualSummary = Invoke-AutomaticDailyMarketDataMaintenance `
+            -BrokerRequest $brokerRequest
+        if ([string]$manualSummary.submissionMode -cne 'MANUAL') {
+            throw 'AUTOMATIC_MAINTENANCE_MANUAL_RESULT_MODE_INVALID'
+        }
+    } finally {
+        Remove-Item -LiteralPath $brokerResultPath -Force `
+            -ErrorAction SilentlyContinue
+    }
+    $tests++
+
+    $brokerRequest.SubmissionMode = 'UNKNOWN'
+    try {
+        Invoke-AutomaticDailyMarketDataMaintenance `
+            -BrokerRequest $brokerRequest | Out-Null
+        throw 'AUTOMATIC_MAINTENANCE_BROKER_UNKNOWN_MODE_ACCEPTED'
+    } catch {
+        if ($_.Exception.Message -ne
+                'AUTOMATIC_MARKET_DATA_MAINTENANCE_SCOPE_INVALID') {
+            throw
+        }
+    }
+    $tests++
+
     if (-not $ledgerAccidentValidated -or -not $brokerAccidentValidated) {
         throw 'AUTOMATIC_MAINTENANCE_ACCIDENT_FIXTURE_NOT_VALIDATED'
     }
 
     $broker = Get-Content -LiteralPath $brokerPath -Raw -Encoding UTF8
-    $invoker = Get-Content -LiteralPath (Join-Path $PSScriptRoot `
-        'invoke-stock-quant-host-broker.ps1') -Raw -Encoding UTF8
+    $invokerPath = Join-Path $PSScriptRoot `
+        'invoke-stock-quant-host-broker.ps1'
+    $invokerTokens = $null
+    $invokerParseErrors = $null
+    [Management.Automation.Language.Parser]::ParseFile(
+        $invokerPath, [ref]$invokerTokens,
+        [ref]$invokerParseErrors) | Out-Null
+    if (@($invokerParseErrors).Count -ne 0) {
+        throw 'AUTOMATIC_MAINTENANCE_INVOKER_PARSE_INVALID'
+    }
+    $invoker = Get-Content -LiteralPath $invokerPath -Raw -Encoding UTF8
     if (-not $broker.Contains(
             "'AUTOMATIC_DAILY_MARKET_DATA_MAINTENANCE' {") -or
         -not $broker.Contains(
             'Invoke-AutomaticDailyMarketDataMaintenance') -or
         -not $invoker.Contains(
             "'AUTOMATIC_DAILY_MARKET_DATA_MAINTENANCE'") -or
+        -not $invoker.Contains(
+            "[string] `$SubmissionMode = 'AUTOMATIC'") -or
+        -not $invoker.Contains("`$SubmissionMode -ceq 'AUTOMATIC'") -or
+        -not $invoker.Contains("'submission.mode' = `$SubmissionMode") -or
         $broker.Contains('Invoke-Expression') -or
         $invoker.Contains('Invoke-Expression') -or
         $invoker.Contains('-Command')) {
