@@ -38,6 +38,16 @@ test('NSIS configuration creates both desktop and Start Menu shortcuts', async (
   assert.equal(value.build.nsis.createDesktopShortcut, 'always')
   assert.equal(value.build.nsis.createStartMenuShortcut, true)
   assert.equal(value.build.nsis.shortcutName, 'Stock Quant Pro')
+  assert.equal(value.build.nsis.perMachine, false)
+  assert.equal(value.build.nsis.uninstallDisplayName, 'Stock Quant Pro')
+  assert.equal(value.build.nsis.include, 'assets/installer.nsh')
+  const installer = await readFile(
+    path.join(desktopRoot, 'assets', 'installer.nsh'), 'utf8',
+  )
+  assert.match(installer,
+    /CurrentVersion\\Uninstall\\com\.stockquant\.pro/)
+  assert.match(installer, /WriteRegStr HKCU[\s\S]*UninstallString/)
+  assert.match(installer, /DeleteRegKey HKCU/)
 })
 
 test('formal lifecycle projection stays provider-free and branch-scoped', async () => {

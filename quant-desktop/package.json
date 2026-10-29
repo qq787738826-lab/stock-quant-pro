@@ -37,6 +37,7 @@
       "executableName": "Stock Quant Pro"
     },
     "nsis": {
+      "include": "assets/installer.nsh",
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
