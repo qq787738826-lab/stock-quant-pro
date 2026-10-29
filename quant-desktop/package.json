@@ -1,12 +1,15 @@
 {
   "name": "stock-quant-desktop",
-  "version": "1.3.1",
+  "version": "1.4.0",
   "private": true,
   "type": "module",
   "main": "dist-electron/main.js",
   "scripts": {
-    "dev": "concurrently -k \"npm --prefix ../quant-web run dev\" \"wait-on http://127.0.0.1:5173 && electron .\"",
-    "build": "tsc -p tsconfig.json && electron-builder"
+    "compile": "tsc -p tsconfig.json",
+    "dev": "npm run compile && electron .",
+    "test": "npm run compile && node --test tests/*.test.mjs",
+    "build": "npm run compile && node scripts/write-runtime-config.mjs && electron-builder --win nsis",
+    "build:dir": "npm run compile && node scripts/write-runtime-config.mjs && electron-builder --win dir"
   },
   "devDependencies": {
     "concurrently": "^9.1.0",
@@ -18,17 +21,29 @@
   "build": {
     "appId": "com.stockquant.pro",
     "productName": "Stock Quant Pro",
+    "artifactName": "Stock Quant Pro Setup.${ext}",
+    "asar": true,
+    "directories": {
+      "output": "release",
+      "buildResources": "assets"
+    },
     "files": [
-      "dist-electron/**/*"
+      "dist-electron/**/*",
+      "assets/icon.ico"
     ],
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": "assets/icon.ico",
+      "executableName": "Stock Quant Pro"
     },
-    "extraResources": [
-      {
-        "from": "../quant-web/dist",
-        "to": "web"
-      }
-    ]
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "Stock Quant Pro",
+      "uninstallDisplayName": "Stock Quant Pro"
+    }
   }
 }

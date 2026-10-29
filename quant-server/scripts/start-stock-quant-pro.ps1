@@ -141,6 +141,20 @@ function Get-StartupActionRequiredMessage([string] $Reason) {
     }
 }
 
+function Get-StockQuantLauncherOutputValue(
+    [string[]] $Output,
+    [string] $Name
+) {
+    $prefix = "$Name="
+    $matches = @($Output | Where-Object {
+            $_.StartsWith($prefix, [StringComparison]::Ordinal)
+        })
+    if ($matches.Count -ne 1) {
+        throw 'M6_HOST_BROKER_OPERATION_FAILED'
+    }
+    return $matches[0].Substring($prefix.Length)
+}
+
 Push-Location $repoRoot
 try {
     if ($Action -eq 'Backup') {
@@ -289,9 +303,27 @@ try {
     if ($LASTEXITCODE -ne 0) {
         throw 'M6_HOST_BROKER_OPERATION_FAILED'
     }
+    $backendState = Get-StockQuantLauncherOutputValue `
+        -Output $output -Name 'STOCK_QUANT_BACKEND_STATUS'
+    $autoRecovery = Get-StockQuantLauncherOutputValue `
+        -Output $output -Name 'STOCK_QUANT_PRODUCTION_AUTO_RECOVERY'
+    Write-Output "STOCK_QUANT_BACKEND_STATUS=$backendState"
+    Write-Output "STOCK_QUANT_PRODUCTION_AUTO_RECOVERY=$autoRecovery"
     if ($Action -eq 'Stop') {
+        if ($backendState -notin @('STOPPED', 'ALREADY_STOPPED') -or
+            $autoRecovery -cne 'DISARMED') {
+            throw 'M6_HOST_BROKER_OPERATION_FAILED'
+        }
         Write-Output 'STOCK_QUANT_PRODUCTION_STATUS=STOPPED'
         exit 0
+    }
+    if ($Action -eq 'Status' -and $backendState -eq 'STOPPED') {
+        Write-Output 'STOCK_QUANT_PRODUCTION_STATUS=STOPPED'
+        exit 0
+    }
+    if ($backendState -notin @('RUNNING', 'ALREADY_RUNNING') -or
+        $autoRecovery -cne 'ARMED') {
+        throw 'M6_HOST_BROKER_OPERATION_FAILED'
     }
     $health = Get-SystemHealth
     if (-not $health.success -or $health.data.status -eq 'BLOCKED' -or
@@ -316,6 +348,9 @@ try {
     } elseif ($failure -in @(
             'M6_FORMAL_ARTIFACT_MISSING', 'M6_JAVA_17_REQUIRED',
             'M6_RESEARCH_SELECTION_ARTIFACT_INVALID',
+            'M6_TRADE_CAL_FORWARD_ARTIFACT_INVALID',
+            'M6_CATCHUP_AUDIT_ARTIFACT_INVALID',
+            'M6_DAILY_INCREMENT_ARTIFACT_INVALID',
             'M6_AUTOMATIC_MAINTENANCE_RUNNER_INVALID',
             'M6_DATABASE_NOT_LISTENING',
             'M6_HOST_BROKER_OPERATION_FAILED',

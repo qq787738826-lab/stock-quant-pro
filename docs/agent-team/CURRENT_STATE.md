@@ -29,6 +29,7 @@
 - V1.0.9 长期任务分支：`codex/1.4.0-v1.0.9-full-mainboard-universe`
 - V1 自动行情维护主实现及其启动装配、失败调用账本、数据页手工入口和显式目标日期修复已经依次合入集成分支，当前集成基线为 `5ee98382474e0d828975771aadd3ec48bc8e6180`。固定的 `AUTOMATIC_DAILY_MARKET_DATA_MAINTENANCE` Broker operation 仍由交易日历前向增量、只读 Audit、逐日 Daily Increment 和最终只读 Audit 组成单一可审计链，并在 Shadow 调度前执行结果门禁；该代码事实不表示本轮执行过正式 Tushare 同步。
 - V1 手工同步日历 bootstrap 修复任务分支：`codex/1.4.0-v1-manual-sync-calendar-bootstrap-fix`。该分支把稳定的自然日覆盖截止日与实际目标交易日显式分离：两所日历对齐但落后时，手工入口可用覆盖截止日启动既有 Broker 链，由第一阶段补齐日历；实际交易日在可证明前保持 `null`，补齐后轮询仍优先读取原 bootstrap 请求身份。空日历、两所最大日期不一致或尾部无法证明共同开市日时继续 fail-closed。Java 定向回归 `49/0/0/0`，显式排除 Integration/Postgres/CrossLanguage/Live 的离线回归为 `quant-core 23/0/0/0`、`quant-server 846/0/0/1`，前端页面测试 `4/0/0/0` 且生产构建通过；本任务尚未合入集成分支，等待 ChatGPT 基于最终 Git 提交验收和用户批准 merge，未访问正式 Provider、正式数据库或凭据。
+- V1 Windows 桌面客户端任务分支：`codex/1.4.0-v1-windows-desktop-client`。该分支复用既有 `quant-desktop`，以隔离的 Electron Main Process 严格调用正式 `Status/Start/Stop` 包装合同，Renderer 只显示本地无脚本启动/错误页和现有 `127.0.0.1:8080` UI；单实例、Backend `HEALTHY` 门禁、关闭时 `STOPPED + autoRecovery=DISARMED + 8080 closed` 三重确认、外链隔离和 NSIS 桌面/开始菜单快捷方式均已实现。桌面 Mock 回归 `19/0/0/0`、启动自愈合同 `16/0/0/0`、M6 Broker 协议 `9/0/0/0`、Java Production 合同 `3/0/0/0`、Vue 生产构建和 Electron/NSIS 构建通过；所有测试的 Tushare、百炼、Maintenance、Selection、Shadow、Paper 调用均为 0，未读取凭据、未运行真实业务、未改变数据库 Schema/Flyway。该任务尚未合入集成分支，等待 ChatGPT 基于最终 Git 提交验收和用户批准 merge。
 - 1D-4 验收来源分支：`codex/1.4.0-1d4-acceptance`
 - 1D-4 验收基线：`5bc492a feat(agent): add safe local team runtime scripts`
 - 阶段 2A 验收来源分支：`codex/1.4.0-2a-readonly-context`

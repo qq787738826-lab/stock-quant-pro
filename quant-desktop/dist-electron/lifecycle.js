@@ -1,0 +1,138 @@
+import { DesktopLifecycleError } from './errors.js';
+const DEFAULT_OPTIONS = {
+    healthTimeoutMs: 120_000,
+    shutdownTimeoutMs: 30_000,
+    pollIntervalMs: 500,
+};
+export class DesktopLifecycle {
+    #gateway;
+    #options;
+    #startupAttempt;
+    #shutdownAttempt;
+    constructor(gateway, options = {}) {
+        this.#gateway = gateway;
+        this.#options = { ...DEFAULT_OPTIONS, ...options };
+    }
+    ensureStarted(onStage) {
+        if (this.#startupAttempt) {
+            return this.#startupAttempt;
+        }
+        const attempt = this.#performStartup(onStage);
+        this.#startupAttempt = attempt;
+        void attempt.catch(() => {
+            if (this.#startupAttempt === attempt) {
+                this.#startupAttempt = undefined;
+            }
+        });
+        return attempt;
+    }
+    shutdown(onStage) {
+        if (this.#shutdownAttempt) {
+            return this.#shutdownAttempt;
+        }
+        const attempt = this.#performShutdown(onStage);
+        this.#shutdownAttempt = attempt;
+        void attempt.catch(() => {
+            if (this.#shutdownAttempt === attempt) {
+                this.#shutdownAttempt = undefined;
+            }
+        });
+        return attempt;
+    }
+    async #performStartup(onStage) {
+        onStage('checking_service');
+        let current = await this.#gateway.status();
+        const reusedExistingBackend = current.backendState === 'RUNNING'
+            && current.autoRecovery === 'ARMED';
+        if (!reusedExistingBackend) {
+            onStage('starting_backend');
+            current = await this.#gateway.start();
+            if (current.backendState !== 'RUNNING'
+                || current.autoRecovery !== 'ARMED') {
+                throw new DesktopLifecycleError('DESKTOP_LIFECYCLE_CONTRACT_INVALID');
+            }
+        }
+        onStage('connecting_database');
+        await this.#waitForHealthy();
+        onStage('loading_client');
+        return { reusedExistingBackend };
+    }
+    async #waitForHealthy() {
+        const deadline = this.#gateway.now() + this.#options.healthTimeoutMs;
+        let lastError;
+        while (this.#gateway.now() <= deadline) {
+            try {
+                const health = await this.#gateway.health();
+                if (health.status === 'HEALTHY') {
+                    return;
+                }
+                if (health.status === 'BLOCKED') {
+                    throw new DesktopLifecycleError('DESKTOP_BACKEND_BLOCKED');
+                }
+            }
+            catch (error) {
+                if (error instanceof DesktopLifecycleError
+                    && (error.code === 'DESKTOP_BACKEND_VERSION_MISMATCH'
+                        || error.code === 'DESKTOP_BACKEND_BLOCKED')) {
+                    throw error;
+                }
+                lastError = error;
+            }
+            await this.#gateway.wait(this.#options.pollIntervalMs);
+        }
+        if (lastError instanceof DesktopLifecycleError
+            && lastError.code === 'DESKTOP_BACKEND_VERSION_MISMATCH') {
+            throw lastError;
+        }
+        throw new DesktopLifecycleError('DESKTOP_BACKEND_HEALTH_TIMEOUT');
+    }
+    async #performShutdown(onStage) {
+        onStage('stopping_backend');
+        let stopError;
+        try {
+            await this.#gateway.stop();
+        }
+        catch (error) {
+            stopError = error;
+        }
+        onStage('verifying_stopped');
+        const status = await this.#waitForStopped().catch(error => {
+            throw stopError ?? error;
+        });
+        if (status.backendState !== 'STOPPED'
+            || status.autoRecovery !== 'DISARMED') {
+            throw stopError
+                ?? new DesktopLifecycleError('DESKTOP_BACKEND_STOP_UNCONFIRMED');
+        }
+        onStage('closing_port');
+        const deadline = this.#gateway.now() + this.#options.shutdownTimeoutMs;
+        while (this.#gateway.now() <= deadline) {
+            if (!await this.#gateway.isBackendPortOpen()) {
+                return;
+            }
+            await this.#gateway.wait(this.#options.pollIntervalMs);
+        }
+        throw new DesktopLifecycleError('DESKTOP_BACKEND_PORT_STILL_OPEN');
+    }
+    async #waitForStopped() {
+        const deadline = this.#gateway.now() + this.#options.shutdownTimeoutMs;
+        let lastError;
+        while (this.#gateway.now() <= deadline) {
+            try {
+                const status = await this.#gateway.status();
+                if (status.backendState === 'STOPPED'
+                    && status.autoRecovery === 'DISARMED') {
+                    return status;
+                }
+            }
+            catch (error) {
+                lastError = error;
+            }
+            await this.#gateway.wait(this.#options.pollIntervalMs);
+        }
+        if (lastError instanceof DesktopLifecycleError) {
+            throw lastError;
+        }
+        throw new DesktopLifecycleError('DESKTOP_BACKEND_STOP_UNCONFIRMED');
+    }
+}

@@ -188,9 +188,10 @@ try {
                 'codex/1.4.0-v1.0.9-full-mainboard-universe',
                 'codex/1.4.0-v1.0.11-mainboard-daily-increment',
                 'codex/1.4.0-mainboard-250-session-history-backfill',
-                'codex/1.4.0-mainboard-250-session-trade-cal-backfill',
-                'codex/1.4.0-v1-trade-cal-forward-increment-fix',
-                $automaticMaintenanceBranch)
+                 'codex/1.4.0-mainboard-250-session-trade-cal-backfill',
+                 'codex/1.4.0-v1-trade-cal-forward-increment-fix',
+                 'codex/1.4.0-v1-windows-desktop-client',
+                 $automaticMaintenanceBranch)
         $allowedProfiles = @(
                 'RESEARCH_SELECTION', 'M6_RESEARCH_PRODUCTION',
                 'MAINBOARD_DAILY_INCREMENT',

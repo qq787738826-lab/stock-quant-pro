@@ -4,6 +4,8 @@
 **/target/
 **/node_modules/
 **/dist/
+quant-desktop/release/
+quant-desktop/dist-electron/runtime-config.json
 **/.venv/
 **/__pycache__/
 *.log

@@ -269,10 +269,11 @@ try {
             'STOP_RESEARCH_PRODUCTION',
             'CHECK_RESEARCH_PRODUCTION_STATUS') -and
         $branch -in @(
-            'codex/1.4.0-v1.0.3-research-selection-runtime-fix',
-            'codex/1.4.0-v1.0.7-intraday-research-selection-anchor-fix',
-            'codex/1.4.0-v1.0.9-full-mainboard-universe',
-            'codex/1.4.0-v1-automatic-daily-market-data-maintenance')) {
+             'codex/1.4.0-v1.0.3-research-selection-runtime-fix',
+             'codex/1.4.0-v1.0.7-intraday-research-selection-anchor-fix',
+             'codex/1.4.0-v1.0.9-full-mainboard-universe',
+             'codex/1.4.0-v1-automatic-daily-market-data-maintenance',
+             'codex/1.4.0-v1-windows-desktop-client')) {
         $branch
     } elseif ($Operation -in @('START_RESEARCH_PRODUCTION',
             'STOP_RESEARCH_PRODUCTION',
@@ -1205,6 +1206,39 @@ try {
     Write-Output "STOCK_QUANT_HOST_BROKER_STAGE=$($result.stage)"
     Write-Output "STOCK_QUANT_HOST_BROKER_REASON=$($result.reason)"
     if ($result.status -ne 'SUCCEEDED') { exit 20 }
+    if ($Operation -in @('START_RESEARCH_PRODUCTION',
+            'STOP_RESEARCH_PRODUCTION',
+            'CHECK_RESEARCH_PRODUCTION_STATUS')) {
+        $summaryFields = @($result.summary.PSObject.Properties.Name)
+        if ($summaryFields -notcontains 'backendState' -or
+            $summaryFields -notcontains 'autoRecovery' -or
+            $summaryFields -notcontains 'providerCallCount' -or
+            $summaryFields -notcontains 'retryCount') {
+            throw 'STOCK_QUANT_HOST_BROKER_RESULT_INVALID'
+        }
+        $backendState = [string]$result.summary.backendState
+        $autoRecovery = [string]$result.summary.autoRecovery
+        [int]$providerCalls = $result.summary.providerCallCount
+        [int]$retryCount = $result.summary.retryCount
+        $allowedStates = switch ($Operation) {
+            'START_RESEARCH_PRODUCTION' {
+                @('RUNNING', 'ALREADY_RUNNING')
+            }
+            'STOP_RESEARCH_PRODUCTION' {
+                @('STOPPED', 'ALREADY_STOPPED')
+            }
+            default { @('RUNNING', 'STOPPED') }
+        }
+        if ($backendState -notin $allowedStates -or
+            $autoRecovery -notin @('ARMED', 'DISARMED', 'EXHAUSTED') -or
+            $providerCalls -ne 0 -or $retryCount -ne 0) {
+            throw 'STOCK_QUANT_HOST_BROKER_RESULT_INVALID'
+        }
+        Write-Output "STOCK_QUANT_BACKEND_STATUS=$backendState"
+        Write-Output "STOCK_QUANT_PRODUCTION_AUTO_RECOVERY=$autoRecovery"
+        Write-Output 'STOCK_QUANT_PRODUCTION_PROVIDER_CALLS=0'
+        Write-Output 'STOCK_QUANT_PRODUCTION_RETRY_COUNT=0'
+    }
     exit 0
 } catch {
     $reason = ConvertTo-StockQuantSafeCode -ErrorValue $_

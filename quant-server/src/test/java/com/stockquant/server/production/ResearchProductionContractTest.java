@@ -33,6 +33,15 @@ class ResearchProductionContractTest {
         assertTrue(launcher.contains("ConsecutiveSamples -lt 2"));
         assertTrue(launcher.contains(
                 "STOCK_QUANT_PRODUCTION_STATUS=ACTION_REQUIRED"));
+        assertTrue(launcher.contains(
+                "STOCK_QUANT_BACKEND_STATUS=$backendState"));
+        assertTrue(launcher.contains(
+                "STOCK_QUANT_PRODUCTION_AUTO_RECOVERY=$autoRecovery"));
+        assertTrue(launcher.contains(
+                "$Action -eq 'Status' -and $backendState -eq 'STOPPED'"));
+        assertTrue(launcher.indexOf(
+                "$Action -eq 'Status' -and $backendState -eq 'STOPPED'")
+                < launcher.lastIndexOf("$health = Get-SystemHealth"));
         assertTrue(launcher.contains("Get-ScheduledTask"));
         assertTrue(launcher.contains(
                 "Assert-StockQuantHostBrokerTaskDefinition"));
@@ -75,6 +84,11 @@ class ResearchProductionContractTest {
                 "STOCK_QUANT_HOST_BROKER_STATUS=REJECTED"));
         assertTrue(invoker.contains(
                 "STOCK_QUANT_HOST_BROKER_REASON=$reason"));
+        assertTrue(invoker.contains("STOCK_QUANT_BACKEND_STATUS="));
+        assertTrue(invoker.contains(
+                "STOCK_QUANT_PRODUCTION_AUTO_RECOVERY="));
+        assertTrue(invoker.contains(
+                "STOCK_QUANT_PRODUCTION_PROVIDER_CALLS=0"));
         assertTrue(invoker.contains(
                 "AUTOMATIC_DAILY_MARKET_DATA_MAINTENANCE"));
         assertTrue(broker.contains(
@@ -83,6 +97,10 @@ class ResearchProductionContractTest {
                 "codex/1.4.0-v1-automatic-daily-market-data-maintenance"));
         assertEquals(3, occurrences(invoker,
                 "codex/1.4.0-v1-automatic-daily-market-data-maintenance"));
+        assertEquals(1, occurrences(invoker,
+                "codex/1.4.0-v1-windows-desktop-client"));
+        assertEquals(2, occurrences(broker,
+                "codex/1.4.0-v1-windows-desktop-client"));
 
         String build = read(
                 "scripts/prepare-m6-research-production-build-proof.ps1");

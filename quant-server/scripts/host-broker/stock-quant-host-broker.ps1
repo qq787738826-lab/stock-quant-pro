@@ -202,11 +202,11 @@ function Assert-GitBinding {
                 'codex/1.4.0-m6-research-production-ready'
             } elseif ($BrokerRequest.Operation -eq
                     'RUN_RESEARCH_SELECTION' -and $branch -in @(
-                     'codex/1.4.0-v1.0.1-research-selection-usability',
-                     'codex/1.4.0-v1.0.3-research-selection-runtime-fix',
-                     'codex/1.4.0-v1.0.7-intraday-research-selection-anchor-fix',
-                     'codex/1.4.0-v1.0.9-full-mainboard-universe',
-                     'codex/1.4.0-v1-automatic-daily-market-data-maintenance') -and
+                    'codex/1.4.0-v1.0.1-research-selection-usability',
+                    'codex/1.4.0-v1.0.3-research-selection-runtime-fix',
+                    'codex/1.4.0-v1.0.7-intraday-research-selection-anchor-fix',
+                    'codex/1.4.0-v1.0.9-full-mainboard-universe',
+                    'codex/1.4.0-v1-automatic-daily-market-data-maintenance') -and
                 [IO.Path]::GetFullPath($BrokerRequest.JarPath).Equals(
                     (Join-Path $paths.TargetRoot `
                         'quant-server-1.3.1-research-selection-runner.jar'),
@@ -281,10 +281,11 @@ function Assert-GitBinding {
                     'STOP_RESEARCH_PRODUCTION',
                     'CHECK_RESEARCH_PRODUCTION_STATUS') -and
                 $branch -in @(
-                     'codex/1.4.0-v1.0.3-research-selection-runtime-fix',
-                     'codex/1.4.0-v1.0.7-intraday-research-selection-anchor-fix',
-                     'codex/1.4.0-v1.0.9-full-mainboard-universe',
-                     'codex/1.4.0-v1-automatic-daily-market-data-maintenance') -and
+                      'codex/1.4.0-v1.0.3-research-selection-runtime-fix',
+                      'codex/1.4.0-v1.0.7-intraday-research-selection-anchor-fix',
+                      'codex/1.4.0-v1.0.9-full-mainboard-universe',
+                      'codex/1.4.0-v1-automatic-daily-market-data-maintenance',
+                      'codex/1.4.0-v1-windows-desktop-client') -and
                 [IO.Path]::GetFullPath($BrokerRequest.JarPath).Equals(
                     (Join-Path $paths.TargetRoot `
                         'quant-server-1.3.1-research-production.jar'),
@@ -2569,6 +2570,7 @@ function Assert-ResearchProductionBinding {
                 'codex/1.4.0-v1.0.3-research-selection-runtime-fix',
                 'codex/1.4.0-v1.0.7-intraday-research-selection-anchor-fix',
                 'codex/1.4.0-v1.0.9-full-mainboard-universe',
+                'codex/1.4.0-v1-windows-desktop-client',
                 'codex/1.4.0-m6-research-production-ready') -or
             $unexpected.Count -ne 0 -or
             @(git diff --cached --name-only).Count -ne 0) {
