@@ -25,6 +25,22 @@ Assert-Equal 1 $healthy.Attempts `
     'STARTUP_SELF_HEAL_IMMEDIATE_ATTEMPTS_FAILED'
 $tests++
 
+Assert-Equal 'CURRENT' (Resolve-StockQuantHostBrokerCommitState `
+        -HeartbeatCommit ('a' * 40) -ExpectedCommit ('a' * 40) `
+        -AncestorProbe { $false }) `
+    'STARTUP_SELF_HEAL_CURRENT_COMMIT_FAILED'
+$tests++
+Assert-Equal 'STALE' (Resolve-StockQuantHostBrokerCommitState `
+        -HeartbeatCommit ('a' * 40) -ExpectedCommit ('b' * 40) `
+        -AncestorProbe { param($Ancestor, $Descendant) $true }) `
+    'STARTUP_SELF_HEAL_STALE_COMMIT_FAILED'
+$tests++
+Assert-Equal 'UNTRUSTED' (Resolve-StockQuantHostBrokerCommitState `
+        -HeartbeatCommit ('f' * 40) -ExpectedCommit ('b' * 40) `
+        -AncestorProbe { param($Ancestor, $Descendant) $false }) `
+    'STARTUP_SELF_HEAL_UNTRUSTED_COMMIT_FAILED'
+$tests++
+
 $script:probeAttempts = 0
 $recovered = Wait-StockQuantHostBrokerRecovery `
     -TimeoutMilliseconds 100 -PollMilliseconds 1 -HeartbeatProbe {
@@ -133,6 +149,15 @@ if ($launcherText -match '(?i)schtasks' -or
     $launcherText -match 'TUSHARE_TOKEN' -or
     $launcherText -match 'Write-Error') {
     throw 'STARTUP_SELF_HEAL_SAFETY_CONTRACT_FAILED'
+}
+$tests++
+
+if ($launcherText -notmatch 'Invoke-StockQuantStaleBrokerRecovery' -or
+    $launcherText -notmatch 'HOST_BROKER_STALE_RECOVERY_UNSAFE' -or
+    $launcherText -notmatch 'Assert-StockQuantHostBrokerTaskDefinition' -or
+    $launcherText -notmatch 'SQHB_\*\.request\.properties' -or
+    $launcherText -notmatch 'ExpectedGitCommit \$expectedHead\s*\r?\n\s*\$candidate') {
+    throw 'STARTUP_SELF_HEAL_STALE_BROKER_CONTRACT_FAILED'
 }
 $tests++
 

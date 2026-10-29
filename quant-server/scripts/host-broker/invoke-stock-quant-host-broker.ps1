@@ -273,7 +273,8 @@ try {
              'codex/1.4.0-v1.0.7-intraday-research-selection-anchor-fix',
              'codex/1.4.0-v1.0.9-full-mainboard-universe',
              'codex/1.4.0-v1-automatic-daily-market-data-maintenance',
-             'codex/1.4.0-v1-windows-desktop-client')) {
+             'codex/1.4.0-v1-windows-desktop-client',
+             'codex/1.4.0-v1-windows-desktop-client-lifecycle-hotfix')) {
         $branch
     } elseif ($Operation -in @('START_RESEARCH_PRODUCTION',
             'STOP_RESEARCH_PRODUCTION',

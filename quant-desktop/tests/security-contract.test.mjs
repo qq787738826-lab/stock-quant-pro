@@ -56,6 +56,7 @@ test('formal lifecycle projection stays provider-free and branch-scoped', async 
     'stock-quant-host-broker.ps1',
   ), 'utf8')
   const branch = 'codex/1.4.0-v1-windows-desktop-client'
+  const hotfixBranch = `${branch}-lifecycle-hotfix`
   const invokerSelection = invoker.indexOf("$Operation -eq 'RUN_RESEARCH_SELECTION'")
   const invokerLifecycle = invoker.indexOf(
     "$Operation -in @('START_RESEARCH_PRODUCTION'",
@@ -66,12 +67,17 @@ test('formal lifecycle projection stays provider-free and branch-scoped', async 
     new RegExp(branch.replaceAll('.', '\\.')))
   assert.match(invoker.slice(invokerLifecycle, invokerLifecycle + 1200),
     new RegExp(branch.replaceAll('.', '\\.')))
+  assert.match(invoker.slice(invokerLifecycle, invokerLifecycle + 1400),
+    new RegExp(hotfixBranch.replaceAll('.', '\\.')))
   assert.match(invoker, /STOCK_QUANT_BACKEND_STATUS=/)
   assert.match(invoker, /STOCK_QUANT_PRODUCTION_AUTO_RECOVERY=/)
   assert.match(invoker, /STOCK_QUANT_PRODUCTION_PROVIDER_CALLS=0/)
   assert.match(launcher, /STOCK_QUANT_PRODUCTION_STATUS=STOPPED/)
   assert.match(launcher, /status -eq 'BLOCKED'/)
-  assert.doesNotMatch(launcher, /taskkill|Stop-Process|java\.exe/i)
+  assert.doesNotMatch(launcher, /taskkill|java\.exe/i)
+  assert.match(launcher,
+    /Stop-Process -Id \(\[int\]\$Heartbeat\.processId\) -ErrorAction Stop/)
+  assert.match(launcher, /HOST_BROKER_STALE_RECOVERY_UNSAFE/)
   assert.match(broker, /M6_PRODUCTION_PROCESS_IDENTITY_INVALID/)
   assert.match(broker, /\/api\/system\/lifecycle\/stop/)
   assert.doesNotMatch(mainCommandSurface(broker), /RUN_RESEARCH_SELECTION/)

@@ -115,6 +115,21 @@ export class DesktopLifecycle {
   }
 
   async #performShutdown(onStage: StageListener): Promise<void> {
+    onStage('verifying_stopped');
+    let current: ProductionStatus | undefined;
+    try {
+      current = await this.#gateway.status();
+    } catch {
+      // A failed preflight does not prove that shutdown is safe. Continue with
+      // the formal STOP contract and require a subsequent status proof.
+    }
+
+    if (current?.backendState === 'STOPPED'
+        && current.autoRecovery === 'DISARMED') {
+      await this.#waitForPortClosed(onStage);
+      return;
+    }
+
     onStage('stopping_backend');
     let stopError: unknown;
     try {
@@ -123,7 +138,6 @@ export class DesktopLifecycle {
       stopError = error;
     }
 
-    onStage('verifying_stopped');
     const status = await this.#waitForStopped().catch(error => {
       throw stopError ?? error;
     });
@@ -133,6 +147,10 @@ export class DesktopLifecycle {
         ?? new DesktopLifecycleError('DESKTOP_BACKEND_STOP_UNCONFIRMED');
     }
 
+    await this.#waitForPortClosed(onStage);
+  }
+
+  async #waitForPortClosed(onStage: StageListener): Promise<void> {
     onStage('closing_port');
     const deadline = this.#gateway.now() + this.#options.shutdownTimeoutMs;
     while (this.#gateway.now() <= deadline) {

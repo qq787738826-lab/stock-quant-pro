@@ -710,7 +710,9 @@ public final class TushareControlledAcceptanceBuildProof {
                     "codex/1.4.0-v1.0.11-mainboard-daily-increment",
                     "codex/1.4.0-mainboard-250-session-history-backfill",
                     "codex/1.4.0-mainboard-250-session-trade-cal-backfill",
-                    "codex/1.4.0-v1-trade-cal-forward-increment-fix")
+                    "codex/1.4.0-v1-trade-cal-forward-increment-fix",
+                    "codex/1.4.0-v1-windows-desktop-client",
+                    "codex/1.4.0-v1-windows-desktop-client-lifecycle-hotfix")
                     .contains(branchName);
         }
         return REQUIRED_INTEGRATION_BRANCH.equals(branchName)

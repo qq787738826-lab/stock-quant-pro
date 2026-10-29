@@ -155,6 +155,68 @@ function Get-StockQuantLauncherOutputValue(
     return $matches[0].Substring($prefix.Length)
 }
 
+function Invoke-StockQuantStaleBrokerRecovery(
+    [object] $Heartbeat,
+    [string] $ExpectedHead
+) {
+    $commitState = Resolve-StockQuantHostBrokerCommitState `
+        -HeartbeatCommit ([string]$Heartbeat.gitCommit) `
+        -ExpectedCommit $ExpectedHead -AncestorProbe {
+            param($Ancestor, $Descendant)
+            & git -C $repoRoot merge-base --is-ancestor `
+                $Ancestor $Descendant 2>$null | Out-Null
+            return $LASTEXITCODE -eq 0
+        }
+    if ($commitState -eq 'CURRENT') { return }
+    if ($commitState -ne 'STALE' -or [string]$Heartbeat.state -cne 'IDLE') {
+        throw 'HOST_BROKER_STALE_RECOVERY_UNSAFE'
+    }
+
+    Import-Module ScheduledTasks -ErrorAction Stop
+    Import-Module $taskDefinitionModule -Force -ErrorAction Stop
+    $task = Get-ScheduledTask -TaskName 'StockQuantLocalBroker' `
+        -ErrorAction Stop
+    $powershellExe = Join-Path $env:SystemRoot `
+        'System32\WindowsPowerShell\v1.0\powershell.exe'
+    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    Assert-StockQuantHostBrokerTaskDefinition -Task $task `
+        -ExpectedPowerShellExecutable $powershellExe `
+        -ExpectedBrokerScript $brokerScript `
+        -ExpectedWorkingDirectory $repoRoot `
+        -ExpectedUserSid $identity.User.Value `
+        -ExpectedTaskName 'StockQuantLocalBroker'
+
+    $brokerPaths = Get-StockQuantHostBrokerPaths
+    $pending = @(Get-ChildItem -LiteralPath $brokerPaths.Requests -File `
+        -Filter 'SQHB_*.request.properties')
+    if ($pending.Count -ne 0 -or $null -ne (Get-NetTCPConnection `
+            -LocalAddress 127.0.0.1 -LocalPort 8080 -State Listen `
+            -ErrorAction SilentlyContinue)) {
+        throw 'HOST_BROKER_STALE_RECOVERY_UNSAFE'
+    }
+
+    $brokerProcess = Get-CimInstance Win32_Process -Filter `
+        "ProcessId=$([int]$Heartbeat.processId)" -ErrorAction Stop
+    $expectedCommand = '"' + $powershellExe + '" -NoProfile ' +
+        '-NonInteractive -ExecutionPolicy Bypass -File "' +
+        $brokerScript + '"'
+    if ($null -eq $brokerProcess -or
+        -not ([IO.Path]::GetFullPath([string]$brokerProcess.ExecutablePath)
+            ).Equals([IO.Path]::GetFullPath($powershellExe),
+                [StringComparison]::OrdinalIgnoreCase) -or
+        [string]$brokerProcess.CommandLine -cne $expectedCommand) {
+        throw 'HOST_BROKER_STALE_RECOVERY_UNSAFE'
+    }
+
+    Stop-Process -Id ([int]$Heartbeat.processId) -ErrorAction Stop
+    Wait-Process -Id ([int]$Heartbeat.processId) -Timeout 15 `
+        -ErrorAction SilentlyContinue
+    if ($null -ne (Get-Process -Id ([int]$Heartbeat.processId) `
+            -ErrorAction SilentlyContinue)) {
+        throw 'HOST_BROKER_STALE_RECOVERY_FAILED'
+    }
+}
+
 Push-Location $repoRoot
 try {
     if ($Action -eq 'Backup') {
@@ -227,6 +289,17 @@ try {
                 'com.stockquant.server.agent.marketfacts.TushareMainboardDailyIncrementManualRunner' `
             -FailureReason 'M6_DAILY_INCREMENT_ARTIFACT_INVALID'
         Write-Output 'STOCK_QUANT_STARTUP_STAGE=CHECKING_RESIDENT_BROKER'
+        $initialHeartbeat = $null
+        try {
+            $initialHeartbeat = Read-StockQuantHostBrokerHeartbeat `
+                -ExpectedGitCommit $expectedHead -AllowAncestorGitCommit
+        } catch {
+            if ($_.Exception.Message -cne 'HOST_BROKER_NOT_RUNNING') { throw }
+        }
+        if ($null -ne $initialHeartbeat) {
+            Invoke-StockQuantStaleBrokerRecovery `
+                -Heartbeat $initialHeartbeat -ExpectedHead $expectedHead
+        }
         $brokerProbeState = [pscustomobject]@{
             ProcessId = 0
             ConsecutiveSamples = 0
@@ -235,8 +308,7 @@ try {
             -TimeoutMilliseconds ($TimeoutSeconds * 1000) `
             -PollMilliseconds 1000 -HeartbeatProbe {
                 $candidate = Read-StockQuantHostBrokerHeartbeat `
-                    -ExpectedGitCommit $expectedHead `
-                    -AllowAncestorGitCommit
+                    -ExpectedGitCommit $expectedHead
                 $candidateProcessId = [int]$candidate.processId
                 if ($null -eq (Get-Process -Id $candidateProcessId `
                         -ErrorAction SilentlyContinue)) {

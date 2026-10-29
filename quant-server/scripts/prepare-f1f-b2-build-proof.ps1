@@ -191,6 +191,7 @@ try {
                  'codex/1.4.0-mainboard-250-session-trade-cal-backfill',
                  'codex/1.4.0-v1-trade-cal-forward-increment-fix',
                  'codex/1.4.0-v1-windows-desktop-client',
+                 'codex/1.4.0-v1-windows-desktop-client-lifecycle-hotfix',
                  $automaticMaintenanceBranch)
         $allowedProfiles = @(
                 'RESEARCH_SELECTION', 'M6_RESEARCH_PRODUCTION',

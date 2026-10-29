@@ -1,5 +1,7 @@
 # Windows 桌面客户端
 
+> Lifecycle hotfix：Production Start 前，只有经过任务、进程、队列、端口、Git 与 proof 校验且确认属于祖先版本的空闲 Resident Broker，才会交给既有 watchdog 更新；未知提交继续 fail-closed。关闭已处于 STOPPED/DISARMED 的 Backend 时，确认 8080 已关闭后直接退出，不重复 STOP。
+
 ## 构建
 
 桌面客户端复用 `quant-desktop`、现有 `quant-web` 和正式 Production 生命周期合同。构建机需要 Windows、Node.js 22+，并且当前仓库 HEAD 已具有匹配的正式 Backend JAR 与 proof。

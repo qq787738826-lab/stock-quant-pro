@@ -1,5 +1,7 @@
 # Stock Quant Pro 智能体团队当前状态
 
+Windows Desktop lifecycle hotfix 正在 `codex/1.4.0-v1-windows-desktop-client-lifecycle-hotfix` 验证：startup self-heal 仅通过既有 watchdog 更新已证明为旧祖先版本的空闲 Broker；Desktop 在正式 STOPPED/DISARMED 且 8080 关闭后可直接退出。研究业务行为未改变。
+
 > 本文件是智能体团队进度、能力边界和下一阶段入口的单一事实来源。阶段文档、聊天记录或旧注释与本文件冲突时，以本文件为准。
 
 历史阶段提交、测试和验收证据索引见 [PROGRESS_LOG.md](PROGRESS_LOG.md)；该日志不替代本文件。

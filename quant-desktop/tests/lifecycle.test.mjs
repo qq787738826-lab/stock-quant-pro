@@ -95,8 +95,8 @@ test('HEALTHY desktop startup reuses the existing Backend without START', async 
 
 test('shutdown runs once, confirms DISARMED, then confirms port 8080 closed', async () => {
   const gateway = new FakeGateway({
+    statuses: [running, stopped],
     stops: [stopped],
-    statuses: [stopped],
     ports: [false],
   })
   const lifecycle = new DesktopLifecycle(gateway)
@@ -107,30 +107,42 @@ test('shutdown runs once, confirms DISARMED, then confirms port 8080 closed', as
   ])
 
   assert.equal(gateway.calls.stop, 1)
-  assert.equal(gateway.calls.status, 1)
+  assert.equal(gateway.calls.status, 2)
   assert.equal(gateway.calls.port, 1)
   assert.deepEqual(stages, [
-    'stopping_backend', 'verifying_stopped', 'closing_port',
+    'verifying_stopped', 'stopping_backend', 'closing_port',
   ])
+})
+
+test('failed startup can exit without another STOP when formally stopped', async () => {
+  const gateway = new FakeGateway({statuses: [stopped], ports: [false]})
+  const lifecycle = new DesktopLifecycle(gateway)
+  const stages = []
+  await lifecycle.shutdown(stage => stages.push(stage))
+
+  assert.equal(gateway.calls.status, 1)
+  assert.equal(gateway.calls.stop, 0)
+  assert.equal(gateway.calls.port, 1)
+  assert.deepEqual(stages, ['verifying_stopped', 'closing_port'])
 })
 
 test('a transient STOP client failure is accepted only after formal STOPPED proof', async () => {
   const gateway = new FakeGateway({
+    statuses: [running, stopped],
     stops: [new DesktopLifecycleError('M6_HOST_BROKER_OPERATION_FAILED')],
-    statuses: [stopped],
     ports: [false],
   })
   const lifecycle = new DesktopLifecycle(gateway)
   await lifecycle.shutdown(() => {})
   assert.equal(gateway.calls.stop, 1)
-  assert.equal(gateway.calls.status, 1)
+  assert.equal(gateway.calls.status, 2)
 })
 
 test('STOP failure never substitutes a process kill and remains failed when unconfirmed', async () => {
   const failure = new DesktopLifecycleError('M6_HOST_BROKER_OPERATION_FAILED')
   const gateway = new FakeGateway({
+    statuses: [running, running],
     stops: [failure],
-    statuses: [running],
   })
   const lifecycle = new DesktopLifecycle(gateway, {
     shutdownTimeoutMs: 0,

@@ -75,7 +75,25 @@ function Resolve-StockQuantHostBrokerRecoveryFailure {
     return 'HOST_BROKER_WATCHDOG_RECOVERY_TIMEOUT'
 }
 
+function Resolve-StockQuantHostBrokerCommitState {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [ValidatePattern('^[0-9a-f]{40}$')]
+        [string] $HeartbeatCommit,
+        [Parameter(Mandatory = $true)]
+        [ValidatePattern('^[0-9a-f]{40}$')]
+        [string] $ExpectedCommit,
+        [Parameter(Mandatory = $true)]
+        [scriptblock] $AncestorProbe
+    )
+    if ($HeartbeatCommit -ceq $ExpectedCommit) { return 'CURRENT' }
+    if (& $AncestorProbe $HeartbeatCommit $ExpectedCommit) { return 'STALE' }
+    return 'UNTRUSTED'
+}
+
 Export-ModuleMember -Function @(
     'Wait-StockQuantHostBrokerRecovery'
     'Resolve-StockQuantHostBrokerRecoveryFailure'
+    'Resolve-StockQuantHostBrokerCommitState'
 )

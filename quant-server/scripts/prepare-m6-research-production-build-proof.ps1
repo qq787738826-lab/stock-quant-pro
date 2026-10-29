@@ -31,7 +31,8 @@ $mode = if ($branch -eq 'feature/1.4.0-agent-team') {
         'codex/1.4.0-v1.0.7-intraday-research-selection-anchor-fix',
         'codex/1.4.0-v1.0.9-full-mainboard-universe',
         'codex/1.4.0-v1-automatic-daily-market-data-maintenance',
-        'codex/1.4.0-v1-windows-desktop-client')) {
+        'codex/1.4.0-v1-windows-desktop-client',
+        'codex/1.4.0-v1-windows-desktop-client-lifecycle-hotfix')) {
     'RESEARCH_SELECTION_CONTROLLED_BUILD_ARTIFACT'
 } else { 'M6_STAGE_CONTROLLED_BUILD_ARTIFACT' }
 

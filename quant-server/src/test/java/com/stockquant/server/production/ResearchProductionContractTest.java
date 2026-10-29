@@ -98,9 +98,13 @@ class ResearchProductionContractTest {
         assertEquals(3, occurrences(invoker,
                 "codex/1.4.0-v1-automatic-daily-market-data-maintenance"));
         assertEquals(1, occurrences(invoker,
-                "codex/1.4.0-v1-windows-desktop-client"));
+                "'codex/1.4.0-v1-windows-desktop-client'"));
         assertEquals(2, occurrences(broker,
-                "codex/1.4.0-v1-windows-desktop-client"));
+                "'codex/1.4.0-v1-windows-desktop-client'"));
+        assertEquals(1, occurrences(invoker,
+                "'codex/1.4.0-v1-windows-desktop-client-lifecycle-hotfix'"));
+        assertEquals(2, occurrences(broker,
+                "'codex/1.4.0-v1-windows-desktop-client-lifecycle-hotfix'"));
 
         String build = read(
                 "scripts/prepare-m6-research-production-build-proof.ps1");
