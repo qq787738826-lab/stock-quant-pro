@@ -209,10 +209,14 @@ function Invoke-StockQuantStaleBrokerRecovery(
     }
 
     Stop-Process -Id ([int]$Heartbeat.processId) -ErrorAction Stop
-    Wait-Process -Id ([int]$Heartbeat.processId) -Timeout 15 `
-        -ErrorAction SilentlyContinue
-    if ($null -ne (Get-Process -Id ([int]$Heartbeat.processId) `
-            -ErrorAction SilentlyContinue)) {
+    $exitDeadline = [DateTimeOffset]::UtcNow.AddSeconds(15)
+    while ($null -ne (Get-Process -Id ([int]$Heartbeat.processId) `
+            -ErrorAction SilentlyContinue) -and
+        [DateTimeOffset]::UtcNow -lt $exitDeadline) {
+        Start-Sleep -Milliseconds 200
+    }
+    if ($null -ne (Get-Process -Id ([int]$Heartbeat.processId) -ErrorAction `
+            SilentlyContinue)) {
         throw 'HOST_BROKER_STALE_RECOVERY_FAILED'
     }
 }

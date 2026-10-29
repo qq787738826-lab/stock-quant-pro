@@ -161,6 +161,13 @@ if ($launcherText -notmatch 'Invoke-StockQuantStaleBrokerRecovery' -or
 }
 $tests++
 
+if ($launcherText -match 'Wait-Process' -or
+    $launcherText -notmatch 'exitDeadline' -or
+    $launcherText -notmatch 'Start-Sleep -Milliseconds 200') {
+    throw 'STARTUP_SELF_HEAL_PROCESS_EXIT_POLL_FAILED'
+}
+$tests++
+
 Write-Output "STARTUP_SELF_HEAL_TESTS=$tests"
 Write-Output 'STARTUP_SELF_HEAL_SCHEDULED_TASK_TRIGGERS=0'
 Write-Output 'STARTUP_SELF_HEAL_CREDENTIAL_READS=0'
