@@ -3,8 +3,8 @@
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\com.stockquant.pro" "DisplayVersion" "${VERSION}"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\com.stockquant.pro" "InstallLocation" "$INSTDIR"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\com.stockquant.pro" "DisplayIcon" "$INSTDIR\${APP_FILENAME}.exe,0"
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\com.stockquant.pro" "UninstallString" "$\"$INSTDIR\${UNINSTALL_FILENAME}$\" /currentuser"
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\com.stockquant.pro" "QuietUninstallString" "$\"$INSTDIR\${UNINSTALL_FILENAME}$\" /currentuser /S"
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\com.stockquant.pro" "UninstallString" "$\"$INSTDIR\Uninstall ${PRODUCT_FILENAME}.exe$\" /currentuser"
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\com.stockquant.pro" "QuietUninstallString" "$\"$INSTDIR\Uninstall ${PRODUCT_FILENAME}.exe$\" /currentuser /S"
   WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\com.stockquant.pro" "NoModify" 1
   WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\com.stockquant.pro" "NoRepair" 1
 !macroend
@@ -20,8 +20,8 @@ Function .onInstSuccess
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\com.stockquant.pro" "DisplayVersion" "${VERSION}"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\com.stockquant.pro" "InstallLocation" "$INSTDIR"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\com.stockquant.pro" "DisplayIcon" "$INSTDIR\${APP_FILENAME}.exe,0"
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\com.stockquant.pro" "UninstallString" "$\"$INSTDIR\${UNINSTALL_FILENAME}$\" /currentuser"
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\com.stockquant.pro" "QuietUninstallString" "$\"$INSTDIR\${UNINSTALL_FILENAME}$\" /currentuser /S"
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\com.stockquant.pro" "UninstallString" "$\"$INSTDIR\Uninstall ${PRODUCT_FILENAME}.exe$\" /currentuser"
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\com.stockquant.pro" "QuietUninstallString" "$\"$INSTDIR\Uninstall ${PRODUCT_FILENAME}.exe$\" /currentuser /S"
   WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\com.stockquant.pro" "NoModify" 1
   WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\com.stockquant.pro" "NoRepair" 1
 FunctionEnd
