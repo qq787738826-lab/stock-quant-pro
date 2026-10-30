@@ -55,11 +55,38 @@ function normalizeAutoRecovery(value) {
     }
     throw new DesktopLifecycleError('DESKTOP_LIFECYCLE_CONTRACT_INVALID');
 }
+const FASTAPI_HEALTH_REASONS = new Set([
+    'FASTAPI_HEALTHY',
+    'FASTAPI_HEALTH_HTTP_STATUS',
+    'FASTAPI_HEALTH_PAYLOAD_INVALID',
+    'FASTAPI_HEALTH_INTERRUPTED',
+    'FASTAPI_HEALTH_UNAVAILABLE',
+]);
+function normalizeServiceState(value) {
+    if (value === 'RUNNING' || value === 'STOPPED') {
+        return value;
+    }
+    throw new DesktopLifecycleError('DESKTOP_LIFECYCLE_CONTRACT_INVALID');
+}
+function normalizeBoolean(value) {
+    if (value === 'true') {
+        return true;
+    }
+    if (value === 'false') {
+        return false;
+    }
+    throw new DesktopLifecycleError('DESKTOP_LIFECYCLE_CONTRACT_INVALID');
+}
 function statusFromOutput(values) {
-    return {
+    const status = {
         backendState: normalizeBackendState(values.get('STOCK_QUANT_BACKEND_STATUS')),
+        fastApiState: normalizeServiceState(values.get('STOCK_QUANT_FASTAPI_STATUS')),
+        javaState: normalizeServiceState(values.get('STOCK_QUANT_JAVA_STATUS')),
+        backendPortOpen: normalizeBoolean(values.get('STOCK_QUANT_BACKEND_PORT_OPEN')),
+        fastApiPortOpen: normalizeBoolean(values.get('STOCK_QUANT_FASTAPI_PORT_OPEN')),
         autoRecovery: normalizeAutoRecovery(values.get('STOCK_QUANT_PRODUCTION_AUTO_RECOVERY')),
     };
+    return status;
 }
 function reasonFromOutput(values) {
     for (const key of [
@@ -122,13 +149,31 @@ export class PowerShellProductionGateway {
             throw new DesktopLifecycleError(reasonFromOutput(values));
         }
         const status = statusFromOutput(values);
+        const servicesRunning = status.fastApiState === 'RUNNING'
+            && status.javaState === 'RUNNING'
+            && status.backendPortOpen
+            && status.fastApiPortOpen;
+        if ((status.backendState === 'RUNNING' && !servicesRunning)
+            || (status.backendState === 'STOPPED' && servicesRunning)
+            || (status.fastApiState === 'RUNNING' && !status.fastApiPortOpen)
+            || (status.javaState === 'RUNNING' && !status.backendPortOpen)) {
+            throw new DesktopLifecycleError('DESKTOP_LIFECYCLE_CONTRACT_INVALID');
+        }
         if (action === 'Start'
             && (status.backendState !== 'RUNNING'
+                || status.fastApiState !== 'RUNNING'
+                || status.javaState !== 'RUNNING'
+                || !status.backendPortOpen
+                || !status.fastApiPortOpen
                 || status.autoRecovery !== 'ARMED')) {
             throw new DesktopLifecycleError('DESKTOP_LIFECYCLE_CONTRACT_INVALID');
         }
         if (action === 'Stop'
             && (status.backendState !== 'STOPPED'
+                || status.fastApiState !== 'STOPPED'
+                || status.javaState !== 'STOPPED'
+                || status.backendPortOpen
+                || status.fastApiPortOpen
                 || status.autoRecovery !== 'DISARMED')) {
             throw new DesktopLifecycleError('DESKTOP_LIFECYCLE_CONTRACT_INVALID');
         }
@@ -162,18 +207,26 @@ export class PowerShellProductionGateway {
                         const payload = JSON.parse(body);
                         const status = payload.data?.status;
                         const gitCommit = payload.data?.gitCommit;
+                        const fastApiComponents = payload.data?.components?.filter(component => component.component === 'FastAPI 8001') ?? [];
+                        const fastApiStatus = fastApiComponents[0]?.status;
+                        const fastApiReason = fastApiComponents[0]?.reason;
                         if (payload.success !== true
                             || (status !== 'HEALTHY'
                                 && status !== 'DEGRADED'
                                 && status !== 'BLOCKED')
-                            || typeof gitCommit !== 'string') {
+                            || typeof gitCommit !== 'string'
+                            || fastApiComponents.length !== 1
+                            || (fastApiStatus !== 'HEALTHY'
+                                && fastApiStatus !== 'BLOCKED')
+                            || !isSafeCode(fastApiReason)
+                            || !FASTAPI_HEALTH_REASONS.has(fastApiReason)) {
                             throw new Error('invalid health payload');
                         }
                         if (gitCommit !== this.#binding.gitCommit) {
                             reject(new DesktopLifecycleError('DESKTOP_BACKEND_VERSION_MISMATCH'));
                             return;
                         }
-                        resolve({ status, gitCommit });
+                        resolve({ status, gitCommit, fastApiStatus, fastApiReason });
                     }
                     catch (error) {
                         reject(error instanceof DesktopLifecycleError
@@ -186,9 +239,16 @@ export class PowerShellProductionGateway {
             request.on('error', () => reject(new DesktopLifecycleError('DESKTOP_BACKEND_HEALTH_TIMEOUT')));
         });
     }
-    isBackendPortOpen() {
+    async ports() {
+        const [backendPortOpen, fastApiPortOpen] = await Promise.all([
+            this.#isPortOpen(8080),
+            this.#isPortOpen(8001),
+        ]);
+        return { backendPortOpen, fastApiPortOpen };
+    }
+    #isPortOpen(port) {
         return new Promise(resolve => {
-            const socket = net.createConnection({ host: '127.0.0.1', port: 8080 });
+            const socket = net.createConnection({ host: '127.0.0.1', port });
             let settled = false;
             const finish = (open) => {
                 if (settled) {

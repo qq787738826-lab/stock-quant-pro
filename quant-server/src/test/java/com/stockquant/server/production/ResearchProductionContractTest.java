@@ -36,6 +36,12 @@ class ResearchProductionContractTest {
         assertTrue(launcher.contains(
                 "STOCK_QUANT_BACKEND_STATUS=$backendState"));
         assertTrue(launcher.contains(
+                "STOCK_QUANT_FASTAPI_STATUS=$fastApiState"));
+        assertTrue(launcher.contains(
+                "STOCK_QUANT_JAVA_STATUS=$javaState"));
+        assertTrue(launcher.contains(
+                "STOCK_QUANT_FASTAPI_PORT_OPEN=$fastApiPortOpen"));
+        assertTrue(launcher.contains(
                 "STOCK_QUANT_PRODUCTION_AUTO_RECOVERY=$autoRecovery"));
         assertTrue(launcher.contains(
                 "$Action -eq 'Status' -and $backendState -eq 'STOPPED'"));
@@ -53,6 +59,27 @@ class ResearchProductionContractTest {
         assertTrue(invoker.contains("provider' = 'NONE'"));
         assertTrue(broker.contains("quant-server-1.3.1-research-production.jar"));
         assertTrue(broker.contains("M6_PRODUCTION_PROCESS_IDENTITY_INVALID"));
+        assertTrue(broker.contains("quant-ai\\.venv\\Scripts\\python.exe"));
+        assertTrue(broker.contains("UVICORN_APP_MAIN_V1"));
+        assertTrue(broker.contains("M6_FASTAPI_PROCESS_IDENTITY_INVALID"));
+        assertTrue(broker.contains("M6_FASTAPI_PORT_OCCUPIED"));
+        assertTrue(broker.contains("http://127.0.0.1:8001/health"));
+        int compositeStart = broker.indexOf(
+                "function Start-ResearchProductionProcess");
+        int fastApiStart = broker.indexOf(
+                "Start-ResearchFastApiProcess", compositeStart);
+        int javaStart = broker.indexOf(
+                "Start-ResearchBackendProcess", compositeStart);
+        assertTrue(compositeStart >= 0 && fastApiStart > compositeStart
+                && javaStart > fastApiStart);
+        int compositeStop = broker.indexOf(
+                "function Stop-ResearchProductionProcesses");
+        int javaStop = broker.indexOf(
+                "Stop-ResearchBackendProcess", compositeStop);
+        int fastApiStop = broker.indexOf(
+                "Stop-ResearchFastApiProcess", compositeStop);
+        assertTrue(compositeStop >= 0 && javaStop > compositeStop
+                && fastApiStop > javaStop);
         assertTrue(broker.contains("productionMaximumRestarts = 3"));
         assertTrue(broker.contains("Invoke-ResearchProductionRecovery"));
         assertTrue(broker.contains("backend.autostart.json"));
@@ -85,6 +112,10 @@ class ResearchProductionContractTest {
         assertTrue(invoker.contains(
                 "STOCK_QUANT_HOST_BROKER_REASON=$reason"));
         assertTrue(invoker.contains("STOCK_QUANT_BACKEND_STATUS="));
+        assertTrue(invoker.contains("STOCK_QUANT_FASTAPI_STATUS="));
+        assertTrue(invoker.contains("STOCK_QUANT_JAVA_STATUS="));
+        assertTrue(invoker.contains("STOCK_QUANT_BACKEND_PORT_OPEN="));
+        assertTrue(invoker.contains("STOCK_QUANT_FASTAPI_PORT_OPEN="));
         assertTrue(invoker.contains(
                 "STOCK_QUANT_PRODUCTION_AUTO_RECOVERY="));
         assertTrue(invoker.contains(
@@ -224,9 +255,18 @@ class ResearchProductionContractTest {
     void systemHealthUsesTheResidentBrokerHeartbeatContract() throws Exception {
         String health = read("src/main/java/com/stockquant/server/production/"
                 + "SystemHealthService.java");
+        String fastApi = read("src/main/java/com/stockquant/server/production/"
+                + "FastApiHealthProbe.java");
         assertTrue(health.contains("base.resolve(\"heartbeat.json\")"));
         assertFalse(health.contains("health/heartbeat.json"));
         assertTrue(health.contains("ProjectNonShadowCostCny"));
+        assertTrue(health.contains("\"FastAPI 8001\""));
+        assertTrue(health.contains("fastApiHealthProbe.probe()"));
+        assertTrue(fastApi.contains("http://127.0.0.1:8001/health"));
+        assertTrue(fastApi.contains("HttpClient.Redirect.NEVER"));
+        assertTrue(fastApi.contains("EXPECTED_VERSION = \"1.3.1\""));
+        assertFalse(fastApi.toLowerCase().contains("tushare"));
+        assertFalse(fastApi.toLowerCase().contains("bailian"));
     }
 
     private static String read(String path) throws Exception {

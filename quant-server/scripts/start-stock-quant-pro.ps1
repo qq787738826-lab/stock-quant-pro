@@ -126,6 +126,39 @@ function Get-StartupActionRequiredMessage([string] $Reason) {
         'M6_JAVA_17_REQUIRED' {
             return 'Java 17 is required before Stock Quant Pro can start.'
         }
+        'M6_JAVA_17_RUNTIME_INVALID' {
+            return 'Java 8080 cannot be validated against the fixed Java 17 runtime.'
+        }
+        'M6_FASTAPI_PYTHON_MISSING' {
+            return 'FastAPI 8001 cannot start because quant-ai\.venv\Scripts\python.exe is missing.'
+        }
+        'M6_FASTAPI_PYTHON_INVALID' {
+            return 'FastAPI 8001 cannot start because the fixed quant-ai Python 3.11 runtime is invalid.'
+        }
+        'M6_FASTAPI_PORT_OCCUPIED' {
+            return 'FastAPI 8001 cannot start or stop safely because port 8001 belongs to an unknown process.'
+        }
+        'M6_BACKEND_PORT_OCCUPIED' {
+            return 'Java 8080 cannot start or stop safely because port 8080 belongs to an unknown process.'
+        }
+        'M6_FASTAPI_HEALTH_TIMEOUT' {
+            return 'FastAPI 8001 did not become healthy within the startup timeout.'
+        }
+        'M6_FASTAPI_EXITED' {
+            return 'FastAPI 8001 exited before it became healthy.'
+        }
+        'M6_FASTAPI_START_FAILED' {
+            return 'FastAPI 8001 could not be started by Resident Broker.'
+        }
+        'M6_PRODUCTION_BACKEND_EXITED' {
+            return 'Java 8080 exited before the composite service became healthy.'
+        }
+        'M6_PRODUCTION_BACKEND_START_FAILED' {
+            return 'Java 8080 could not be started; FastAPI 8001 was rolled back.'
+        }
+        'M6_PRODUCTION_HEALTH_TIMEOUT' {
+            return 'Java 8080 did not reach composite health within the startup timeout.'
+        }
         'M6_DATABASE_NOT_LISTENING' {
             return 'The local research database is not running on 127.0.0.1:38432.'
         }
@@ -157,7 +190,10 @@ function Get-StockQuantLauncherOutputValue(
 
 function Invoke-StockQuantStaleBrokerRecovery(
     [object] $Heartbeat,
-    [string] $ExpectedHead
+    [string] $ExpectedHead,
+    [string] $ArtifactPath,
+    [string] $InvokerPath,
+    [int] $RequestTimeoutSeconds
 ) {
     $commitState = Resolve-StockQuantHostBrokerCommitState `
         -HeartbeatCommit ([string]$Heartbeat.gitCommit) `
@@ -189,11 +225,63 @@ function Invoke-StockQuantStaleBrokerRecovery(
     $brokerPaths = Get-StockQuantHostBrokerPaths
     $pending = @(Get-ChildItem -LiteralPath $brokerPaths.Requests -File `
         -Filter 'SQHB_*.request.properties')
-    if ($pending.Count -ne 0 -or $null -ne (Get-NetTCPConnection `
-            -LocalAddress 127.0.0.1 -LocalPort 8080 -State Listen `
-            -ErrorAction SilentlyContinue)) {
+    $claimed = @(Get-ChildItem -LiteralPath $brokerPaths.Requests -File `
+        -Filter 'SQHB_*.processing.properties')
+    if ($pending.Count -ne 0 -or $claimed.Count -ne 0) {
         throw 'HOST_BROKER_STALE_RECOVERY_UNSAFE'
     }
+    $backendListeners = @(Get-NetTCPConnection -LocalPort 8080 `
+        -State Listen -ErrorAction SilentlyContinue)
+    $fastApiListeners = @(Get-NetTCPConnection -LocalPort 8001 `
+        -State Listen -ErrorAction SilentlyContinue)
+    $autostartFile = Join-Path $brokerPaths.TargetRoot `
+        'stock-quant-production\backend.autostart.json'
+    if ($backendListeners.Count -ne 0 -or
+        $fastApiListeners.Count -ne 0 -or
+        (Test-Path -LiteralPath $autostartFile -PathType Leaf)) {
+        $compatibilityOutput = @(& $InvokerPath `
+            -Operation 'STOP_RESEARCH_PRODUCTION' `
+            -ArtifactPath $ArtifactPath `
+            -TimeoutSeconds $RequestTimeoutSeconds 2>&1 |
+            ForEach-Object { [string]$_ })
+        $compatibilityExitCode = $LASTEXITCODE
+        if ($compatibilityExitCode -ne 0) {
+            $reasonPrefix = 'STOCK_QUANT_HOST_BROKER_REASON='
+            $compatibilityReasons = @($compatibilityOutput | Where-Object {
+                $_.StartsWith($reasonPrefix,
+                    [StringComparison]::Ordinal)
+            } | ForEach-Object { $_.Substring($reasonPrefix.Length) })
+            if ($compatibilityReasons.Count -eq 0 -or
+                $compatibilityReasons[-1] -cne
+                    'STOCK_QUANT_HOST_BROKER_RESULT_INVALID') {
+                throw 'HOST_BROKER_STALE_RECOVERY_UNSAFE'
+            }
+        }
+        $backendListeners = @(Get-NetTCPConnection -LocalPort 8080 `
+            -State Listen -ErrorAction SilentlyContinue)
+        $fastApiListeners = @(Get-NetTCPConnection -LocalPort 8001 `
+            -State Listen -ErrorAction SilentlyContinue)
+        $pending = @(Get-ChildItem -LiteralPath $brokerPaths.Requests -File `
+            -Filter 'SQHB_*.request.properties')
+        $claimed = @(Get-ChildItem -LiteralPath $brokerPaths.Requests -File `
+            -Filter 'SQHB_*.processing.properties')
+        if ($backendListeners.Count -ne 0 -or
+            $fastApiListeners.Count -ne 0 -or $pending.Count -ne 0 -or
+            $claimed.Count -ne 0 -or
+            (Test-Path -LiteralPath $autostartFile)) {
+            throw 'HOST_BROKER_STALE_RECOVERY_UNSAFE'
+        }
+    }
+
+    $finalHeartbeat = Read-StockQuantHostBrokerHeartbeat `
+        -ExpectedGitCommit $ExpectedHead -AllowAncestorGitCommit
+    if ([int]$finalHeartbeat.processId -ne [int]$Heartbeat.processId -or
+        [string]$finalHeartbeat.gitCommit -cne
+            [string]$Heartbeat.gitCommit -or
+        [string]$finalHeartbeat.state -cne 'IDLE') {
+        throw 'HOST_BROKER_STALE_RECOVERY_UNSAFE'
+    }
+    $Heartbeat = $finalHeartbeat
 
     $brokerProcess = Get-CimInstance Win32_Process -Filter `
         "ProcessId=$([int]$Heartbeat.processId)" -ErrorAction Stop
@@ -302,7 +390,9 @@ try {
         }
         if ($null -ne $initialHeartbeat) {
             Invoke-StockQuantStaleBrokerRecovery `
-                -Heartbeat $initialHeartbeat -ExpectedHead $expectedHead
+                -Heartbeat $initialHeartbeat -ExpectedHead $expectedHead `
+                -ArtifactPath $artifact -InvokerPath $invokeBroker `
+                -RequestTimeoutSeconds $TimeoutSeconds
         }
         $brokerProbeState = [pscustomobject]@{
             ProcessId = 0
@@ -377,27 +467,59 @@ try {
         -ArtifactPath $artifact -TimeoutSeconds $TimeoutSeconds 2>&1 |
         ForEach-Object { [string]$_ })
     if ($LASTEXITCODE -ne 0) {
+        $brokerReason = Get-StockQuantLauncherOutputValue `
+            -Output $output -Name 'STOCK_QUANT_HOST_BROKER_REASON'
+        if ($brokerReason -match '^[A-Z][A-Z0-9_]{7,127}$') {
+            throw $brokerReason
+        }
         throw 'M6_HOST_BROKER_OPERATION_FAILED'
     }
     $backendState = Get-StockQuantLauncherOutputValue `
         -Output $output -Name 'STOCK_QUANT_BACKEND_STATUS'
+    $fastApiState = Get-StockQuantLauncherOutputValue `
+        -Output $output -Name 'STOCK_QUANT_FASTAPI_STATUS'
+    $javaState = Get-StockQuantLauncherOutputValue `
+        -Output $output -Name 'STOCK_QUANT_JAVA_STATUS'
+    $backendPortOpen = Get-StockQuantLauncherOutputValue `
+        -Output $output -Name 'STOCK_QUANT_BACKEND_PORT_OPEN'
+    $fastApiPortOpen = Get-StockQuantLauncherOutputValue `
+        -Output $output -Name 'STOCK_QUANT_FASTAPI_PORT_OPEN'
     $autoRecovery = Get-StockQuantLauncherOutputValue `
         -Output $output -Name 'STOCK_QUANT_PRODUCTION_AUTO_RECOVERY'
     Write-Output "STOCK_QUANT_BACKEND_STATUS=$backendState"
+    Write-Output "STOCK_QUANT_FASTAPI_STATUS=$fastApiState"
+    Write-Output "STOCK_QUANT_JAVA_STATUS=$javaState"
+    Write-Output "STOCK_QUANT_BACKEND_PORT_OPEN=$backendPortOpen"
+    Write-Output "STOCK_QUANT_FASTAPI_PORT_OPEN=$fastApiPortOpen"
     Write-Output "STOCK_QUANT_PRODUCTION_AUTO_RECOVERY=$autoRecovery"
     if ($Action -eq 'Stop') {
         if ($backendState -notin @('STOPPED', 'ALREADY_STOPPED') -or
+            $fastApiState -cne 'STOPPED' -or
+            $javaState -cne 'STOPPED' -or
+            $backendPortOpen -cne 'false' -or
+            $fastApiPortOpen -cne 'false' -or
             $autoRecovery -cne 'DISARMED') {
             throw 'M6_HOST_BROKER_OPERATION_FAILED'
         }
         Write-Output 'STOCK_QUANT_PRODUCTION_STATUS=STOPPED'
         exit 0
     }
-    if ($Action -eq 'Status' -and $backendState -eq 'STOPPED') {
+    if ($Action -eq 'Status' -and $backendState -eq 'STOPPED' -and
+        $fastApiState -ceq 'STOPPED' -and $javaState -ceq 'STOPPED' -and
+        $backendPortOpen -ceq 'false' -and
+        $fastApiPortOpen -ceq 'false') {
         Write-Output 'STOCK_QUANT_PRODUCTION_STATUS=STOPPED'
         exit 0
     }
+    if ($Action -eq 'Status' -and $backendState -eq 'STOPPED') {
+        Write-Output 'STOCK_QUANT_PRODUCTION_STATUS=RECOVERY_REQUIRED'
+        exit 0
+    }
     if ($backendState -notin @('RUNNING', 'ALREADY_RUNNING') -or
+        $fastApiState -cne 'RUNNING' -or
+        $javaState -cne 'RUNNING' -or
+        $backendPortOpen -cne 'true' -or
+        $fastApiPortOpen -cne 'true' -or
         $autoRecovery -cne 'ARMED') {
         throw 'M6_HOST_BROKER_OPERATION_FAILED'
     }
@@ -423,6 +545,7 @@ try {
             'STOCK_QUANT_STARTUP_ACTION_REQUIRED:'.Length)
     } elseif ($failure -in @(
             'M6_FORMAL_ARTIFACT_MISSING', 'M6_JAVA_17_REQUIRED',
+            'M6_JAVA_17_RUNTIME_INVALID',
             'M6_RESEARCH_SELECTION_ARTIFACT_INVALID',
             'M6_TRADE_CAL_FORWARD_ARTIFACT_INVALID',
             'M6_CATCHUP_AUDIT_ARTIFACT_INVALID',
@@ -430,7 +553,30 @@ try {
             'M6_AUTOMATIC_MAINTENANCE_RUNNER_INVALID',
             'M6_DATABASE_NOT_LISTENING',
             'M6_HOST_BROKER_OPERATION_FAILED',
-            'M6_SYSTEM_HEALTH_BLOCKED')) {
+            'M6_SYSTEM_HEALTH_BLOCKED',
+            'M6_FASTAPI_PYTHON_MISSING',
+            'M6_FASTAPI_PYTHON_INVALID',
+            'M6_FASTAPI_PORT_OCCUPIED',
+            'M6_FASTAPI_PROCESS_STATE_INVALID',
+            'M6_FASTAPI_PROCESS_IDENTITY_INVALID',
+            'M6_FASTAPI_EXITED',
+            'M6_FASTAPI_START_FAILED',
+            'M6_FASTAPI_HEALTH_TIMEOUT',
+            'M6_FASTAPI_STOP_FAILED',
+            'M6_BACKEND_PORT_OCCUPIED',
+            'M6_PRODUCTION_PORT_IDENTITY_INVALID',
+            'M6_PRODUCTION_PROCESS_STATE_INVALID',
+            'M6_PRODUCTION_PROCESS_IDENTITY_INVALID',
+            'M6_PRODUCTION_BACKEND_EXITED',
+            'M6_PRODUCTION_BACKEND_START_FAILED',
+            'M6_PRODUCTION_HEALTH_TIMEOUT',
+            'M6_PRODUCTION_STOP_FAILED',
+            'M6_PRODUCTION_RUNNING_VERSION_MISMATCH',
+            'M6_PRODUCTION_AUTOSTART_BINDING_INVALID',
+            'M6_PRODUCTION_AUTOSTART_STATE_INVALID',
+            'M6_PRODUCTION_AUTOSTART_WRITE_FAILED',
+            'M6_PRODUCTION_AUTOSTART_DISARM_FAILED',
+            'M6_PRODUCTION_AUTOSTART_ARM_FAILED')) {
         $reason = $failure
     } else {
         $reason = 'STOCK_QUANT_STARTUP_UNEXPECTED_FAILURE'

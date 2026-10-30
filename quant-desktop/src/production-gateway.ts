@@ -7,6 +7,7 @@ import type {
   AutoRecoveryState,
   HealthSnapshot,
   ProductionGateway,
+  ProductionPortStatus,
   ProductionStatus,
 } from './contracts.js';
 import {
@@ -96,13 +97,51 @@ function normalizeAutoRecovery(value: string | undefined): AutoRecoveryState {
   throw new DesktopLifecycleError('DESKTOP_LIFECYCLE_CONTRACT_INVALID');
 }
 
+const FASTAPI_HEALTH_REASONS = new Set([
+  'FASTAPI_HEALTHY',
+  'FASTAPI_HEALTH_HTTP_STATUS',
+  'FASTAPI_HEALTH_PAYLOAD_INVALID',
+  'FASTAPI_HEALTH_INTERRUPTED',
+  'FASTAPI_HEALTH_UNAVAILABLE',
+]);
+
+function normalizeServiceState(
+  value: string | undefined,
+): 'RUNNING' | 'STOPPED' {
+  if (value === 'RUNNING' || value === 'STOPPED') {
+    return value;
+  }
+  throw new DesktopLifecycleError('DESKTOP_LIFECYCLE_CONTRACT_INVALID');
+}
+
+function normalizeBoolean(value: string | undefined): boolean {
+  if (value === 'true') {
+    return true;
+  }
+  if (value === 'false') {
+    return false;
+  }
+  throw new DesktopLifecycleError('DESKTOP_LIFECYCLE_CONTRACT_INVALID');
+}
+
 function statusFromOutput(values: ReadonlyMap<string, string>): ProductionStatus {
-  return {
+  const status: ProductionStatus = {
     backendState: normalizeBackendState(values.get('STOCK_QUANT_BACKEND_STATUS')),
+    fastApiState: normalizeServiceState(
+      values.get('STOCK_QUANT_FASTAPI_STATUS'),
+    ),
+    javaState: normalizeServiceState(values.get('STOCK_QUANT_JAVA_STATUS')),
+    backendPortOpen: normalizeBoolean(
+      values.get('STOCK_QUANT_BACKEND_PORT_OPEN'),
+    ),
+    fastApiPortOpen: normalizeBoolean(
+      values.get('STOCK_QUANT_FASTAPI_PORT_OPEN'),
+    ),
     autoRecovery: normalizeAutoRecovery(
       values.get('STOCK_QUANT_PRODUCTION_AUTO_RECOVERY'),
     ),
   };
+  return status;
 }
 
 function reasonFromOutput(values: ReadonlyMap<string, string>): string {
@@ -184,13 +223,31 @@ export class PowerShellProductionGateway implements ProductionGateway {
       throw new DesktopLifecycleError(reasonFromOutput(values));
     }
     const status = statusFromOutput(values);
+    const servicesRunning = status.fastApiState === 'RUNNING'
+      && status.javaState === 'RUNNING'
+      && status.backendPortOpen
+      && status.fastApiPortOpen;
+    if ((status.backendState === 'RUNNING' && !servicesRunning)
+        || (status.backendState === 'STOPPED' && servicesRunning)
+        || (status.fastApiState === 'RUNNING' && !status.fastApiPortOpen)
+        || (status.javaState === 'RUNNING' && !status.backendPortOpen)) {
+      throw new DesktopLifecycleError('DESKTOP_LIFECYCLE_CONTRACT_INVALID');
+    }
     if (action === 'Start'
         && (status.backendState !== 'RUNNING'
+          || status.fastApiState !== 'RUNNING'
+          || status.javaState !== 'RUNNING'
+          || !status.backendPortOpen
+          || !status.fastApiPortOpen
           || status.autoRecovery !== 'ARMED')) {
       throw new DesktopLifecycleError('DESKTOP_LIFECYCLE_CONTRACT_INVALID');
     }
     if (action === 'Stop'
         && (status.backendState !== 'STOPPED'
+          || status.fastApiState !== 'STOPPED'
+          || status.javaState !== 'STOPPED'
+          || status.backendPortOpen
+          || status.fastApiPortOpen
           || status.autoRecovery !== 'DISARMED')) {
       throw new DesktopLifecycleError('DESKTOP_LIFECYCLE_CONTRACT_INVALID');
     }
@@ -226,15 +283,33 @@ export class PowerShellProductionGateway implements ProductionGateway {
             try {
               const payload = JSON.parse(body) as {
                 success?: boolean;
-                data?: {status?: string; gitCommit?: string};
+                data?: {
+                  status?: string;
+                  gitCommit?: string;
+                  components?: Array<{
+                    component?: string;
+                    status?: string;
+                    reason?: string;
+                  }>;
+                };
               };
               const status = payload.data?.status;
               const gitCommit = payload.data?.gitCommit;
+              const fastApiComponents = payload.data?.components?.filter(
+                component => component.component === 'FastAPI 8001',
+              ) ?? [];
+              const fastApiStatus = fastApiComponents[0]?.status;
+              const fastApiReason = fastApiComponents[0]?.reason;
               if (payload.success !== true
                   || (status !== 'HEALTHY'
                     && status !== 'DEGRADED'
                     && status !== 'BLOCKED')
-                  || typeof gitCommit !== 'string') {
+                  || typeof gitCommit !== 'string'
+                  || fastApiComponents.length !== 1
+                  || (fastApiStatus !== 'HEALTHY'
+                    && fastApiStatus !== 'BLOCKED')
+                  || !isSafeCode(fastApiReason)
+                  || !FASTAPI_HEALTH_REASONS.has(fastApiReason)) {
                 throw new Error('invalid health payload');
               }
               if (gitCommit !== this.#binding.gitCommit) {
@@ -243,7 +318,7 @@ export class PowerShellProductionGateway implements ProductionGateway {
                 ));
                 return;
               }
-              resolve({status, gitCommit});
+              resolve({status, gitCommit, fastApiStatus, fastApiReason});
             } catch (error) {
               reject(error instanceof DesktopLifecycleError
                 ? error
@@ -259,9 +334,17 @@ export class PowerShellProductionGateway implements ProductionGateway {
     });
   }
 
-  isBackendPortOpen(): Promise<boolean> {
+  async ports(): Promise<ProductionPortStatus> {
+    const [backendPortOpen, fastApiPortOpen] = await Promise.all([
+      this.#isPortOpen(8080),
+      this.#isPortOpen(8001),
+    ]);
+    return {backendPortOpen, fastApiPortOpen};
+  }
+
+  #isPortOpen(port: 8001 | 8080): Promise<boolean> {
     return new Promise(resolve => {
-      const socket = net.createConnection({host: '127.0.0.1', port: 8080});
+      const socket = net.createConnection({host: '127.0.0.1', port});
       let settled = false;
       const finish = (open: boolean): void => {
         if (settled) {

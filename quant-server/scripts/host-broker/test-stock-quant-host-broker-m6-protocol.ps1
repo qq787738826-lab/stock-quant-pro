@@ -12,6 +12,10 @@ $artifact = Join-Path $root 'quant-server-1.3.1-research-production.jar'
 $tests = 0
 $brokerScript = Get-Content -LiteralPath (
     Join-Path $PSScriptRoot 'stock-quant-host-broker.ps1') -Raw
+$invokerScript = Get-Content -LiteralPath (
+    Join-Path $PSScriptRoot 'invoke-stock-quant-host-broker.ps1') -Raw
+$launcherScript = Get-Content -LiteralPath (Join-Path $paths.RepositoryRoot `
+    'quant-server\scripts\start-stock-quant-pro.ps1') -Raw
 
 function Write-Lines([string] $Path, [System.Collections.IDictionary] $Values) {
     $lines = foreach ($key in $Values.Keys) { "$key=$($Values[$key])" }
@@ -127,6 +131,51 @@ try {
         $brokerScript -match
             '\[IO\.File\]::Replace\(\$temporary, \$productionAutostartFile, \$null\)') {
         throw 'M6_JAVA_PROCESS_BINDING_CONTRACT_FAILED'
+    }
+    $tests++
+
+    $compositeStart = $brokerScript.IndexOf(
+        'function Start-ResearchProductionProcess')
+    $fastApiStart = $brokerScript.IndexOf(
+        'Start-ResearchFastApiProcess', $compositeStart)
+    $javaStart = $brokerScript.IndexOf(
+        'Start-ResearchBackendProcess', $compositeStart)
+    $compositeStop = $brokerScript.IndexOf(
+        'function Stop-ResearchProductionProcesses')
+    $javaStop = $brokerScript.IndexOf(
+        'Stop-ResearchBackendProcess', $compositeStop)
+    $fastApiStop = $brokerScript.IndexOf(
+        'Stop-ResearchFastApiProcess', $compositeStop)
+    if ($brokerScript -notmatch
+            "quant-ai\\\.venv\\Scripts\\python\.exe" -or
+        $brokerScript -notmatch 'http://127\.0\.0\.1:8001/health' -or
+        $brokerScript -notmatch 'UVICORN_APP_MAIN_V1' -or
+        $brokerScript -notmatch 'M6_FASTAPI_PROCESS_IDENTITY_INVALID' -or
+        $brokerScript -notmatch 'M6_FASTAPI_PORT_OCCUPIED' -or
+        $brokerScript -notmatch 'fastapi\.pid\.json' -or
+        $brokerScript -notmatch 'fastApiState = ''RUNNING''' -or
+        $brokerScript -notmatch 'javaState = ''RUNNING''' -or
+        $compositeStart -lt 0 -or $fastApiStart -le $compositeStart -or
+        $javaStart -le $fastApiStart -or $compositeStop -lt 0 -or
+        $javaStop -le $compositeStop -or $fastApiStop -le $javaStop) {
+        throw 'M6_COMPOSITE_PROCESS_CONTRACT_FAILED'
+    }
+    foreach ($field in @('STOCK_QUANT_FASTAPI_STATUS',
+            'STOCK_QUANT_JAVA_STATUS',
+            'STOCK_QUANT_BACKEND_PORT_OPEN',
+            'STOCK_QUANT_FASTAPI_PORT_OPEN')) {
+        if ($invokerScript -notmatch [regex]::Escape($field) -or
+            $launcherScript -notmatch [regex]::Escape($field)) {
+            throw 'M6_COMPOSITE_RESULT_CONTRACT_FAILED'
+        }
+    }
+    if ($launcherScript -notmatch
+            '\$fastApiState -cne ''RUNNING''' -or
+        $launcherScript -notmatch
+            '\$fastApiPortOpen -cne ''true''' -or
+        $launcherScript -notmatch
+            '\$fastApiPortOpen -cne ''false''') {
+        throw 'M6_COMPOSITE_LAUNCHER_GATE_FAILED'
     }
     $tests++
 

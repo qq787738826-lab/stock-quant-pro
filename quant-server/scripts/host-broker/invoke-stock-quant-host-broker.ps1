@@ -1212,12 +1212,24 @@ try {
             'CHECK_RESEARCH_PRODUCTION_STATUS')) {
         $summaryFields = @($result.summary.PSObject.Properties.Name)
         if ($summaryFields -notcontains 'backendState' -or
+            $summaryFields -notcontains 'fastApiState' -or
+            $summaryFields -notcontains 'javaState' -or
+            $summaryFields -notcontains 'backendPortOpen' -or
+            $summaryFields -notcontains 'fastApiPortOpen' -or
             $summaryFields -notcontains 'autoRecovery' -or
             $summaryFields -notcontains 'providerCallCount' -or
             $summaryFields -notcontains 'retryCount') {
             throw 'STOCK_QUANT_HOST_BROKER_RESULT_INVALID'
         }
         $backendState = [string]$result.summary.backendState
+        $fastApiState = [string]$result.summary.fastApiState
+        $javaState = [string]$result.summary.javaState
+        if ($result.summary.backendPortOpen -isnot [bool] -or
+            $result.summary.fastApiPortOpen -isnot [bool]) {
+            throw 'STOCK_QUANT_HOST_BROKER_RESULT_INVALID'
+        }
+        [bool]$backendPortOpen = $result.summary.backendPortOpen
+        [bool]$fastApiPortOpen = $result.summary.fastApiPortOpen
         $autoRecovery = [string]$result.summary.autoRecovery
         [int]$providerCalls = $result.summary.providerCallCount
         [int]$retryCount = $result.summary.retryCount
@@ -1231,11 +1243,38 @@ try {
             default { @('RUNNING', 'STOPPED') }
         }
         if ($backendState -notin $allowedStates -or
+            $fastApiState -notin @('RUNNING', 'STOPPED') -or
+            $javaState -notin @('RUNNING', 'STOPPED') -or
             $autoRecovery -notin @('ARMED', 'DISARMED', 'EXHAUSTED') -or
             $providerCalls -ne 0 -or $retryCount -ne 0) {
             throw 'STOCK_QUANT_HOST_BROKER_RESULT_INVALID'
         }
+        $compositeRunning = $fastApiState -ceq 'RUNNING' -and
+            $javaState -ceq 'RUNNING' -and $backendPortOpen -and
+            $fastApiPortOpen
+        $compositeStopped = $fastApiState -ceq 'STOPPED' -and
+            $javaState -ceq 'STOPPED' -and -not $backendPortOpen -and
+            -not $fastApiPortOpen
+        if (($backendState -in @('RUNNING', 'ALREADY_RUNNING') -and
+                -not $compositeRunning) -or
+            ($fastApiState -ceq 'RUNNING' -and -not $fastApiPortOpen) -or
+            ($javaState -ceq 'RUNNING' -and -not $backendPortOpen) -or
+            ($backendState -in @('STOPPED', 'ALREADY_STOPPED') -and
+                $Operation -ne 'CHECK_RESEARCH_PRODUCTION_STATUS' -and
+                -not $compositeStopped) -or
+            ($Operation -eq 'START_RESEARCH_PRODUCTION' -and
+                $autoRecovery -cne 'ARMED') -or
+            ($Operation -eq 'STOP_RESEARCH_PRODUCTION' -and
+                $autoRecovery -cne 'DISARMED')) {
+            throw 'STOCK_QUANT_HOST_BROKER_RESULT_INVALID'
+        }
         Write-Output "STOCK_QUANT_BACKEND_STATUS=$backendState"
+        Write-Output "STOCK_QUANT_FASTAPI_STATUS=$fastApiState"
+        Write-Output "STOCK_QUANT_JAVA_STATUS=$javaState"
+        Write-Output ("STOCK_QUANT_BACKEND_PORT_OPEN=" +
+            $backendPortOpen.ToString().ToLowerInvariant())
+        Write-Output ("STOCK_QUANT_FASTAPI_PORT_OPEN=" +
+            $fastApiPortOpen.ToString().ToLowerInvariant())
         Write-Output "STOCK_QUANT_PRODUCTION_AUTO_RECOVERY=$autoRecovery"
         Write-Output 'STOCK_QUANT_PRODUCTION_PROVIDER_CALLS=0'
         Write-Output 'STOCK_QUANT_PRODUCTION_RETRY_COUNT=0'

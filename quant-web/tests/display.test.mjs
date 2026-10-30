@@ -6,6 +6,7 @@ import {
   DISPLAY_MAPPING_COUNT,
   displayAgentRole,
   displayClaimType,
+  displayComponent,
   displayDecision,
   displayProduct,
   displayReason,
@@ -93,6 +94,8 @@ test('普通时间、金额和脱敏错误原因适合中文用户阅读', () =>
   assert.equal(displayReason('M4_SHADOW_REQUEST_INVALID'), '研究时间边界校验未通过')
   assert.equal(displayReason('RESEARCH_SELECTION_PAPER_EXECUTION_NOT_AFTER_AS_OF'),
     '模拟执行时间早于研究时点，已安全拒绝')
+  assert.equal(displayComponent('FastAPI 8001'), 'FastAPI 行情与分析服务')
+  assert.equal(displayReason('FASTAPI_HEALTH_UNAVAILABLE'), 'FastAPI 8001 当前不可用')
   assert.equal(displayReason('SOME_TUSHARE_RUNTIME_ERROR'), '市场数据服务异常')
   assert.ok(DISPLAY_MAPPING_COUNT >= 200)
 })

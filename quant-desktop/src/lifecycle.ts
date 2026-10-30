@@ -21,6 +21,24 @@ export interface StartupResult {
   reusedExistingBackend: boolean;
 }
 
+function isCompositeRunning(status: ProductionStatus): boolean {
+  return status.backendState === 'RUNNING'
+    && status.fastApiState === 'RUNNING'
+    && status.javaState === 'RUNNING'
+    && status.backendPortOpen
+    && status.fastApiPortOpen
+    && status.autoRecovery === 'ARMED';
+}
+
+function isCompositeStopped(status: ProductionStatus): boolean {
+  return status.backendState === 'STOPPED'
+    && status.fastApiState === 'STOPPED'
+    && status.javaState === 'STOPPED'
+    && !status.backendPortOpen
+    && !status.fastApiPortOpen
+    && status.autoRecovery === 'DISARMED';
+}
+
 export class DesktopLifecycle {
   readonly #gateway: ProductionGateway;
   readonly #options: LifecycleOptions;
@@ -66,13 +84,11 @@ export class DesktopLifecycle {
   async #performStartup(onStage: StageListener): Promise<StartupResult> {
     onStage('checking_service');
     let current = await this.#gateway.status();
-    const reusedExistingBackend = current.backendState === 'RUNNING'
-      && current.autoRecovery === 'ARMED';
+    const reusedExistingBackend = isCompositeRunning(current);
     if (!reusedExistingBackend) {
       onStage('starting_backend');
       current = await this.#gateway.start();
-      if (current.backendState !== 'RUNNING'
-          || current.autoRecovery !== 'ARMED') {
+      if (!isCompositeRunning(current)) {
         throw new DesktopLifecycleError(
           'DESKTOP_LIFECYCLE_CONTRACT_INVALID',
         );
@@ -91,16 +107,21 @@ export class DesktopLifecycle {
     while (this.#gateway.now() <= deadline) {
       try {
         const health = await this.#gateway.health();
-        if (health.status === 'HEALTHY') {
+        if (health.status === 'HEALTHY'
+            && health.fastApiStatus === 'HEALTHY') {
           return;
         }
         if (health.status === 'BLOCKED') {
+          if (health.fastApiStatus === 'BLOCKED') {
+            throw new DesktopLifecycleError(health.fastApiReason);
+          }
           throw new DesktopLifecycleError('DESKTOP_BACKEND_BLOCKED');
         }
       } catch (error) {
         if (error instanceof DesktopLifecycleError
             && (error.code === 'DESKTOP_BACKEND_VERSION_MISMATCH'
-              || error.code === 'DESKTOP_BACKEND_BLOCKED')) {
+              || error.code === 'DESKTOP_BACKEND_BLOCKED'
+              || error.code.startsWith('FASTAPI_HEALTH_'))) {
           throw error;
         }
         lastError = error;
@@ -124,9 +145,8 @@ export class DesktopLifecycle {
       // the formal STOP contract and require a subsequent status proof.
     }
 
-    if (current?.backendState === 'STOPPED'
-        && current.autoRecovery === 'DISARMED') {
-      await this.#waitForPortClosed(onStage);
+    if (current && isCompositeStopped(current)) {
+      await this.#waitForPortsClosed(onStage);
       return;
     }
 
@@ -141,23 +161,27 @@ export class DesktopLifecycle {
     const status = await this.#waitForStopped().catch(error => {
       throw stopError ?? error;
     });
-    if (status.backendState !== 'STOPPED'
-        || status.autoRecovery !== 'DISARMED') {
+    if (!isCompositeStopped(status)) {
       throw stopError
         ?? new DesktopLifecycleError('DESKTOP_BACKEND_STOP_UNCONFIRMED');
     }
 
-    await this.#waitForPortClosed(onStage);
+    await this.#waitForPortsClosed(onStage);
   }
 
-  async #waitForPortClosed(onStage: StageListener): Promise<void> {
+  async #waitForPortsClosed(onStage: StageListener): Promise<void> {
     onStage('closing_port');
     const deadline = this.#gateway.now() + this.#options.shutdownTimeoutMs;
+    let last = {backendPortOpen: true, fastApiPortOpen: true};
     while (this.#gateway.now() <= deadline) {
-      if (!await this.#gateway.isBackendPortOpen()) {
+      last = await this.#gateway.ports();
+      if (!last.backendPortOpen && !last.fastApiPortOpen) {
         return;
       }
       await this.#gateway.wait(this.#options.pollIntervalMs);
+    }
+    if (last.fastApiPortOpen) {
+      throw new DesktopLifecycleError('DESKTOP_FASTAPI_PORT_STILL_OPEN');
     }
     throw new DesktopLifecycleError('DESKTOP_BACKEND_PORT_STILL_OPEN');
   }
@@ -168,8 +192,7 @@ export class DesktopLifecycle {
     while (this.#gateway.now() <= deadline) {
       try {
         const status = await this.#gateway.status();
-        if (status.backendState === 'STOPPED'
-            && status.autoRecovery === 'DISARMED') {
+        if (isCompositeStopped(status)) {
           return status;
         }
       } catch (error) {

@@ -156,8 +156,21 @@ if ($launcherText -notmatch 'Invoke-StockQuantStaleBrokerRecovery' -or
     $launcherText -notmatch 'HOST_BROKER_STALE_RECOVERY_UNSAFE' -or
     $launcherText -notmatch 'Assert-StockQuantHostBrokerTaskDefinition' -or
     $launcherText -notmatch 'SQHB_\*\.request\.properties' -or
+    $launcherText -notmatch 'LocalPort 8001' -or
+    $launcherText -notmatch "-Operation 'STOP_RESEARCH_PRODUCTION'" -or
+    $launcherText -notmatch 'backend\.autostart\.json' -or
+    $launcherText -notmatch 'STOCK_QUANT_HOST_BROKER_RESULT_INVALID' -or
     $launcherText -notmatch 'ExpectedGitCommit \$expectedHead\s*\r?\n\s*\$candidate') {
     throw 'STARTUP_SELF_HEAL_STALE_BROKER_CONTRACT_FAILED'
+}
+$tests++
+
+$compatibilityStop = $launcherText.IndexOf(
+    "-Operation 'STOP_RESEARCH_PRODUCTION'")
+$brokerStop = $launcherText.IndexOf(
+    'Stop-Process -Id ([int]$Heartbeat.processId)')
+if ($compatibilityStop -lt 0 -or $brokerStop -le $compatibilityStop) {
+    throw 'STARTUP_SELF_HEAL_STALE_STOP_ORDER_FAILED'
 }
 $tests++
 

@@ -50,6 +50,17 @@ test('NSIS configuration creates both desktop and Start Menu shortcuts', async (
   assert.match(installer, /DeleteRegKey HKCU/)
 })
 
+test('window X is guarded by the composite shutdown contract', async () => {
+  const main = await readFile(path.join(desktopRoot, 'src', 'main.ts'), 'utf8')
+  const lifecycle = await readFile(
+    path.join(desktopRoot, 'src', 'lifecycle.ts'), 'utf8',
+  )
+  assert.match(main, /window\.on\('close',[\s\S]*?event\.preventDefault\(\)[\s\S]*?this\.shutdown\(\)/)
+  assert.match(main, /ports 8080\/8001[\s\S]*?are closed/)
+  assert.match(lifecycle, /status\.autoRecovery === 'DISARMED'/)
+  assert.match(lifecycle, /!last\.backendPortOpen && !last\.fastApiPortOpen/)
+})
+
 test('formal lifecycle projection stays provider-free and branch-scoped', async () => {
   const invoker = await readFile(path.join(
     repositoryRoot,
@@ -80,6 +91,9 @@ test('formal lifecycle projection stays provider-free and branch-scoped', async 
   assert.match(invoker.slice(invokerLifecycle, invokerLifecycle + 1400),
     new RegExp(hotfixBranch.replaceAll('.', '\\.')))
   assert.match(invoker, /STOCK_QUANT_BACKEND_STATUS=/)
+  assert.match(invoker, /STOCK_QUANT_FASTAPI_STATUS=/)
+  assert.match(invoker, /STOCK_QUANT_JAVA_STATUS=/)
+  assert.match(invoker, /STOCK_QUANT_FASTAPI_PORT_OPEN=/)
   assert.match(invoker, /STOCK_QUANT_PRODUCTION_AUTO_RECOVERY=/)
   assert.match(invoker, /STOCK_QUANT_PRODUCTION_PROVIDER_CALLS=0/)
   assert.match(launcher, /STOCK_QUANT_PRODUCTION_STATUS=STOPPED/)
@@ -89,6 +103,18 @@ test('formal lifecycle projection stays provider-free and branch-scoped', async 
     /Stop-Process -Id \(\[int\]\$Heartbeat\.processId\) -ErrorAction Stop/)
   assert.match(launcher, /HOST_BROKER_STALE_RECOVERY_UNSAFE/)
   assert.match(broker, /M6_PRODUCTION_PROCESS_IDENTITY_INVALID/)
+  assert.match(broker, /quant-ai\\\.venv\\Scripts\\python\.exe/)
+  assert.match(broker, /M6_FASTAPI_PROCESS_IDENTITY_INVALID/)
+  const compositeStart = broker.indexOf('function Start-ResearchProductionProcess')
+  const fastApiStart = broker.indexOf('Start-ResearchFastApiProcess', compositeStart)
+  const backendStart = broker.indexOf('Start-ResearchBackendProcess', compositeStart)
+  assert.ok(compositeStart >= 0 && fastApiStart > compositeStart
+    && backendStart > fastApiStart)
+  const compositeStop = broker.indexOf('function Stop-ResearchProductionProcesses')
+  const backendStop = broker.indexOf('Stop-ResearchBackendProcess', compositeStop)
+  const fastApiStop = broker.indexOf('Stop-ResearchFastApiProcess', compositeStop)
+  assert.ok(compositeStop >= 0 && backendStop > compositeStop
+    && fastApiStop > backendStop)
   assert.match(broker, /\/api\/system\/lifecycle\/stop/)
   assert.doesNotMatch(mainCommandSurface(broker), /RUN_RESEARCH_SELECTION/)
 })
@@ -99,7 +125,7 @@ test('STOPPED status returns before HTTP health and remains fail-closed otherwis
     'quant-server', 'scripts', 'start-stock-quant-pro.ps1',
   ), 'utf8')
   const stopped = launcher.indexOf(
-    "if ($Action -eq 'Status' -and $backendState -eq 'STOPPED')",
+    "if ($Action -eq 'Status' -and $backendState -eq 'STOPPED' -and",
   )
   const health = launcher.indexOf('$health = Get-SystemHealth', stopped)
   const runningGuard = launcher.indexOf(

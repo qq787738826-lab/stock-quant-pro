@@ -52,12 +52,19 @@ $automaticDailyMarketDataMaintenanceRunnerScript = Join-Path `
     'quant-server\scripts\run-automatic-daily-market-data-maintenance.ps1'
 $productionRoot = Join-Path $paths.TargetRoot 'stock-quant-production'
 $productionPidFile = Join-Path $productionRoot 'backend.pid.json'
+$productionFastApiPidFile = Join-Path $productionRoot 'fastapi.pid.json'
 $productionAutostartFile = Join-Path $productionRoot 'backend.autostart.json'
 $productionRecoveryStatusFile = Join-Path $productionRoot `
     'backend.recovery-status.json'
 $productionStdout = Join-Path $productionRoot 'logs\backend.stdout.log'
 $productionStderr = Join-Path $productionRoot 'logs\backend.stderr.log'
+$productionFastApiStdout = Join-Path $productionRoot `
+    'logs\fastapi.stdout.log'
+$productionFastApiStderr = Join-Path $productionRoot `
+    'logs\fastapi.stderr.log'
 $productionMaximumRestarts = 3
+$productionJavaExecutableCache = $null
+$productionPythonExecutableCache = $null
 $fakeE2eScript = Join-Path $paths.RepositoryRoot `
     'quant-server\scripts\run-reduced-research-day001-e2e-dry-run.ps1'
 $mutex = [Threading.Mutex]::new($false, 'Local\StockQuantLocalBroker')
@@ -2455,7 +2462,16 @@ function Invoke-AutomaticDailyMarketDataMaintenance {
     return $summary
 }
 
+function Get-ResearchProductionJavaPath {
+    return Resolve-ResearchProductionJavaExecutable
+}
+
 function Resolve-ResearchProductionJavaExecutable {
+    if ($null -ne $productionJavaExecutableCache -and
+        (Test-Path -LiteralPath $productionJavaExecutableCache `
+            -PathType Leaf)) {
+        return $productionJavaExecutableCache
+    }
     $command = 'java.exe'
     $oldPreference = $ErrorActionPreference
     try {
@@ -2480,12 +2496,214 @@ function Resolve-ResearchProductionJavaExecutable {
         $versions.Count -ne 1 -or $versions[0] -notmatch '^17(?:\.|$)') {
         throw 'M6_JAVA_17_RUNTIME_INVALID'
     }
-    $java = [IO.Path]::GetFullPath(
+    $reportedJava = [IO.Path]::GetFullPath(
         (Join-Path $homes[0] 'bin\java.exe'))
-    if (-not (Test-Path -LiteralPath $java -PathType Leaf)) {
+    if (-not (Test-Path -LiteralPath $reportedJava -PathType Leaf)) {
         throw 'M6_JAVA_17_RUNTIME_INVALID'
     }
-    return $java
+    $script:productionJavaExecutableCache = $reportedJava
+    return $reportedJava
+}
+
+function Get-ResearchProductionPythonPath {
+    return Resolve-ResearchProductionPythonExecutable
+}
+
+function Resolve-ResearchProductionPythonExecutable {
+    if ($null -ne $productionPythonExecutableCache -and
+        (Test-Path -LiteralPath $productionPythonExecutableCache `
+            -PathType Leaf)) {
+        return $productionPythonExecutableCache
+    }
+    $python = [IO.Path]::GetFullPath((Join-Path $paths.RepositoryRoot `
+        'quant-ai\.venv\Scripts\python.exe'))
+    if (-not (Test-Path -LiteralPath $python -PathType Leaf)) {
+        throw 'M6_FASTAPI_PYTHON_MISSING'
+    }
+    $oldPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        $details = @(& $python '--version' 2>&1 |
+            ForEach-Object { [string]$_ })
+        $pythonExitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $oldPreference
+    }
+    if ($pythonExitCode -ne 0 -or $details.Count -ne 1 -or
+        $details[0] -notmatch '^Python 3\.11(?:\.|$)') {
+        throw 'M6_FASTAPI_PYTHON_INVALID'
+    }
+    $script:productionPythonExecutableCache = $python
+    return $python
+}
+
+function Get-ResearchProductionPortOwner {
+    param(
+        [Parameter(Mandatory = $true)]
+        [ValidateSet(8001, 8080)]
+        [int] $Port
+    )
+    $listeners = @(Get-NetTCPConnection -State Listen -LocalPort $Port `
+        -ErrorAction SilentlyContinue)
+    $owners = @($listeners | ForEach-Object { [int]$_.OwningProcess } |
+        Sort-Object -Unique)
+    if ($owners.Count -gt 1) {
+        throw 'M6_PRODUCTION_PORT_IDENTITY_INVALID'
+    }
+    if ($owners.Count -eq 0) { return $null }
+    return [int]$owners[0]
+}
+
+function Wait-ResearchProductionPortClosed {
+    param(
+        [Parameter(Mandatory = $true)]
+        [ValidateSet(8001, 8080)]
+        [int] $Port,
+        [int] $TimeoutSeconds = 10
+    )
+    $deadline = [DateTimeOffset]::UtcNow.AddSeconds($TimeoutSeconds)
+    do {
+        if ($null -eq (Get-ResearchProductionPortOwner -Port $Port)) {
+            return $true
+        }
+        Start-Sleep -Milliseconds 100
+    } while ([DateTimeOffset]::UtcNow -lt $deadline)
+    return $false
+}
+
+function Get-ResearchProductionProcessCreatedAt {
+    param([Parameter(Mandatory = $true)] [object] $Process)
+    return ([DateTimeOffset]$Process.CreationDate).ToUniversalTime().ToString('o')
+}
+
+function Test-ResearchProductionProcessCreatedAt {
+    param(
+        [Parameter(Mandatory = $true)] [object] $Process,
+        [Parameter(Mandatory = $true)] [string] $Expected,
+        [int] $ToleranceSeconds = 1
+    )
+    try {
+        $recorded = [DateTimeOffset]::Parse($Expected).ToUniversalTime()
+        $actual = ([DateTimeOffset]$Process.CreationDate).ToUniversalTime()
+        return [Math]::Abs(($actual - $recorded).TotalSeconds) -lt
+            $ToleranceSeconds
+    } catch { return $false }
+}
+
+function Test-ResearchProductionNativeProcessCreatedAt {
+    param(
+        [Parameter(Mandatory = $true)] [object] $Process,
+        [Parameter(Mandatory = $true)] [string] $Expected,
+        [int] $ToleranceSeconds = 1
+    )
+    try {
+        $recorded = [DateTimeOffset]::Parse($Expected).ToUniversalTime()
+        $actual = ([DateTimeOffset]$Process.StartTime).ToUniversalTime()
+        return [Math]::Abs(($actual - $recorded).TotalSeconds) -lt
+            $ToleranceSeconds
+    } catch { return $false }
+}
+
+function Write-ResearchProductionPidState {
+    param(
+        [Parameter(Mandatory = $true)] [string] $Path,
+        [Parameter(Mandatory = $true)]
+        [System.Collections.IDictionary] $State
+    )
+    New-Item -ItemType Directory -Path (Split-Path -Parent $Path) `
+        -Force | Out-Null
+    $temporary = "$Path.$PID.tmp"
+    $backup = "$Path.$PID.backup"
+    try {
+        [IO.File]::WriteAllText($temporary,
+            ($State | ConvertTo-Json -Depth 4) + "`n",
+            [Text.UTF8Encoding]::new($false))
+        if (Test-Path -LiteralPath $Path -PathType Leaf) {
+            Remove-Item -LiteralPath $backup -Force `
+                -ErrorAction SilentlyContinue
+            [IO.File]::Replace($temporary, $Path, $backup)
+        } else {
+            [IO.File]::Move($temporary, $Path)
+        }
+    } finally {
+        Remove-Item -LiteralPath $temporary -Force `
+            -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $backup -Force `
+            -ErrorAction SilentlyContinue
+    }
+}
+
+function Test-ResearchFastApiHealth {
+    try {
+        $health = Invoke-RestMethod -Uri `
+            'http://127.0.0.1:8001/health' -Method Get -TimeoutSec 3 `
+            -MaximumRedirection 0
+        return [string]$health.status -ceq 'UP' -and
+            [string]$health.version -ceq '1.3.1'
+    } catch { return $false }
+}
+
+function Get-ResearchFastApiProcess {
+    if (-not (Test-Path -LiteralPath $productionFastApiPidFile `
+            -PathType Leaf)) { return $null }
+    try {
+        $state = Get-Content -LiteralPath $productionFastApiPidFile -Raw `
+            -Encoding UTF8 | ConvertFrom-Json
+        $expected = @('schemaVersion', 'processId', 'gitCommit',
+            'pythonPath', 'appDirectory', 'commandContract',
+            'processCreatedAt', 'startedAt')
+        $actual = @($state.PSObject.Properties.Name)
+        if ($actual.Count -ne $expected.Count -or
+            @($expected | Where-Object { $_ -notin $actual }).Count -ne 0 -or
+            $state.schemaVersion -cne
+                'STOCK_QUANT_RESEARCH_FASTAPI_PROCESS_V1' -or
+            [int]$state.processId -le 0 -or
+            [string]$state.gitCommit -notmatch '^[0-9a-f]{40}$' -or
+            [string]$state.commandContract -cne 'UVICORN_APP_MAIN_V1') {
+            throw 'M6_FASTAPI_PROCESS_STATE_INVALID'
+        }
+        $process = Get-CimInstance Win32_Process -Filter `
+            "ProcessId=$([int]$state.processId)" -ErrorAction SilentlyContinue
+        if ($null -eq $process) {
+            Remove-Item -LiteralPath $productionFastApiPidFile -Force `
+                -ErrorAction SilentlyContinue
+            return $null
+        }
+        $python = Get-ResearchProductionPythonPath
+        $appDirectory = [IO.Path]::GetFullPath(
+            (Join-Path $paths.RepositoryRoot 'quant-ai'))
+        $commandLine = [string]$process.CommandLine
+        $commandPattern = '^\s*"?' + [regex]::Escape($python) +
+            '"?\s+-m\s+uvicorn\s+app\.main:app\s+--app-dir\s+"?' +
+            [regex]::Escape($appDirectory) +
+            '"?\s+--host\s+127\.0\.0\.1\s+--port\s+8001\s+' +
+            '--workers\s+1\s+--no-access-log\s*$'
+        if ($process.Name -ne 'python.exe' -or
+            -not [IO.Path]::GetFullPath([string]$process.ExecutablePath).Equals(
+                $python, [StringComparison]::OrdinalIgnoreCase) -or
+            -not [IO.Path]::GetFullPath([string]$state.pythonPath).Equals(
+                $python, [StringComparison]::OrdinalIgnoreCase) -or
+            -not [IO.Path]::GetFullPath([string]$state.appDirectory).Equals(
+                $appDirectory, [StringComparison]::OrdinalIgnoreCase) -or
+            $commandLine -notmatch $commandPattern -or
+            $commandLine -match '(?i)(password|token|api.?key|secret)' -or
+            -not (Test-ResearchProductionProcessCreatedAt -Process $process `
+                -Expected ([string]$state.processCreatedAt))) {
+            throw 'M6_FASTAPI_PROCESS_IDENTITY_INVALID'
+        }
+        $owner = Get-ResearchProductionPortOwner -Port 8001
+        if ($null -eq $owner -or $owner -ne [int]$state.processId) {
+            throw 'M6_FASTAPI_PROCESS_IDENTITY_INVALID'
+        }
+        return [pscustomobject]@{ Process = $process; State = $state }
+    } catch {
+        if ($_.Exception.Message -in @(
+                'M6_FASTAPI_PYTHON_MISSING',
+                'M6_FASTAPI_PYTHON_INVALID',
+                'M6_FASTAPI_PROCESS_IDENTITY_INVALID',
+                'M6_PRODUCTION_PORT_IDENTITY_INVALID')) { throw }
+        throw 'M6_FASTAPI_PROCESS_STATE_INVALID'
+    }
 }
 
 function Get-ResearchProductionProcess {
@@ -2510,18 +2728,193 @@ function Get-ResearchProductionProcess {
         $fixedJar = [IO.Path]::GetFullPath(
             (Join-Path $paths.TargetRoot `
                 'quant-server-1.3.1-research-production.jar'))
+        $legacy = [string]$state.schemaVersion -ceq
+            'STOCK_QUANT_RESEARCH_PRODUCTION_PROCESS_V1'
+        $java = Get-ResearchProductionJavaPath
+        $commandLine = [string]$process.CommandLine
+        $legacyCommandPattern = '^\s*"?' + [regex]::Escape($java) +
+            '"?\s+-jar\s+"?' + [regex]::Escape($fixedJar) + '"?\s*$'
+        $workingDirectory = [IO.Path]::GetFullPath($paths.RepositoryRoot)
+        $workingArgument = '-Dstockquant.runtime.working-directory=' +
+            $workingDirectory
+        $v2CommandPattern = '^\s*"?' + [regex]::Escape($java) +
+            '"?\s+"?' + [regex]::Escape($workingArgument) +
+            '"?\s+-jar\s+"?' + [regex]::Escape($fixedJar) + '"?\s*$'
         if ($process.Name -ne 'java.exe' -or
+            -not [IO.Path]::GetFullPath([string]$process.ExecutablePath).Equals(
+                $java, [StringComparison]::OrdinalIgnoreCase) -or
             -not [IO.Path]::GetFullPath([string]$state.jarPath).Equals(
                 $fixedJar, [StringComparison]::OrdinalIgnoreCase) -or
-            [string]$process.CommandLine -notmatch
-                [regex]::Escape(' -jar "' + $fixedJar + '"') -or
-            [string]$process.CommandLine -match '(?i)(password|token|api.?key)') {
+            ($legacy -and $commandLine -notmatch $legacyCommandPattern) -or
+            (-not $legacy -and $commandLine -notmatch $v2CommandPattern) -or
+            $commandLine -match '(?i)(password|token|api.?key|secret)') {
             throw 'M6_PRODUCTION_PROCESS_IDENTITY_INVALID'
         }
-        return [pscustomobject]@{ Process = $process; State = $state }
+        if ($legacy) {
+            $expected = @('schemaVersion', 'processId', 'gitCommit',
+                'jarPath', 'jarSha256', 'startedAt')
+            $actual = @($state.PSObject.Properties.Name)
+            if ($actual.Count -ne $expected.Count -or
+                @($expected | Where-Object { $_ -notin $actual }).Count -ne 0 -or
+                -not (Test-ResearchProductionProcessCreatedAt `
+                    -Process $process -Expected ([string]$state.startedAt) `
+                    -ToleranceSeconds 5)) {
+                throw 'M6_PRODUCTION_PROCESS_IDENTITY_INVALID'
+            }
+        } else {
+            $expected = @('schemaVersion', 'processId', 'gitCommit',
+                'jarPath', 'jarSha256', 'javaPath', 'workingDirectory',
+                'commandContract', 'processCreatedAt', 'startedAt')
+            $actual = @($state.PSObject.Properties.Name)
+            if ($actual.Count -ne $expected.Count -or
+                @($expected | Where-Object { $_ -notin $actual }).Count -ne 0 -or
+                [string]$state.schemaVersion -cne
+                    'STOCK_QUANT_RESEARCH_PRODUCTION_PROCESS_V2' -or
+                [string]$state.commandContract -cne 'JAVA_JAR_V2' -or
+                -not [IO.Path]::GetFullPath([string]$state.javaPath).Equals(
+                    $java, [StringComparison]::OrdinalIgnoreCase) -or
+                -not [IO.Path]::GetFullPath(
+                    [string]$state.workingDirectory).Equals(
+                    $workingDirectory,
+                    [StringComparison]::OrdinalIgnoreCase) -or
+                -not (Test-ResearchProductionProcessCreatedAt `
+                    -Process $process `
+                    -Expected ([string]$state.processCreatedAt))) {
+                throw 'M6_PRODUCTION_PROCESS_IDENTITY_INVALID'
+            }
+        }
+        $owner = Get-ResearchProductionPortOwner -Port 8080
+        if ($null -eq $owner -or $owner -ne [int]$state.processId) {
+            throw 'M6_PRODUCTION_PROCESS_IDENTITY_INVALID'
+        }
+        return [pscustomobject]@{
+            Process = $process
+            State = $state
+            Legacy = $legacy
+        }
     } catch {
+        if ($_.Exception.Message -in @(
+                'M6_JAVA_17_RUNTIME_INVALID',
+                'M6_PRODUCTION_PROCESS_IDENTITY_INVALID',
+                'M6_PRODUCTION_PORT_IDENTITY_INVALID')) { throw }
         throw 'M6_PRODUCTION_PROCESS_STATE_INVALID'
     }
+}
+
+function Start-ResearchFastApiProcess {
+    param(
+        [Parameter(Mandatory = $true)] [object] $Binding,
+        [switch] $Recovery
+    )
+    $owner = Get-ResearchProductionPortOwner -Port 8001
+    if ($null -ne $owner) { throw 'M6_FASTAPI_PORT_OCCUPIED' }
+    $python = Resolve-ResearchProductionPythonExecutable
+    $appDirectory = [IO.Path]::GetFullPath(
+        (Join-Path $paths.RepositoryRoot 'quant-ai'))
+    New-Item -ItemType Directory -Path (
+        Split-Path -Parent $productionFastApiStdout) -Force | Out-Null
+    foreach ($log in @($productionFastApiStdout, $productionFastApiStderr)) {
+        if (Test-Path -LiteralPath $log -PathType Leaf) {
+            Move-Item -LiteralPath $log -Destination `
+                "$log.$([DateTimeOffset]::UtcNow.Ticks).previous"
+        }
+    }
+    $arguments = @('-m', 'uvicorn', 'app.main:app', '--app-dir',
+        ('"' + $appDirectory + '"'), '--host', '127.0.0.1', '--port',
+        '8001', '--workers', '1', '--no-access-log')
+    $process = $null
+    try {
+        $process = Start-Process -FilePath $python -ArgumentList $arguments `
+            -WorkingDirectory $appDirectory -WindowStyle Hidden -PassThru `
+            -RedirectStandardOutput $productionFastApiStdout `
+            -RedirectStandardError $productionFastApiStderr
+        [void]$process.Handle
+        $cim = Get-CimInstance Win32_Process -Filter `
+            "ProcessId=$($process.Id)" -ErrorAction SilentlyContinue
+        if ($null -eq $cim) {
+            throw 'M6_FASTAPI_PROCESS_STATE_INVALID'
+        }
+        $state = [ordered]@{
+            schemaVersion = 'STOCK_QUANT_RESEARCH_FASTAPI_PROCESS_V1'
+            processId = $process.Id
+            gitCommit = $Binding.GitCommit
+            pythonPath = $python
+            appDirectory = $appDirectory
+            commandContract = 'UVICORN_APP_MAIN_V1'
+            processCreatedAt = Get-ResearchProductionProcessCreatedAt `
+                -Process $cim
+            startedAt = [DateTimeOffset]::UtcNow.ToString('o')
+        }
+        Write-ResearchProductionPidState -Path $productionFastApiPidFile `
+            -State $state
+        $deadline = [DateTimeOffset]::UtcNow.AddSeconds(45)
+        while ([DateTimeOffset]::UtcNow -lt $deadline) {
+            if ($Recovery) { Write-BrokerHeartbeat -State IDLE }
+            if ($process.HasExited) { throw 'M6_FASTAPI_EXITED' }
+            if ((Test-ResearchFastApiHealth) -and
+                (Get-ResearchProductionPortOwner -Port 8001) -eq
+                    $process.Id) {
+                return Get-ResearchFastApiProcess
+            }
+            Start-Sleep -Milliseconds 250
+        }
+        throw 'M6_FASTAPI_HEALTH_TIMEOUT'
+    } catch {
+        $originalError = $_
+        $cleanupClosed = $false
+        try {
+            if ($null -ne $process -and -not $process.HasExited) {
+                Stop-Process -InputObject $process -Force `
+                    -ErrorAction SilentlyContinue
+            }
+            $cleanupClosed = Wait-ResearchProductionPortClosed -Port 8001
+        } catch {
+            $cleanupClosed = $false
+        }
+        if (-not $cleanupClosed) { throw 'M6_FASTAPI_STOP_FAILED' }
+        Remove-Item -LiteralPath $productionFastApiPidFile -Force `
+            -ErrorAction SilentlyContinue
+        throw $originalError
+    }
+}
+
+function Stop-ResearchFastApiProcess {
+    param([AllowNull()] [object] $Managed)
+    if ($null -eq $Managed) {
+        $owner = Get-ResearchProductionPortOwner -Port 8001
+        if ($null -ne $owner) { throw 'M6_FASTAPI_PORT_OCCUPIED' }
+        Remove-Item -LiteralPath $productionFastApiPidFile -Force `
+            -ErrorAction SilentlyContinue
+        return
+    }
+    $Managed = Get-ResearchFastApiProcess
+    if ($null -eq $Managed) {
+        if (-not (Wait-ResearchProductionPortClosed -Port 8001 `
+                -TimeoutSeconds 1)) { throw 'M6_FASTAPI_STOP_FAILED' }
+        Remove-Item -LiteralPath $productionFastApiPidFile -Force `
+            -ErrorAction SilentlyContinue
+        return
+    }
+    $native = Get-Process -Id ([int]$Managed.Process.ProcessId) `
+        -ErrorAction SilentlyContinue
+    if ($null -eq $native -or
+        -not (Test-ResearchProductionNativeProcessCreatedAt `
+            -Process $native `
+            -Expected ([string]$Managed.State.processCreatedAt))) {
+        throw 'M6_FASTAPI_PROCESS_IDENTITY_INVALID'
+    }
+    Stop-Process -InputObject $native -Force -ErrorAction SilentlyContinue
+    $deadline = [DateTimeOffset]::UtcNow.AddSeconds(10)
+    do {
+        Start-Sleep -Milliseconds 100
+        $alive = -not $native.HasExited
+    } while ($alive -and [DateTimeOffset]::UtcNow -lt $deadline)
+    if ($alive -or
+        -not (Wait-ResearchProductionPortClosed -Port 8001)) {
+        throw 'M6_FASTAPI_STOP_FAILED'
+    }
+    Remove-Item -LiteralPath $productionFastApiPidFile -Force `
+        -ErrorAction SilentlyContinue
 }
 
 function Assert-ResearchProductionBinding {
@@ -2591,7 +2984,7 @@ function Write-ResearchProductionAutostart {
     )
     New-Item -ItemType Directory -Path $productionRoot -Force | Out-Null
     $state = [ordered]@{
-        schemaVersion = 'STOCK_QUANT_RESEARCH_PRODUCTION_AUTOSTART_V1'
+        schemaVersion = 'STOCK_QUANT_RESEARCH_PRODUCTION_AUTOSTART_V2'
         enabled = $true
         gitCommit = [string]$Binding.GitCommit
         jarPath = [IO.Path]::GetFullPath([string]$Binding.JarPath)
@@ -2644,8 +3037,9 @@ function Read-ResearchProductionAutostart {
         }
         if ($actual.Count -ne $expected.Count -or
             @($expected | Where-Object { $_ -notin $actual }).Count -ne 0 -or
-            $state.schemaVersion -cne
-                'STOCK_QUANT_RESEARCH_PRODUCTION_AUTOSTART_V1' -or
+            $state.schemaVersion -notin @(
+                'STOCK_QUANT_RESEARCH_PRODUCTION_AUTOSTART_V1',
+                'STOCK_QUANT_RESEARCH_PRODUCTION_AUTOSTART_V2') -or
             $state.enabled -ne $true -or [int]$state.restartCount -lt 0 -or
             [int]$state.restartCount -gt $productionMaximumRestarts -or
             -not $lastRestartValid) {
@@ -2667,12 +3061,37 @@ function Read-ResearchProductionAutostart {
     }
 }
 
-function Start-ResearchProductionProcess {
+function Get-ResearchBackendHealth {
+    param([Parameter(Mandatory = $true)] [object] $Binding)
+    try {
+        $health = Invoke-RestMethod -Uri `
+            'http://127.0.0.1:8080/api/system/health' -Method Get `
+            -TimeoutSec 3 -MaximumRedirection 0
+        $fastApi = @($health.data.components | Where-Object {
+            [string]$_.component -ceq 'FastAPI 8001' -and
+            [string]$_.status -ceq 'HEALTHY'
+        })
+        $backend = @($health.data.components | Where-Object {
+            [string]$_.component -ceq 'Backend' -and
+            [string]$_.status -ceq 'HEALTHY'
+        })
+        if ($health.success -eq $true -and
+            [string]$health.data.gitCommit -ceq [string]$Binding.GitCommit -and
+            $fastApi.Count -eq 1 -and $backend.Count -eq 1) {
+            return $health
+        }
+    } catch { }
+    return $null
+}
+
+function Start-ResearchBackendProcess {
     param(
         [Parameter(Mandatory = $true)] [object] $Binding,
         [switch] $Recovery
     )
     Assert-ResearchProductionBinding -Binding $Binding
+    $owner = Get-ResearchProductionPortOwner -Port 8080
+    if ($null -ne $owner) { throw 'M6_BACKEND_PORT_OCCUPIED' }
     if (Test-Path -LiteralPath $productionPidFile) {
         Remove-Item -LiteralPath $productionPidFile -Force
     }
@@ -2681,63 +3100,213 @@ function Start-ResearchProductionProcess {
     foreach ($log in @($productionStdout, $productionStderr)) {
         if (Test-Path -LiteralPath $log) {
             Move-Item -LiteralPath $log -Destination `
-                "$log.$([DateTimeOffset]::UtcNow.ToUnixTimeSeconds()).previous"
+                "$log.$([DateTimeOffset]::UtcNow.Ticks).previous"
         }
     }
     $javaExecutable = Resolve-ResearchProductionJavaExecutable
-    $process = Start-Process -FilePath $javaExecutable `
-        -ArgumentList @('-jar', ('"' + $Binding.JarPath + '"')) `
-        -WorkingDirectory $paths.RepositoryRoot -WindowStyle Hidden -PassThru `
-        -RedirectStandardOutput $productionStdout `
-        -RedirectStandardError $productionStderr
-    $state = [ordered]@{
-        schemaVersion = 'STOCK_QUANT_RESEARCH_PRODUCTION_PROCESS_V1'
-        processId = $process.Id
-        gitCommit = $Binding.GitCommit
-        jarPath = $Binding.JarPath
-        jarSha256 = $Binding.JarSha256
-        startedAt = [DateTimeOffset]::UtcNow.ToString('o')
-    }
-    [IO.File]::WriteAllText($productionPidFile,
-        ($state | ConvertTo-Json -Depth 3) + "`n",
-        [Text.UTF8Encoding]::new($false))
-    $deadline = [DateTimeOffset]::UtcNow.AddSeconds(90)
-    $health = $null
-    while ([DateTimeOffset]::UtcNow -lt $deadline) {
-        if ($Recovery) { Write-BrokerHeartbeat -State IDLE }
-        if ($process.HasExited) {
-            Remove-Item -LiteralPath $productionPidFile -Force `
-                -ErrorAction SilentlyContinue
-            throw 'M6_PRODUCTION_BACKEND_EXITED'
+    $workingDirectory = [IO.Path]::GetFullPath($paths.RepositoryRoot)
+    $workingBinding = '"-Dstockquant.runtime.working-directory=' +
+        $workingDirectory + '"'
+    $process = $null
+    try {
+        $process = Start-Process -FilePath $javaExecutable `
+            -ArgumentList @($workingBinding, '-jar',
+                ('"' + $Binding.JarPath + '"')) `
+            -WorkingDirectory $workingDirectory -WindowStyle Hidden `
+            -PassThru -RedirectStandardOutput $productionStdout `
+            -RedirectStandardError $productionStderr
+        [void]$process.Handle
+        $cim = Get-CimInstance Win32_Process -Filter `
+            "ProcessId=$($process.Id)" -ErrorAction SilentlyContinue
+        if ($null -eq $cim) {
+            throw 'M6_PRODUCTION_PROCESS_STATE_INVALID'
         }
-        try {
-            $health = Invoke-RestMethod -Uri `
-                'http://127.0.0.1:8080/api/system/health' `
-                -Method Get -TimeoutSec 3
-            if ($health.success -and
-                $health.data.gitCommit -eq $Binding.GitCommit) {
-                break
+        $state = [ordered]@{
+            schemaVersion = 'STOCK_QUANT_RESEARCH_PRODUCTION_PROCESS_V2'
+            processId = $process.Id
+            gitCommit = $Binding.GitCommit
+            jarPath = $Binding.JarPath
+            jarSha256 = $Binding.JarSha256
+            javaPath = $javaExecutable
+            workingDirectory = $workingDirectory
+            commandContract = 'JAVA_JAR_V2'
+            processCreatedAt = Get-ResearchProductionProcessCreatedAt `
+                -Process $cim
+            startedAt = [DateTimeOffset]::UtcNow.ToString('o')
+        }
+        Write-ResearchProductionPidState -Path $productionPidFile -State $state
+        $deadline = [DateTimeOffset]::UtcNow.AddSeconds(90)
+        $health = $null
+        while ([DateTimeOffset]::UtcNow -lt $deadline) {
+            if ($Recovery) { Write-BrokerHeartbeat -State IDLE }
+            if ($process.HasExited) {
+                throw 'M6_PRODUCTION_BACKEND_EXITED'
             }
-        } catch { }
-        Start-Sleep -Milliseconds 500
-    }
-    if ($null -eq $health -or -not $health.success -or
-        $health.data.gitCommit -ne $Binding.GitCommit) {
-        Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            $health = Get-ResearchBackendHealth -Binding $Binding
+            if ($null -ne $health -and
+                (Get-ResearchProductionPortOwner -Port 8080) -eq
+                    $process.Id) {
+                return [pscustomobject]@{
+                    Process = $process
+                    Health = $health
+                }
+            }
+            Start-Sleep -Milliseconds 500
+        }
+        if (-not (Test-ResearchFastApiHealth)) {
+            throw 'M6_FASTAPI_HEALTH_TIMEOUT'
+        }
+        throw 'M6_PRODUCTION_HEALTH_TIMEOUT'
+    } catch {
+        $originalError = $_
+        $cleanupClosed = $false
+        try {
+            if ($null -ne $process -and -not $process.HasExited) {
+                Stop-Process -InputObject $process -Force `
+                    -ErrorAction SilentlyContinue
+            }
+            $cleanupClosed = Wait-ResearchProductionPortClosed -Port 8080
+        } catch {
+            $cleanupClosed = $false
+        }
+        if (-not $cleanupClosed) { throw 'M6_PRODUCTION_STOP_FAILED' }
         Remove-Item -LiteralPath $productionPidFile -Force `
             -ErrorAction SilentlyContinue
-        throw 'M6_PRODUCTION_HEALTH_TIMEOUT'
+        throw $originalError
     }
-    return [ordered]@{
-        backendState = 'RUNNING'
-        processId = $process.Id
-        schemaVersion = [int](
-            $health.data.components | Where-Object component -eq 'Database'
-        ).details.schemaVersion
-        schedulerState = [string]$health.data.scheduler.state
-        overallHealth = [string]$health.data.status
-        providerCallCount = 0
-        retryCount = 0
+}
+
+function Stop-ResearchBackendProcess {
+    param([AllowNull()] [object] $Managed)
+    if ($null -eq $Managed) {
+        $owner = Get-ResearchProductionPortOwner -Port 8080
+        if ($null -ne $owner) { throw 'M6_BACKEND_PORT_OCCUPIED' }
+        Remove-Item -LiteralPath $productionPidFile -Force `
+            -ErrorAction SilentlyContinue
+        return $false
+    }
+    $Managed = Get-ResearchProductionProcess
+    if ($null -eq $Managed) {
+        if (-not (Wait-ResearchProductionPortClosed -Port 8080 `
+                -TimeoutSeconds 1)) { throw 'M6_PRODUCTION_STOP_FAILED' }
+        Remove-Item -LiteralPath $productionPidFile -Force `
+            -ErrorAction SilentlyContinue
+        return $false
+    }
+    $native = Get-Process -Id ([int]$Managed.Process.ProcessId) `
+        -ErrorAction SilentlyContinue
+    $createdAt = if ($Managed.Legacy) {
+        [string]$Managed.State.startedAt
+    } else {
+        [string]$Managed.State.processCreatedAt
+    }
+    $creationTolerance = if ($Managed.Legacy) { 5 } else { 1 }
+    if ($null -eq $native -or
+        -not (Test-ResearchProductionNativeProcessCreatedAt `
+            -Process $native -Expected $createdAt `
+            -ToleranceSeconds $creationTolerance)) {
+        throw 'M6_PRODUCTION_PROCESS_IDENTITY_INVALID'
+    }
+    $graceful = $false
+    try {
+        $response = Invoke-RestMethod -Uri `
+            'http://127.0.0.1:8080/api/system/lifecycle/stop' `
+            -Method Post -TimeoutSec 5 -MaximumRedirection 0
+        $graceful = $response.success -eq $true
+    } catch { }
+    $deadline = [DateTimeOffset]::UtcNow.AddSeconds(15)
+    do {
+        Start-Sleep -Milliseconds 250
+        $alive = -not $native.HasExited
+    } while ($alive -and [DateTimeOffset]::UtcNow -lt $deadline)
+    if ($alive) {
+        Stop-Process -InputObject $native -Force `
+            -ErrorAction SilentlyContinue
+        $graceful = $false
+        Start-Sleep -Milliseconds 500
+        $alive = -not $native.HasExited
+    }
+    if ($alive -or
+        -not (Wait-ResearchProductionPortClosed -Port 8080)) {
+        throw 'M6_PRODUCTION_STOP_FAILED'
+    }
+    Remove-Item -LiteralPath $productionPidFile -Force `
+        -ErrorAction SilentlyContinue
+    return $graceful
+}
+
+function Stop-ResearchProductionProcesses {
+    $backend = Get-ResearchProductionProcess
+    $fastApi = Get-ResearchFastApiProcess
+    $backendOwner = Get-ResearchProductionPortOwner -Port 8080
+    $fastApiOwner = Get-ResearchProductionPortOwner -Port 8001
+    if ($null -eq $backend -and $null -ne $backendOwner) {
+        throw 'M6_BACKEND_PORT_OCCUPIED'
+    }
+    if ($null -eq $fastApi -and $null -ne $fastApiOwner) {
+        throw 'M6_FASTAPI_PORT_OCCUPIED'
+    }
+    $graceful = Stop-ResearchBackendProcess -Managed $backend
+    Stop-ResearchFastApiProcess -Managed $fastApi
+    return [pscustomobject]@{
+        Backend = $backend
+        FastApi = $fastApi
+        Graceful = $graceful
+    }
+}
+
+function Start-ResearchProductionProcess {
+    param(
+        [Parameter(Mandatory = $true)] [object] $Binding,
+        [switch] $Recovery
+    )
+    Assert-ResearchProductionBinding -Binding $Binding
+    $fastApi = $null
+    try {
+        $fastApi = Start-ResearchFastApiProcess -Binding $Binding `
+            -Recovery:$Recovery
+        $backend = Start-ResearchBackendProcess -Binding $Binding `
+            -Recovery:$Recovery
+        $health = $backend.Health
+        return [ordered]@{
+            backendState = 'RUNNING'
+            fastApiState = 'RUNNING'
+            javaState = 'RUNNING'
+            processId = [int]$backend.Process.Id
+            fastApiProcessId = [int]$fastApi.Process.ProcessId
+            backendPortOpen = $true
+            fastApiPortOpen = $true
+            schemaVersion = [int](
+                $health.data.components |
+                Where-Object component -eq 'Database'
+            ).details.schemaVersion
+            schedulerState = [string]$health.data.scheduler.state
+            overallHealth = [string]$health.data.status
+            providerCallCount = 0
+            retryCount = 0
+        }
+    } catch {
+        $originalError = $_
+        $safeFailure = [string]$originalError.Exception.Message -match
+            '^[A-Z][A-Z0-9_]{7,127}$'
+        $rollbackError = $null
+        if ($null -ne $fastApi) {
+            try {
+                Stop-ResearchFastApiProcess -Managed $fastApi
+            } catch {
+                $rollbackError = $_
+            }
+        }
+        if ($null -ne $rollbackError) {
+            if ([string]$rollbackError.Exception.Message -match
+                    '^[A-Z][A-Z0-9_]{7,127}$') {
+                throw $rollbackError
+            }
+            throw 'M6_FASTAPI_STOP_FAILED'
+        }
+        if ($safeFailure) { throw $originalError }
+        if ($null -eq $fastApi) { throw 'M6_FASTAPI_START_FAILED' }
+        throw 'M6_PRODUCTION_BACKEND_START_FAILED'
     }
 }
 
@@ -2754,31 +3323,51 @@ function Invoke-ResearchProductionStart {
     }
     Assert-ResearchProductionBinding -Binding $binding
     $existing = Get-ResearchProductionProcess
-    if ($null -ne $existing) {
-        if ([string]$existing.State.gitCommit -cne $binding.GitCommit -or
-            [string]$existing.State.jarSha256 -cne $binding.JarSha256) {
-            throw 'M6_PRODUCTION_RUNNING_VERSION_MISMATCH'
-        }
+    $existingFastApi = Get-ResearchFastApiProcess
+    if (($null -ne $existing -and
+            ([string]$existing.State.gitCommit -cne $binding.GitCommit -or
+             [string]$existing.State.jarSha256 -cne $binding.JarSha256)) -or
+        ($null -ne $existingFastApi -and
+            [string]$existingFastApi.State.gitCommit -cne
+                $binding.GitCommit)) {
+        throw 'M6_PRODUCTION_RUNNING_VERSION_MISMATCH'
+    }
+    if ($null -ne $existing -and $null -ne $existingFastApi -and
+        -not $existing.Legacy -and (Test-ResearchFastApiHealth) -and
+        $null -ne (Get-ResearchBackendHealth -Binding $binding)) {
         Write-ResearchProductionAutostart -Binding $binding `
             -RestartCount 0 -LastRestartAt 'NONE'
         return [ordered]@{
             backendState = 'ALREADY_RUNNING'
+            fastApiState = 'RUNNING'
+            javaState = 'RUNNING'
             processId = [int]$existing.Process.ProcessId
-            migrationTarget = 16
+            fastApiProcessId = [int]$existingFastApi.Process.ProcessId
+            backendPortOpen = $true
+            fastApiPortOpen = $true
+            migrationTarget = 18
             autoRecovery = 'ARMED'
             providerCallCount = 0
             retryCount = 0
         }
+    }
+    if ($null -ne $existing -or $null -ne $existingFastApi -or
+        $null -ne (Get-ResearchProductionPortOwner -Port 8080) -or
+        $null -ne (Get-ResearchProductionPortOwner -Port 8001)) {
+        Stop-ResearchProductionProcesses | Out-Null
     }
     $summary = Start-ResearchProductionProcess -Binding $binding
     try {
         Write-ResearchProductionAutostart -Binding $binding `
             -RestartCount 0 -LastRestartAt 'NONE'
     } catch {
-        Stop-Process -Id ([int]$summary.processId) -Force `
-            -ErrorAction SilentlyContinue
-        Remove-Item -LiteralPath $productionPidFile -Force `
-            -ErrorAction SilentlyContinue
+        try {
+            Stop-ResearchProductionProcesses | Out-Null
+        } catch {
+            if ([string]$_.Exception.Message -match
+                    '^[A-Z][A-Z0-9_]{7,127}$') { throw }
+            throw 'M6_PRODUCTION_STOP_FAILED'
+        }
         throw 'M6_PRODUCTION_AUTOSTART_ARM_FAILED'
     }
     $summary['autoRecovery'] = 'ARMED'
@@ -2788,9 +3377,14 @@ function Invoke-ResearchProductionStart {
 function Invoke-ResearchProductionRecovery {
     try {
         if (-not (Test-Path -LiteralPath $productionAutostartFile `
-                -PathType Leaf) -or
-            $null -ne (Get-ResearchProductionProcess)) { return }
+                -PathType Leaf)) { return }
         $autostart = Read-ResearchProductionAutostart
+        $backend = Get-ResearchProductionProcess
+        $fastApi = Get-ResearchFastApiProcess
+        if ($null -ne $backend -and -not $backend.Legacy -and
+            $null -ne $fastApi -and (Test-ResearchFastApiHealth) -and
+            $null -ne (Get-ResearchBackendHealth `
+                -Binding $autostart.Binding)) { return }
         if ($autostart.RestartCount -ge $productionMaximumRestarts) { return }
         if ($autostart.LastRestartAt -cne 'NONE') {
             $last = [DateTimeOffset]::Parse($autostart.LastRestartAt)
@@ -2801,12 +3395,15 @@ function Invoke-ResearchProductionRecovery {
         $now = [DateTimeOffset]::UtcNow.ToString('o')
         Write-ResearchProductionAutostart -Binding $autostart.Binding `
             -RestartCount $nextCount -LastRestartAt $now
+        Stop-ResearchProductionProcesses | Out-Null
         Start-ResearchProductionProcess -Binding $autostart.Binding `
             -Recovery | Out-Null
         $status = [ordered]@{
-            schemaVersion = 'STOCK_QUANT_RESEARCH_PRODUCTION_RECOVERY_V1'
+            schemaVersion = 'STOCK_QUANT_RESEARCH_PRODUCTION_RECOVERY_V2'
             status = 'SUCCEEDED'
             reason = 'M6_PRODUCTION_RECOVERED'
+            fastApiState = 'RUNNING'
+            javaState = 'RUNNING'
             completedAt = [DateTimeOffset]::UtcNow.ToString('o')
         }
         [IO.File]::WriteAllText($productionRecoveryStatusFile,
@@ -2815,7 +3412,7 @@ function Invoke-ResearchProductionRecovery {
     } catch {
         $reason = ConvertTo-StockQuantSafeCode -ErrorValue $_
         $status = [ordered]@{
-            schemaVersion = 'STOCK_QUANT_RESEARCH_PRODUCTION_RECOVERY_V1'
+            schemaVersion = 'STOCK_QUANT_RESEARCH_PRODUCTION_RECOVERY_V2'
             status = 'FAILED'
             reason = $reason
             completedAt = [DateTimeOffset]::UtcNow.ToString('o')
@@ -2830,36 +3427,55 @@ function Invoke-ResearchProductionRecovery {
 function Invoke-ResearchProductionStatus {
     param([Parameter(Mandatory = $true)] [object] $BrokerRequest)
     $process = Get-ResearchProductionProcess
-    if ($null -eq $process) {
-        $autostart = Read-ResearchProductionAutostart
-        return [ordered]@{
-            backendState = 'STOPPED'
-            processId = 0
-            autoRecovery = $(if ($null -eq $autostart) { 'DISARMED' }
-                elseif ($autostart.RestartCount -ge
-                    $productionMaximumRestarts) { 'EXHAUSTED' }
-                else { 'ARMED' })
-            providerCallCount = 0
-            retryCount = 0
-        }
+    $fastApi = Get-ResearchFastApiProcess
+    if ($null -eq $process -and
+        $null -ne (Get-ResearchProductionPortOwner -Port 8080)) {
+        throw 'M6_BACKEND_PORT_OCCUPIED'
     }
-    try {
-        $health = Invoke-RestMethod -Uri `
-            'http://127.0.0.1:8080/api/system/health' -Method Get -TimeoutSec 5
-    } catch {
-        throw 'M6_PRODUCTION_HEALTH_UNAVAILABLE'
+    if ($null -eq $fastApi -and
+        $null -ne (Get-ResearchProductionPortOwner -Port 8001)) {
+        throw 'M6_FASTAPI_PORT_OCCUPIED'
     }
-    if ($health.data.gitCommit -cne $BrokerRequest.GitCommit -or
-        [string]$process.State.gitCommit -cne $BrokerRequest.GitCommit -or
-        [string]$process.State.jarSha256 -cne $BrokerRequest.JarSha256) {
+    if (($null -ne $process -and
+            ([string]$process.State.gitCommit -cne $BrokerRequest.GitCommit -or
+             [string]$process.State.jarSha256 -cne
+                $BrokerRequest.JarSha256)) -or
+        ($null -ne $fastApi -and
+            [string]$fastApi.State.gitCommit -cne $BrokerRequest.GitCommit)) {
         throw 'M6_PRODUCTION_RUNNING_VERSION_MISMATCH'
     }
+    $fastApiHealthy = $null -ne $fastApi -and
+        (Test-ResearchFastApiHealth)
+    $health = if ($null -ne $process -and $fastApiHealthy -and
+        -not $process.Legacy) {
+        Get-ResearchBackendHealth -Binding ([pscustomobject]@{
+            GitCommit = $BrokerRequest.GitCommit
+            JarPath = $BrokerRequest.JarPath
+            JarSha256 = $BrokerRequest.JarSha256
+        })
+    } else { $null }
+    $running = $null -ne $health
+    $autostart = Read-ResearchProductionAutostart
+    $autoRecovery = if ($null -eq $autostart) { 'DISARMED' }
+        elseif ($autostart.RestartCount -ge
+            $productionMaximumRestarts) { 'EXHAUSTED' }
+        else { 'ARMED' }
     return [ordered]@{
-        backendState = 'RUNNING'
-        processId = [int]$process.Process.ProcessId
-        overallHealth = [string]$health.data.status
-        schedulerState = [string]$health.data.scheduler.state
-        autoRecovery = 'ARMED'
+        backendState = $(if ($running) { 'RUNNING' } else { 'STOPPED' })
+        fastApiState = $(if ($fastApiHealthy) { 'RUNNING' } else { 'STOPPED' })
+        javaState = $(if ($null -ne $health) { 'RUNNING' } else { 'STOPPED' })
+        processId = $(if ($null -ne $process) {
+            [int]$process.Process.ProcessId } else { 0 })
+        fastApiProcessId = $(if ($null -ne $fastApi) {
+            [int]$fastApi.Process.ProcessId } else { 0 })
+        backendPortOpen = $null -ne (
+            Get-ResearchProductionPortOwner -Port 8080)
+        fastApiPortOpen = $null -ne (
+            Get-ResearchProductionPortOwner -Port 8001)
+        overallHealth = $(if ($running) {
+            [string]$health.data.status
+        } else { 'BLOCKED' })
+        autoRecovery = $autoRecovery
         providerCallCount = 0
         retryCount = 0
     }
@@ -2869,47 +3485,27 @@ function Invoke-ResearchProductionStop {
     param([Parameter(Mandatory = $true)] [object] $BrokerRequest)
     Remove-Item -LiteralPath $productionAutostartFile -Force `
         -ErrorAction SilentlyContinue
+    if (Test-Path -LiteralPath $productionAutostartFile) {
+        throw 'M6_PRODUCTION_AUTOSTART_DISARM_FAILED'
+    }
     Remove-Item -LiteralPath $productionRecoveryStatusFile -Force `
         -ErrorAction SilentlyContinue
     $process = Get-ResearchProductionProcess
-    if ($null -eq $process) {
-        if (Test-Path -LiteralPath $productionPidFile) {
-            Remove-Item -LiteralPath $productionPidFile -Force
-        }
-        return [ordered]@{
-            backendState = 'ALREADY_STOPPED'
-            processId = 0
-            autoRecovery = 'DISARMED'
-            providerCallCount = 0
-            retryCount = 0
-        }
-    }
-    $graceful = $false
-    try {
-        $response = Invoke-RestMethod -Uri `
-            'http://127.0.0.1:8080/api/system/lifecycle/stop' `
-            -Method Post -TimeoutSec 5
-        $graceful = $response.success -eq $true
-    } catch { }
-    $deadline = [DateTimeOffset]::UtcNow.AddSeconds(15)
-    do {
-        Start-Sleep -Milliseconds 250
-        $alive = Get-Process -Id ([int]$process.Process.ProcessId) `
-            -ErrorAction SilentlyContinue
-    } while ($null -ne $alive -and [DateTimeOffset]::UtcNow -lt $deadline)
-    if ($null -ne $alive) {
-        Stop-Process -Id ([int]$process.Process.ProcessId) -Force
-        $graceful = $false
-        Start-Sleep -Milliseconds 500
-        $alive = Get-Process -Id ([int]$process.Process.ProcessId) `
-            -ErrorAction SilentlyContinue
-    }
-    if ($null -ne $alive) { throw 'M6_PRODUCTION_STOP_FAILED' }
-    Remove-Item -LiteralPath $productionPidFile -Force
+    $fastApi = Get-ResearchFastApiProcess
+    $alreadyStopped = $null -eq $process -and $null -eq $fastApi
+    $stopped = Stop-ResearchProductionProcesses
     return [ordered]@{
-        backendState = 'STOPPED'
-        processId = [int]$process.Process.ProcessId
-        graceful = $graceful
+        backendState = $(if ($alreadyStopped) {
+            'ALREADY_STOPPED' } else { 'STOPPED' })
+        fastApiState = 'STOPPED'
+        javaState = 'STOPPED'
+        processId = $(if ($null -ne $process) {
+            [int]$process.Process.ProcessId } else { 0 })
+        fastApiProcessId = $(if ($null -ne $fastApi) {
+            [int]$fastApi.Process.ProcessId } else { 0 })
+        backendPortOpen = $false
+        fastApiPortOpen = $false
+        graceful = [bool]$stopped.Graceful
         autoRecovery = 'DISARMED'
         providerCallCount = 0
         retryCount = 0

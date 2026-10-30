@@ -9,7 +9,7 @@ import {
 test('startup page contains the four required dark startup stages and no script', () => {
   const html = renderDesktopView({kind: 'startup', stage: 'starting_backend'})
   for (const label of [
-    '正在检查服务', '正在启动后端', '正在连接数据库', '正在加载客户端',
+    '正在检查服务', '正在启动本地服务', '正在确认服务健康', '正在加载客户端',
   ]) {
     assert.match(html, new RegExp(label))
   }

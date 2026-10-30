@@ -244,7 +244,9 @@ else {
     app.on('before-quit', event => desktop?.handleBeforeQuit(event));
     app.on('activate', () => desktop?.focus());
     app.on('window-all-closed', () => {
-        // The guarded close path destroys the window only after STOPPED and port 8080 closed.
+        // The guarded close path destroys the window only after both managed
+        // services are STOPPED, auto-recovery is DISARMED, and ports 8080/8001
+        // are closed.
     });
     void app.whenReady().then(async () => {
         desktop = new DesktopApplication();

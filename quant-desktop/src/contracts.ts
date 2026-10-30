@@ -11,12 +11,23 @@ export type AutoRecoveryState = 'ARMED' | 'DISARMED' | 'EXHAUSTED';
 
 export interface ProductionStatus {
   backendState: 'RUNNING' | 'STOPPED';
+  fastApiState: 'RUNNING' | 'STOPPED';
+  javaState: 'RUNNING' | 'STOPPED';
+  backendPortOpen: boolean;
+  fastApiPortOpen: boolean;
   autoRecovery: AutoRecoveryState;
 }
 
 export interface HealthSnapshot {
   status: 'HEALTHY' | 'DEGRADED' | 'BLOCKED';
   gitCommit: string;
+  fastApiStatus: 'HEALTHY' | 'BLOCKED';
+  fastApiReason: string;
+}
+
+export interface ProductionPortStatus {
+  backendPortOpen: boolean;
+  fastApiPortOpen: boolean;
 }
 
 export interface ProductionGateway {
@@ -24,7 +35,7 @@ export interface ProductionGateway {
   start(): Promise<ProductionStatus>;
   stop(): Promise<ProductionStatus>;
   health(): Promise<HealthSnapshot>;
-  isBackendPortOpen(): Promise<boolean>;
+  ports(): Promise<ProductionPortStatus>;
   wait(milliseconds: number): Promise<void>;
   now(): number;
 }

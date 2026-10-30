@@ -54,6 +54,7 @@ public final class SystemHealthService {
     private final AutomaticMarketDataMaintenanceProperties maintenanceSchedule;
     private final AutomaticMarketDataMaintenanceRuntimeState maintenanceState;
     private final ObjectMapper mapper;
+    private final FastApiHealthProbe fastApiHealthProbe;
     private final Clock clock;
     private final Path repositoryRoot;
 
@@ -66,10 +67,12 @@ public final class SystemHealthService {
             ShadowSchedulerRuntimeState schedulerState,
             AutomaticMarketDataMaintenanceProperties maintenanceSchedule,
             AutomaticMarketDataMaintenanceRuntimeState maintenanceState,
-            ObjectMapper mapper
+            ObjectMapper mapper,
+            FastApiHealthProbe fastApiHealthProbe
     ) {
         this(jdbc, shadows, evaluations, schedule, schedulerState,
                 maintenanceSchedule, maintenanceState, mapper,
+                fastApiHealthProbe,
                 Clock.systemUTC(), repositoryRoot());
     }
 
@@ -82,6 +85,7 @@ public final class SystemHealthService {
             AutomaticMarketDataMaintenanceProperties maintenanceSchedule,
             AutomaticMarketDataMaintenanceRuntimeState maintenanceState,
             ObjectMapper mapper,
+            FastApiHealthProbe fastApiHealthProbe,
             Clock clock,
             Path repositoryRoot
     ) {
@@ -93,6 +97,7 @@ public final class SystemHealthService {
         this.maintenanceSchedule = maintenanceSchedule;
         this.maintenanceState = maintenanceState;
         this.mapper = mapper;
+        this.fastApiHealthProbe = fastApiHealthProbe;
         this.clock = clock;
         this.repositoryRoot = repositoryRoot.toAbsolutePath().normalize();
     }
@@ -105,6 +110,7 @@ public final class SystemHealthService {
         database(components);
         BrokerSnapshot broker = broker(components, now);
         dataset(components);
+        fastApi(components);
         components.add(healthy("Backend", "API_RESPONDING",
                 Map.of("startedAt", runtime.startedAt())));
         boolean frontendAvailable = frontendAvailable();
@@ -186,6 +192,17 @@ public final class SystemHealthService {
                 batches > 0 && observations > 0
                         ? "M1_RESEARCH_DATASET_V1" : "DATASET_EMPTY",
                 Map.of("batches", batches, "observations", observations)));
+    }
+
+    private void fastApi(List<ComponentHealth> components) {
+        FastApiHealthProbe.Snapshot snapshot = fastApiHealthProbe.probe();
+        components.add(new ComponentHealth("FastAPI 8001",
+                snapshot.healthy() ? HealthStatus.HEALTHY
+                        : HealthStatus.BLOCKED,
+                snapshot.reason(), snapshot.healthy()
+                ? Map.of("host", "127.0.0.1", "port", 8_001,
+                        "version", snapshot.version())
+                : Map.of("host", "127.0.0.1", "port", 8_001)));
     }
 
     private long count(String table) {

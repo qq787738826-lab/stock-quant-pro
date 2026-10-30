@@ -1,11 +1,11 @@
 const STARTUP_STEPS = [
     { stage: 'checking_service', label: '正在检查服务' },
-    { stage: 'starting_backend', label: '正在启动后端' },
-    { stage: 'connecting_database', label: '正在连接数据库' },
+    { stage: 'starting_backend', label: '正在启动本地服务' },
+    { stage: 'connecting_database', label: '正在确认服务健康' },
     { stage: 'loading_client', label: '正在加载客户端' },
 ];
 const SHUTDOWN_STEPS = [
-    { stage: 'stopping_backend', label: '正在停止后端' },
+    { stage: 'stopping_backend', label: '正在停止本地服务' },
     { stage: 'verifying_stopped', label: '正在确认服务已停止' },
     { stage: 'closing_port', label: '正在关闭本地端口' },
 ];
