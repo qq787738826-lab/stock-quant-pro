@@ -170,10 +170,13 @@ class DesktopApplication {
     }
     async #performShutdown() {
         try {
-            await this.#render({ kind: 'shutdown', stage: 'stopping_backend' });
             if (this.#startupPromise) {
+                // Let an in-flight client load settle before navigating to the
+                // shutdown view. Replacing that navigation first can leave Electron's
+                // loadURL promise pending and prevent the formal STOP from running.
                 await this.#startupPromise.catch(() => undefined);
             }
+            await this.#render({ kind: 'shutdown', stage: 'stopping_backend' });
             if (this.#lifecycle) {
                 await this.#lifecycle.shutdown(stage => {
                     void this.#render({ kind: 'shutdown', stage });

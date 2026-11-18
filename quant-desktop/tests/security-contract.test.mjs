@@ -56,6 +56,15 @@ test('window X is guarded by the composite shutdown contract', async () => {
     path.join(desktopRoot, 'src', 'lifecycle.ts'), 'utf8',
   )
   assert.match(main, /window\.on\('close',[\s\S]*?event\.preventDefault\(\)[\s\S]*?this\.shutdown\(\)/)
+  const shutdown = main.indexOf('async #performShutdown()')
+  const startupSettled = main.indexOf(
+    'await this.#startupPromise.catch(() => undefined)', shutdown,
+  )
+  const shutdownView = main.indexOf(
+    "await this.#render({kind: 'shutdown'", shutdown,
+  )
+  assert.ok(shutdown >= 0 && startupSettled > shutdown
+    && shutdownView > startupSettled)
   assert.match(main, /ports 8080\/8001[\s\S]*?are closed/)
   assert.match(lifecycle, /status\.autoRecovery === 'DISARMED'/)
   assert.match(lifecycle, /!last\.backendPortOpen && !last\.fastApiPortOpen/)
