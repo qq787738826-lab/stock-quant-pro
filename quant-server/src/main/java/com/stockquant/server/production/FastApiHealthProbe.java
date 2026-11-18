@@ -1,6 +1,7 @@
 package com.stockquant.server.production;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.io.InputStream;
@@ -22,6 +23,7 @@ public final class FastApiHealthProbe {
     private final HttpClient client;
     private final URI healthUri;
 
+    @Autowired
     public FastApiHealthProbe(ObjectMapper mapper) {
         this(mapper, HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(2))

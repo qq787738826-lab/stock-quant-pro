@@ -3,6 +3,7 @@ package com.stockquant.server.production;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -13,9 +14,22 @@ import java.time.Duration;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FastApiHealthProbeTest {
+    @Test
+    void springSelectsTheManagedObjectMapperConstructor() {
+        try (var context = new AnnotationConfigApplicationContext()) {
+            context.registerBean(ObjectMapper.class,
+                    () -> new ObjectMapper());
+            context.register(FastApiHealthProbe.class);
+            context.refresh();
+
+            assertNotNull(context.getBean(FastApiHealthProbe.class));
+        }
+    }
+
     @Test
     void acceptsOnlyTheFixedUpAndVersionContract() throws Exception {
         try (Fixture fixture = fixture(200,
