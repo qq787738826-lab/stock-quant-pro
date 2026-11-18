@@ -65,6 +65,7 @@ $productionFastApiStderr = Join-Path $productionRoot `
 $productionMaximumRestarts = 3
 $productionJavaExecutableCache = $null
 $productionPythonExecutableCache = $null
+$productionPythonRuntimeExecutableCache = $null
 $fakeE2eScript = Join-Path $paths.RepositoryRoot `
     'quant-server\scripts\run-reduced-research-day001-e2e-dry-run.ps1'
 $mutex = [Threading.Mutex]::new($false, 'Local\StockQuantLocalBroker')
@@ -2537,6 +2538,42 @@ function Resolve-ResearchProductionPythonExecutable {
     return $python
 }
 
+function Resolve-ResearchProductionPythonRuntimeExecutable {
+    if ($null -ne $productionPythonRuntimeExecutableCache -and
+        (Test-Path -LiteralPath $productionPythonRuntimeExecutableCache `
+            -PathType Leaf)) {
+        return $productionPythonRuntimeExecutableCache
+    }
+    $python = Resolve-ResearchProductionPythonExecutable
+    $venvRoot = Split-Path (Split-Path $python -Parent) -Parent
+    $configurationPath = Join-Path $venvRoot 'pyvenv.cfg'
+    if (-not (Test-Path -LiteralPath $configurationPath -PathType Leaf)) {
+        throw 'M6_FASTAPI_PYTHON_INVALID'
+    }
+    $runtimeValues = @(
+        foreach ($line in @(Get-Content -LiteralPath $configurationPath `
+                -Encoding UTF8)) {
+            if ([string]$line -match '^\s*executable\s*=\s*(.+?)\s*$') {
+                $Matches[1].Trim()
+            }
+        }
+    )
+    if ($runtimeValues.Count -ne 1) {
+        throw 'M6_FASTAPI_PYTHON_INVALID'
+    }
+    try {
+        $runtime = [IO.Path]::GetFullPath([string]$runtimeValues[0])
+    } catch {
+        throw 'M6_FASTAPI_PYTHON_INVALID'
+    }
+    if (-not (Test-Path -LiteralPath $runtime -PathType Leaf) -or
+        [IO.Path]::GetFileName($runtime) -cne 'python.exe') {
+        throw 'M6_FASTAPI_PYTHON_INVALID'
+    }
+    $script:productionPythonRuntimeExecutableCache = $runtime
+    return $runtime
+}
+
 function Get-ResearchProductionPortOwner {
     param(
         [Parameter(Mandatory = $true)]
@@ -2643,6 +2680,43 @@ function Test-ResearchFastApiHealth {
     } catch { return $false }
 }
 
+function Get-ResearchFastApiListenerProcess {
+    param(
+        [Parameter(Mandatory = $true)] [object] $LauncherProcess,
+        [Parameter(Mandatory = $true)] [string] $AppDirectory
+    )
+    $owner = Get-ResearchProductionPortOwner -Port 8001
+    if ($null -eq $owner) {
+        throw 'M6_FASTAPI_PROCESS_IDENTITY_INVALID'
+    }
+    if ($owner -eq [int]$LauncherProcess.ProcessId) {
+        return $LauncherProcess
+    }
+    $listener = Get-CimInstance Win32_Process -Filter `
+        "ProcessId=$owner" -ErrorAction SilentlyContinue
+    if ($null -eq $listener) {
+        throw 'M6_FASTAPI_PROCESS_IDENTITY_INVALID'
+    }
+    $runtimePython = Resolve-ResearchProductionPythonRuntimeExecutable
+    $commandLine = [string]$listener.CommandLine
+    $commandPattern = '^\s*"?' + [regex]::Escape($runtimePython) +
+        '"?\s+-m\s+uvicorn\s+app\.main:app\s+--app-dir\s+"?' +
+        [regex]::Escape($AppDirectory) +
+        '"?\s+--host\s+127\.0\.0\.1\s+--port\s+8001\s+' +
+        '--workers\s+1\s+--no-access-log\s*$'
+    if ([int]$listener.ParentProcessId -ne
+            [int]$LauncherProcess.ProcessId -or
+        $listener.Name -cne 'python.exe' -or
+        -not [IO.Path]::GetFullPath(
+            [string]$listener.ExecutablePath).Equals(
+                $runtimePython, [StringComparison]::OrdinalIgnoreCase) -or
+        $commandLine -notmatch $commandPattern -or
+        $commandLine -match '(?i)(password|token|api.?key|secret)') {
+        throw 'M6_FASTAPI_PROCESS_IDENTITY_INVALID'
+    }
+    return $listener
+}
+
 function Get-ResearchFastApiProcess {
     if (-not (Test-Path -LiteralPath $productionFastApiPidFile `
             -PathType Leaf)) { return $null }
@@ -2691,11 +2765,13 @@ function Get-ResearchFastApiProcess {
                 -Expected ([string]$state.processCreatedAt))) {
             throw 'M6_FASTAPI_PROCESS_IDENTITY_INVALID'
         }
-        $owner = Get-ResearchProductionPortOwner -Port 8001
-        if ($null -eq $owner -or $owner -ne [int]$state.processId) {
-            throw 'M6_FASTAPI_PROCESS_IDENTITY_INVALID'
+        $listener = Get-ResearchFastApiListenerProcess `
+            -LauncherProcess $process -AppDirectory $appDirectory
+        return [pscustomobject]@{
+            Process = $process
+            ListenerProcess = $listener
+            State = $state
         }
-        return [pscustomobject]@{ Process = $process; State = $state }
     } catch {
         if ($_.Exception.Message -in @(
                 'M6_FASTAPI_PYTHON_MISSING',
@@ -2851,9 +2927,7 @@ function Start-ResearchFastApiProcess {
         while ([DateTimeOffset]::UtcNow -lt $deadline) {
             if ($Recovery) { Write-BrokerHeartbeat -State IDLE }
             if ($process.HasExited) { throw 'M6_FASTAPI_EXITED' }
-            if ((Test-ResearchFastApiHealth) -and
-                (Get-ResearchProductionPortOwner -Port 8001) -eq
-                    $process.Id) {
+            if (Test-ResearchFastApiHealth) {
                 return Get-ResearchFastApiProcess
             }
             Start-Sleep -Milliseconds 250

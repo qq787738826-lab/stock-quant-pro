@@ -189,6 +189,7 @@ try {
         'COMPOSITE_LIFECYCLE_STOP_SUMMARY_FAILED'
     $tests++
 
+    Set-ActualBrokerFunction 'Get-ResearchFastApiListenerProcess'
     Set-ActualBrokerFunction 'Get-ResearchFastApiProcess'
     $productionFastApiPidFile = Join-Path $testRoot 'fastapi.pid.json'
     [IO.File]::WriteAllText($productionFastApiPidFile, '{}',
@@ -293,9 +294,62 @@ try {
         return 101
     }
     $strictFastApi = Get-ResearchFastApiProcess
-    Assert-True ($strictFastApi.Process.ProcessId -eq 101) `
+    Assert-True ($strictFastApi.Process.ProcessId -eq 101 -and
+        $strictFastApi.ListenerProcess.ProcessId -eq 101) `
         'COMPOSITE_LIFECYCLE_FASTAPI_IDENTITY_REJECTED'
     $script:mockCimProcess.CommandLine += ' --reload'
+    Expect-SafeFailure { Get-ResearchFastApiProcess | Out-Null } `
+        'M6_FASTAPI_PROCESS_IDENTITY_INVALID'
+    $tests++
+
+    $runtimePython = [IO.Path]::GetFullPath(
+        (Join-Path $testRoot 'python-runtime\python.exe'))
+    $script:mockLauncherProcess = [pscustomobject]@{
+        ProcessId = 101
+        Name = 'python.exe'
+        ExecutablePath = $python
+        CommandLine = '"' + $python + '" -m uvicorn app.main:app ' +
+            '--app-dir "' + $appDirectory + '" --host 127.0.0.1 ' +
+            '--port 8001 --workers 1 --no-access-log'
+        CreationDate = [DateTime]::UtcNow
+    }
+    $script:mockListenerProcess = [pscustomobject]@{
+        ProcessId = 303
+        ParentProcessId = 101
+        Name = 'python.exe'
+        ExecutablePath = $runtimePython
+        CommandLine = '"' + $runtimePython +
+            '" -m uvicorn app.main:app --app-dir "' + $appDirectory +
+            '" --host 127.0.0.1 --port 8001 --workers 1 ' +
+            '--no-access-log'
+        CreationDate = [DateTime]::UtcNow
+    }
+    function script:Get-CimInstance {
+        [CmdletBinding()]
+        param(
+            [Parameter(Position = 0)] [string] $ClassName,
+            [string] $Filter
+        )
+        if ($Filter -ceq 'ProcessId=101') {
+            return $script:mockLauncherProcess
+        }
+        if ($Filter -ceq 'ProcessId=303') {
+            return $script:mockListenerProcess
+        }
+        return $null
+    }
+    function script:Resolve-ResearchProductionPythonRuntimeExecutable {
+        return $runtimePython
+    }
+    function script:Get-ResearchProductionPortOwner {
+        param([int] $Port)
+        return 303
+    }
+    $redirectedFastApi = Get-ResearchFastApiProcess
+    Assert-True ($redirectedFastApi.Process.ProcessId -eq 101 -and
+        $redirectedFastApi.ListenerProcess.ProcessId -eq 303) `
+        'COMPOSITE_LIFECYCLE_FASTAPI_REDIRECTOR_REJECTED'
+    $script:mockListenerProcess.ParentProcessId = 999
     Expect-SafeFailure { Get-ResearchFastApiProcess | Out-Null } `
         'M6_FASTAPI_PROCESS_IDENTITY_INVALID'
     $tests++
@@ -329,6 +383,14 @@ try {
             'working-directory=' + $workingDirectory + '" -jar "' +
             $fixedJar + '"'
         CreationDate = [DateTime]::UtcNow
+    }
+    function script:Get-CimInstance {
+        [CmdletBinding()]
+        param(
+            [Parameter(Position = 0)] [string] $ClassName,
+            [string] $Filter
+        )
+        return $script:mockCimProcess
     }
     function script:Get-ResearchProductionJavaPath { return $java }
     function script:Get-ResearchProductionPortOwner {

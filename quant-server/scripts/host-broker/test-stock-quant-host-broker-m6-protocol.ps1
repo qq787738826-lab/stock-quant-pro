@@ -150,6 +150,9 @@ try {
             "quant-ai\\\.venv\\Scripts\\python\.exe" -or
         $brokerScript -notmatch 'http://127\.0\.0\.1:8001/health' -or
         $brokerScript -notmatch 'UVICORN_APP_MAIN_V1' -or
+        $brokerScript -notmatch
+            'Resolve-ResearchProductionPythonRuntimeExecutable' -or
+        $brokerScript -notmatch 'ParentProcessId' -or
         $brokerScript -notmatch 'M6_FASTAPI_PROCESS_IDENTITY_INVALID' -or
         $brokerScript -notmatch 'M6_FASTAPI_PORT_OCCUPIED' -or
         $brokerScript -notmatch 'fastapi\.pid\.json' -or

@@ -61,6 +61,10 @@ class ResearchProductionContractTest {
         assertTrue(broker.contains("M6_PRODUCTION_PROCESS_IDENTITY_INVALID"));
         assertTrue(broker.contains("quant-ai\\.venv\\Scripts\\python.exe"));
         assertTrue(broker.contains("UVICORN_APP_MAIN_V1"));
+        assertTrue(broker.contains(
+                "Resolve-ResearchProductionPythonRuntimeExecutable"));
+        assertTrue(broker.contains("ParentProcessId"));
+        assertTrue(broker.contains("ListenerProcess = $listener"));
         assertTrue(broker.contains("M6_FASTAPI_PROCESS_IDENTITY_INVALID"));
         assertTrue(broker.contains("M6_FASTAPI_PORT_OCCUPIED"));
         assertTrue(broker.contains("http://127.0.0.1:8001/health"));
