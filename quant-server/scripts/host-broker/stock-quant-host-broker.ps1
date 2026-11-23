@@ -294,7 +294,8 @@ function Assert-GitBinding {
                       'codex/1.4.0-v1.0.9-full-mainboard-universe',
                       'codex/1.4.0-v1-automatic-daily-market-data-maintenance',
                       'codex/1.4.0-v1-windows-desktop-client',
-                      'codex/1.4.0-v1-windows-desktop-client-lifecycle-hotfix') -and
+                      'codex/1.4.0-v1-windows-desktop-client-lifecycle-hotfix',
+                      'codex/1.4.0-selection-sync-ui-hotfix') -and
                 [IO.Path]::GetFullPath($BrokerRequest.JarPath).Equals(
                     (Join-Path $paths.TargetRoot `
                         'quant-server-1.3.1-research-production.jar'),
@@ -3040,6 +3041,7 @@ function Assert-ResearchProductionBinding {
                 'codex/1.4.0-v1.0.9-full-mainboard-universe',
                 'codex/1.4.0-v1-windows-desktop-client',
                 'codex/1.4.0-v1-windows-desktop-client-lifecycle-hotfix',
+                'codex/1.4.0-selection-sync-ui-hotfix',
                 'codex/1.4.0-m6-research-production-ready') -or
             $unexpected.Count -ne 0 -or
             @(git diff --cached --name-only).Count -ne 0) {

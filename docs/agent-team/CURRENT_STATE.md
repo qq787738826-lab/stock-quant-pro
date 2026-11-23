@@ -745,8 +745,14 @@ DATA_QUALITY 只作门禁和 confidence 上限，MARKET_REGIME V1 权重为 0 �
   和真实可见的安全诊断码；选股页在孤儿任务收口后解除运行态并提示可重新发起。Java 定向回归
   `50/0/0/0`、临时 PostgreSQL V1-V18 闭环 `8/0/0/0`、前端页面测试 `23/0/0/0` 与生产构建通过；
   正式 Provider 调用和永久数据库写入均为 0，临时 PostgreSQL 残留为 0。无 Flyway、Provider、
-  Universe、选股算法、Shadow、Paper 或真实交易变化。该热修复尚未合入集成分支；既有失败的正式同步
-  请求保持不可重试，也未由本次开发重新执行。
+  Universe、选股算法、Shadow、Paper 或真实交易变化。后续桌面启动诊断确认：已安装客户端与 autoRecovery
+  状态仍绑定旧集成提交 `24dcb6e85437c4257b8a1efac115e99ab5f2ed40`，而正式制品证明、Invoker 和
+  Resident Broker 的精确允许清单尚未包含本任务分支，Java 8080 退出而 FastAPI 8001 残留后记录
+  `M6_PRODUCTION_AUTOSTART_STATE_INVALID`。修复仅把本任务分支精确加入受控构建证明和复合生命周期绑定，
+  未放宽为任意 `codex/*`；Java 制品/生产合同 `30/0/0/0`、Electron 安全合同 `6/0/0/0`、M6 Broker
+  协议 `10/0/0/0` 和复合生命周期 Mock `17/0/0/0` 通过，Provider 调用与数据库写入均为 0。提交后仍须
+  生成与该提交绑定的正式制品和桌面运行配置，并通过正式 STOP 合同解除旧复合进程后再启动，不得直接接管
+  版本不一致的端口。该热修复尚未合入集成分支；既有失败的正式同步请求保持不可重试，也未由本次开发重新执行。
 
 ## 当前后续入口与阻断
 
