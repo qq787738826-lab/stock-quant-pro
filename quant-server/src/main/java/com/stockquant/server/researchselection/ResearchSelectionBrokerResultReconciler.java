@@ -12,13 +12,16 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Optional;
 
-/** Recovers a queued UI run when the resident Broker rejects it before Java starts. */
+/** Reconciles Broker failures and terminalizes abandoned queued runs. */
 @Component
 @ConditionalOnProperty(prefix = "stockquant.production",
         name = "enabled", havingValue = "true")
 public final class ResearchSelectionBrokerResultReconciler {
+    static final Duration STALE_RUN_TIMEOUT = Duration.ofHours(2);
     private final ResearchSelectionRepository repository;
     private final ObjectMapper mapper;
     private final Clock clock;
@@ -49,18 +52,16 @@ public final class ResearchSelectionBrokerResultReconciler {
 
     @Scheduled(fixedDelayString = "${stockquant.research-selection.reconcile-delay:PT2S}")
     public void reconcile() {
-        for (var run : repository.queuedBrokerRuns(20)) {
-            Path result = resultsDirectory.resolve(
-                    run.brokerRequestId() + ".result.json").normalize();
-            if (!result.startsWith(resultsDirectory)) continue;
+        Instant now = clock.instant();
+        for (var run : repository.queuedRunsForReconciliation(20)) {
             try {
-                failure(mapper, result, run.brokerRequestId()).ifPresent(value -> {
+                reconciliationFailure(mapper, resultsDirectory, run, now)
+                        .ifPresent(reason -> {
                     try {
                         repository.fail(run.runId(),
                                 ResearchSelectionModels.Status.QUEUED,
                                 ResearchSelectionFailureCategory.from(
-                                        value.reason()), value.reason(),
-                                clock.instant());
+                                        reason), reason, now);
                     } catch (IllegalStateException ignored) {
                         // The Runner may have claimed or terminalized it concurrently.
                     }
@@ -69,6 +70,33 @@ public final class ResearchSelectionBrokerResultReconciler {
                 // A partial or foreign result is never trusted; the next pass retries.
             }
         }
+    }
+
+    static Optional<String> reconciliationFailure(
+            ObjectMapper mapper,
+            Path resultsDirectory,
+            ResearchSelectionRepository.QueuedRun run,
+            Instant now
+    ) {
+        String requestId = run.brokerRequestId();
+        if (requestId != null) {
+            Path base = resultsDirectory.toAbsolutePath().normalize();
+            Path result = base.resolve(requestId + ".result.json")
+                    .normalize();
+            if (result.startsWith(base)) {
+                Optional<BrokerFailure> failure = failure(mapper, result,
+                        requestId);
+                if (failure.isPresent()) {
+                    return Optional.of(failure.orElseThrow().reason());
+                }
+            }
+        }
+        if (run.updatedAt().plus(STALE_RUN_TIMEOUT).isAfter(now)) {
+            return Optional.empty();
+        }
+        return Optional.of(requestId == null
+                ? "RESEARCH_SELECTION_BROKER_BINDING_TIMEOUT"
+                : "RESEARCH_SELECTION_BROKER_RESULT_TIMEOUT");
     }
 
     static Optional<BrokerFailure> failure(

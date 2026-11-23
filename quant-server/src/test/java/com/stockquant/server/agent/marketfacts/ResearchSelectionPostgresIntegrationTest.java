@@ -432,8 +432,10 @@ class ResearchSelectionPostgresIntegrationTest {
         String brokerRequest =
                 "SQHB_20260813T100000Z_A1B2C3D4E5F6";
         repository.bindBrokerRequest(created.runId(), brokerRequest);
-        assertEquals(brokerRequest, repository.queuedBrokerRuns(10).get(0)
-                .brokerRequestId());
+        var active = repository.queuedRunsForReconciliation(10).stream()
+                .filter(value -> value.runId() == created.runId())
+                .findFirst().orElseThrow();
+        assertEquals(brokerRequest, active.brokerRequestId());
         assertThrows(IllegalStateException.class, () ->
                 repository.bindBrokerRequest(created.runId(),
                         "SQHB_20260813T100001Z_B1C2D3E4F5A6"));
@@ -460,7 +462,7 @@ class ResearchSelectionPostgresIntegrationTest {
         repository.fail(created.runId(),
                 ResearchSelectionModels.Status.PREPARING_DATA,
                 "DATA", "RESEARCH_UNIVERSE_DATA_INCOMPLETE", advanced);
-        assertEquals(0, repository.queuedBrokerRuns(10).size());
+        assertEquals(0, repository.queuedRunsForReconciliation(10).size());
         assertEquals(ResearchSelectionModels.Status.FAILED,
                 repository.summary(created.runId()).orElseThrow().status());
         assertThrows(RuntimeException.class, () -> jdbc.update("""

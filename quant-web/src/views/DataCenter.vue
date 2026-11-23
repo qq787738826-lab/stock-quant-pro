@@ -438,6 +438,11 @@ onUnmounted(() => {
       <span><label>是否 DATA_READY</label>{{ maintenanceStatus.readyForShadow ? '是' : '否' }}</span>
       <span><label>成功/失败原因</label>{{ maintenanceMessage }}</span>
     </div>
+    <details v-if="maintenanceStatus.status === 'FAILED'"
+      class="diagnostic maintenance-diagnostic">
+      <summary>高级诊断信息</summary>
+      <code>{{ maintenanceStatus.reason }}</code>
+    </details>
   </div>
 
   <div class="section-grid three">
@@ -581,6 +586,8 @@ onUnmounted(() => {
 .maintenance-status-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin-top:16px; }
 .maintenance-status-grid span { min-width:0; color:#d2dbea; font-size:12px; overflow-wrap:anywhere; }
 .maintenance-status-grid label { display:block; color:#7d8da5; margin-bottom:4px; }
+.maintenance-diagnostic { margin-top:14px; color:#8194ad; font-size:12px; }
+.maintenance-diagnostic code { display:block; margin-top:8px; color:#a9bad0; overflow-wrap:anywhere; }
 .section-grid.three { grid-template-columns: repeat(3, 1fr); }
 .form-column { display:grid; grid-template-columns:1fr 130px; gap:8px 10px; align-items:center; margin-bottom:12px; }
 .form-column label { color:#7d8da5; font-size:12px; }

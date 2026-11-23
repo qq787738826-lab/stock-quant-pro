@@ -735,6 +735,18 @@ DATA_QUALITY 只作门禁和 confidence 上限，MARKET_REGIME V1 权重为 0 �
   连续尾部历史独立计算 20/60/120/250 日窗口，并把逐证券窗口资格贯穿稳定性、解释和 Agent/Critic
   确定性证据。250/180/61 日同池夹具分别得到 `1111/1110/1100`，短历史证券不再裁短其他证券；
   既有 60 日数值、PIT/QFQ、评分公式、策略、排名和已冻结历史均不改变。
+- `V1_SELECTION_MAINTENANCE_ORPHAN_RECOVERY_HOTFIX` 任务分支为
+  `codex/1.4.0-selection-sync-ui-hotfix`。2026-11-23 的只读现场诊断确认，run 42
+  `SELECT_20261121T021756Z_55638C89AB7B` 自 2026-11-21 起停留在 `QUEUED`，导致首页“立即选股”
+  持续显示运行中，并使正式行情同步以 `MAINBOARD_TRADE_CAL_FORWARD_BUSINESS_RUN_ACTIVE` 安全拒绝。
+  热修复将 Broker 脱敏失败结果核对扩展为 `QUEUED` 选股运行的有界恢复：排队状态连续 2 小时未推进时，
+  原子写入 `FAILED` 终态；未绑定请求与已绑定但无结果分别保留稳定 reason，
+  不删除或改写终态历史，不重试 Broker/Provider，不签发新请求。数据中心为业务运行占用增加明确中文说明
+  和真实可见的安全诊断码；选股页在孤儿任务收口后解除运行态并提示可重新发起。Java 定向回归
+  `50/0/0/0`、临时 PostgreSQL V1-V18 闭环 `8/0/0/0`、前端页面测试 `23/0/0/0` 与生产构建通过；
+  正式 Provider 调用和永久数据库写入均为 0，临时 PostgreSQL 残留为 0。无 Flyway、Provider、
+  Universe、选股算法、Shadow、Paper 或真实交易变化。该热修复尚未合入集成分支；既有失败的正式同步
+  请求保持不可重试，也未由本次开发重新执行。
 
 ## 当前后续入口与阻断
 

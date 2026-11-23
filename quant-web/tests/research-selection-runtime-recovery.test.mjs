@@ -28,3 +28,10 @@ test('启动响应超时会核对历史而不是提示泛化失败或诱导重�
   assert.equal(page.includes('正在从历史记录核对，请勿重复提交'), true)
   assert.match(page, /isRequestTimeout\(cause\)\) await loadHistoryAndResult\(\)/)
 })
+
+test('服务端收口孤儿任务后立即恢复选股入口', () => {
+  assert.equal(page.includes('RESEARCH_SELECTION_BROKER_BINDING_TIMEOUT'), true)
+  assert.equal(page.includes('RESEARCH_SELECTION_BROKER_RESULT_TIMEOUT'), true)
+  assert.equal(page.includes('现在可以重新点击“立即选股”'), true)
+  assert.match(page, /value\.status === 'FAILED'[\s\S]*running\.value = false/)
+})

@@ -118,16 +118,17 @@ public final class ResearchSelectionRepository {
         }
     }
 
-    public List<BrokerBoundRun> queuedBrokerRuns(int limit) {
+    public List<QueuedRun> queuedRunsForReconciliation(int limit) {
         int bounded = Math.max(1, Math.min(100, limit));
         return jdbc.query("""
-                SELECT id, broker_request_id
+                SELECT id, broker_request_id, updated_at
                   FROM research_selection_runs
-                 WHERE status='QUEUED' AND broker_request_id IS NOT NULL
-                 ORDER BY id LIMIT ?
-                """, (row, ignored) -> new BrokerBoundRun(
-                row.getLong("id"), row.getString("broker_request_id")),
-                bounded);
+                 WHERE status='QUEUED'
+                 ORDER BY updated_at, id LIMIT ?
+                """, (row, ignored) -> new QueuedRun(
+                row.getLong("id"),
+                row.getString("broker_request_id"),
+                row.getTimestamp("updated_at").toInstant()), bounded);
     }
 
     public void complete(long id, SelectionResult result) {
@@ -414,6 +415,13 @@ public final class ResearchSelectionRepository {
         }
     }
 
-    public record BrokerBoundRun(long runId, String brokerRequestId) {
+    public record QueuedRun(
+            long runId,
+            String brokerRequestId,
+            Instant updatedAt
+    ) {
+        public QueuedRun {
+            Objects.requireNonNull(updatedAt, "updatedAt");
+        }
     }
 }

@@ -44,9 +44,13 @@ test('正式同步状态和原因使用稳定中文文案', () => {
   '检测到部分交易日数据，已停止自动修复')
   assert.equal(displayReason('TUSHARE_CONNECT_TIMEOUT_NO_RESPONSE'),
     '行情数据服务连接超时，本次未自动重试')
+  assert.equal(displayReason('MAINBOARD_TRADE_CAL_FORWARD_BUSINESS_RUN_ACTIVE'),
+    '存在未结束的选股或影子研究任务，本次同步已安全停止')
   assert.equal(source.includes('行情已同步到最新完整交易日'), true)
   assert.equal(source.includes('正在同步行情，请稍候'), true)
   assert.equal(source.includes('同步失败：${displayReason(value.reason)}'), true)
+  assert.equal(source.includes('<summary>高级诊断信息</summary>'), true)
+  assert.equal(source.includes('{{ maintenanceStatus.reason }}'), true)
 })
 
 test('手动同步展示服务端解析的目标日期和回退说明', () => {

@@ -247,6 +247,10 @@ function updateHistory(value: SelectionSummary) {
   else history.value = [value, ...history.value]
 }
 function friendly(category?: string, reason?: string) {
+  if (reason === 'RESEARCH_SELECTION_BROKER_BINDING_TIMEOUT'
+    || reason === 'RESEARCH_SELECTION_BROKER_RESULT_TIMEOUT') {
+    return '上一项选股任务长时间无进展，已安全结束；现在可以重新点击“立即选股”。'
+  }
   if (reason === 'M4_SHADOW_REQUEST_INVALID'
     || reason === 'RESEARCH_SELECTION_PAPER_EXECUTION_NOT_AFTER_AS_OF') {
     return '研究时间边界校验未通过；系统没有使用尚未结束的当日日线。'
