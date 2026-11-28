@@ -124,6 +124,8 @@ class ResearchProductionContractTest {
                 "STOCK_QUANT_PRODUCTION_AUTO_RECOVERY="));
         assertTrue(invoker.contains(
                 "STOCK_QUANT_PRODUCTION_PROVIDER_CALLS=0"));
+        assertTrue(launcher.contains(
+                "'STOCK_QUANT_HOST_BROKER_GIT_BINDING_INVALID'"));
         assertTrue(invoker.contains(
                 "AUTOMATIC_DAILY_MARKET_DATA_MAINTENANCE"));
         assertTrue(broker.contains(

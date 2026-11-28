@@ -108,6 +108,9 @@ function Get-StartupActionRequiredMessage([string] $Reason) {
         'STOCK_QUANT_HOST_BROKER_GIT_BASELINE_INVALID' {
             return 'The repository must be clean, pushed, and aligned with the formal task branch before Stock Quant Pro can start.'
         }
+        'STOCK_QUANT_HOST_BROKER_GIT_BINDING_INVALID' {
+            return 'Resident Broker is bound to an older repository version. Start will attempt the bounded watchdog self-heal.'
+        }
         'STOCK_QUANT_HOST_BROKER_RESULT_TIMEOUT' {
             return 'Resident Broker did not return a sanitized lifecycle result within the timeout.'
         }
@@ -584,6 +587,7 @@ try {
             'M6_PRODUCTION_AUTOSTART_DISARM_FAILED',
             'M6_PRODUCTION_AUTOSTART_ARM_FAILED',
             'STOCK_QUANT_HOST_BROKER_GIT_BASELINE_INVALID',
+            'STOCK_QUANT_HOST_BROKER_GIT_BINDING_INVALID',
             'STOCK_QUANT_HOST_BROKER_RESULT_TIMEOUT')) {
         $reason = $failure
     } else {

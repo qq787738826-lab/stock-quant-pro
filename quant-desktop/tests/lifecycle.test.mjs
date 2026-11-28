@@ -116,6 +116,28 @@ test('a single-service state is never reused and must pass formal START', async 
   assert.equal(gateway.calls.start, 1)
 })
 
+test('a stale Broker status binding enters formal START self-heal', async () => {
+  const gateway = new FakeGateway({
+    statuses: [new DesktopLifecycleError(
+      'STOCK_QUANT_HOST_BROKER_GIT_BINDING_INVALID',
+    )],
+    starts: [running],
+    health: [healthy],
+  })
+  const lifecycle = new DesktopLifecycle(gateway)
+  const stages = []
+  const result = await lifecycle.ensureStarted(stage => stages.push(stage))
+
+  assert.equal(result.reusedExistingBackend, false)
+  assert.deepEqual(gateway.calls, {
+    status: 1, start: 1, stop: 0, health: 1, port: 0,
+  })
+  assert.deepEqual(stages, [
+    'checking_service', 'starting_backend',
+    'connecting_database', 'loading_client',
+  ])
+})
+
 test('shutdown runs once, confirms DISARMED, then confirms both ports closed', async () => {
   const gateway = new FakeGateway({
     statuses: [running, stopped], stops: [stopped], ports: [portsClosed],

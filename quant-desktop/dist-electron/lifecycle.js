@@ -57,8 +57,20 @@ export class DesktopLifecycle {
     }
     async #performStartup(onStage) {
         onStage('checking_service');
-        let current = await this.#gateway.status();
-        const reusedExistingBackend = isCompositeRunning(current);
+        let current;
+        try {
+            current = await this.#gateway.status();
+        }
+        catch (error) {
+            if (!(error instanceof DesktopLifecycleError
+                && error.code === 'STOCK_QUANT_HOST_BROKER_GIT_BINDING_INVALID')) {
+                throw error;
+            }
+            // A stale resident Broker cannot validate the current task branch.
+            // Formal START owns the bounded, identity-checked Broker self-heal.
+        }
+        const reusedExistingBackend = current !== undefined
+            && isCompositeRunning(current);
         if (!reusedExistingBackend) {
             onStage('starting_backend');
             current = await this.#gateway.start();

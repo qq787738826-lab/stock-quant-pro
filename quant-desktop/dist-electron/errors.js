@@ -55,6 +55,7 @@ const SAFE_MESSAGES = {
     HOST_BROKER_WATCHDOG_RECOVERY_TIMEOUT: 'Resident Broker 未能在限定时间内恢复。',
     STOCK_QUANT_HOST_BROKER_RESULT_TIMEOUT: '等待 Resident Broker 脱敏结果超时。',
     STOCK_QUANT_HOST_BROKER_GIT_BASELINE_INVALID: '当前仓库不是已推送且干净的正式任务基线。',
+    STOCK_QUANT_HOST_BROKER_GIT_BINDING_INVALID: 'Resident Broker 仍绑定旧版本，客户端将通过正式启动流程进行安全自愈。',
 };
 export class DesktopLifecycleError extends Error {
     code;
