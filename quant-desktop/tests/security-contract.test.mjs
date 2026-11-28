@@ -88,6 +88,7 @@ test('formal lifecycle projection stays provider-free and branch-scoped', async 
   const branch = 'codex/1.4.0-v1-windows-desktop-client'
   const hotfixBranch = `${branch}-lifecycle-hotfix`
   const selectionSyncBranch = 'codex/1.4.0-selection-sync-ui-hotfix'
+  const fullRegressionBranch = 'codex/1.4.0-full-regression-fixes'
   const invokerSelection = invoker.indexOf("$Operation -eq 'RUN_RESEARCH_SELECTION'")
   const invokerLifecycle = invoker.indexOf(
     "$Operation -in @('START_RESEARCH_PRODUCTION'",
@@ -102,6 +103,8 @@ test('formal lifecycle projection stays provider-free and branch-scoped', async 
     new RegExp(hotfixBranch.replaceAll('.', '\\.')))
   assert.match(invoker.slice(invokerLifecycle, invokerLifecycle + 1500),
     new RegExp(selectionSyncBranch.replaceAll('.', '\\.')))
+  assert.match(invoker.slice(invokerLifecycle, invokerLifecycle + 1600),
+    new RegExp(fullRegressionBranch.replaceAll('.', '\\.')))
   assert.match(invoker, /STOCK_QUANT_BACKEND_STATUS=/)
   assert.match(invoker, /STOCK_QUANT_FASTAPI_STATUS=/)
   assert.match(invoker, /STOCK_QUANT_JAVA_STATUS=/)

@@ -275,7 +275,8 @@ try {
              'codex/1.4.0-v1-automatic-daily-market-data-maintenance',
              'codex/1.4.0-v1-windows-desktop-client',
              'codex/1.4.0-v1-windows-desktop-client-lifecycle-hotfix',
-             'codex/1.4.0-selection-sync-ui-hotfix')) {
+             'codex/1.4.0-selection-sync-ui-hotfix',
+             'codex/1.4.0-full-regression-fixes')) {
         $branch
     } elseif ($Operation -in @('START_RESEARCH_PRODUCTION',
             'STOP_RESEARCH_PRODUCTION',

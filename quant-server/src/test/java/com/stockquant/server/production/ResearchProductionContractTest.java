@@ -144,6 +144,10 @@ class ResearchProductionContractTest {
                 "'codex/1.4.0-selection-sync-ui-hotfix'"));
         assertEquals(2, occurrences(broker,
                 "'codex/1.4.0-selection-sync-ui-hotfix'"));
+        assertEquals(1, occurrences(invoker,
+                "'codex/1.4.0-full-regression-fixes'"));
+        assertEquals(2, occurrences(broker,
+                "'codex/1.4.0-full-regression-fixes'"));
 
         String build = read(
                 "scripts/prepare-m6-research-production-build-proof.ps1");
@@ -160,6 +164,10 @@ class ResearchProductionContractTest {
                 "codex/1.4.0-selection-sync-ui-hotfix"));
         assertTrue(read("scripts/prepare-f1f-b2-build-proof.ps1").contains(
                 "codex/1.4.0-selection-sync-ui-hotfix"));
+        assertTrue(build.contains(
+                "codex/1.4.0-full-regression-fixes"));
+        assertTrue(read("scripts/prepare-f1f-b2-build-proof.ps1").contains(
+                "codex/1.4.0-full-regression-fixes"));
         assertTrue(launcher.contains(
                 "quant-server-1.3.1-research-selection-runner.jar"));
         assertTrue(launcher.contains(
