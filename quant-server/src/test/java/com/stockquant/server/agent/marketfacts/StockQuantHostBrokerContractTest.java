@@ -352,7 +352,12 @@ class StockQuantHostBrokerContractTest {
                 "Start-Process -FilePath $javaExecutable"));
         assertTrue(production.contains("java\\.home"));
         assertTrue(production.contains("M6_JAVA_17_RUNTIME_INVALID"));
-        assertTrue(production.contains("-ArgumentList @('-jar'"));
+        assertTrue(production.contains(
+                "-ArgumentList @($workingBinding, '-jar',"));
+        assertTrue(production.contains(
+                "-Dstockquant.runtime.working-directory="));
+        assertTrue(production.contains(
+                "-WorkingDirectory $workingDirectory"));
         assertFalse(production.contains("Credential"));
         assertFalse(production.contains("Provider"));
         assertFalse(script.contains("ScriptBlock]::Create"));

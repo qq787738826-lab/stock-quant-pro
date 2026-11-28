@@ -105,6 +105,12 @@ function Get-StartupActionRequiredMessage([string] $Reason) {
         'HOST_BROKER_WATCHDOG_RECOVERY_TIMEOUT' {
             return 'Resident Broker did not recover within the watchdog timeout. Repair StockQuantLocalBroker once, then start again.'
         }
+        'STOCK_QUANT_HOST_BROKER_GIT_BASELINE_INVALID' {
+            return 'The repository must be clean, pushed, and aligned with the formal task branch before Stock Quant Pro can start.'
+        }
+        'STOCK_QUANT_HOST_BROKER_RESULT_TIMEOUT' {
+            return 'Resident Broker did not return a sanitized lifecycle result within the timeout.'
+        }
         'M6_FORMAL_ARTIFACT_MISSING' {
             return 'The formal application build is missing. Run the controlled application update, then start again.'
         }
@@ -576,7 +582,9 @@ try {
             'M6_PRODUCTION_AUTOSTART_STATE_INVALID',
             'M6_PRODUCTION_AUTOSTART_WRITE_FAILED',
             'M6_PRODUCTION_AUTOSTART_DISARM_FAILED',
-            'M6_PRODUCTION_AUTOSTART_ARM_FAILED')) {
+            'M6_PRODUCTION_AUTOSTART_ARM_FAILED',
+            'STOCK_QUANT_HOST_BROKER_GIT_BASELINE_INVALID',
+            'STOCK_QUANT_HOST_BROKER_RESULT_TIMEOUT')) {
         $reason = $failure
     } else {
         $reason = 'STOCK_QUANT_STARTUP_UNEXPECTED_FAILURE'

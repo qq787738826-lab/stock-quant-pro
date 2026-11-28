@@ -62,6 +62,14 @@ try {
     $month = [TimeZoneInfo]::ConvertTimeBySystemTimeZoneId(
         $created, 'China Standard Time').ToString('yyyy-MM')
     [int]$limit = Get-StockQuantTushareMonthlyLimit -CalendarMonth $month
+    [int]$expectedMissing = [Math]::Min(190,
+        [Math]::Floor(($limit - 4) / 2))
+    [int]$maximumProvider = $expectedMissing * 2 + 4
+    [int]$successfulProviderCalls = $expectedMissing * 2 + 2
+    [int]$perEndpointCalls = $expectedMissing + 1
+    if ($expectedMissing -lt 1 -or $maximumProvider -gt $limit) {
+        throw 'MAINBOARD_BACKFILL_TEST_BUDGET_INVALID'
+    }
     if ($month -eq '2026-08' -and $limit -ne 625) {
         throw 'MAINBOARD_BACKFILL_APPROVED_MONTHLY_LIMIT_INVALID'
     }
@@ -81,7 +89,7 @@ try {
         'authorization.file' = 'NONE'
         'anchor.trade.date' = '2026-08-27'
         'target.sessions' = '250'
-        'expected.missing.sessions' = '190'
+        'expected.missing.sessions' = [string]$expectedMissing
         'universe.version' = 'RESEARCH_UNIVERSE_MAINBOARD_V1'
         'database.host' = '127.0.0.1'
         'database.port' = '38432'
@@ -91,10 +99,10 @@ try {
         'provider' = 'TUSHARE'
         'provider.endpoints' = 'daily,adj_factor'
         'endpoint.stock_basic.requests' = '0'
-        'endpoint.daily.requests' = '190'
-        'endpoint.adj_factor.requests' = '190'
+        'endpoint.daily.requests' = [string]$expectedMissing
+        'endpoint.adj_factor.requests' = [string]$expectedMissing
         'endpoint.trade_cal.requests' = '0'
-        'maximum.provider.requests' = '384'
+        'maximum.provider.requests' = [string]$maximumProvider
         'budget.calendar.month' = $month
         'tushare.monthly.limit' = [string]$limit
         'tushare.monthly.calls.before' = '0'
@@ -121,7 +129,8 @@ try {
     if ($parsed.Operation -ne 'MAINBOARD_HISTORY_BACKFILL' -or
         $parsed.AuthorizationStatus -ne
             'V1_MAINBOARD_250_SESSION_HISTORY_BACKFILL_APPROVED' -or
-        [int]$parsed.Values['maximum.provider.requests'] -ne 384) {
+        [int]$parsed.Values['maximum.provider.requests'] -ne
+            $maximumProvider) {
         throw 'MAINBOARD_HISTORY_BACKFILL_VALID_REQUEST_REJECTED'
     }
     $tests++
@@ -129,10 +138,10 @@ try {
     foreach ($case in @(
         @('target.sessions', '120'),
         @('endpoint.stock_basic.requests', '1'),
-        @('endpoint.daily.requests', '189'),
-        @('endpoint.adj_factor.requests', '189'),
+        @('endpoint.daily.requests', [string]($expectedMissing - 1)),
+        @('endpoint.adj_factor.requests', [string]($expectedMissing - 1)),
         @('endpoint.trade_cal.requests', '1'),
-        @('maximum.provider.requests', '380'),
+        @('maximum.provider.requests', [string]($maximumProvider - 4)),
         @('network.recovery.budget', '5'),
         @('retry.budget', '1'),
         @('provider.endpoints', 'daily'),
@@ -168,8 +177,8 @@ try {
         executionId = ($ledger['request.id'] -replace '^SQHB_', 'MBH250_')
         gitCommit = $head
         targetSessions = 250
-        expectedMissingSessions = 190
-        maximumProviderRequests = 384
+        expectedMissingSessions = $expectedMissing
+        maximumProviderRequests = $maximumProvider
         finalCompleteSessions = 250
         milestone120Complete = $true
         final250Complete = $true
@@ -178,9 +187,9 @@ try {
         partialDateCount = 0
         duplicateCount = 0
         universeMemberCount = 3193
-        tushareProviderCallCount = 382
-        dailyProviderCallCount = 191
-        adjustmentFactorProviderCallCount = 191
+        tushareProviderCallCount = $successfulProviderCalls
+        dailyProviderCallCount = $perEndpointCalls
+        adjustmentFactorProviderCallCount = $perEndpointCalls
         stockBasicProviderCallCount = 0
         tradeCalendarProviderCallCount = 0
         retryCount = 2
@@ -205,7 +214,7 @@ try {
     $cleanup += $resultPath
     [int]$afterCalls = (Get-StockQuantM4MonthlyUsage `
         -CalendarMonth $month).CommittedTushareCalls
-    if ($afterCalls -ne $beforeCalls + 382) {
+    if ($afterCalls -ne $beforeCalls + $successfulProviderCalls) {
         throw 'MAINBOARD_HISTORY_BACKFILL_LEDGER_ACCOUNTING_INVALID'
     }
     $tests++

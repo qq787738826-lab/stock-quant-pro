@@ -143,6 +143,17 @@ if ($launcherText -notmatch
     throw 'STARTUP_SELF_HEAL_ACTION_REQUIRED_CONTRACT_FAILED'
 }
 $tests++
+if ($launcherText -notmatch
+        "'STOCK_QUANT_HOST_BROKER_GIT_BASELINE_INVALID'" -or
+    $launcherText -notmatch
+        "'STOCK_QUANT_HOST_BROKER_RESULT_TIMEOUT'" -or
+    $launcherText -notmatch
+        'The repository must be clean, pushed, and aligned' -or
+    $launcherText -notmatch
+        'did not return a sanitized lifecycle result within the timeout') {
+    throw 'STARTUP_SELF_HEAL_BROKER_FAILURE_CLASSIFICATION_FAILED'
+}
+$tests++
 if ($launcherText -match '(?i)schtasks' -or
     $launcherText -match 'Start-ScheduledTask' -or
     $launcherText -match 'DB_PASSWORD' -or

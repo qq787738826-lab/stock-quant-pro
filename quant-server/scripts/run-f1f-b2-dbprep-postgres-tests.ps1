@@ -3,7 +3,12 @@ $pgBin = 'C:\Program Files\PostgreSQL\16\bin'
 $suffix = [Guid]::NewGuid().ToString('N').Substring(0, 10)
 $tempRoot = Join-Path $env:TEMP "stock-quant-f1f-b2-dbprep-$suffix"
 $dataDir = Join-Path $tempRoot 'data'
-$port = Get-Random -Minimum 20000 -Maximum 45000
+$listener = [Net.Sockets.TcpListener]::new(
+    [Net.IPAddress]::Loopback, 0)
+$listener.Start()
+try { $port = ([Net.IPEndPoint]$listener.LocalEndpoint).Port }
+finally { $listener.Stop() }
+if ($port -eq 38432) { throw 'F1F_B2_DBPREP_POSTGRES_PORT_INVALID' }
 $oldPort = $env:F1F_B2_DBPREP_POSTGRES_PORT
 try {
     Write-Output "F1F_B2_DBPREP_TEST_PORT=$port"

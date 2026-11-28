@@ -79,7 +79,7 @@ class TushareControlledAcceptancePostgresTest {
     }
 
     @Test
-    void defaultFlywayStopsAtV13AndGovernanceUsesIndependentHistory() {
+    void controlledAcceptanceBaseStopsAtV13AndUsesIndependentHistory() {
         assertEquals(List.of("1", "2", "3", "4", "5", "6", "7", "8", "9",
                 "10", "11", "12", "13"), mainVersions());
         assertEquals(List.of(
@@ -207,29 +207,39 @@ class TushareControlledAcceptancePostgresTest {
         PGSimpleDataSource wrongDatabase = source(
                 baseUrl.replace("/stock_quant_research", "/postgres"),
                 System.getenv("F1F_B1_POSTGRES_USER"));
+        PGSimpleDataSource wrongDatabaseAdmin = source(
+                baseUrl.replace("/stock_quant_research", "/postgres"),
+                "postgres");
         JdbcTemplate wrongDatabaseJdbc = new JdbcTemplate(wrongDatabase);
-        dropAndCreateSchema(wrongDatabaseJdbc);
+        JdbcTemplate wrongDatabaseAdminJdbc = new JdbcTemplate(wrongDatabaseAdmin);
+        dropAndCreateSchema(wrongDatabaseAdminJdbc);
+        wrongDatabaseAdminJdbc.execute(
+                "CREATE EXTENSION btree_gist WITH SCHEMA tushare_research");
         migrateMain(wrongDatabase);
         try {
             assertThrows(RuntimeException.class, () -> migrateGovernance(wrongDatabase));
             assertFalse(governanceHistoryExists(wrongDatabaseJdbc));
         } finally {
-            wrongDatabaseJdbc.execute("DROP SCHEMA tushare_research CASCADE");
+            wrongDatabaseAdminJdbc.execute(
+                    "DROP SCHEMA tushare_research CASCADE");
         }
 
         resetToMainV13();
-        jdbc.execute("DROP ROLE IF EXISTS stock_quant_wrong_user");
-        jdbc.execute("CREATE ROLE stock_quant_wrong_user LOGIN");
-        jdbc.execute("GRANT USAGE ON SCHEMA tushare_research TO stock_quant_wrong_user");
-        jdbc.execute("GRANT SELECT ON tushare_research.flyway_schema_history "
+        JdbcTemplate databaseAdmin = new JdbcTemplate(source(baseUrl, "postgres"));
+        databaseAdmin.execute("DROP ROLE IF EXISTS stock_quant_wrong_user");
+        databaseAdmin.execute("CREATE ROLE stock_quant_wrong_user LOGIN");
+        databaseAdmin.execute(
+                "GRANT USAGE ON SCHEMA tushare_research TO stock_quant_wrong_user");
+        databaseAdmin.execute(
+                "GRANT SELECT ON tushare_research.flyway_schema_history "
                 + "TO stock_quant_wrong_user");
         PGSimpleDataSource wrongUser = source(baseUrl, "stock_quant_wrong_user");
         try {
             assertThrows(RuntimeException.class, () -> migrateGovernance(wrongUser));
             assertFalse(governanceHistoryExists(jdbc));
         } finally {
-            jdbc.execute("DROP OWNED BY stock_quant_wrong_user");
-            jdbc.execute("DROP ROLE stock_quant_wrong_user");
+            databaseAdmin.execute("DROP OWNED BY stock_quant_wrong_user");
+            databaseAdmin.execute("DROP ROLE stock_quant_wrong_user");
         }
     }
 
@@ -979,11 +989,9 @@ class TushareControlledAcceptancePostgresTest {
     }
 
     private static void migrateMain(DataSource target) {
-        Flyway.configure().dataSource(target)
-                .schemas("tushare_research").defaultSchema("tushare_research")
-                .locations("classpath:db/migration")
-                .cleanDisabled(true)
-                .load().migrate();
+        TushareControlledAcceptanceDatabasePreparationService
+                .mainFlyway(target)
+                .migrate();
     }
 
     private static void baselineGovernance() {

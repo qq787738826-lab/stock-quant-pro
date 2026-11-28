@@ -636,11 +636,11 @@ if (/(BaoStock|AKShare|Tencent|Sina|Eastmoney|CNINFO|iFinD)/i.test(fixtureSource
 const routeSource = read('src/router.ts')
 if (!routeSource.includes("path: '/research-preview'")) fail('research preview route is missing')
 const appSource = read('src/App.vue')
-const researchIndex = appSource.indexOf("['/research-preview','研究预览']")
-const teamIndex = appSource.indexOf("['/agent-team','智能体团队']")
-const shadowIndex = appSource.indexOf("['/agent-shadow','影子观测']")
-if (researchIndex < 0 || teamIndex < 0 || shadowIndex < 0) fail('research preview menu entries are incomplete')
-if (!(researchIndex < teamIndex && teamIndex < shadowIndex)) fail('AI menu order is not research preview -> agent team -> shadow')
+const selectionIndex = appSource.indexOf("['/research-selection', '立即选股']")
+const researchIndex = appSource.indexOf("['/agent-research', '研究']")
+const shadowIndex = appSource.indexOf("['/shadow-research', '影子研究']")
+if (selectionIndex < 0 || researchIndex < 0 || shadowIndex < 0) fail('production research menu entries are incomplete')
+if (!(selectionIndex < researchIndex && researchIndex < shadowIndex)) fail('research menu order is not selection -> research -> shadow')
 
 const requiredPresentationText = [
   '本页面用于研究产品形态验证，不构成投资建议、收益承诺或自动交易指令。',
@@ -659,11 +659,11 @@ for (const text of requiredPresentationText) {
 }
 
 const currentState = readFileSync(resolve(repoRoot, 'docs/agent-team/CURRENT_STATE.md'), 'utf8')
-if (!currentState.includes('FREE_PRODUCT_PREVIEW_GATE=BLOCKED')) {
-  fail('FREE_PRODUCT_PREVIEW_GATE is not BLOCKED in CURRENT_STATE')
+if (!currentState.includes('FREE_PRODUCT_PREVIEW_GATE=PASS')) {
+  fail('FREE_PRODUCT_PREVIEW_GATE is not PASS in CURRENT_STATE')
 }
-if (/当前正式状态[^\n]*FREE_PRODUCT_PREVIEW_GATE=PASS/.test(currentState)) {
-  fail('FREE_PRODUCT_PREVIEW_GATE was prematurely set to PASS')
+if (!/当前正式状态[^\n]*FREE_PRODUCT_PREVIEW_GATE=PASS/.test(currentState)) {
+  fail('current formal state does not keep FREE_PRODUCT_PREVIEW_GATE at PASS')
 }
 
 const fixtureHash = createHash('sha256').update(fixtureSource, 'utf8').digest('hex')
@@ -692,5 +692,5 @@ console.log(`PASS DEMO01 insufficiency and DEMO02 POSITION_RISK veto`)
 console.log(`PASS demo tasks: ${(fixture.bundles ?? []).length}; exact ordered agents: 6 each`)
 console.log(`PASS demo evidenceId unique: ${allEvidenceIds.length}`)
 console.log(`PASS demo fixture SHA-256: ${fixtureHash}`)
-console.log(`PASS route/menu/disclaimer/qualification markers`)
-console.log(`PASS FREE_PRODUCT_PREVIEW_GATE=BLOCKED`)
+console.log(`PASS legacy preview route and current production menu/disclaimer/qualification markers`)
+console.log(`PASS FREE_PRODUCT_PREVIEW_GATE=PASS`)
